@@ -77,11 +77,18 @@ odyssey3d play pelicula_sbs.mkv        # reproduce un vídeo estéreo
 odyssey3d ctl lens auth                # sólo autenticar la lente
 odyssey3d ctl scaler off               # sólo apagar el modo 3D del scaler
 odyssey3d ctl panel status             # ver modos del panel (kscreen-doctor)
+odyssey3d ctl panel snapshot           # guardar el estado actual del panel en disco
+odyssey3d ctl panel restore            # devolver el panel al estado guardado
 ```
 
 Al arrancar, `test` y `play` hacen todo solos: ponen el panel en `3840x2160@120`, escala 1 y
 rotación normal, autentican y encienden la lente y activan el 3D del scaler. Al salir (ESC) lo
 deshacen y restauran el modo, la escala y la rotación previos.
+
+Antes de tocar el panel guardan el estado que había en `~/.local/state/odyssey3d/panel.state` y lo
+borran al restaurarlo. Si el programa muere a mitad (señal, cuelgue, Kill), el fichero se queda ahí
+y la siguiente arrancada avisa; se recupera con `odyssey3d ctl panel restore`. Añade `--dry` a
+`apply` o `restore` para ver el comando `kscreen-doctor` que se ejecutaría sin tocar la pantalla.
 
 ### Formatos de vídeo
 
@@ -168,6 +175,31 @@ odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
 se manda al panel; visto de cerca deben apreciarse las franjas diagonales (paso 1.8 px con la
 inclinación nominal de 0.29).
 
+### El monitor se queda vertical al cerrar el vídeo
+
+Causa: **kscreen-doctor numera la rotación con la enum de KScreen, no con la transformación de
+Wayland**. El puerto leía ese número y al restaurar escribía la palabra equivocada. La tabla real,
+comprobada en esta máquina cambiando la rotación y releyendo:
+
+| `Rotation:` en `kscreen-doctor -o` | orientación | palabra para `kscreen-doctor` |
+|---|---|---|
+| 1 | horizontal (normal) | `rotation.none` |
+| 2 | girada a la izquierda | `rotation.left` |
+| 4 | boca abajo | `rotation.inverted` |
+| 8 | girada a la derecha | `rotation.right` |
+
+En Wayland `1` significa 90°, que es lo que el puerto asumía: guardaba tu estado horizontal como
+`1` y al salir mandaba `rotation.left`, dejando el panel en vertical. Corregido en `src/panel.*`
+(`RotNone = 1`, `RotLeft = 2`, `RotInverted = 4`, `RotRight = 8`; un valor no reconocido ya no
+toca la rotación) y cubierto con `tools/prueba_rotacion.py`.
+
+Si se te ha quedado vertical y no quieres andar por los ajustes de KDE:
+
+```sh
+kscreen-doctor output.DP-4.rotation.none     # sustituye DP-4 por el nombre de tu salida
+odyssey3d ctl panel status                   # debe decir "rotacion: 1 (none)"
+```
+
 ## Verificación sin hardware
 
 `tools/verifica_weave.py` comprueba pixel a pixel el entrelazado del C++ contra el oráculo
@@ -185,6 +217,10 @@ Con los mapas de corrección neutros la diferencia es de ~1 LSB (redondeo float3
 Con los mapas reales sube a ~24 LSB en pocos píxeles porque el filtrado lineal de texturas de
 8 bits lo hace la GPU en punto fijo (~1/256 de ciclo de fase); es el mismo camino que siguen el
 Hub de Dimenco y el port X11, así que se deja tal cual.
+
+`tools/prueba_rotacion.py` comprueba la tabla de rotaciones de `kscreen-doctor` (la que dejaba el
+monitor en vertical al salir). No cambia nada: escribe una instantánea falsa y mira el comando que
+`ctl panel restore --dry` generaría.
 
 También se puede mirar la trama a mano: `odyssey3d weave --solid` produce una imagen 3840x2160
 en la que la mitad izquierda del archivo es roja y la derecha verde; midiendo con

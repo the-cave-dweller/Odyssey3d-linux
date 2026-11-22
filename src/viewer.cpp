@@ -16,6 +16,11 @@
 #include <string>
 #include <unistd.h>
 
+static const char *rotW(int r) {
+  const char *w = Panel::rotationWord(r);
+  return w ? w : "desconocida";
+}
+
 static void glfwError(int code, const char *desc) { std::fprintf(stderr, "[glfw %d] %s\n", code, desc); }
 
 /* ---------------- puesta en marcha / apagado del hardware ---------------- */
@@ -48,16 +53,31 @@ struct Rig {
           int idx = Panel::pickMode(st, o.hz);
           if (idx < 0) {
             std::fprintf(stderr, "[aviso] %s no tiene modo 3840x2160: no se cambia el modo\n", name.c_str());
-          } else if (Panel::apply(name, idx, 1.0, 0, true, &err, false)) {
-            saved = st;
-            panelApplied = true;
-            std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR apagado\n", name.c_str(), idx,
-                        Panel::modeName(st, idx).c_str());
-            std::printf("[panel] al salir se restaura el modo %d %s con escala %g\n", saved.modeIndex,
-                        saved.modeRes.c_str(), saved.scale);
-            usleep(400000); /* que KWin asiente antes de crear la ventana */
           } else {
-            std::fprintf(stderr, "[aviso] no se pudo cambiar el modo: %s\n", err.c_str());
+            /* Aviso si una sesion anterior se quedo sin restaurar (no tocamos nada por nuestra
+               cuenta: puede que el usuario haya cambiado la pantalla despues). */
+            PanelState stale{};
+            if (Panel::loadSnapshot(stale) && stale.name == name &&
+                (stale.modeIndex != st.modeIndex || stale.scale != st.scale || stale.rotation != st.rotation))
+              std::fprintf(stderr,
+                           "[aviso] hay un estado del panel sin restaurar de otra sesion (modo %d %s, escala %g, "
+                           "rotacion %s). Si quieres recuperarlo: odyssey3d ctl panel restore\n",
+                           stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
+            std::string snapPath;
+            if (!Panel::saveSnapshot(st, &snapPath, &err))
+              std::fprintf(stderr, "[aviso] %s\n", err.c_str());
+            if (Panel::apply(name, idx, 1.0, RotNone, true, &err, false)) {
+                saved = st;
+              panelApplied = true;
+              std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR apagado\n", name.c_str(), idx,
+                          Panel::modeName(st, idx).c_str());
+              std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
+                          saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
+              usleep(400000); /* que KWin asiente antes de crear la ventana */
+            } else {
+              std::fprintf(stderr, "[aviso] no se pudo cambiar el modo: %s\n", err.c_str());
+              Panel::clearSnapshot();
+            }
           }
           if (!st.vrr.empty() && st.vrr != "Never")
             std::fprintf(stderr, "[aviso] sincronizacion adaptativa en %s: apagala en Ajustustes > Pantalla si ves parpadeo\n",
@@ -111,10 +131,15 @@ struct Rig {
     }
     if (panelApplied) {
       std::string err;
-      if (Panel::restore(saved, &err))
-        std::printf("[panel] restaurado: modo %d %s, escala %g\n", saved.modeIndex, saved.modeRes.c_str(), saved.scale);
-      else
+      if (Panel::restore(saved, &err)) {
+        std::printf("[panel] restaurado: modo %d %s, escala %g, rotacion %s\n", saved.modeIndex,
+                    saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
+        Panel::clearSnapshot();
+      } else {
         std::fprintf(stderr, "[aviso] no se pudo restaurar el panel: %s\n", err.c_str());
+        std::fprintf(stderr, "[aviso] el estado guardado sigue en ~/.local/state/odyssey3d/panel.state: "
+                             "recuperelo con `odyssey3d ctl panel restore`\n");
+      }
       panelApplied = false;
     }
   }

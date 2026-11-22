@@ -3,7 +3,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 
 static std::string stripAnsi(const std::string &s) {
@@ -31,11 +34,13 @@ bool Panel::available() {
 }
 
 const char *Panel::rotationWord(int r) {
+  /* tabla verificada contra kscreen-doctor (ver panel.h): 1 none, 2 left, 4 inverted, 8 right */
   switch (r) {
-    case 1: return "left";
-    case 2: return "inverted";
-    case 3: return "right";
-    default: return "none";
+    case RotLeft: return "left";
+    case RotInverted: return "inverted";
+    case RotRight: return "right";
+    case RotNone: return "none";
+    default: return nullptr; /* valor desconocido: mejor no tocar la rotacion */
   }
 }
 
@@ -149,8 +154,9 @@ int Panel::pickMode(const PanelState &st, double preferHz) {
 bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotation, bool disableHdr,
                   std::string *err, bool dryRun) {
   std::ostringstream args;
-  args << "output." << out << ".mode." << modeIndex << " output." << out << ".scale." << scale
-       << " output." << out << ".rotation." << rotationWord(rotation);
+  args << "output." << out << ".mode." << modeIndex << " output." << out << ".scale." << scale;
+  if (const char *rot = rotationWord(rotation))
+    args << " output." << out << ".rotation." << rot;
   if (dryRun) {
     if (err) *err = "kscreen-doctor " + args.str();
     return true;
@@ -170,8 +176,9 @@ bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotat
 bool Panel::restore(const PanelState &st, std::string *err) {
   if (st.name.empty()) return true;
   std::ostringstream args;
-  args << "output." << st.name << ".mode." << st.modeIndex << " output." << st.name << ".scale." << st.scale
-       << " output." << st.name << ".rotation." << rotationWord(st.rotation);
+  args << "output." << st.name << ".mode." << st.modeIndex << " output." << st.name << ".scale." << st.scale;
+  if (const char *rot = rotationWord(st.rotation))
+    args << " output." << st.name << ".rotation." << rot;
   std::string r = ksd(args.str());
   if (st.hdr) ksd("output." + st.name + ".hdr.enable");
   if (st.vrr == "Always")
@@ -179,6 +186,84 @@ bool Panel::restore(const PanelState &st, std::string *err) {
   else if (st.vrr == "Automatic")
     ksd("output." + st.name + ".vrr.automatic");
   return r.find("Unable to parse") == std::string::npos;
+}
+
+/* ------------- instantanea en disco (por si el programa muere a mitad) ------------- */
+
+static std::string stateDir() {
+  const char *xdg = std::getenv("XDG_STATE_HOME");
+  if (xdg && *xdg) return std::string(xdg) + "/odyssey3d";
+  const char *home = std::getenv("HOME");
+  std::string base = (home && *home) ? std::string(home) : std::string(".");
+  return base + "/.local/state/odyssey3d";
+}
+
+static std::string snapshotPath() { return stateDir() + "/panel.state"; }
+
+bool Panel::saveSnapshot(const PanelState &st, std::string *path, std::string *err) {
+  std::string p = snapshotPath();
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(p).parent_path(), ec);
+  std::ofstream os(p, std::ios::trunc);
+  if (!os) {
+    if (err) *err = "no se pudo escribir " + p;
+    return false;
+  }
+  char num[32];
+  std::snprintf(num, sizeof(num), "%g", st.scale);
+  os << "output=" << st.name << "\n"
+     << "mode=" << st.modeIndex << " " << st.modeRes << "\n"
+     << "scale=" << num << "\n"
+     << "rotation=" << st.rotation << "\n"
+     << "vrr=" << st.vrr << "\n"
+     << "hdr=" << (st.hdr ? 1 : 0) << "\n";
+  os.close();
+  if (path) *path = p;
+  return true;
+}
+
+bool Panel::loadSnapshot(PanelState &st, std::string *path, std::string *err) {
+  std::string p = snapshotPath();
+  if (path) *path = p;
+  std::ifstream is(p);
+  if (!is) {
+    if (err) *err = "no hay instantanea en " + p;
+    return false;
+  }
+  std::string line;
+  while (std::getline(is, line)) {
+    size_t eq = line.find('=');
+    if (eq == std::string::npos) continue;
+    std::string key = line.substr(0, eq), val = line.substr(eq + 1);
+    if (key == "output")
+      st.name = val;
+    else if (key == "mode") {
+      std::istringstream ss(val);
+      ss >> st.modeIndex;
+      std::getline(ss, st.modeRes);
+      st.modeRes = strTrim(st.modeRes);
+    } else if (key == "scale")
+      st.scale = atof(val.c_str());
+    else if (key == "rotation")
+      st.rotation = atoi(val.c_str());
+    else if (key == "vrr")
+      st.vrr = val;
+    else if (key == "hdr")
+      st.hdr = val == "1";
+  }
+  if (st.name.empty()) {
+    if (err) *err = "instantanea invalida en " + p;
+    return false;
+  }
+  return true;
+}
+
+bool Panel::clearSnapshot(std::string *path) {
+  std::string p = snapshotPath();
+  if (path) *path = p;
+  std::error_code ec;
+  std::filesystem::remove(std::filesystem::path(p), ec);
+  return !ec;
 }
 
 std::string Panel::resolveOutput(const std::string &want) {

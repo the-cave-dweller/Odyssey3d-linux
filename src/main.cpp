@@ -19,6 +19,11 @@
 #include <unistd.h>
 #include <vector>
 
+static const char *rotW(int r) {
+  const char *w = Panel::rotationWord(r);
+  return w ? w : "desconocida";
+}
+
 static const char *kUsage =
     "odyssey3d — 3D sin gafas en el Samsung Odyssey 3D (G90XF) bajo Wayland\n"
     "\n"
@@ -183,7 +188,8 @@ static int cmdPanel(int argc, char **argv) {
       return 1;
     }
     out = names.front();
-    std::fprintf(stderr, "usando output %s\n", out.c_str());
+    if (names.size() > 1)
+      std::fprintf(stderr, "usando output %s\n", out.c_str());
   }
   PanelState st;
   std::string err;
@@ -195,7 +201,7 @@ static int cmdPanel(int argc, char **argv) {
     std::printf("output   : %s\n", st.name.c_str());
     std::printf("  modo   : %d (%s)\n", st.modeIndex, st.modeRes.c_str());
     std::printf("  escala : %g\n", st.scale);
-    std::printf("  rotacion: %d (%s)\n", st.rotation, Panel::rotationWord(st.rotation));
+    std::printf("  rotacion: %d (%s)\n", st.rotation, rotW(st.rotation));
     std::printf("  vrr    : %s\n", st.vrr.empty() ? "?" : st.vrr.c_str());
     std::printf("  hdr    : %s\n", st.hdr ? "on" : "off");
     std::printf("  modos  : ");
@@ -208,7 +214,12 @@ static int cmdPanel(int argc, char **argv) {
   if (what == "apply") {
     bool dry = hasFlag(argc, argv, "--dry");
     int mode = Panel::pickMode(st, hz);
-    if (!Panel::apply(out, mode, 1.0, 0, true, &err, dry)) {
+    if (!dry) {
+      std::string snapPath;
+      if (Panel::saveSnapshot(st, &snapPath, &err))
+        std::printf("  estado actual guardado en %s (para `ctl panel restore`)\n", snapPath.c_str());
+    }
+    if (!Panel::apply(out, mode, 1.0, RotNone, true, &err, dry)) {
       std::fprintf(stderr, "%s\n", err.c_str());
       return 1;
     }
@@ -216,15 +227,42 @@ static int cmdPanel(int argc, char **argv) {
     if (!dry) {
       PanelState after;
       if (Panel::query(out, after))
-        std::printf("  ahora: %s escala %g rotacion %d\n", after.modeRes.c_str(), after.scale, after.rotation);
+        std::printf("  ahora: %s escala %g rotacion %d (%s)\n", after.modeRes.c_str(), after.scale, after.rotation, rotW(after.rotation));
     }
     return 0;
   }
-  if (what == "restore") {
-    if (!Panel::restore(st, &err)) {
+  if (what == "snapshot") {
+    std::string snapPath;
+    if (!Panel::saveSnapshot(st, &snapPath, &err)) {
       std::fprintf(stderr, "%s\n", err.c_str());
       return 1;
     }
+    std::printf("estado guardado en %s: modo %d %s, escala %g, rotacion %d (%s)\n", snapPath.c_str(), st.modeIndex,
+                st.modeRes.c_str(), st.scale, st.rotation, rotW(st.rotation));
+    return 0;
+  }
+  if (what == "restore") {
+    PanelState snap{};
+    std::string snapPath;
+    if (!Panel::loadSnapshot(snap, &snapPath, &err)) {
+      std::fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    std::printf("  instantanea: %s  modo %d %s, escala %g, rotacion %d (%s)\n", snapPath.c_str(), snap.modeIndex,
+                snap.modeRes.c_str(), snap.scale, snap.rotation, rotW(snap.rotation));
+    if (hasFlag(argc, argv, "--dry")) {
+      std::printf("  ejecutaría: kscreen-doctor output.%s.mode.%d output.%s.scale.%g", snap.name.c_str(),
+                  snap.modeIndex, snap.name.c_str(), snap.scale);
+      if (const char *w = Panel::rotationWord(snap.rotation))
+        std::printf(" output.%s.rotation.%s", snap.name.c_str(), w);
+      std::printf("\n");
+      return 0;
+    }
+    if (!Panel::restore(snap, &err)) {
+      std::fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    Panel::clearSnapshot();
     std::printf("panel restaurado\n");
     return 0;
   }
@@ -490,12 +528,12 @@ static int cmdDoctor(const ViewerOpts &o, const std::string &waylandSock) {
       std::printf("  salida        : %s\n", st.name.c_str());
       std::printf("  modo activo   : %d %s\n", st.modeIndex, st.modeRes.c_str());
       std::printf("  escala        : %g  (la trama necesita 1)\n", st.scale);
-      std::printf("  rotacion      : %s  (la trama necesita normal)\n", Panel::rotationWord(st.rotation));
+      std::printf("  rotacion      : %s  (la trama necesita normal)\n", rotW(st.rotation));
       std::printf("  HDR           : %s\n", st.hdr ? "activado (se apagara al reproducir)" : "apagado");
       std::printf("  sincron. adap.: %s\n", st.vrr.empty() ? "(sin dato)" : st.vrr.c_str());
       int idx = Panel::pickMode(st, o.hz);
       std::printf("  modo elegido  : %s\n", idx < 0 ? "(ninguno 3840x2160)" : Panel::modeName(st, idx).c_str());
-      if (st.scale != 1.0 || st.rotation != 0) { std::printf("  ! el panel no esta a pixel a pixel: usa `odyssey3d ctl panel apply`\n"); }
+      if (st.scale != 1.0 || !Panel::isLandscape(st.rotation)) { std::printf("  ! el panel no esta a pixel a pixel: usa `odyssey3d ctl panel apply`\n"); }
     }
   }
 
