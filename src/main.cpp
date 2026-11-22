@@ -5,9 +5,12 @@
 #include "lens.h"
 #include "panel.h"
 #include "scaler.h"
+#include "testsrc.h"
 #include "util.h"
 #include "viewer.h"
 #include "weave.h"
+
+#include <GLFW/glfw3.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +25,7 @@ static const char *kUsage =
     "  odyssey3d play ARCHIVO        reproducir un video side-by-side en 3D sin gafas\n"
     "  odyssey3d test                patron de calibracion (disparidades, barras RGB) sobre el panel\n"
     "  odyssey3d doctor              diagnostico: lente, scaler, camara IR, panel, permisos\n"
+    "  odyssey3d weave               escribe un PNG con la trama calculada (sin tocar el panel)\n"
     "  odyssey3d attrs               atributos de trama calculados (para validar el modelo)\n"
     "  odyssey3d ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odyssey3d ctl scaler [on|off] [--dev /dev/sg1]\n"
@@ -35,6 +39,7 @@ static const char *kUsage =
     "  --no-panel        no tocar el modo/escala del panel   --no-lens  no tocar la lente\n"
     "  --no-scaler       no tocar el scaler del monitor      --2d       arrancar en pase 2D\n"
     "  --tb              el video esta en formato arriba/abajo (por defecto: lado a lado)\n"
+    "  --out ARCHIVO         nombre de salida para `weave`\n"
     "  --dump PREFIX         guarda dos PNG (trama y origen) al cuadro 30 y sale\n"
     "  --hwdec M         modo de decodificacion de mpv (auto, nvdec, no; prueba `no` si hay artefactos)\n"
     "  --eye-x CM --eye-y CM --eye-z CM   posicion del ojo (por defecto 0, 8.39, 65.11 cm)\n"
@@ -278,6 +283,9 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--no-scaler") o.noScaler = true;
     else if (a == "--2d") o.no3d = true;
     else if (a == "--tb" || a == "--top-bottom") o.topBottom = true;
+    else if (a == "--no-corr") o.noCorr = true;
+    else if (a == "--solid") o.solid = true;
+    else if (a == "--out") { if (!need("out")) return false; o.outPath = argv[++i]; }
     else if (a == "--dump") { if (!need("dump")) return false; o.dumpPath = argv[++i]; }
     else if (a == "--hwdec") { if (!need("hwdec")) return false; setenv("ODYSSEY_HWDEC", argv[++i], 1); }
     else if (a == "--eye-x") { if (!need("eye-x")) return false; o.eyeX = atof(argv[++i]); }
@@ -326,6 +334,96 @@ static int cmdAttrs(const ViewerOpts &o) {
                 a.v3[1], a.v4[0], a.v4[1], a.v4[2]);
   }
   return 0;
+}
+
+/* ---------------- tramo calculado en fuera de pantalla (sin tocar el panel) ---------------- */
+
+static int cmdWeavePng(const ViewerOpts &o) {
+  int W = o.w > 0 ? o.w : 3840, H = o.h > 0 ? o.h : 2160;
+  if (!glfwInit()) {
+    std::fprintf(stderr, "[error] glfwInit fallo\n");
+    return 1;
+  }
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *win = glfwCreateWindow(64, 64, "odyssey3d-weave", nullptr, nullptr);
+  if (!win) {
+    std::fprintf(stderr, "[error] no se pudo crear un contexto GL\n");
+    glfwTerminate();
+    return 1;
+  }
+  glfwMakeContextCurrent(win);
+  std::printf("[gl] %s / %s\n", (const char *)glGetString(GL_VERSION), (const char *)glGetString(GL_RENDERER));
+
+  std::string err;
+  Weave weave;
+  if (!weave.init(&err)) {
+    std::fprintf(stderr, "[error] shader de trama: %s\n", err.c_str());
+    glfwDestroyWindow(win);
+    glfwTerminate();
+    return 1;
+  }
+  weave.setPanelSize(W, H);
+  weave.setEye(EyePose{o.eyeX, o.eyeY, o.eyeZ});
+  WeaveTuning t{};
+  t.align = o.align;
+  t.pitch = o.pitch;
+  t.weave = !o.no3d;
+  t.topBottom = o.topBottom;
+  weave.setTuning(t);
+  if (!o.noCorr) {
+    std::string a = o.corrA.empty() ? findDataFile("3DStackCorrection_A.png", o.corrDir) : o.corrA;
+    std::string b = o.corrB.empty() ? findDataFile("3DStackCorrection_B.png", o.corrDir) : o.corrB;
+    if (!a.empty() && !b.empty())
+      weave.setCorrectionsFromPng(a, b);
+    else
+      std::printf("[aviso] sin mapas de correccion del panel (se usan neutros)\n");
+  } else {
+    std::printf("[aviso] mapas de correccion desactivados (neutros)\n");
+  }
+
+  GLuint tex = 0;
+  TestSrc pat;
+  bool havePat = false;
+  if (o.solid) {   /* mitad izquierda del archivo roja, derecha verde: la trama debe alternarlas */
+    const uint8_t px[16] = {255, 0, 0, 255, 0, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255};
+    tex = glTexFromRGBA(2, 2, px, false);
+  } else if (!pat.init(&err)) {
+    std::fprintf(stderr, "[error] patron: %s\n", err.c_str());
+    weave.destroy();
+    glfwDestroyWindow(win);
+    glfwTerminate();
+    return 1;
+  } else {
+    havePat = true;
+    pat.createFbo(W, H);
+    tex = pat.render(0.0, 0, 0);
+  }
+  Fbo dst;
+  dst.create(W, H);
+  dst.bind();
+  weave.refreshCorners();
+  weave.draw(tex);
+  glCheckErr("weave.draw");
+  std::vector<uint8_t> buf((size_t)W * (size_t)H * 4u);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
+  glPixelStorei(GL_PACK_ALIGNMENT, 4);
+  std::vector<uint8_t> top((size_t)W * (size_t)H * 4u);
+  for (int y = 0; y < H; y++)
+    std::memcpy(&top[(size_t)y * W * 4u], &buf[(size_t)(H - 1 - y) * W * 4u], (size_t)W * 4u);
+  std::string out = o.outPath.empty() ? "trama.png" : o.outPath;
+  bool ok = glPngSave(out, W, H, top.data());
+  std::printf("[trama] %s (%dx%d)%s\n", out.c_str(), W, H, ok ? "" : "  <-- fallo al escribir");
+  dst.destroy();
+  if (havePat) pat.destroy();
+  weave.destroy();
+  glfwDestroyWindow(win);
+  glfwTerminate();
+  return ok ? 0 : 1;
 }
 
 /* ---------------- diagnostico ---------------- */
@@ -439,6 +537,11 @@ int main(int argc, char **argv) {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;
     return cmdAttrs(o);
+  }
+  if (cmd == "weave") {
+    ViewerOpts o{};
+    if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;
+    return cmdWeavePng(o);
   }
   if (cmd == "test" || cmd == "play" || cmd == "doctor") {
     ViewerOpts o{};

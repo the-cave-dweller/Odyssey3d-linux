@@ -158,6 +158,7 @@ activos; **naranja** = sólo uno de los dos; **rojo** = ninguno (no hay 3D).
 
 ```sh
 odyssey3d doctor                      # qué ve, qué toca, qué falta
+odyssey3d weave [--solid] [--out f.png]  # escribe un PNG con la trama (no toca el panel)
 odyssey3d attrs                       # atributos de la trama (para depurar el modelo)
 odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
                                       # guarda chk-trama.png y chk-origen.png y sale
@@ -166,6 +167,29 @@ odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
 `--dump` es útil para ver el entrelazado sin el hardware: `chk-trama.png` es literalmente lo que
 se manda al panel; visto de cerca deben apreciarse las franjas diagonales (paso 1.8 px con la
 inclinación nominal de 0.29).
+
+## Verificación sin hardware
+
+`tools/verifica_weave.py` comprueba pixel a pixel el entrelazado del C++ contra el oráculo
+Python de `Linux_3D_SBS_Player` (en la posición de ojo de fábrica, recorte de 360x16 px a
+3840x2160):
+
+```
+$ python3 tools/verifica_weave.py
+recorte 360x16 px   mayor desviación = 1.28 LSB   media = 0.026 LSB        OK
+$ python3 tools/verifica_weave.py --corr
+recorte 360x16 px   mayor desviación = 23.86 LSB  media = 0.448 LSB        OK
+```
+
+Con los mapas de corrección neutros la diferencia es de ~1 LSB (redondeo float32 del filtro).
+Con los mapas reales sube a ~24 LSB en pocos píxeles porque el filtrado lineal de texturas de
+8 bits lo hace la GPU en punto fijo (~1/256 de ciclo de fase); es el mismo camino que siguen el
+Hub de Dimenco y el port X11, así que se deja tal cual.
+
+También se puede mirar la trama a mano: `odyssey3d weave --solid` produce una imagen 3840x2160
+en la que la mitad izquierda del archivo es roja y la derecha verde; midiendo con
+autocorrelación sale un paso de **1.806 px** y una inclinación de **0.29 px por fila**, que son
+los valores nominales del G90XF.
 
 ## Estructura
 
@@ -180,6 +204,7 @@ src/testsrc.*  patrón SBS de calibración (disparidades, marcas, barras RGB)
 src/mpvsrc.*   reproducción con la render API de libmpv
 src/viewer.*   ventana GLFW/Wayland,secuencia de arranque/apagado, teclas
 src/main.*     subcomandos y banderas
+tools/         verificación numérica de la trama contra el oráculo
 calib/         mapas de corrección del panel (3DStackCorrection_A/B.png)
 udev/          regla de permisos
 ```

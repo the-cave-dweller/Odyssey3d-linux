@@ -15,6 +15,8 @@ struct ViewerOpts {
   bool noScaler = false;
   bool noPanel = false;
   bool no3d = false;       /* arrancar en pase 2D */
+  bool noCorr = false;     /* sin mapas de correccion del panel */
+  bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */
   double eyeX = 0.0;       /* cm */
   double eyeY = 8.391599655;  /* cm hacia abajo desde el centro de la pantalla */
@@ -23,6 +25,7 @@ struct ViewerOpts {
   double pitch = 1.0;      /* escala de la rampa de fase */
   std::string corrA, corrB, corrDir;
   std::string file;
+  std::string outPath;     /* salida de `weave` */
   std::string dumpPath;    /* guardar fotogramas PNG (diagnóstico) y salir */        /* para play */
 };
 
