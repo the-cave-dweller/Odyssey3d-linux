@@ -1,0 +1,33 @@
+/* viewer.h — ventana GL, puesta en marcha del hardware y bucle de trazado. */
+#ifndef ODYSSEY_VIEWER_H
+#define ODYSSEY_VIEWER_H
+
+#include "weave.h"
+
+#include <string>
+
+struct ViewerOpts {
+  std::string output;      /* nombre de la salida del panel (DP-4); vacío = autodetectar */
+  double hz = 120.0;       /* frecuencia objetivo para el modo del panel */
+  int w = 0, h = 0;        /* 0 = modo nativo del panel */
+  bool windowed = false;
+  bool noLens = false;
+  bool noScaler = false;
+  bool noPanel = false;
+  bool no3d = false;       /* arrancar en pase 2D */
+  bool topBottom = false;  /* video arriba/abajo */
+  double eyeX = 0.0;       /* cm */
+  double eyeY = 8.391599655;  /* cm hacia abajo desde el centro de la pantalla */
+  double eyeZ = 65.11128998; /* cm de distancia */
+  double align = 0.0;      /* desfase de fase inicial (ciclos) */
+  double pitch = 1.0;      /* escala de la rampa de fase */
+  std::string corrA, corrB, corrDir;
+  std::string file;
+  std::string dumpPath;    /* guardar fotogramas PNG (diagnóstico) y salir */        /* para play */
+};
+
+enum class SourceKind { Test, Mpv };
+
+int runViewer(const ViewerOpts &opts, SourceKind kind);
+
+#endif

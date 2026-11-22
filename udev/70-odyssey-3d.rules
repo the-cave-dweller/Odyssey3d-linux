@@ -1,0 +1,8 @@
+# Samsung Odyssey 3D (G90XF): lente lenticular, scaler MediaTek y camara de seguimiento.
+# Lente lenticular (CDC-ACM, 354b:0116)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="354b", ATTRS{idProduct}=="0116", MODE="0660", GROUP="uucp", TAG+="uaccess", TAG+="odyssey3d"
+# Scaler del panel (dispositivo SCSI vendor GCREADER, /dev/sgN)
+SUBSYSTEM=="scsi_generic", SUBSYSTEMS=="scsi", ATTRS{vendor}=="GCREADER*", MODE="0660", TAG+="uaccess", TAG+="odyssey3d"
+SUBSYSTEM=="bsg", SUBSYSTEMS=="scsi", ATTRS{vendor}=="GCREADER*", MODE="0660", TAG+="uaccess"
+# Camara estereo IR (04e8:20d7)
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="04e8", ATTRS{idProduct}=="20d7", MODE="0660", GROUP="video", TAG+="uaccess"

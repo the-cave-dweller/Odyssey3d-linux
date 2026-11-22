@@ -1,0 +1,5 @@
+build/
+samples/chk*
+samples/pat*
+*.o
+*.png.bak
