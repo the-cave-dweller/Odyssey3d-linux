@@ -155,7 +155,7 @@ if(FREETYPE_FOUND)
 endif()
 
 if(OPENCV_FOUND)
-  target_sources(odyssey3d PRIVATE src/track.cpp)
+  target_sources(odyssey3d PRIVATE src/track.cpp src/trackfeed.cpp)
   target_include_directories(odyssey3d PRIVATE ${OPENCV_INCLUDE_DIRS})
   target_link_directories(odyssey3d PRIVATE ${OPENCV_LIBRARY_DIRS})
   target_link_libraries(odyssey3d PRIVATE opencv_objdetect opencv_dnn opencv_geometry opencv_imgcodecs opencv_imgproc opencv_core)

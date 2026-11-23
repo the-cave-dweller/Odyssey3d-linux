@@ -2,7 +2,7 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
-## rastreo de cabeza (en preparación, sobre v0.5)
+## rastreo de cabeza (integrado en el visor, sobre v0.5)
 - **Calibración de fábrica leída del propio monitor**: `ctl calib` pregunta por el puerto serie
   de la lente (`SR+CALCAM`, `SR+CALET`, `SR+CAL3D`, `SR+CHIP`) y guarda los datos en `calib/`.
   En este G90XF la cámara izquierda sale fx 474.3 fy 474.4 cx 322.2 cy 242.1, la derecha fx 476.2
@@ -20,6 +20,25 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   mide detección y geometría sobre un par lateral pegado. Con un par sintético a 55 px de desfase
   sale 622.9 mm y −9.35/17.19/62.59 cm en el panel: la dirección del desfase es la que dicta la
   calibración (la vista derecha va hacia la **derecha**).
+- **Ya va dentro del visor**: `odyssey3d test --track` (o `play ARCHIVO --track`) arranca un hilo
+  (`src/trackfeed.*`) que lee la cámara, mide la cara y deja la última pose; el bucle de dibujado,
+  que va a 120 fps, la copia en el ojo de la trama con `wv.setEye` una vez por cuadro. Se usa la
+  misma regla que el hub: pose fresca (menos de 0.15 s) y dentro de la zona de visión
+  (y entre −50 y 50 cm, z entre 50 y 130 cm); fuera de ahí se queda la pose nominal. Opciones:
+  `--track`, `--track-dev`, `--track-model`, `--track-calib-dir`, `--track-offset-x/y/z`,
+  `--track-flip-x/-y`, `--track-score`, `--track-suavizado`, `--track-fixed`. Cada segundo saca una
+  línea `[rastreo]` con lo medido. Sin OpenCV compilado, avisa y sigue normal.
+- **Ojo con la y**: la trama propia mide `y` hacia abajo desde el borde de arriba
+  (`lensCorner`: `eyeYPx = eye.y / pxPcm`), mientras `WeaverMath.cpp` la recibe al revés
+  (`ey = -eye[1] / px`, hacia arriba desde el centro del panel). Los dos marcos coinciden justo en
+  la pose nominal, porque 8.3916 cm es media altura del panel en el modelo, así que la pose fija de
+  siempre vale para las dos; al alimentar el rastreo hay que convertir
+  `e.y = altoDelPanel/2 − yPanel` (con x y z directas). El modelo de la cámara mira hacia abajo, así
+  que una cara a la altura de la cámara sale en y +18 cm, medio centímetro por encima del borde.
+- Falta el paso físico: al encender el infrarrojo por el control USB de la cámara el controlador se
+  colgó y el monitor desapareció del bus, así que ahora mismo no hay `/dev/video*`. Hay que
+  desenchufar y volver a enchufar el cable USB del monitor; probado sin mandar nada de control UVC
+  (`ctl ir` ya no toca esos controles por defecto).
 
 ## v0.5 — Vulkan, interfaz con cursor y servicio al arrancar (2026-11-23)
 - **Todo el dibujado pasa a Vulkan** (dynamic rendering de Vulkan 1.3; los shaders GLSL 450 de

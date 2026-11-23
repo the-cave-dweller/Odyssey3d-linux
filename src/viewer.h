@@ -25,6 +25,15 @@ struct ViewerOpts {
   double eyeZ = 65.11128998; /* cm de distancia */
   double align = 0.0;      /* desfase de fase inicial (ciclos) */
   double pitch = 1.0;      /* escala de la rampa de fase */
+  /* rastreo de cabeza con la camara infrarroja del monitor (necesita OpenCV) */
+  bool track = false;
+  std::string trackDevice, trackModel, trackCalibDir;
+  double trackOffsetX = 0.0, trackOffsetY = 0.0, trackOffsetZ = 0.0;  /* cm */
+  bool trackFlipX = false, trackFlipY = false;
+  bool trackFixed = false;   /* ignora lo que mide la camara (para comparar) */
+  float trackScore = 0.6f;
+  double trackSmoothing = 0.35;
+
   std::string corrA, corrB, corrDir;
   std::string file;
   std::string captureUuid;   /* ventana a capturar (SourceKind::Capture) */

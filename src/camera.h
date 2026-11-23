@@ -36,6 +36,10 @@ public:
   /* cuatro caracteres -> entero fourcc ("MJPG" -> 0x474A4D4D) */
   static uint32_t fourccCode(const std::string &fourcc);
 
+  /* Elige el dispositivo de captura: prefiere el nombre "3D Stereo WebCam" de la
+     camara del monitor y si no, el primer /dev/videoN que anuncie modos. */
+  static bool pickDevice(std::string &dev, std::string *err = nullptr);
+
   /* formatos que el propio dispositivo anuncia (tamanos e intervalos). */
   struct Mode {
     std::string fourcc;

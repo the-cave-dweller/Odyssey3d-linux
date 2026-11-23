@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -282,4 +283,35 @@ std::vector<Camera::Mode> Camera::modes(const std::string &device) {
   }
   ::close(fd);
   return out;
+}
+
+bool Camera::pickDevice(std::string &dev, std::string *err) {
+  if (!dev.empty()) return true;
+  std::string alterno;
+  for (int i = 0; i < 10; i++) {
+    const std::string node = "/dev/video" + std::to_string(i);
+    const std::string sys = "/sys/class/video4linux/video" + std::to_string(i) + "/name";
+    char texto[160] = {};
+    FILE *f = std::fopen(sys.c_str(), "rb");
+    bool buena = false;
+    if (f) {
+      if (std::fgets(texto, sizeof texto, f)) {
+        std::string nombre(texto);
+        for (char &c : nombre) c = (char)std::tolower((unsigned char)c);
+        buena = nombre.find("stereo") != std::string::npos || nombre.find("3d") != std::string::npos;
+      }
+      std::fclose(f);
+    }
+    if (buena) {
+      dev = node;
+      return true;
+    }
+    if (alterno.empty() && !modes(node).empty()) alterno = node;
+  }
+  if (!alterno.empty()) {
+    dev = alterno;
+    return true;
+  }
+  say(err, "no se encontro ninguna camara de video (/dev/video*)");
+  return false;
 }

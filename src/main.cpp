@@ -86,6 +86,10 @@ static const char *kUsage =
     "  --tb              video arriba/abajo (por defecto: lado a lado)\n"
     "  --hwdec M         decodificacion de mpv: auto, nvdec, no (prueba `no` si hay artefactos)\n"
     "  --eye-x/--eye-y/--eye-z CM   posicion del ojo (por defecto 0, 8.39, 65.11 cm)\n"
+    "  --track                      rastrear la cabeza con la camara IR del monitor\n"
+    "  --track-dev DEV  --track-model ONNX  --track-calib-dir DIR   (se solos por separado)\n"
+    "  --track-offset-x/y/z CM      corregir lo medido · --track-flip-x/-y invertir un eje\n"
+    "  --track-score 0.6            umbral de cara · --track-suavizado 0.35 · --track-fixed\n"
     "  --align CICLOS    desfase de fase inicial   --pitch F  escala de la rampa de fase\n"
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
@@ -1185,6 +1189,18 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--eye-x") { if (!need("eye-x")) return false; o.eyeX = atof(argv[++i]); }
     else if (a == "--eye-y") { if (!need("eye-y")) return false; o.eyeY = atof(argv[++i]); }
     else if (a == "--eye-z") { if (!need("eye-z")) return false; o.eyeZ = atof(argv[++i]); }
+    else if (a == "--track") o.track = true;
+    else if (a == "--track-fixed") o.trackFixed = true;
+    else if (a == "--track-flip-x") o.trackFlipX = true;
+    else if (a == "--track-flip-y") o.trackFlipY = true;
+    else if (a == "--track-dev") { if (!need("track-dev")) return false; o.trackDevice = argv[++i]; }
+    else if (a == "--track-model") { if (!need("track-model")) return false; o.trackModel = argv[++i]; }
+    else if (a == "--track-calib-dir") { if (!need("track-calib-dir")) return false; o.trackCalibDir = argv[++i]; }
+    else if (a == "--track-offset-x") { if (!need("track-offset-x")) return false; o.trackOffsetX = atof(argv[++i]); }
+    else if (a == "--track-offset-y") { if (!need("track-offset-y")) return false; o.trackOffsetY = atof(argv[++i]); }
+    else if (a == "--track-offset-z") { if (!need("track-offset-z")) return false; o.trackOffsetZ = atof(argv[++i]); }
+    else if (a == "--track-score") { if (!need("track-score")) return false; o.trackScore = (float)atof(argv[++i]); }
+    else if (a == "--track-suavizado") { if (!need("track-suavizado")) return false; o.trackSmoothing = atof(argv[++i]); }
     else if (a == "--align") { if (!need("align")) return false; o.align = atof(argv[++i]); }
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
@@ -1195,6 +1211,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (o.file.empty()) o.file = a;
     else { std::fprintf(stderr, "solo se admite un archivo; ignorando %s\n", a.c_str()); }
   }
+  if (o.track && o.trackModel.empty()) o.trackModel = defaultModelPath();
   if (!o.corrDir.empty()) {
     std::string dir = o.corrDir;
     o.corrA = dir + "/3DStackCorrection_A.png";

@@ -10,6 +10,9 @@
 #include "capture.h"
 #endif
 #include "glutil.h"
+#ifdef HAVE_OPENCV
+#include "trackfeed.h"
+#endif
 #include "session.h"
 #include "util.h"
 #include "vkui.h"
@@ -302,6 +305,32 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   wv.setPanelPixels(fbW, fbH);
   wv.setField(LensField{}, EyePose{opts.eyeX, opts.eyeY, opts.eyeZ});
 
+  /* rastreo de cabeza: un hilo mira la camara IR y aqui se lee lo ultimo que vio */
+#ifdef HAVE_OPENCV
+  TrackFeed feed;
+  bool rastreoVivo = false;
+  if (opts.track) {
+    TrackFeedOptions fo;
+    fo.device = opts.trackDevice;
+    fo.model = opts.trackModel;
+    fo.calibDir = opts.trackCalibDir;
+    fo.set.model = opts.trackModel;
+    fo.set.score = opts.trackScore;
+    fo.set.smoothing = opts.trackSmoothing;
+    std::string trk;
+    if (!feed.start(fo, &trk))
+      std::fprintf(stderr, "[rastreo] no arranco: %s\n", trk.c_str());
+    else {
+      rastreoVivo = true;
+      const TrackFeedState fs = feed.state();
+      std::printf("[rastreo] %s en %s, buscando la cara\n", fs.camera.c_str(), fs.mode.c_str());
+    }
+  }
+#else
+  if (opts.track)
+    std::fprintf(stderr, "[aviso] este binario se compilo sin OpenCV: no hay rastreo de cabeza\n");
+#endif
+
   /* atlas de texto de la interfaz (FreeType), subido una sola vez */
   std::string herr;
   if (ui.hud.buildAtlas(&herr))
@@ -349,7 +378,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n\n");
   std::fflush(stdout);
 
-  double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0;
+  double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
   int frames = 0, errStreak = 0, reintentos = 0;
   bool dumpHecho = false;
   while (!glfwWindowShouldClose(win) && !ui.quit) {
@@ -447,6 +476,41 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     ui.hud.begin(fbW, fbH);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
+
+#ifdef HAVE_OPENCV
+    if (rastreoVivo) {
+      const TrackFeedState fs = feed.state();
+      const double altoCm = (double)fbH * wv.field().pxPcm;
+      const bool dentro = fs.sample.panelCentimetres[1] >= -50.0 && fs.sample.panelCentimetres[1] <= 50.0 &&
+                          fs.sample.panelCentimetres[2] >= 50.0 && fs.sample.panelCentimetres[2] <= 130.0;
+      const bool fresco = fs.seen && fs.age >= 0.0 && fs.age <= 0.15 && dentro;
+      if (fresco && !opts.trackFixed) {
+        const TrackSample &m = fs.sample;
+        double x = m.panelCentimetres[0], y = m.panelCentimetres[1], z = m.panelCentimetres[2];
+        if (opts.trackFlipX) x = -x;
+        if (opts.trackFlipY) y = -y;
+        EyePose e;
+        e.x = x + opts.trackOffsetX;
+        /* la trama nuestra mide y hacia abajo desde el borde de arriba, y la
+           transformada del hub la da hacia arriba desde el centro del panel: los
+           dos marcos caen iguales justo en la pose nominal (8.3916 cm) */
+        e.y = altoCm * 0.5 - y + opts.trackOffsetY;
+        e.z = z + opts.trackOffsetZ;
+        wv.setEye(e);
+      }
+      if (now - ultimoRastreo >= 1.0) {
+        ultimoRastreo = now;
+        const TrackSample &m = fs.sample;
+        std::printf("[rastreo] camara (%6.1f, %6.1f, %6.1f) mm · panel (%6.2f, %6.2f, %6.2f) cm · ipd %.1f mm · "
+                    "%lld/%lld cuadros (%.1f fps) · error %.2f px · hace %.2f s · %s\n",
+                    m.eyeMillimetres[0], m.eyeMillimetres[1], m.eyeMillimetres[2], m.panelCentimetres[0],
+                    m.panelCentimetres[1], m.panelCentimetres[2], m.ipdMillimetres, fs.frames, fs.good,
+                    fs.cameraFps, m.reprojectionPx, fs.age,
+                    fresco ? "siguiendo" : (fs.note.empty() ? "sin pose valida" : fs.note.c_str()));
+        std::fflush(stdout);
+      }
+    }
+#endif
 
     if (!wv.frame(&err)) {
       if (wv.lost()) {

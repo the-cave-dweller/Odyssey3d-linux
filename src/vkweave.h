@@ -32,6 +32,9 @@ public:
   void setCorrections(const uint8_t *a, int aw, int ah, const uint8_t *b, int bw, int bh);
 
   void setField(const LensField &f, const EyePose &e) { field_ = f, eye_ = e, cornersDirty_ = true; }
+  void setEye(const EyePose &e) { eye_ = e; cornersDirty_ = true; }
+  const EyePose &eye() const { return eye_; }
+  const LensField &field() const { return field_; }
   void setPanelPixels(int w, int h) { pw_ = w, ph_ = h, cornersDirty_ = true; }
   WeaveTuning &tuning() { return tune_; }
   void setAtlas(const std::vector<uint8_t> &px, int w, int h);
