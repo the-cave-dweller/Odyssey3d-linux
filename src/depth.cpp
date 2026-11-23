@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <dlfcn.h>
 #include <unordered_map>
 #include <sys/stat.h>
@@ -92,6 +93,25 @@ static std::string resumenOrt(const std::string &m) {
   return salida;
 }
 
+/* Cuanta memoria libre queda en cada tarjeta. nvidia-smi responde "0, 246" por linea; si no esta
+   (AMD, o sin el utilitario) devuelve vacio y no se mira nada. Sirve para no abrir la red donde no
+   cabe: con la tarjeta reventada la creacion de la sesion revienta y el conversor no arranca. */
+static std::vector<long> vramLibreMiB() {
+  std::vector<long> libres;
+  FILE *p = popen("nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null", "r");
+  if (!p) return libres;
+  char linea[128];
+  while (std::fgets(linea, sizeof linea, p)) {
+    long idx = -1, ml = -1;
+    if (std::sscanf(linea, "%ld, %ld", &idx, &ml) == 2 && idx >= 0 && idx < 16) {
+      if ((int)libres.size() <= idx) libres.resize((size_t)idx + 1, -1);
+      libres[(size_t)idx] = ml;
+    }
+  }
+  pclose(p);
+  return libres;
+}
+
 bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   const std::string path = model.empty() ? defaultModelPath() : model;
   gpu_ = gpu < 0 ? 0 : gpu;
@@ -108,6 +128,34 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
      cargadas en el ambito global antes de abrirlo (probado con onnxruntime 1.29 + cudnn 9.28). */
   for (const char *lib : {"libcudnn.so.9", "libcudnn_cnn.so.9", "libcudnn_adv.so.9", "libcudnn_graph.so.9"})
     dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
+  /* Elegir donde corre la red: si en la tarjeta pedida no caben los ~1,1 GB que necesita (contexto
+     de CUDA + modelo + activaciones), buscar la que mas memoria libre tenga. Y si en ninguna cabe,
+     ir directos a la CPU antes de que la creacion de la sesion reviente. */
+  const long kNecesitoMiB = 1100;
+  bool sinGpu = false;
+  {
+    const std::vector<long> libres = vramLibreMiB();
+    if (!libres.empty()) {
+      long mia = gpu_ < (int)libres.size() ? libres[(size_t)gpu_] : -1;
+      int mejor = gpu_;
+      long mejorMiB = mia;
+      for (size_t i = 0; i < libres.size(); i++)
+        if (libres[i] > mejorMiB) { mejorMiB = libres[i]; mejor = (int)i; }
+      if (mia >= 0 && mia < kNecesitoMiB) {
+        if (mejor != gpu_ && mejorMiB >= kNecesitoMiB) {
+          std::printf("[conversor] la grafica %d tiene solo %ld MB libres: la red se va a la grafica %d "
+                      "(%ld MB libres)\n", gpu_, mia, mejor, mejorMiB);
+          std::fflush(stdout);
+          gpu_ = mejor;
+        } else {
+          std::printf("[conversor] no hay %ld MB libres en ninguna grafica: la red se hara con la CPU, "
+                      "mas despacio\n", kNecesitoMiB);
+          std::fflush(stdout);
+          sinGpu = true;
+        }
+      }
+    }
+  }
   OrtImpl *im = new OrtImpl();
   im->so.SetIntraOpNumThreads(4);
   im->so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -115,9 +163,10 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
      Con el arenal de memoria apagada el pico baja bastante (el modelo pequeno no necesita 1 GB
      reservados de golpe), y aun asi se le deja un techo por si acaso. */
   try {
+    if (sinGpu) throw std::runtime_error("sin sitio en la grafica");
     std::unordered_map<std::string, std::string> co;
     co["device_id"] = std::to_string(gpu_);
-    co["gpu_mem_limit"] = "800000000";
+    co["gpu_mem_limit"] = "550000000";
     co["enable_mem_arena"] = "0";
     co["cudnn_conv_algo_search"] = "heuristic";
     im->so.AppendExecutionProvider("CUDA", co);
@@ -126,7 +175,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     try {
       OrtCUDAProviderOptions o{};
       o.device_id = gpu_;
-      o.gpu_mem_limit = 800ull << 20;
+      o.gpu_mem_limit = 550ull << 20;
       o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
       im->so.AppendExecutionProvider_CUDA(o);
       dev_ = "NVIDIA";
@@ -135,21 +184,44 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
       dev_ = "CPU";
     }
   }
-  try {
-    im->ses = new Ort::Session(im->env, path.c_str(), im->so);
-    im->inN = im->ses->GetInputNameAllocated(0, im->alloc).get();
-    im->outN = im->ses->GetOutputNameAllocated(0, im->alloc).get();
-    im->in.assign((size_t)3 * (size_t)sz_ * (size_t)sz_, 0.0f);
-    std::vector<int64_t> shape{1, 3, sz_, sz_};
+  auto abrir = [](OrtImpl *q, const std::string &ruta, int sz) {
+    q->ses = new Ort::Session(q->env, ruta.c_str(), q->so);
+    q->inN = q->ses->GetInputNameAllocated(0, q->alloc).get();
+    q->outN = q->ses->GetOutputNameAllocated(0, q->alloc).get();
+    q->in.assign((size_t)3 * (size_t)sz * (size_t)sz, 0.0f);
+    std::vector<int64_t> shape{1, 3, sz, sz};
     Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-    Ort::Value tin =
-        Ort::Value::CreateTensor<float>(mem, im->in.data(), im->in.size(), shape.data(), shape.size());
-    const char *inN = im->inN.c_str(), *outN = im->outN.c_str();
-    im->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);   /* el primero vale para calentar */
+    Ort::Value tin = Ort::Value::CreateTensor<float>(mem, q->in.data(), q->in.size(), shape.data(), shape.size());
+    const char *inN = q->inN.c_str(), *outN = q->outN.c_str();
+    q->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);   /* el primero vale para calentar */
+  };
+  std::string fallo;
+  try {
+    abrir(im, path, sz_);
   } catch (const std::exception &e) {
-    if (err) *err = "el modelo no abrio: " + resumenOrt(e.what());
+    fallo = resumenOrt(e.what());
+    if (dev_ == "CPU") {   /* ya no queda donde intentar */
+      if (err) *err = "el modelo no abrio: " + fallo;
+      delete im;
+      return false;
+    }
+    /* La tarjeta dijo que no: ultima oportunidad, la CPU. Va lento (cientos de ms por cuadro), pero
+       el relieve sale y se puede usar con --cada alto. */
+    std::printf("[conversor] la grafica no dio para abrir el modelo (%s): se intentara con la CPU\n",
+                fallo.c_str());
+    std::fflush(stdout);
     delete im;
-    return false;
+    im = new OrtImpl();
+    im->so.SetIntraOpNumThreads(6);
+    im->so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    dev_ = "CPU";
+    try {
+      abrir(im, path, sz_);
+    } catch (const std::exception &e2) {
+      if (err) *err = "el modelo no abrio: " + resumenOrt(e2.what());
+      delete im;
+      return false;
+    }
   }
   impl_ = im;
   ready_ = true;

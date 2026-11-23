@@ -148,9 +148,11 @@ odyssey3d capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
   ```
 * `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
   conviene 2; si la GPU va justa, 4 o 5.
-* `--red N` pone la red en la GPU `N` (`0` por defecto). Si la primera tarjeta está llena —con el 4090
-  ocupado por otra aplicación los repartos fallan y ONNX responde «sin memoria de dispositivo»— la red
-  pasa **sola** a la segunda y el registro lo avisa; `--red 1` es la forma de fijarlo de antemano.
+* `--red N` pone la red en la GPU `N` (`0` por defecto). El programa mira cuánta memoria libre tiene
+  cada tarjeta: si en la pedida no caben ~1,1 GB la manda a la que más tenga y lo avisa. Si en ninguna
+  cabe, la red **se va a la CPU** (tarda 150 ms en vez de 9) y entonces la profundidad se recalcula
+  cada 10 cuadros en lugar de cada 3; `--cada N` lo cambia. La estimación corre en su propio hilo, así
+  que ni siquiera en CPU se corta el vídeo.
 
 Se ve en el registro: `[conversor] video normal a 3D encendido con NVIDIA`; una estimación tarda
 ~9 ms en una RTX 4090. La fuerza del relieve la siguen moviendo **3D Salida** (`Ctrl+Shift+5/6`) y

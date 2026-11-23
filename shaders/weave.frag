@@ -98,7 +98,17 @@ void main()
            cada ojo. Lo que esta en el plano de referencia (tun4.z) no se mueve; lo que esta por
            delante sale hacia fuera de la pantalla y el fondo hacia dentro. */
         float cerca = texture(uDepth, fuv).r;   /* el mapa ya esta derecho: viene del pase pequeno */
-        float s = (cerca - P.tun4.z) * P.tun4.y;
+        /* El mapa llega de 518 x 518 y en los cantos sale borroso: alli desplazar de mas estira el
+           color en peine. Donde la profundidad cambia rapido en horizontal se recorta el
+           desplazamiento, asi que el canto se queda en su sitio en vez de babearse.
+           CantoSuave manda: subelo si aun se babea, bajalo si el relieve se apaga. */
+        const float pasoMapa = 1.0 / 518.0;
+        const float CantoSuave = 0.004;
+        float dI = texture(uDepth, fuv + vec2(-pasoMapa, 0.0)).r;
+        float dD = texture(uDepth, fuv + vec2(+pasoMapa, 0.0)).r;
+        float pendiente = abs(dD - dI) * 0.5;
+        float canto = clamp(CantoSuave / max(pendiente, 0.00001), 0.10, 1.0);
+        float s = (cerca - P.tun4.z) * P.tun4.y * canto;
         vec2 q4 = fuv;
         if (P.tun3.z == 1.0)
             q4.y = 1.0 - q4.y;                  /* la fuente puede venir con la primera fila abajo */

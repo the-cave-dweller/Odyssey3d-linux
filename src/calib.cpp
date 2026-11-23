@@ -70,8 +70,10 @@ static std::vector<std::string> calibBases() {
   if (!ed.empty()) {
     bases.push_back(ed + "/calib");
     bases.push_back(ed + "/../share/odyssey3d/calib");
+    bases.push_back(ed + "/../calib");
   }
   bases.push_back("/usr/share/odyssey3d/calib");
+  bases.push_back("/usr/local/share/odyssey3d/calib");
   return bases;
 }
 

@@ -31,6 +31,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <thread>
+#include <mutex>
 
 static void vkGlfwError(int code, const char *desc) { std::fprintf(stderr, "[glfw %d] %s\n", code, desc); }
 
@@ -559,6 +561,56 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int convSalto = 0;
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
+  int cadaConv = opts.convEach;
+   /* La red puede tardar cientos de ms si le toca la CPU (cuando las dos tarjetas estan llenas).
+      Para no congelar el cuadro, la estimacion corre en su propio hilo: aqui solo se reduce la
+      imagen en la tarjeta y se le manda la copia; el mapa vuelve cuando esta terminado y se sube
+      en este hilo, que es el dueno de Vulkan. */
+   struct HiloRed {
+     std::thread hilo;
+     std::mutex candado;
+     std::vector<uint8_t> mapa;   /* mapa terminado y esperando subirse */
+     std::string error;
+     float ms = 0.0f;
+     bool terminado = false;
+     bool ocupado = false;        /* solo lo toca el hilo del visor */
+     ~HiloRed() {
+       if (hilo.joinable())
+         hilo.join();
+     }
+     void arrancar(DepthNet *red, const uint8_t *chico, int sz) {
+       if (hilo.joinable())
+         hilo.join();
+       std::vector<uint8_t> copia(chico, chico + (size_t)sz * (size_t)sz * 4);
+       ocupado = true, terminado = false, error.clear();
+       hilo = std::thread([this, red, copia = std::move(copia), sz]() {
+         std::vector<uint8_t> m;
+         std::string e;
+         const bool ok = red->estimate(copia.data(), sz, sz, m, &e);
+         std::lock_guard<std::mutex> g(candado);
+         mapa = ok ? std::move(m) : std::vector<uint8_t>{};
+         error = ok ? std::string() : e;
+         ms = red->lastMs();
+         terminado = true;
+       });
+     }
+     /* 0 = sigue trabajando, 1 = mapa listo (en `fuera`), -1 = fallo (en `errFuera`) */
+     int recoger(std::vector<uint8_t> &fuera, float &msFuera, std::string &errFuera) {
+       if (!ocupado)
+         return 0;
+       std::lock_guard<std::mutex> g(candado);
+       if (!terminado)
+         return 0;
+       ocupado = false, terminado = false;
+       msFuera = ms;
+       if (!error.empty()) {
+         errFuera.swap(error);
+         return -1;
+       }
+       fuera.swap(mapa);
+       return fuera.empty() ? -1 : 1;
+     }
+   } hiloRed;
   int convGpu = opts.convGpu;   /* se sube solo a la 1 si la 0 esta llena (strata, juegos, ...) */
   auto arrancarRed = [&](int &gpu, std::string *e) {
     if (red.init(opts.modelPath, e, gpu)) return true;
@@ -582,8 +634,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::fprintf(stderr, "[conversor] %s\n", rerr.c_str());
       convActivo = false;
     } else {
+      if (red.device() == "CPU" && opts.convEach < 10) {
+        cadaConv = 10;   /* la red por CPU tarda ~150 ms: no tiene sentido pedirla cada 3 cuadros */
+        std::printf("[conversor] la red va por CPU: la profundidad se recalcula cada %d cuadros "
+                    "(se cambia con --cada N)\n", cadaConv);
+      }
       std::printf("[conversor] video normal a 3D con %s, cada %d cuadros (tecla C para apagar)\n",
-                  red.device().c_str(), opts.convEach);
+                  red.device().c_str(), cadaConv);
       ui.convInfo = true;
       std::fflush(stdout);
       ui.hud.state().popout = 50;   /* sin desplazamiento no hay relieve: empezar en el medio */
@@ -967,15 +1024,25 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       /* con el video quieto no hace falta repetir la red, pero tampoco queremos un mapa
          congelado si el cuadro no cambia: como mucho una vez cada medio segundo */
-      if ((newSource || now - ultimaEstim > 0.5) && wv.hasSource() && ++convSalto >= opts.convEach) {
+      /* con la red en su hilo solo lanzamos una estimacion nueva cuando la anterior ya se subio */
+      if (!hiloRed.ocupado && (newSource || now - ultimaEstim > 0.5) && wv.hasSource() &&
+          ++convSalto >= cadaConv) {
         convSalto = 0;
         ultimaEstim = now;
         std::string cerr;
-        bool ok = wv.readSmall(chico, &cerr);
-        if (ok) ok = red.estimate(chico.data(), wv.converterSize(), wv.converterSize(), mapa, &cerr);
-        if (ok) ok = wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
-        if (ok) {
-          convMs = red.lastMs();
+        if (wv.readSmall(chico, &cerr)) {
+          hiloRed.arrancar(&red, chico.data(), wv.converterSize());
+        } else if (++convFallos == 1 || convFallos % 100 == 0) {
+          std::fprintf(stderr, "[conversor] no se pudo leer el cuadro pequeno (%d): %s\n", (int)convFallos,
+                       cerr.c_str());
+        }
+      }
+      float msHecho = 0.0f;
+      std::string cerr, errHecho;
+      const int estado = hiloRed.recoger(mapa, msHecho, errHecho);
+      if (estado == 1) {
+        convMs = msHecho;
+        if (wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr)) {
           /* con --dump guardamos tambien el mapa del primer cuadro: sirve para ver si la red
              esta entendiendo bien la escena (claro = cerca, oscuro = lejos) */
           if (!opts.dumpPath.empty() && (convHechas == 0 || convHechas == 8)) {
@@ -1016,6 +1083,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             std::fprintf(stderr, "[conversor] %s\n", cerr.c_str());
             convActivo = false;   /* no insistir cuadro tras cuadro con el mismo fallo */
           }
+        }
+      } else if (estado == -1) {
+        if (++convFallos == 1 || convFallos % 100 == 0)
+          std::fprintf(stderr, "[conversor] fallo (%d): %s\n", (int)convFallos, errHecho.c_str());
+        if (!convHechas) {
+          std::fprintf(stderr, "[conversor] %s\n", errHecho.c_str());
+          convActivo = false;   /* la red no dio una sola: no seguir intentandolo cada cuadro */
         }
       }
       /* los dos deslizadores de siempre mandan aqui: "3D Depth" pone el plano que se queda

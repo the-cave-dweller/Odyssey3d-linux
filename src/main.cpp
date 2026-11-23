@@ -1168,8 +1168,10 @@ static std::string findDataFile(const std::string &name, const std::string &cali
   if (!ed.empty()) {
     bases.push_back(ed + "/calib");
     bases.push_back(ed + "/../share/odyssey3d/calib");
+    bases.push_back(ed + "/../calib");
   }
   bases.push_back("/usr/share/odyssey3d/calib");
+  bases.push_back("/usr/local/share/odyssey3d/calib");
   for (const std::string &b : bases) {
     std::string p = b + "/" + name;
     if (fileExists(p)) return p;

@@ -2,6 +2,24 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El conversor aguantado: cantos limpios, red en su propio hilo y tarjetas llenas
+- **Los cantos ya no se babeen.** En el tramado, donde el mapa de profundidad cambia rápido en
+  horizontal (un borde) se recorta el desplazamiento de cada ojo. Sin eso, el relleno del mapa —que
+  llega de 518×518 y se estira a 3840— estira el color en peine justo en los bordes de los objetos. La
+  constante `CantoSuave` de `weave.frag` (0,004) manda: subirla apaga más el desplazamiento en los
+  cantos, bajarla devuelve relieve.
+- **La red ya no congela el cuadro.** La estimación corre en un hilo aparte: el visor baja la imagen
+  chica, se la pasa y sigue dibujando; el mapa se sube cuando está listo. Antes, con la red por CPU
+  (150 ms), cada estimación paraba el cuadro entero.
+- **Elección de tarjeta con criterio.** Antes de abrir el modelo se mira la memoria libre de cada GPU;
+  si en la pedida no caben ~1,1 GB se prueba en la que más tenga y, si en ninguna cabe, se usa la CPU
+  con avisos claros (`cada` sube solo a 10). En esta máquina, con 246 MB libres en la 4090 y 1,8 GB en
+  la 5080, el conversor ahora funciona por CPU en vez de quedarse mudo (antes: `CUDA error ... out of
+  memory` en el nodo `/Resize` y nada de relieve).
+- **Mapas de corrección encontrados desde cualquier sitio.** Faltaban dos rutas de búsqueda
+  (`<carpeta del ejecutable>/../calib` y `/usr/local/share/odyssey3d/calib`): lanzando el binario del
+  `build` desde otra carpeta se trabajaba con corrección neutra sin decir por qué.
+
 ## Los vídeos normales también salen en relieve: conversor 2D a 3D en tiempo real (v0.12)
 - **Qué hace.** Ya no hace falta que el vídeo traiga dos imágenes. Con el conversor puesto, el visor
   mira el fotograma normal, deduce qué está cerca y qué está lejos, y desplaza cada ojo unas decenas de
