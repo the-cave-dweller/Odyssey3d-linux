@@ -118,6 +118,15 @@ void main()
         L = texture(uSrc, q4 + vec2(-s + cnv, 0.0)).rgb;
         R = texture(uSrc, q4 + vec2(s + cnv, 0.0)).rgb;
         if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
+    } else if (P.tun4.w == 2.0) {
+        /* conversor puesto pero aun sin mapa de profundidad: los dos ojos ven lo mismo, o sea la
+           imagen normal y plana. Es lo que se ve medio segundo al encender el conversor y si la red
+           falla; si cayera a la rama de lado a lado se veria la pantalla partida en dos. */
+        vec2 q3 = fuv;
+        if (P.tun3.z == 1.0)
+            q3.y = 1.0 - q3.y;
+        L = texture(uSrc, q3 + vec2(cnv, 0.0)).rgb;
+        R = L;
     } else {
         L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);
         R = srcHalf(fuv + vec2(cnv - dep, 0.0), rx);

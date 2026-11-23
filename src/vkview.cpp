@@ -639,11 +639,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         std::printf("[conversor] la red va por CPU: la profundidad se recalcula cada %d cuadros "
                     "(se cambia con --cada N)\n", cadaConv);
       }
+      /* sin desplazamiento no hay relieve: arrancar arriba del todo del termino medio. Con el
+         deslizador a 60 el tope de separacion entre el ojo izquierdo y el derecho es de ~85 px a
+         3840 de ancho; ahi es donde aun se ve un solo volumen y no dos imagenes despegadas. */
+      ui.hud.state().popout = 60;
+      if (ui.hud.state().depth == 50) ui.hud.state().depth = 60;   /* mas cosas por delante del cristal */
       std::printf("[conversor] video normal a 3D con %s, cada %d cuadros (tecla C para apagar)\n",
                   red.device().c_str(), cadaConv);
+      std::printf("[conversor] arranque: relieve %d (%.0f px de separacion entre ojos a %d px de ancho), "
+                  "plano de referencia %d -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
+                  ui.hud.state().popout, (0.004 + ui.hud.state().popout / 100.0 * 0.036) * 3840.0,
+                  3840, ui.hud.state().depth);
       ui.convInfo = true;
+      ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
+      ui.extraHasta = glfwGetTime() + 9.0;
       std::fflush(stdout);
-      ui.hud.state().popout = 50;   /* sin desplazamiento no hay relieve: empezar en el medio */
     }
   }
 #else
@@ -802,10 +812,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           convActivo = true;
           ui.hud.state().weaveOn = true;   /* hace falta la trama: el relieve sale de ahi */
           ui.tune.topBottom = false;
-          if (ui.hud.state().popout == 0) ui.hud.state().popout = 50;
-          std::printf("[conversor] video normal a 3D encendido con %s (tecla C para apagar)\n",
-                      red.device().c_str());
+          if (ui.hud.state().popout < 60) ui.hud.state().popout = 60;   /* plano = sin relieve */
+          if (ui.hud.state().depth == 50) ui.hud.state().depth = 60;
+          std::printf("[conversor] video normal a 3D encendido con %s (tecla C para apagar): "
+                      "relieve %d, plano %d -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
+                      red.device().c_str(), ui.hud.state().popout, ui.hud.state().depth);
           ui.convInfo = true;
+          ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
+          ui.extraHasta = glfwGetTime() + 9.0;
         }
       } else if (!pidiendo) {
         convActivo = false;
@@ -1069,6 +1083,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               std::printf("[volcado] %s (%dx%d, estimacion %lld)\n", mp.c_str(), red.size(), red.size(),
                           convHechas + 1);
             }
+            /* y la trama YA con el mapa puesto: el volcado del principio sale antes de la primera
+               estimacion, asi que ahi el desplazamiento por ojo todavia no existe. Esta es la unica
+               imagen que deja ver el relieve aplicado y como se aguantan los cantos. */
+            if (convHechas == 8) {
+              std::vector<uint8_t> trama;
+              if (wv.grab(trama, &cerr)) {
+                const std::string tp = opts.dumpPath + "-trama-con-mapa.png";
+                if (glPngSave(tp, fbW, fbH, trama.data()))
+                  std::printf("[volcado] %s (%dx%d con el mapa de profundidad puesto)\n",
+                              tp.c_str(), fbW, fbH);
+                else
+                  std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", tp.c_str());
+              } else
+                std::fprintf(stderr, "[volcado] trama con mapa: %s\n", cerr.c_str());
+            }
           }
           if (++convHechas == 1 || convHechas % 150 == 0)
             std::printf("[conversor] profundidad en %.1f ms con %s (cuadro %lld)\n", convMs,
@@ -1094,8 +1123,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       /* los dos deslizadores de siempre mandan aqui: "3D Depth" pone el plano que se queda
          quieto y "3D Popout" cuanto se separan la vista izquierda y la derecha */
-      wv.setConverter(0.003f + (float)st.popout / 100.0f * 0.020f, (float)st.depth / 100.0f,
-                      wv.hasDepthMap());
+      /* "3D Salida" (relieve) manda aqui: 0 deja la imagen plana y 100 separa las dos vistas
+         un 3,6 % del ancho de la pantalla, que es donde este panel todavía se fusiona comodo. */
+      const float ganancia = 0.004f + (float)st.popout / 100.0f * 0.036f;
+      wv.setConverter(ganancia, (float)st.depth / 100.0f, wv.hasDepthMap());
     }
 #endif
     ui.hud.state().hud = rig.hud();

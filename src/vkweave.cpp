@@ -696,6 +696,10 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t4[0] = (convOn_ && depthUsable_) ? 1.0f : 0.0f;   /* conversor activo de verdad */
   t4[1] = convGain_;                                 /* cuanto desplaza cada ojo */
   t4[2] = convRef_;                                  /* plano que se queda quieto */
+  /* conversor puesto pero sin mapa todavia (el primer cuadro, o si la red falla): el shader tiene
+     que pintar la imagen ENTERA y plana. Si cae en la rama de lado a lado se ven dos mitades de la
+     pantalla una al lado de la otra, que es lo primero que se notaba al encender el conversor. */
+  t4[3] = (convOn_ && !depthUsable_) ? 2.0f : 0.0f;
   if (std::getenv("ODYSSEY_UBO")) {
     std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · v4 TL %.2f %.2f %.2f\n",
                  res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], v4[0], v4[1], v4[2]);

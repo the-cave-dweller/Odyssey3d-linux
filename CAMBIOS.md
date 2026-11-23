@@ -2,6 +2,23 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El relieve se sube: curva mas fuerte, arranque plano y medicion en pantalla
+- **Curva del deslizador "3D Salida" casi duplicada.** Antes, a mitad de deslizador, la separacion
+  maxima entre la vista del ojo izquierdo y la del derecho era de ~50 px en una pantalla de 3840 px de
+  ancho; ahora es de ~98 px (2,6 % del ancho), que es donde este panel aun se fusiona comodo. El
+  arranque del conversor pone el deslizador en 60 en vez de 50 y el plano de referencia en 60, o sea
+  mas contenido por delante del cristal: con 50/50 se veia casi plano.
+- **Al encender el conversor ya no se parte la pantalla.** Sin mapa de profundidad (el primer medio
+  segundo, o si la red falla) el tramado caia en la rama de «lado a lado» y se veian dos medias
+  pantallas una junto a la otra. Ahora, con el conversor puesto y sin mapa, los dos ojos reciben la
+  imagen entera y plana.
+- **Se ve de cuanto hablamos.** Al encender el conversor el registro dice la separacion en pixeles
+  entre ojos y el plano de referencia, y en pantalla aparece un aviso de 9 segundos con las teclas
+  `Ctrl+Shift+6` (subir) y `Ctrl+Shift+5` (bajar), para ajustar el relieve mirando el panel.
+- **Volcado util.** Con `--dump` ahora se guarda tambien `-trama-con-mapa.png`: la trama leida de
+  Vulkan con el mapa ya puesto. El volcado de siempre se hacía antes de la primera estimacion, asi que
+  nunca dejaba ver el relieve aplicado.
+
 ## El conversor aguantado: cantos limpios, red en su propio hilo y tarjetas llenas
 - **Los cantos ya no se babeen.** En el tramado, donde el mapa de profundidad cambia rápido en
   horizontal (un borde) se recorta el desplazamiento de cada ojo. Sin eso, el relleno del mapa —que
