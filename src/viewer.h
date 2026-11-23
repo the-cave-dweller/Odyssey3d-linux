@@ -18,6 +18,8 @@ struct ViewerOpts {
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */
+  bool noHud = false;
+  bool cpuPattern = false;   /* el patron de prueba se genera en la CPU (para comparar GL y Vulkan) */        /* sin la superposicion del hub (para comparar trazados) */
   double eyeX = 0.0;       /* cm */
   double eyeY = 8.391599655;  /* cm hacia abajo desde el centro de la pantalla */
   double eyeZ = 65.11128998; /* cm de distancia */
@@ -32,6 +34,7 @@ struct ViewerOpts {
 
 enum class SourceKind { Test, Mpv, Capture };
 
-int runViewer(const ViewerOpts &opts, SourceKind kind);
+int runViewer(const ViewerOpts &opts, SourceKind kind);      /* camino OpenGL  */
+int runViewerVk(const ViewerOpts &opts, SourceKind kind);    /* camino Vulkan  */
 
 #endif

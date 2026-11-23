@@ -147,7 +147,7 @@ void Weave::setCorrectionsFromPng(const std::string &a, const std::string &b) {
   std::fprintf(stderr, "[weave] mapas de corrección del panel cargados (%dx%d)\n", wa, ha);
 }
 
-Weave::CornerAttrs Weave::fill(double ndcX, double ndcY) const {
+CornerAttrs lensCorner(const LensField &field_, const EyePose &eye_, int W_, int H_, double ndcX, double ndcY) {
   const double u = (ndcX + 1.0) * 0.5; /* 0 = izquierda, 1 = derecha */
   const double v = (ndcY + 1.0) * 0.5; /* 0 = arriba, 1 = abajo  (y hacia abajo en pantalla) */
   const double px = u * W_ - 0.5;
@@ -168,6 +168,8 @@ Weave::CornerAttrs Weave::fill(double ndcX, double ndcY) const {
     a.v4[c] = (float)(field_.c00[c] + field_.kx * (px + 0.5) + field_.ky * (py + 0.5));
   return a;
 }
+
+CornerAttrs Weave::fill(double ndcX, double ndcY) const { return lensCorner(field_, eye_, W_, H_, ndcX, ndcY); }
 
 void Weave::refreshCorners() {
   /* TL, TR, BL, BR: posición NDC, uv y atributos (el NDC en y coincide con el orden de pantalla). */

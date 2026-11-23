@@ -1,0 +1,298 @@
+/* session.cpp — hardware del monitor, pantalla y teclas compartidas por los dos visores. */
+#include "session.h"
+
+#include "util.h"
+
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <unistd.h>
+
+static const char *rotW(int r) {
+  const char *w = Panel::rotationWord(r);
+  return w ? w : "desconocida";
+}
+
+void Rig::bringUp(const ViewerOpts &o) {
+  /* 1) modo del panel: la trama exige píxel a píxel (escala 1, rotación normal, 3840x2160). */
+  if (!o.noPanel) {
+    if (!Panel::available()) {
+      std::fprintf(stderr,
+                   "[aviso] kscreen-doctor no esta disponible: deja el panel a 3840x2160, escala 1 y rotacion normal\n");
+    } else {
+      std::string name = Panel::resolveOutput(o.output);
+      PanelState st{};
+      std::string err;
+      if (name.empty() || !Panel::query(name, st, &err)) {
+        std::fprintf(stderr, "[aviso] no se pudo leer el estado del panel (%s): no se cambia el modo\n",
+                     err.empty() ? "sin salidas" : err.c_str());
+      } else {
+        output = name;
+        int idx = Panel::pickMode(st, o.hz);
+        if (idx < 0) {
+          std::fprintf(stderr, "[aviso] %s no tiene modo 3840x2160: no se cambia el modo\n", name.c_str());
+        } else {
+          /* Aviso si una sesión anterior se quedó sin restaurar (no tocamos nada por nuestra
+             cuenta: puede que el usuario haya cambiado la pantalla después). */
+          PanelState stale{};
+          if (Panel::loadSnapshot(stale) && stale.name == name &&
+              (stale.modeIndex != st.modeIndex || stale.scale != st.scale || stale.rotation != st.rotation))
+            std::fprintf(stderr,
+                         "[aviso] hay un estado del panel sin restaurar de otra sesion (modo %d %s, escala %g, "
+                         "rotacion %s). Si quieres recuperarlo: odyssey3d ctl panel restore\n",
+                         stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
+          std::string snapPath;
+          if (!Panel::saveSnapshot(st, &snapPath, &err)) std::fprintf(stderr, "[aviso] %s\n", err.c_str());
+          if (Panel::apply(name, idx, 1.0, RotNone, true, &err, false)) {
+            saved = st;
+            panelApplied = true;
+            std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR apagado\n", name.c_str(), idx,
+                        Panel::modeName(st, idx).c_str());
+            std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
+                        saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
+            usleep(400000); /* que KWin asiente antes de crear la ventana */
+          } else {
+            std::fprintf(stderr, "[aviso] no se pudo cambiar el modo: %s\n", err.c_str());
+            Panel::clearSnapshot();
+          }
+        }
+        if (!st.vrr.empty() && st.vrr != "Never")
+          std::fprintf(stderr, "[aviso] sincronizacion adaptativa en %s: apagala en Ajustustes > Pantalla si ves parpadeo\n",
+                       st.vrr.c_str());
+      }
+    }
+  }
+
+  /* 2) lente lenticular: autenticación HMAC-SHA3 y conmutación a 3D. */
+  if (!o.noLens) {
+    std::string port = Lens::findPort();
+    if (port.empty()) {
+      std::fprintf(stderr, "[aviso] no se encontro la lente (USB 354b:0116): ¿falta el cable USB-B del monitor?\n");
+    } else if (!lens.open(port)) {
+      std::fprintf(stderr, "[aviso] lente: %s\n", lens.lastError().c_str());
+    } else {
+      std::printf("[lente] %s\n", port.c_str());
+      if (!lens.authenticate()) std::fprintf(stderr, "[aviso] autenticación de lente falló: %s\n", lens.lastError().c_str());
+      if (!lens.on()) std::fprintf(stderr, "[aviso] no se pudo encender la lente: %s\n", lens.lastError().c_str());
+      lensOk = lens.state();
+      std::printf("[lente] estado: %s\n", lensOk ? "3D" : "2D");
+    }
+  }
+
+  /* 3) scaler MediaTek: modo 3D de la tarjeta del monitor. */
+  if (!o.noScaler) {
+    std::string dev = Scaler::findDevice();
+    if (dev.empty()) {
+      std::fprintf(stderr, "[aviso] no se encontro el scaler (dispositivo SCSI con vendor GCREADER)\n");
+    } else if (!scaler.open(dev)) {
+      std::fprintf(stderr, "[aviso] scaler: %s\n", scaler.lastError().c_str());
+    } else if (scaler.set3d(true)) {
+      scalerOn = true;
+      std::printf("[scaler] %s: modo 3D activado\n", dev.c_str());
+    } else {
+      std::fprintf(stderr, "[aviso] no se pudo activar el modo 3D: %s\n", scaler.lastError().c_str());
+    }
+  }
+}
+
+void Rig::shutDown() {
+  if (scalerOn) {
+    scaler.set3d(false);
+    std::printf("[scaler] modo 3D apagado\n");
+    scalerOn = false;
+  }
+  if (lens.isOpen()) {
+    lens.off();
+    std::printf("[lente] devuelta a 2D\n");
+    lens.close();
+  }
+  if (panelApplied) {
+    std::string err;
+    if (Panel::restore(saved, &err)) {
+      std::printf("[panel] restaurado: modo %d %s, escala %g, rotacion %s\n", saved.modeIndex, saved.modeRes.c_str(),
+                  saved.scale, rotW(saved.rotation));
+      Panel::clearSnapshot();
+    } else {
+      std::fprintf(stderr, "[aviso] no se pudo restaurar el panel: %s\n", err.c_str());
+      std::fprintf(stderr, "[aviso] el estado guardado sigue en ~/.local/state/odyssey3d/panel.state: "
+                           "recuperelo con `odyssey3d ctl panel restore`\n");
+    }
+    panelApplied = false;
+  }
+}
+
+/* ---------------- pantalla ---------------- */
+
+GLFWmonitor *pickMonitor(const std::string &output) {
+  int n = 0;
+  GLFWmonitor **ms = glfwGetMonitors(&n);
+  for (int i = 0; i < n; i++)
+    if (!output.empty() && output == glfwGetMonitorName(ms[i])) return ms[i];
+  for (int i = 0; i < n; i++) { /* si no coincide el nombre, el panel con modo 4K */
+    int nm = 0;
+    const GLFWvidmode *modes = glfwGetVideoModes(ms[i], &nm);
+    for (int j = 0; j < nm; j++)
+      if (modes[j].width == 3840 && modes[j].height == 2160) return ms[i];
+  }
+  return glfwGetPrimaryMonitor();
+}
+
+int refreshOf(GLFWmonitor *mon, double wantHz) {
+  int n = 0;
+  const GLFWvidmode *modes = glfwGetVideoModes(mon, &n);
+  int best = 0;
+  double bestd = 1e9;
+  for (int i = 0; i < n; i++) {
+    double d = std::fabs((double)modes[i].refreshRate - wantHz);
+    if (d < bestd) {
+      bestd = d;
+      best = modes[i].refreshRate;
+    }
+  }
+  const GLFWvidmode *cur = glfwGetVideoMode(mon);
+  return best > 0 ? best : (cur ? cur->refreshRate : 0);
+}
+
+/* ---------------- teclas ---------------- */
+
+bool tuningKey(WeaveTuning &t, int key, const char **tag) {
+  *tag = nullptr;
+  switch (key) {
+    case GLFW_KEY_3:
+      t.weave = !t.weave;
+      *tag = "3D/2D";
+      break;
+    case GLFW_KEY_F:
+      t.swapLR = !t.swapLR;
+      *tag = "invertir";
+      break;
+    case GLFW_KEY_LEFT:
+      t.align -= 0.002f;
+      *tag = "fase -";
+      break;
+    case GLFW_KEY_RIGHT:
+      t.align += 0.002f;
+      *tag = "fase +";
+      break;
+    case GLFW_KEY_PAGE_UP:
+      t.pitch += 0.0002f;
+      *tag = "paso +";
+      break;
+    case GLFW_KEY_PAGE_DOWN:
+      t.pitch -= 0.0002f;
+      *tag = "paso -";
+      break;
+    case GLFW_KEY_UP:
+      t.xtalkDyn += 0.002f;
+      *tag = "crosstalk +";
+      break;
+    case GLFW_KEY_DOWN:
+      t.xtalkDyn -= 0.002f;
+      *tag = "crosstalk -";
+      break;
+    case GLFW_KEY_COMMA:
+      t.filterSlope = t.filterSlope < 0.5f ? 0.0f : t.filterSlope - 0.5f;
+      *tag = "filtro -";
+      break;
+    case GLFW_KEY_PERIOD:
+      t.filterSlope += 0.5f;
+      *tag = "filtro +";
+      break;
+    case GLFW_KEY_9:
+      t.conv -= 0.0005f;
+      *tag = "conv -";
+      break;
+    case GLFW_KEY_0:
+      t.conv += 0.0005f;
+      *tag = "conv +";
+      break;
+    case GLFW_KEY_8:
+      t.conv = 0.0f;
+      t.align = 0.0f;
+      t.pitch = 1.0f;
+      t.xtalkDyn = 0.0f;
+      *tag = "reiniciar";
+      break;
+    default:
+      break;
+  }
+  return *tag != nullptr;
+}
+
+/* ---------------- patrón de prueba por CPU ---------------- */
+
+namespace {
+inline void px(std::vector<uint8_t> &img, int w, int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+  if (x < 0 || y < 0 || x >= w) return;
+  size_t o = ((size_t)y * (size_t)w + (size_t)x) * 4u;
+  if (o + 3 >= img.size()) return;
+  img[o] = r, img[o + 1] = g, img[o + 2] = b, img[o + 3] = 255;
+}
+inline void rect(std::vector<uint8_t> &img, int w, int h, int x0, int y0, int x1, int y1, uint8_t r, uint8_t g,
+                 uint8_t b) {
+  for (int y = y0; y <= y1; y++)
+    for (int x = x0; x <= x1; x++)
+      if (y >= 0 && y < h) px(img, w, x, y, r, g, b);
+}
+/* color por índice, como el hsv() del patrón de OpenGL */
+inline void hue(int i, uint8_t &r, uint8_t &g, uint8_t &b) {
+  float hh = (float)i / 9.0f;
+  float c[3];
+  for (int k = 0; k < 3; k++) {
+    float x = std::fabs(std::fmod(hh * 6.0f + (float)k * 2.0f, 6.0f)) - 3.0f;
+    x = std::fabs(x) - 1.0f;
+    x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);
+    c[k] = 0.25f + 0.75f * (1.0f - x);
+  }
+  r = (uint8_t)(c[0] * 255.0f);
+  g = (uint8_t)(c[1] * 255.0f);
+  b = (uint8_t)(c[2] * 255.0f);
+}
+}  // namespace
+
+void makeTestSbs(std::vector<uint8_t> &img, int w, int h, double t, double parallax) {
+  img.assign((size_t)w * (size_t)h * 4u, 0);
+  const int hw = w / 2;
+  for (int eye = 0; eye < 2; eye++) {
+    const int ox = eye * hw;
+    const double s = eye == 0 ? 1.0 : -1.0;  /* el otro ojo, desplazado en sentido contrario */
+    for (int y = 0; y < h; y++) {
+      float fy = (float)(h - 1 - y); /* como gl_FragCoord: 0 abajo, para que el dibujo coincida */
+      for (int x = 0; x < hw; x++) {
+        float pxx = (float)x, pyy = fy;
+        uint8_t r = 13, g = 13, b = 15;
+        /* rejilla de referencia en el plano de la pantalla */
+        float gx = std::fmod(pxx + (float)(s * 0.0), 96.0f), gy = std::fmod(pyy, 96.0f);
+        if (gx < 2.0f || gy < 2.0f) r = g = b = 51;
+        /* escalera de profundidad: 9 cuadros, cada uno con otra disparidad (uno oscila) */
+        for (int i = 0; i < 9; i++) {
+          double disp = ((double)i - 4.0) * 14.0 + (i == 4 ? 12.0 * std::sin(t * 0.9) : 0.0);
+          double cx = (double)hw * ((double)i + 0.5) / 9.0 + s * disp;
+          double cy = (double)h * 0.55;
+          if (std::fabs(pxx - cx) < 66.0 && std::fabs(pyy - cy) < 66.0) hue(i, r, g, b);
+        }
+        /* crucero en el plano de la pantalla */
+        double ccx = hw * 0.5, ccy = h * 0.86;
+        if ((std::fabs(pxx - ccx) < 3.0 && std::fabs(pyy - ccy) < 40.0) ||
+            (std::fabs(pyy - ccy) < 3.0 && std::fabs(pxx - ccx) < 40.0))
+          r = g = b = 255;
+        /* dos marcas verticales con disparidad fuerte: deben fusionarse por delante */
+        if (std::fabs(pxx - (hw * 0.5 - s * parallax)) < 3.0 && std::fabs(pyy - h * 0.16) < 50.0) r = g = b = 255;
+        /* barras R/G/B sin disparidad: sirven para ver el alineado por canal de la trama */
+        if (pyy > 70.0 && pyy < 114.0) {
+          float tt = (pxx - hw * 0.30f) / (hw * 0.40f);
+          if (tt > 0.0f && tt < 1.0f) {
+            if (tt < 0.333f)
+              r = 255, g = b = 0;
+            else if (tt < 0.666f)
+              g = 255, r = b = 0;
+            else
+              b = 255, r = g = 0;
+          }
+        }
+        px(img, w, ox + x, y, r, g, b);
+      }
+    }
+  }
+  (void)rect;
+}

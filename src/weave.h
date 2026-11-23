@@ -29,6 +29,17 @@ struct WeaveTuning {
   bool swapLR = false;         /* profundidad invertida -> alternar */
 };
 
+/* Esquina del campo: lo mismo que Weave::fill pero sin tocar el contexto GL, para que
+   el trazador Vulkan use exactamente los mismos números. */
+struct CornerAttrs {
+  float v2[2];
+  float v3[2];
+  float v4[3];
+};
+
+struct LensField;
+CornerAttrs lensCorner(const LensField &f, const EyePose &e, int W, int H, double ndcX, double ndcY);
+
 /* Modelo analítico del campo de la lente. Valores capturados de un G90XF (ver README). */
 struct LensField {
   double kx = 0.5539365133;      /* ciclos de fase por píxel en x */
@@ -43,12 +54,6 @@ struct LensField {
 
 class Weave {
 public:
-  struct CornerAttrs {
-    float v2[2];
-    float v3[2];
-    float v4[3];
-  };
-
   bool init(std::string *err);
   void destroy();
 

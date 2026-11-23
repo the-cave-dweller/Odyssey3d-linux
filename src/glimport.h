@@ -5,23 +5,12 @@
 #ifndef ODYSSEY_GLIMPORT_H
 #define ODYSSEY_GLIMPORT_H
 
+#include "frame.h"  /* GpuFrame: el fotograma DMA-BUF del compositor */
 #include "glutil.h" /* define GL_GLEXT_PROTOTYPES antes que GL/gl.h */
 
 #include <cstdint>
 #include <string>
 #include <vector>
-
-/* Un fotograma tal y como lo entrega el compositor. */
-struct GpuFrame {
-  int fd = -1;
-  int w = 0, h = 0;
-  int stride = 0; /* bytes por línea */
-  int offset = 0;
-  uint64_t modifier = 0;
-  uint32_t fourcc = 0;
-  bool dmabuf = false;
-  bool valid() const { return fd >= 0 && w > 0 && h > 0 && fourcc != 0; }
-};
 
 class GpuImporter {
 public:

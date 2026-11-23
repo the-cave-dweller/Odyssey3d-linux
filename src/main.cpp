@@ -7,12 +7,16 @@
 #include "wm.h"
 #include "capture.h"
 #include "glimport.h"
+#include "vkdev.h"
+#include "vkprobe.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include "notify.h"
 #include "scaler.h"
+#include "session.h"
 #include "testsrc.h"
+#include "vkui.h"
 #include "util.h"
 #include "viewer.h"
 #include "weave.h"
@@ -53,8 +57,11 @@ static const char *kUsage =
     "  odyssey3d ctl windows [--watch]\n"
     "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
+    "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
+      "                                        muestra y guarda un fotograma leido en Vulkan\n"
     "  odyssey3d ctl notify [--wait N]\n"
     "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
+    "  odyssey3d test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
     "  odyssey3d serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
     "\n"
     "opciones:\n"
@@ -71,9 +78,12 @@ static const char *kUsage =
     "  --align CICLOS    desfase de fase inicial   --pitch F  escala de la rampa de fase\n"
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
+    "  --sin-interfaz    no dibujar la superposicion del hub (solo Vulkan)\n"
+    "  --gl              usar el camino OpenGL de siempre (por defecto todo se dibuja con Vulkan)\n"
     "\n"
     "teclas: ESC salir · 3 2D/3D · F invertir profundidad · flechas fase/paso/crosstalk · , . filtro\n"
-    "        9/0 convergencia · 8 reiniciar ajuste · espacio pausa · - = saltar 5 s · [ ] cuadro\n";
+    "        9/0 convergencia · 8 reiniciar ajuste · espacio pausa · - = saltar 5 s · [ ] cuadro\n"
+    "        con Vulkan: raton sobre la pastilla · Ctrl+Shift 1..6 como el hub oficial\n";
 
 static std::string flag(int argc, char **argv, const char *name) {
   for (int i = 0; i < argc; i++)
@@ -612,6 +622,115 @@ static int cmdPanel(int argc, char **argv) {
   return 2;
 }
 
+/* ---------------- pruebas Vulkan ---------------- */
+/* Comprueba, sin abrir ventana, si esta GPU puede importar el DMA-BUF que entrega KWin
+   y muestrearlo. Es el paso que decide cómo se porta el visor a Vulkan. */
+static int cmdVkProbe(int argc, char **argv) {
+  std::string err;
+  bool verboso = hasFlag(argc, argv, "--verboso");
+  std::string out = flag(argc, argv, "--out");
+  bool soloGpu = hasFlag(argc, argv, "--solamente-gpu");
+  int secs = 4;
+  if (std::string s = flag(argc, argv, "--segundos"); !s.empty()) secs = std::atoi(s.c_str());
+
+  VkDev dev;
+  if (!dev.init({}, &err)) {
+    std::fprintf(stderr, "[vulkan] no se pudo crear la instancia: %s\n", err.c_str());
+    return 1;
+  }
+  int gpuElegida = -1;
+  if (std::string g = flag(argc, argv, "--gpu"); !g.empty()) gpuElegida = std::atoi(g.c_str());
+  if (!dev.createDevice({}, VK_NULL_HANDLE, &err, gpuElegida)) {
+    std::fprintf(stderr, "[vulkan] %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("[vulkan] gpu: %s · importación DMA-BUF: %s\n", dev.deviceName().c_str(),
+              dev.hasDmaBufImport() ? "sí" : "no");
+  std::fflush(stdout);
+  if (verboso) {
+    std::printf("[vulkan] %s\n", dev.describeModifiers(VK_FORMAT_B8G8R8A8_UNORM).c_str());
+    std::printf("[vulkan] %s\n", dev.describeModifiers(VK_FORMAT_R8G8B8A8_UNORM).c_str());
+    std::printf("[vulkan] %s\n", dev.describeExternal(VK_FORMAT_B8G8R8A8_UNORM).c_str());
+    std::printf("[vulkan] %s\n", dev.describeExternal(VK_FORMAT_R8G8B8A8_UNORM).c_str());
+    std::fflush(stdout);
+  }
+  if (soloGpu) return 0;
+
+#ifndef HAVE_CAPTURE
+  (void)out; (void)secs;
+  std::fprintf(stderr, "compilado sin soporte de captura: usa --gpu para mirar sólo la GPU\n");
+  return 1;
+#else
+  std::string uuid;
+  WindowInfo win;
+  bool haveWin = false;
+  if (!pickWindow(argc, argv, uuid, win, haveWin)) return 1;
+
+  WindowCapture cap;
+  std::string cls = flag(argc, argv, "--clase");
+  if (!cls.empty()) cap.setStreamClass(cls);
+  if (!cap.start(uuid, &err)) {
+    std::fprintf(stderr, "[vulkan] %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("[vulkan] pidiendo el flujo de la ventana a KWin...\n");
+  std::fflush(stdout);
+  for (int i = 0; i < secs * 2; ++i) {
+    struct pollfd pfd{cap.fd(), POLLIN, 0};
+    poll(&pfd, 1, 500);
+    cap.pump();
+    if (cap.framesFlowing()) break;
+    if (i % 2 == 1) std::printf("%s\n", cap.describe().c_str());
+    std::fflush(stdout);
+  }
+  CapturedFrame cf;
+  if (!cap.lastFrame(cf)) {
+    std::fprintf(stderr, "[vulkan] no llegó ningún fotograma: %s\n", cap.lastError().c_str());
+    cap.stop();
+    return 1;
+  }
+  GpuFrame gf;
+  gf.fd = cf.fd;
+  gf.w = cf.w;
+  gf.h = cf.h;
+  gf.stride = cf.stride;
+  gf.offset = cf.offset;
+  gf.modifier = cf.modifier;
+  gf.fourcc = cf.fourcc;
+  gf.dmabuf = cf.dmabuf;
+
+  std::string info;
+  std::vector<uint8_t> rgba;
+  bool ok = vkProbeFrame(dev, gf, rgba, info, &err);
+  cap.stop();
+  std::printf("%s", info.c_str());
+  if (!ok) {
+    std::fprintf(stderr, "[vulkan] %s\n", err.c_str());
+    return 1;
+  }
+  /* resumen para saber si de verdad hay imagen (no todo negro) */
+  unsigned long sumR = 0, sumG = 0, sumB = 0;
+  int muestras = 0;
+  for (size_t i = 0; i + 3 < rgba.size(); i += 4 * 97) {
+    sumR += rgba[i];
+    sumG += rgba[i + 1];
+    sumB += rgba[i + 2];
+    muestras++;
+  }
+  if (muestras)
+    std::printf("promedio muestreado: R %lu G %lu B %lu sobre %d puntos\n", sumR / (unsigned long)muestras,
+                sumG / (unsigned long)muestras, sumB / (unsigned long)muestras, muestras);
+  if (out.empty()) out = "captura-vk.png";
+  if (!glPngSave(out, gf.w, gf.h, rgba.data())) {
+    std::fprintf(stderr, "[vulkan] no se pudo escribir %s\n", out.c_str());
+    return 1;
+  }
+  std::printf("guardado %s (%llu fotogramas recibidos)\n", out.c_str(),
+              static_cast<unsigned long long>(cap.frameCount()));
+  return 0;
+#endif
+}
+
 /* ---------------- ayudas de opciones y datos ---------------- */
 
 static std::string exeDir() {
@@ -664,6 +783,8 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--no-scaler") o.noScaler = true;
     else if (a == "--2d") o.no3d = true;
     else if (a == "--tb" || a == "--top-bottom") o.topBottom = true;
+    else if (a == "--sin-interfaz") o.noHud = true;
+    else if (a == "--cpu-patron") o.cpuPattern = true;
     else if (a == "--no-corr") o.noCorr = true;
     else if (a == "--solid") o.solid = true;
     else if (a == "--out") { if (!need("out")) return false; o.outPath = argv[++i]; }
@@ -710,7 +831,7 @@ static int cmdAttrs(const ViewerOpts &o) {
   std::printf("kx=%.10g ky=%.10g c00=%.10g,%.10g,%.10g px=%.10g slant=%.10g ezEffRef=%.10g fxOverFy=%.10g\n", f.kx,
               f.ky, f.c00[0], f.c00[1], f.c00[2], f.pxPcm, f.slant, f.ezEffRef, f.fxOverFy);
   for (int i = 0; i < 4; i++) {
-    Weave::CornerAttrs a = w.fill(ndc[i][0], ndc[i][1]);
+    CornerAttrs a = w.fill(ndc[i][0], ndc[i][1]);
     std::printf("%s v2=%.10g,%.10g v3=%.10g,%.10g v4=%.10g,%.10g,%.10g\n", name[i], a.v2[0], a.v2[1], a.v3[0],
                 a.v3[1], a.v4[0], a.v4[1], a.v4[2]);
   }
@@ -769,9 +890,13 @@ static int cmdWeavePng(const ViewerOpts &o) {
   GLuint tex = 0;
   TestSrc pat;
   bool havePat = false;
+  std::vector<uint8_t> cpu;
   if (o.solid) {   /* mitad izquierda del archivo roja, derecha verde: la trama debe alternarlas */
     const uint8_t px[16] = {255, 0, 0, 255, 0, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255};
     tex = glTexFromRGBA(2, 2, px, false);
+  } else if (o.cpuPattern) {   /* mismo patron que usa el camino Vulkan: la salida debe coincidir */
+    makeTestSbs(cpu, W, H, 0.0, 34.0);
+    tex = glTexFromRGBA(W, H, cpu.data(), true);
   } else if (!pat.init(&err)) {
     std::fprintf(stderr, "[error] patron: %s\n", err.c_str());
     weave.destroy();
@@ -805,6 +930,58 @@ static int cmdWeavePng(const ViewerOpts &o) {
   glfwDestroyWindow(win);
   glfwTerminate();
   return ok ? 0 : 1;
+}
+
+/* ---------------- prueba sin pantalla de la interfaz ---------------- */
+
+static int cmdHudSelfTest(int argc, char **argv) {
+  ViewerOpts o{};
+  if (!parseViewerFlags(argc, argv, o)) return 2;
+  Hud hud;
+  std::string err;
+  if (!hud.buildAtlas(&err)) {
+    std::fprintf(stderr, "[interfaz] no se pudo armar el atlas: %s\n", err.c_str());
+    return 1;
+  }
+  const int W = o.w > 0 ? o.w : 1920, H = o.h > 0 ? o.h : 1080;
+  hud.state().ask = true;
+  hud.setInfo("prueba de la interfaz");
+  hud.begin(W, H);
+  std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
+              hud.hasText() ? "si" : "no", hud.vertexCount());
+  static const char *nom[] = {"nada",              "boton 3D",   "boton capa",          "deslizador profundidad",
+                              "deslizador salida", "tesela SxS", "tesela arriba/abajo", "tesela plana",
+                              "casilla no preguntar", "cerrar el aviso"};
+  int cuenta[10] = {0}, px0[10] = {0}, py0[10] = {0};
+  for (int y = 0; y < H; y += 2)
+    for (int x = 0; x < W; x += 2) {
+      int h = (int)hud.hit((float)x, (float)y);
+      if (h < 0 || h > 9) continue;
+      if (!cuenta[h]) {
+        px0[h] = x;
+        py0[h] = y;
+      }
+      cuenta[h]++;
+    }
+  for (int h = 1; h <= 9; h++)
+    std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
+
+  const int d0 = hud.state().depth, p0 = hud.state().popout;
+  hud.dragTo(Hud::HitDepth, (float)(W - 1));
+  hud.dragTo(Hud::HitPopout, (float)(W - 1));
+  std::printf("  arrastre a la derecha: profundidad %d -> %d · salida %d -> %d\n", d0, hud.state().depth, p0,
+              hud.state().popout);
+  hud.dragTo(Hud::HitDepth, 0.0f);
+  hud.dragTo(Hud::HitPopout, 0.0f);
+  std::printf("  arrastre a la izquierda: profundidad %d · salida %d\n", hud.state().depth, hud.state().popout);
+  const bool w0 = hud.state().weaveOn;
+  hud.toggle3D();
+  std::printf("  boton 3D: tramado %s -> %s\n", w0 ? "activo" : "apagado", hud.state().weaveOn ? "activo" : "apagado");
+  const bool o0 = hud.state().overlayOn;
+  hud.toggleOverlay();
+  std::printf("  boton capa: superposicion %s -> %s\n", o0 ? "visible" : "oculta",
+              hud.state().overlayOn ? "visible" : "oculta");
+  return 0;
 }
 
 /* ---------------- diagnostico ---------------- */
@@ -1172,6 +1349,8 @@ int main(int argc, char **argv) {
     if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);
     if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
+    if (sub == "vkprobe") return cmdVkProbe(argc - 3, argv + 3);
+    if (sub == "hud") return cmdHudSelfTest(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;
   }
@@ -1203,7 +1382,8 @@ int main(int argc, char **argv) {
     bool haveWin = false;
     if (!pickWindow(argc - 2, argv + 2, uuid, wi, haveWin)) return 1;
     o.captureUuid = uuid;
-    return runViewer(o, SourceKind::Capture);
+    return hasFlag(argc - 2, argv + 2, "--gl") ? runViewer(o, SourceKind::Capture)
+                                               : runViewerVk(o, SourceKind::Capture);
 #endif
   }
   if (cmd == "test" || cmd == "play" || cmd == "doctor") {
@@ -1217,7 +1397,8 @@ int main(int argc, char **argv) {
       }
       return runViewer(o, SourceKind::Mpv);
     }
-    return runViewer(o, SourceKind::Test);
+    return hasFlag(argc - 2, argv + 2, "--gl") ? runViewer(o, SourceKind::Test)
+                                               : runViewerVk(o, SourceKind::Test);
   }
   std::fputs(kUsage, stderr);
   return 2;

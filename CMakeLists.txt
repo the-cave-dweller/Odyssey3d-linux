@@ -16,9 +16,48 @@ pkg_check_modules(GLFW REQUIRED glfw3)
 pkg_check_modules(CRYPTO REQUIRED libcrypto)
 pkg_check_modules(MPV mpv)          # opcional: reproducción de video SBS
 pkg_check_modules(PNG libpng)      # opcional: mapas de corrección del panel
+pkg_check_modules(FREETYPE freetype2)  # opcional: atlas de fuentes para la interfaz
 pkg_check_modules(WAYLAND_CLIENT wayland-client)   # vigilancia de ventanas / captura
 pkg_check_modules(PIPEWIRE libpipewire-0.3)        # opcional: fotogramas de la captura
 pkg_check_modules(LIBSYSTEMD libsystemd)           # opcional: aviso por portal (sd-bus)
+pkg_check_modules(VULKAN REQUIRED vulkan)          # todo el dibujado va por Vulkan
+
+# --- shaders: GLSL -> SPIR-V -> cabecera C++ -------------------------------------
+# Se compilan durante la propia compilación y se incrustan como bytes: el programa no
+# lleva ficheros de shaders encima ni tiene que buscar rutas.
+find_program(GLSLANG glslangValidator)
+if(NOT GLSLANG)
+  message(FATAL_ERROR "Falta glslangValidator (paquetes glslang o shaderc): sin el no se compilan los shaders Vulkan")
+endif()
+set(SP_DIR ${CMAKE_BINARY_DIR}/shadersp)
+file(MAKE_DIRECTORY ${SP_DIR})
+set(SP_FILES
+  "fs.vert|fsVertSpv"
+  "probe.frag|probeFragSpv"
+  "weave.vert|weaveVertSpv"
+  "weave.frag|weaveFragSpv"
+  "hud.vert|hudVertSpv"
+  "hud.frag|hudFragSpv"
+)
+set(SP_GEN "")
+foreach(entry ${SP_FILES})
+  string(REPLACE "|" ";" partes "${entry}")
+  list(GET partes 0 archivo)
+  list(GET partes 1 variable)
+  get_filename_component(nombre "${archivo}" NAME_WE)
+  get_filename_component(extension "${archivo}" EXT)
+  string(SUBSTRING "${extension}" 1 -1 extension)
+  set(spv "${SP_DIR}/${nombre}_${extension}.spv")
+  set(hdr "${SP_DIR}/${nombre}_${extension}_sp.h")
+  add_custom_command(
+    OUTPUT "${hdr}"
+    COMMAND ${GLSLANG} -V "${CMAKE_SOURCE_DIR}/shaders/${archivo}" -o "${spv}"
+    COMMAND ${CMAKE_COMMAND} -DSRC=${spv} -DNAME=${variable} -DDST=${hdr} -P "${CMAKE_SOURCE_DIR}/cmake/embed.cmake"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/${archivo}" "${CMAKE_SOURCE_DIR}/cmake/embed.cmake"
+    COMMENT "compilando shaders/${archivo} a SPIR-V")
+  list(APPEND SP_GEN "${hdr}")
+endforeach()
+add_custom_target(shaders ALL DEPENDS ${SP_GEN})
 
 # --- protocolos de KWin (ventanas y captura) -------------------------------------
 # XMLs del paquete plasma-wayland-protocols. LGPL-2.1-or-later: los generamos en el
@@ -62,7 +101,15 @@ add_executable(odyssey3d
   src/mpvsrc.cpp
   src/glimport.cpp
   src/viewer.cpp
+  src/vkdev.cpp
+  src/vkprobe.cpp
+  src/vkweave.cpp
+  src/vkui.cpp
+  src/session.cpp
+  src/vkview.cpp
 )
+
+add_dependencies(odyssey3d shaders)
 
 target_compile_definitions(odyssey3d PRIVATE ODYSSEY3D_VERSION="${ODYSSEY3D_VERSION_STRING}")
 
@@ -75,8 +122,8 @@ if(WAYLAND_CLIENT_FOUND)
   target_compile_definitions(odyssey3d PRIVATE HAVE_WAYLAND_WM=1)
 endif()
 
-target_include_directories(odyssey3d PRIVATE src ${GLFW_INCLUDE_DIRS} ${CRYPTO_INCLUDE_DIRS} ${PROTO_DIR})
-target_link_libraries(odyssey3d PRIVATE ${GLFW_LIBRARIES} ${CRYPTO_LIBRARIES} GL EGL pthread m)
+target_include_directories(odyssey3d PRIVATE src ${GLFW_INCLUDE_DIRS} ${CRYPTO_INCLUDE_DIRS} ${PROTO_DIR} ${SP_DIR} ${VULKAN_INCLUDE_DIRS})
+target_link_libraries(odyssey3d PRIVATE ${GLFW_LIBRARIES} ${CRYPTO_LIBRARIES} ${VULKAN_LIBRARIES} GL EGL pthread m)
 if(WAYLAND_CLIENT_FOUND)
   target_include_directories(odyssey3d PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIRS})
   target_link_libraries(odyssey3d PRIVATE ${WAYLAND_CLIENT_LIBRARIES})
@@ -98,6 +145,12 @@ if(MPV_FOUND)
   target_link_libraries(odyssey3d PRIVATE ${MPV_LIBRARIES})
   target_compile_definitions(odyssey3d PRIVATE HAVE_MPV=1)
 endif()
+if(FREETYPE_FOUND)
+  target_include_directories(odyssey3d PRIVATE ${FREETYPE_INCLUDE_DIRS})
+  target_link_libraries(odyssey3d PRIVATE ${FREETYPE_LIBRARIES})
+  target_compile_definitions(odyssey3d PRIVATE HAVE_FREETYPE=1)
+endif()
+
 if(PNG_FOUND)
   target_include_directories(odyssey3d PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(odyssey3d PRIVATE ${PNG_LIBRARIES})

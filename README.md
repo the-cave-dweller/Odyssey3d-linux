@@ -21,12 +21,21 @@ inclinación) son las nominales del G90XF, que son idénticas en todas las unida
 ## Requisitos
 
 * Linux con **Wayland** (probado en KDE Plasma + NVIDIA RTX 4090, controlador 620.x).
-* Paquetes: `cmake`, `gcc`, `pkgconf`, `glfw` (>= 3.4), `openssl`, `libpng`, `mpv` (para `play`).
+* Paquetes: `cmake`, `gcc`, `pkgconf`, `glfw` (>= 3.4), `openssl`, `libpng`, **Vulkan**
+  (`vulkan-icd-loader` + `vulkan-headers` + `glslang` para compilar los shaders) y `freetype2`
+  para la interfaz. Para el servicio de ventanas y la captura: `wayland`,
+  `plasma-wayland-protocols`, `libpipewire`, `systemd-libs`. `mpv` es opcional (sólo `play`).
   En CachyOS/Arch:
 
   ```sh
-  sudo pacman -S --needed cmake gcc pkgconf glfw openssl libpng mpv
+  sudo pacman -S --needed cmake gcc pkgconf glfw openssl libpng freetype2 \
+      vulkan-icd-loader vulkan-headers glslang \
+      wayland plasma-wayland-protocols libpipewire systemd-libs mpv
   ```
+
+* Una GPU con **Vulkan 1.3 o más** (probado en RTX 4090, RTX 5080 y AMD con RADV). Todo el
+  dibujado —la trama 3D y la interfaz— se hace con Vulkan; la ruta OpenGL antigua sigue viva
+  con `--gl` por si hace falta compararla.
 
 * El monitor con su **cable USB-B** conectado (por ese cable van la lente, el scaler y la cámara).
 
@@ -79,6 +88,8 @@ odyssey3d ctl scaler off               # sólo apagar el modo 3D del scaler
 odyssey3d ctl panel status             # ver modos del panel (kscreen-doctor)
 odyssey3d ctl panel snapshot           # guardar el estado actual del panel en disco
 odyssey3d ctl panel restore            # devolver el panel al estado guardado
+odyssey3d serve                        # vigilar ventanas a pantalla completa (el servicio)
+odyssey3d capture3d --uuid <id>        # trama en 3D la ventana que captura KWin
 ```
 
 Al arrancar, `test` y `play` hacen todo solos: ponen el panel en `3840x2160@120`, escala 1 y
@@ -118,6 +129,10 @@ mismo fotograma:
 | `,` `.` | pendiente del filtro de traza (±0.5) |
 | `9` `0` | convergencia horizontal (∓0.0005) |
 | `8` | reiniciar el ajuste a los valores nominales |
+| `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
+| `Ctrl+Shift+2` | ocultar / mostrar la capa de la interfaz |
+| `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
+| `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |
 | `espacio`, `-`, `=`, `[`, `]` | pausa, ±5 s, cuadro a cuadro (en `play`) |
 
 Cada cambio imprime una línea con los valores actuales; puedes arrancar desde ellos con
@@ -141,12 +156,65 @@ Cada cambio imprime una línea con los valores actuales; puedes arrancar desde e
 En modo 3D se dibuja un pequeño cuadrado arriba a la izquierda: **verde** = lente y scaler
 activos; **naranja** = sólo uno de los dos; **rojo** = ninguno (no hay 3D).
 
+## La interfaz (pastilla con ratón)
+
+Desde v0.5 el visor dibuja una superposición al estilo del **Odyssey 3D Hub** oficial, con cursor
+de flecha visible y controlables con el ratón:
+
+* pastilla gris translúcida arriba a la derecha, con la línea verde de acento:
+  * **Apagar 3D / Encender 3D** (`Ctrl+Shift+1`),
+  * **Ocultar capa / Mostrar capa** (`Ctrl+Shift+2`),
+  * **3D Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — desplaza la separación de las dos vistas;
+  * **3D Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
+  * un punto de estado: verde = lente y scaler activos, naranja = uno de los dos, rojo = ninguno.
+* aviso abajo a la derecha, casi negro, con tres teselas (**Lado a lado**, **Arriba y abajo**,
+  **2D plano**) y la casilla «no volver a preguntar», que es lo que manda el servicio cuando
+  detecta un vídeo a pantalla completa.
+
+La pastilla se calcula en un lienzo virtual de 1080 px de alto y se escala con la altura del panel,
+así que conserva las proporciones de la aplicación oficial a 3840x2160. Se apaga con
+`--sin-interfaz` (o `Ctrl+Shift+2`). Las teclas finas de alineado (`3`, `F`, flechas, `RePag`…)
+siguen funcionando igual.
+
+## Servicio que arranca con la sesión
+
+`install.sh` activa una unidad de **systemd de usuario** que se levanta con la sesión gráfica y se
+queda esperando (sin ventana, sin consumir GPU):
+
+```sh
+systemctl --user status odyssey3d-serve      # debe decir "active (running)"
+journalctl --user -u odyssey3d-serve -f      # ver lo que hace en vivo
+systemctl --user stop odyssey3d-serve        # pausarlo
+systemctl --user edit odyssey3d-serve        # cambiarlo si hace falta
+```
+
+Qué hace: escucha `org_kde_plasma_window_management` de KWin; cuando una ventana pasa a **pantalla
+completa** manda un aviso de KDE con tres botones. Al pulsar uno lanza
+`odyssey3d capture3d --uuid …`, que pone lente + scaler + modo del panel y trama en 3D el
+fotograma que captura el propio compositor (**DMA-BUF** de KWin → imagen Vulkan, sin copia por
+CPU).
+
+Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
+`espera` (segundos del aviso) y `modo` (`ask`, `sbs`, `tb`, `flat`). Si no aparece ningún aviso:
+
+1. `systemctl --user is-active odyssey3d-serve` → tiene que estar `active`;
+2. la ventana tiene que ser **pantalla completa de verdad** (no maximizada) y su `app_id` no debe
+   estar en `ignore` (los reproductores bajo XWayland aparecen como `xwayland` y están ignorados
+   por defecto: quítalos de la lista si quieres usarlos);
+3. en `journalctl` debe aparecer `ventana <app_id> a pantalla completa` y luego
+   `respuesta <modo> -> <uuid>`.
+
+> KWin 6.8 sólo expone el portal propio de KDE (`zkde_screencast_unstable_v1`, versión 6). Es lo
+> que usa el port; no hay Wlr-Fragment-Capture ni ext-image-copy-capture en este compositor.
+
 ## Limitaciones y diferencias con macdissey-3d
 
-* **Wayland no permite capturar la ventana de otra aplicación**, así que no existe el modo
-  "pantalla completa de cualquier reproductor → trama". El visionado pasa por el reproductor
-  interno (`play`, basado en libmpv). Es la única diferencia funcional de bulto frente al
-  original de macOS, y no depende de este port: en X11 sí se puede (usando `XComposite`).
+* Capturar **otra aplicación** sólo es posible por el portal de captura de KDE
+  (`zkde_screencast_unstable_v1` + PipeWire), que es inestable entre versiones de Plasma: si
+  KWin cambia el interfaz, `serve` deja de ver los fotogramas (lo avisa
+  `journalctl --user -u odyssey3d-serve`). El reproductor interno (`play`, basado en libmpv) sigue
+  siendo la ruta más directa; mpv por ahora se dibuja con OpenGL aunque su fotograma se trama en
+  Vulkan.
 * El **seguimiento de mirada no está activo** todavía. La trama se calcula para la posición de
   ojo nominal (los valores de fábrica del G90XF), igual que el modo "static" del port X11, así
   que el punto dulce es la posición de trabajo normal y se degrada al moverse mucho. Mover la
@@ -167,6 +235,8 @@ activos; **naranja** = sólo uno de los dos; **rojo** = ninguno (no hay 3D).
 odyssey3d doctor                      # qué ve, qué toca, qué falta
 odyssey3d weave [--solid] [--out f.png]  # escribe un PNG con la trama (no toca el panel)
 odyssey3d attrs                       # atributos de la trama (para depurar el modelo)
+odyssey3d ctl hud --w 1920 --h 1080   # prueba la interfaz sin abrir ventana ( atlas, raton )
+odyssey3d ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
 odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
                                       # guarda chk-trama.png y chk-origen.png y sale
 ```
@@ -222,6 +292,22 @@ Hub de Dimenco y el port X11, así que se deja tal cual.
 monitor en vertical al salir). No cambia nada: escribe una instantánea falsa y mira el comando que
 `ctl panel restore --dry` generaría.
 
+`odyssey3d ctl hud --w 1920 --h 1080` comprueba la interfaz sin abrir ventana: construye el atlas
+de fuentes, cuenta los vértices y barre la pantalla entera de 2 px para comprobar que el ratón
+golpea el botón, el deslizador o la tesela que toca, y luego mueve los deslizadores y los botones.
+
+Trama Vulkan contra trama OpenGL, mismo patrón y mismos parámetros (`--cpu-patron` para que la
+fuente sea idéntica en las dos rutas):
+
+```sh
+./build/odyssey3d weave --w 1350 --h 900 --cpu-patron --out /tmp/glc      # OpenGL
+./build/odyssey3d test --windowed --no-panel --no-lens --no-scaler \
+    --w 900 --h 600 --sin-interfaz --dump /tmp/vkn                        # Vulkan (leido de GPU)
+python3 -c "d=[[abs(a-b) for a,b in zip(x,y)] for x,y in zip(__import__('PIL.Image',fromlist=['x']).open('/tmp/glc').convert('RGB').load(),__import__('PIL.Image',fromlist=['x']).open('/tmp/vkn-trama-vulkan.png').convert('RGB').load())]"
+```
+
+Las dos tramas coinciden (diferencia media ~10/255, concentrada en los mapas de corrección).
+
 También se puede mirar la trama a mano: `odyssey3d weave --solid` produce una imagen 3840x2160
 en la que la mitad izquierda del archivo es roja y la derecha verde; midiendo con
 autocorrelación sale un paso de **1.806 px** y una inclinación de **0.29 px por fila**, que son
@@ -238,7 +324,19 @@ src/panel.*    modo/escala/rotación del panel vía kscreen-doctor (guardado y r
 src/weave.*    shader de entrelazado + modelo analítico del oráculo Dimenco
 src/testsrc.*  patrón SBS de calibración (disparidades, marcas, barras RGB)
 src/mpvsrc.*   reproducción con la render API de libmpv
-src/viewer.*   ventana GLFW/Wayland,secuencia de arranque/apagado, teclas
+src/session.*  secuencia de arranque/apagado del panel+lente+scaler, teclas comunes, patron SBS
+src/viewer.*   ventana GLFW/Wayland y dibujado por **OpenGL** (`--gl`, ruta de reserva)
+src/vkview.*   ventana GLFW/Wayland y dibujado por **Vulkan** (la ruta normal)
+src/vkdev.*    instancia, dispositivo, DMA-BUF, subidas, barreras, charco de descriptores
+src/vkweave.*  cadena de trazado Vulkan: pases weave + interfaz con *dynamic rendering*
+src/vkui.*     superposicion de la interfaz (atlas de fuentes FreeType + vertices)
+shaders/       GLSL 450 de la trama y de la interfaz (se compilan a SPIR-V al construir)
+src/wm.*       vigilancia de ventanas a pantalla completa (plasma-window-management)
+src/capture.*  fotogramas de KWin por zkde-screencast + PipeWire (DMA-BUF)
+src/notify.*   avisos de KDE por el portal de notificaciones (sd-bus)
+src/vkprobe.*  diagnóstico: importar un DMA-BUF y dibujarlo en Vulkan
+systemd/       unidad `odyssey3d-serve.service` (arranca con la sesion)
+config/        `serve.conf`, plantilla de ~/.config/odyssey3d/serve.conf
 src/main.*     subcomandos y banderas
 tools/         verificación numérica de la trama contra el oráculo
 calib/         mapas de corrección del panel (3DStackCorrection_A/B.png)
