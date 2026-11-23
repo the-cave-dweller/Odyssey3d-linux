@@ -89,6 +89,8 @@ odyssey3d ctl panel status             # ver modos del panel (kscreen-doctor)
 odyssey3d ctl panel snapshot           # guardar el estado actual del panel en disco
 odyssey3d ctl panel restore            # devolver el panel al estado guardado
 odyssey3d serve                        # vigilar ventanas a pantalla completa (el servicio)
+odyssey3d ctl overlay                    # enseña la tarjeta de pregunta en la esquina
+odyssey3d ctl windows                    # lista las ventanas y detecta la pantalla completa
 odyssey3d capture3d --uuid <id>        # trama en 3D la ventana que captura KWin
 ```
 
@@ -189,20 +191,28 @@ systemctl --user edit odyssey3d-serve        # cambiarlo si hace falta
 ```
 
 Qué hace: escucha `org_kde_plasma_window_management` de KWin; cuando una ventana pasa a **pantalla
-completa** manda un aviso de KDE con tres botones. Al pulsar uno lanza
+completa** dibuja en la esquina una **tarjeta propia** (la misma interfaz del visor) con tres botones.
+Va en una capa `overlay` de `zwlr_layer_shell_v1`, así que **se ve por encima del vídeo a pantalla
+completa**, cosa que las notificaciones de KDE no logran (KWin las dibuja detrás, y con «No molestar»
+ni siquiera aparecen). Si el compositor no expone ese protocolo se vuelve al aviso de KDE. Al pulsar un
+botón lanza
 `odyssey3d capture3d --uuid …`, que pone lente + scaler + modo del panel y trama en 3D el
 fotograma que captura el propio compositor (**DMA-BUF** de KWin → imagen Vulkan, sin copia por
 CPU).
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
-`espera` (segundos del aviso) y `modo` (`ask`, `sbs`, `tb`, `flat`). Si no aparece ningún aviso:
+`espera` (segundos que queda la tarjeta) y `modo` (`ask`, `sbs`, `tb`, `flat`). Si marcada la casilla
+de la tarjeta se pulsa un botón, se guarda una línea `auto = app:modo` en ese archivo y desde entonces
+esa aplicación pasa directa sin preguntar (puedes editar o borrar esa línea a mano). Si no aparece la
+tarjeta:
 
 1. `systemctl --user is-active odyssey3d-serve` → tiene que estar `active`;
 2. la ventana tiene que ser **pantalla completa de verdad** (no maximizada) y su `app_id` no debe
    estar en `ignore` (los reproductores bajo XWayland aparecen como `xwayland` y están ignorados
    por defecto: quítalos de la lista si quieres usarlos);
-3. en `journalctl` debe aparecer `ventana <app_id> a pantalla completa` y luego
-   `respuesta <modo> -> <uuid>`.
+3. en `journalctl` debe aparecer `[serve] tarjeta puesta por <app_id> | <título>` y luego
+   `[serve] tarjeta -> <modo>`; para probar la tarjeta sin ningún vídeo:
+   `odyssey3d ctl overlay --segundos 8` (acepta `--dump CARDEN.png` para volcarla a un archivo).
 
 > KWin 6.8 sólo expone el portal propio de KDE (`zkde_screencast_unstable_v1`, versión 6). Es lo
 > que usa el port; no hay Wlr-Fragment-Capture ni ext-image-copy-capture en este compositor.
