@@ -33,6 +33,9 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   ni el indicador de estado; los parámetros se vuelven a escribir en cada cuadro, antes estaban
   congelados tras el primero y teclas/deslizadores no cambiaban nada. Añadido el volcado con
   `ODYSSEY_UBO=1` para verificar los parámetros que llegan a la GPU.
+- Captura más robusta: si el nodo de PipeWire se crea pero no llega ningún fotograma en 5 s, se
+  pide otra vez el flujo (hasta 3 veces) y cada 5 s informa cuántos fotogramas llegaron y de qué
+  tipo. Con `--segundos` el volcado PNG ya no corta la sesión: se guarda y se sigue viendo el 3D.
 - Bandera `--segundos N` en `test`/`capture3d`: sale sola con la secuencia normal de apagado
   (panel, lente y scaler restaurados), útil para probar sin estar pendiente del teclado.
 - Prueba real en el panel con Vulkan: `test --segundos 30` puso 3840x2160@119.88 con escala 1 y

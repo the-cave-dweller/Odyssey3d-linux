@@ -349,8 +349,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n\n");
   std::fflush(stdout);
 
-  double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0;
-  int frames = 0, errStreak = 0;
+  double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0;
+  int frames = 0, errStreak = 0, reintentos = 0;
+  bool dumpHecho = false;
   while (!glfwWindowShouldClose(win) && !ui.quit) {
     glfwPollEvents();
     double now = glfwGetTime();
@@ -404,7 +405,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       if (now - lastPoll > 1.0) {
         lastPoll = now;
-        if (!cap.streamCreated()) std::fprintf(stderr, "[captura] %s\n", cap.describe().c_str());
+        if (!cap.streamCreated()) {
+          std::fprintf(stderr, "[captura] %s\n", cap.describe().c_str());
+        } else if (lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 3) {
+          /* el nodo se creo pero no llega nada: cambia el modo del panel y KWin invalida la
+             sesion, o el portal tarda. Tira del flujo y pidelo otra vez. */
+          ++reintentos;
+          std::printf("[captura] el flujo no arranca, pidiendolo otra vez (intento %d)\n", reintentos);
+          cap.stop();
+          std::string e2;
+          if (!cap.start(opts.captureUuid, &e2)) std::fprintf(stderr, "[captura] reintentar: %s\n", e2.c_str());
+        }
+      }
+      if (now - ultimoAviso > 5.0 && lastFrameCount > 0) {
+        ultimoAviso = now;
+        CapturedFrame cf;
+        cap.lastFrame(cf);
+        std::printf("[captura] %llu fotogramas del compositor, ultimo %dx%d %s\n",
+                    (unsigned long long)lastFrameCount, cf.w, cf.h, cf.dmabuf ? "en DMA-BUF" : "en memoria");
       }
 #endif
     }
@@ -453,7 +471,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_CAPTURE
     if (kind == SourceKind::Capture) fuenteLista = lastFrameCount > 0;
 #endif
-    if (!opts.dumpPath.empty() && ((fuenteLista && frames >= 4) || frames >= 150)) {
+    if (!opts.dumpPath.empty() && !dumpHecho && ((fuenteLista && frames >= 4) || frames >= 150)) {
       std::vector<uint8_t> rgba;
       if (wv.grab(rgba, &err)) {
         std::string a = opts.dumpPath + "-trama-vulkan.png";
@@ -471,7 +489,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       } else {
         std::fprintf(stderr, "[volcado] %s\n", err.c_str());
       }
-      ui.quit = true;
+      dumpHecho = true;
+      /* si ademas se pidio un tiempo (--segundos), el volcado no corta la sesion: deja ver
+         el 3D en el panel y sale al cumplirse el tiempo */
+      if (opts.segundos <= 0) ui.quit = true;
     }
 #endif
     frames++;
