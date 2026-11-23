@@ -30,6 +30,7 @@ struct ViewerOpts {
   std::string captureUuid;   /* ventana a capturar (SourceKind::Capture) */
   std::string outPath;     /* salida de `weave` */
   std::string dumpPath;    /* guardar fotogramas PNG (diagnostico) y salir */
+  int segundos = 0;      /* salir solos tras N segundos (por secuencias y pruebas) */
 };
 
 enum class SourceKind { Test, Mpv, Capture };

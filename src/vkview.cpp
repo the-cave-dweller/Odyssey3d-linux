@@ -354,6 +354,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   while (!glfwWindowShouldClose(win) && !ui.quit) {
     glfwPollEvents();
     double now = glfwGetTime();
+    if (opts.segundos > 0 && now - t0 >= (double)opts.segundos) {
+      std::printf("[sesion] %d segundos cumplidos, saliendo con la secuencia normal\n", opts.segundos);
+      break;
+    }
 
     /* la fuente de este cuadro */
     bool newSource = false;

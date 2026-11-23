@@ -33,6 +33,11 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   ni el indicador de estado; los parámetros se vuelven a escribir en cada cuadro, antes estaban
   congelados tras el primero y teclas/deslizadores no cambiaban nada. Añadido el volcado con
   `ODYSSEY_UBO=1` para verificar los parámetros que llegan a la GPU.
+- Bandera `--segundos N` en `test`/`capture3d`: sale sola con la secuencia normal de apagado
+  (panel, lente y scaler restaurados), útil para probar sin estar pendiente del teclado.
+- Prueba real en el panel con Vulkan: `test --segundos 30` puso 3840x2160@119.88 con escala 1 y
+  rotación normal, lente a 3D, scaler en 3D, intercambio a 3840x2160 presentando estable a ~119.8
+  cuadros/s, y al salir devolvió el panel a 3840x2160@164.98 con escala 1.5.
 - Comparación numérica Vulkan ↔ OpenGL con el mismo patrón (`weave --cpu-patron` y `--dump`): la
   diferencia media es ~10/255 y se concentra en los mapas de corrección, donde la ruta OpenGL
   todavía muestrea volteada (pendiente).
