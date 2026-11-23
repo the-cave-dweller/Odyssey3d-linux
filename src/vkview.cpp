@@ -47,6 +47,7 @@ struct VkUi {
      MPRIS del navegador. mediaPausaManual evita reanudar un video que el usuario pauso a proposito. */
   Mpris *media = nullptr;
   bool mediaPausaManual = false;
+  std::string fmtInfo;       /* " · lado a lado": recuerda que formato se esta entrelazando */
   std::string extraInfo;     /* " · video en pausa" y cosas asi, detras de la frase de estado */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
 };
@@ -66,7 +67,7 @@ void printTuning(const VkUi &ui, const char *what) {
 
 /* frase breve bajo la pastilla: qué se está viendo y en qué estado está el hardware */
 std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int w, int h,
-                     const std::string &extra = "") {
+                     const std::string &extra = "", const std::string &fmt = "") {
   char buf[192];
   std::snprintf(buf, sizeof buf, "%dx%d  %s  %s  %s", w, h, kind == SourceKind::Capture ? "ventana" : "prueba",
                 st.weaveOn ? (st.ask ? "" : "") : "", "");
@@ -78,6 +79,7 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
   out += (rig.lensOk ? "3D" : "2D");
   out += " · scaler ";
   out += (rig.scalerOn ? "3D" : "apagado");
+  if (st.weaveOn) out += fmt;   /* el formato elegido en la tarjeta: lado a lado / arriba y abajo */
   out += extra;
   return out;
 }
@@ -470,6 +472,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     haveCap = true;
     std::printf("[captura] pidiendo el flujo de la ventana %s\n", opts.captureUuid.c_str());
+    /* el formato lo eligio el usuario en la tarjeta; si se equivoco, la imagen se ve doble
+       y desplazada, que es la queja tipica: decir como se deshace sin cerrar la sesion */
+    std::printf("[formato] %s. Si el video no tiene dos imagenes asi, se vera doble y movido:"
+                " tecla 3 para 2D plano o Ctrl+Shift+1 para apagar el 3D\n",
+                opts.topBottom ? "arriba y abajo (una imagen sobre otra)" : "lado a lado (una imagen al lado de otra)");
+    std::fflush(stdout);
+    ui.fmtInfo = std::string(" · ") + (opts.topBottom ? "arriba y abajo" : "lado a lado");
     std::string merr;
     if (media.open(&merr))
       std::printf("[video] mando el video por MPRIS (%s): P lo pausa y lo reanuda\n", media.playerName().c_str());
@@ -670,7 +679,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.extraInfo.clear();
       ui.extraHasta = 0.0;
     }
-    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo));
+    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo));
     ui.hud.begin(fbW, fbH);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
