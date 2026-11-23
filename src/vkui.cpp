@@ -319,9 +319,29 @@ void Hud::begin(int w, int h) {
     float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 14.0f, 0.06f, 0.07f, 0.08f, 0.92f);
-    text("¿Convertir el vídeo actual a 3D?", ax + 24.0f, ay + 22.0f, 19.0f, ink[0], ink[1], ink[2], 1.0f);
-    text("Elige el formato de la imagen que estás viendo.", ax + 24.0f, ay + 52.0f, 13.0f, dim[0], dim[1], dim[2],
-         dim[3]);
+    /* el titulo lo pone el servicio (la pelicula que da pantalla completa); si viene
+       vacio se usa el texto de la aplicacion oficial */
+    auto encaja = [&](const std::string &s, float tam, float maxAncho) {
+      if (textWidth(s, tam) <= maxAncho) return s;
+      std::string out, col;
+      float ancho = 0.0f, reserva = textWidth("..", tam);
+      size_t i = 0;
+      while (i < s.size()) {
+        size_t antes = i;
+        nextCp(s, i);
+        col = s.substr(antes, i - antes);
+        float w = textWidth(col, tam);
+        if (ancho + w > maxAncho - reserva) break;
+        ancho += w;
+        out += col;
+      }
+      return out + "..";
+    };
+    text(encaja(askTitulo_.empty() ? "¿Convertir el vídeo actual a 3D?" : askTitulo_, 19.0f, aw - 92.0f), ax + 24.0f,
+         ay + 22.0f, 19.0f, ink[0], ink[1], ink[2], 1.0f);
+    text(encaja(askCuerpo_.empty() ? "Elige el formato de la imagen que estás viendo." : askCuerpo_, 13.0f,
+                aw - 48.0f),
+         ax + 24.0f, ay + 52.0f, 13.0f, dim[0], dim[1], dim[2], dim[3]);
     float tw = (aw - 48.0f - 24.0f) / 3.0f;
     askSbs_ = {ax + 24.0f, ay + 86.0f, tw, 78.0f};
     askTop_ = {ax + 24.0f + tw + 12.0f, ay + 86.0f, tw, 78.0f};
@@ -373,6 +393,24 @@ void Hud::begin(int w, int h) {
     solid(16.0f, (float)h - 34.0f, tw + 16.0f, 24.0f, 0.05f, 0.06f, 0.07f, 0.65f);
     text(info_, 24.0f, (float)h - 28.0f, 13.0f, ink[0], ink[1], ink[2], 0.85f);
   }
+}
+
+bool Hud::askBounds(float *x, float *y, float *w, float *h) const {
+  if (!st_.ask || askPanel_.w <= 0.0f) return false;
+  if (x) *x = askPanel_.x * sc_;
+  if (y) *y = askPanel_.y * sc_;
+  if (w) *w = askPanel_.w * sc_;
+  if (h) *h = askPanel_.h * sc_;
+  return true;
+}
+
+bool Hud::pillBounds(float *x, float *y, float *w, float *h) const {
+  if (!st_.overlayOn || pillPanel_.w <= 0.0f) return false;
+  if (x) *x = pillPanel_.x * sc_;
+  if (y) *y = pillPanel_.y * sc_;
+  if (w) *w = pillPanel_.w * sc_;
+  if (h) *h = pillPanel_.h * sc_;
+  return true;
 }
 
 Hud::Hit Hud::hit(float mxa, float mya) const {

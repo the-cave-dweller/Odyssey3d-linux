@@ -8,6 +8,9 @@
 #include "track.h"
 #include "panel.h"
 #include "wm.h"
+#ifdef HAVE_WAYLAND_WM
+#include "overlay.h"
+#endif
 #include "capture.h"
 #include "glimport.h"
 #include "vkdev.h"
@@ -31,6 +34,7 @@
 #include <csignal>
 #include <map>
 #include <set>
+#include <sys/stat.h>
 #include <sys/wait.h>
 
 #include <algorithm>
@@ -71,6 +75,8 @@ static const char *kUsage =
     "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
       "                                        muestra y guarda un fotograma leido en Vulkan\n"
     "  odyssey3d ctl notify [--wait N]\n"
+    "  odyssey3d ctl overlay [--segundos 12] [--dump F.png] [--titulo T] [--cuerpo T]\n"
+    "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
     "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
     "  odyssey3d test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
     "  odyssey3d serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
@@ -1485,7 +1491,21 @@ struct ServeCfg {
   std::vector<std::string> ignore;
   int esperaSeg = 40;
   std::string modo = "ask";   /* ask = preguntar con un aviso; sbs/tb/flat = arrancar sin preguntar */
+  std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
+
+/* Se añade al final del archivo, así se conservan los comentarios de arriba. */
+static void guardarAutoEnDisco(const std::string &appId, const std::string &modo) {
+  const char *home = std::getenv("HOME");
+  if (!home || appId.empty()) return;
+  const std::string dir = std::string(home) + "/.config/odyssey3d";
+  ::mkdir(dir.c_str(), 0700);
+  FILE *f = std::fopen((dir + "/serve.conf").c_str(), "ae");
+  if (!f) return;
+  std::fseek(f, 0, SEEK_END);
+  std::fprintf(f, "auto = %s:%s\n", appId.c_str(), modo.c_str());
+  std::fclose(f);
+}
 
 static void splitList(const std::string &text, std::vector<std::string> &out) {
   std::string item;
@@ -1517,6 +1537,17 @@ static void loadServeCfg(ServeCfg &cfg) {
     if (k == "ignore") splitList(v, cfg.ignore);
     else if (k == "espera") cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
     else if (k == "modo") cfg.modo = strLower(v);
+    else if (k == "auto") {
+      /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
+      std::vector<std::string> pares;
+      splitList(v, pares);
+      for (const std::string &par : pares) {
+        size_t dd = par.find(':');
+        if (dd == std::string::npos) continue;
+        std::string app = strLower(strTrim(par.substr(0, dd))), md = strLower(strTrim(par.substr(dd + 1)));
+        if (!app.empty() && (md == "sbs" || md == "tb" || md == "flat")) cfg.porApp[app] = md;
+      }
+    }
     (void)last;
   };
   for (char c : txt) {
@@ -1558,6 +1589,65 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   ::_exit(127);
 }
 
+#ifdef HAVE_WAYLAND_WM
+/* Deja la tarjeta del hub encima de cualquier ventana, incluidas las de pantalla
+   completa, y la deja visible un rato. Con --dump guarda el lienzo tal cual se pintó,
+   así se puede revisar el dibujo sin mirar la pantalla. */
+static int cmdOverlay(int argc, char **argv) {
+  int segundos = 12;
+  if (std::string v = flag(argc, argv, "--segundos"); !v.empty()) segundos = std::max(1, std::atoi(v.c_str()));
+  const std::string volcado = flag(argc, argv, "--dump");
+  std::string titulo = "¿Convertir el vídeo actual a 3D?";
+  std::string cuerpo = "Elige el formato de la imagen que estás viendo.";
+  if (std::string v = flag(argc, argv, "--titulo"); !v.empty()) titulo = v;
+  if (std::string v = flag(argc, argv, "--cuerpo"); !v.empty()) cuerpo = v;
+
+  std::signal(SIGTERM, onServeSignal);
+  std::signal(SIGINT, onServeSignal);
+
+  Overlay ov;
+  std::string err;
+  if (!ov.open(&err)) {
+    std::fprintf(stderr, "[capa] %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("[capa] %s · escala %.2f\n", ov.outputName().c_str(), ov.scale());
+  std::fflush(stdout);
+  ov.showAsk(titulo, cuerpo);
+  if (!ov.askVisible()) {
+    std::fprintf(stderr, "[capa] el compositor no puso la tarjeta: %s\n", ov.lastError().c_str());
+    return 1;
+  }
+  std::printf("[capa] tarjeta puesta %d s · mueve el ratón sobre los botones\n", segundos);
+  std::fflush(stdout);
+
+  auto reloj = [] {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+  };
+  const double inicio = reloj();
+  bool volcadoHecho = false;
+  while (!g_stopServe && reloj() - inicio < (double)segundos) {
+    ov.waitAndDispatch(100);
+    if (std::string a = ov.takeAction(); !a.empty()) {
+      std::printf("[capa] elegido: %s\n", a.c_str());
+      std::fflush(stdout);
+      if (a != "close") break;
+    }
+    if (!volcadoHecho && !volcado.empty() && reloj() - inicio > 1.0) {
+      if (ov.dumpPng(volcado, &err))
+        std::printf("[capa] lienzo guardado en %s\n", volcado.c_str());
+      else
+        std::fprintf(stderr, "[capa] %s\n", err.c_str());
+      volcadoHecho = true;
+    }
+  }
+  ov.hideAsk();
+  return 0;
+}
+#endif
+
 static int cmdServe(int argc, char **argv) {
 #ifndef HAVE_WAYLAND_WM
   (void)argc; (void)argv;
@@ -1585,11 +1675,19 @@ static int cmdServe(int argc, char **argv) {
     std::fprintf(stderr, "[serve] %s\n", err.c_str());
     return 1;
   }
+  /* La tarjeta propia va por encima del video a pantalla completa; el portal de
+     avisos de KDE queda debajo, así que sólo lo usamos de respaldo. */
+  Overlay ov;
+  bool hayTarjeta = ov.open(&err);
+  if (hayTarjeta)
+    std::printf("[serve] tarjeta superpuesta en %s (escala %.2f)\n", ov.outputName().c_str(), ov.scale());
+  else
+    std::fprintf(stderr, "[serve] sin capa superpuesta: %s\n", err.c_str());
   Notifier nt;
-  bool hayAvisos = nt.open(&err);
-  if (!hayAvisos) std::fprintf(stderr, "[serve] sin portal de avisos: %s\n", err.c_str());
-  if (cfg.modo == "ask" && !hayAvisos) {
-    std::fprintf(stderr, "[serve] para preguntar hacen falta las notificaciones; usa --modo sbs|tb|flat\n");
+  bool hayAvisos = hayTarjeta ? false : nt.open(&err);
+  if (!hayTarjeta && !hayAvisos) std::fprintf(stderr, "[serve] sin portal de avisos: %s\n", err.c_str());
+  if (cfg.modo == "ask" && !hayAvisos && !hayTarjeta) {
+    std::fprintf(stderr, "[serve] para preguntar hace falta la capa superpuesta o las notificaciones; usa --modo sbs|tb|flat\n");
     return 1;
   }
 
@@ -1598,6 +1696,8 @@ static int cmdServe(int argc, char **argv) {
   std::set<std::string> preguntadas;           /* ventanas por las que ya preguntamos o actuamos */
   std::string avisoId, avisoUuid, accion;      /* aviso pendiente y respuesta del usuario */
   double avisoT = 0.0;
+  std::string tarjetaUuid, tarjetaApp;         /* ventana a la que le pusimos la tarjeta */
+  double tarjetaT = 0.0;
   pid_t hijo = -1;
   std::string hijoUuid;
 
@@ -1615,7 +1715,15 @@ static int cmdServe(int argc, char **argv) {
   std::fflush(stdout);
 
   while (!g_stopServe) {
-    wm.waitAndDispatch(500);
+    if (hayTarjeta) {
+      /* dos conexiones de Wayland abiertas: ninguna puede bloquear a la otra */
+      struct pollfd ojea[2] = {{wm.fd(), POLLIN, 0}, {ov.fd(), POLLIN, 0}};
+      ::poll(ojea, 2, 200);
+      wm.waitAndDispatch(0);
+      ov.waitAndDispatch(0);
+    } else {
+      wm.waitAndDispatch(500);
+    }
     if (hayAvisos) {
       nt.process();
       nt.flush();
@@ -1639,6 +1747,36 @@ static int cmdServe(int argc, char **argv) {
     }
 
     /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
+    /* lo mismo con la tarjeta: si nadie pulsa, se retira */
+    if (!tarjetaUuid.empty() && now - tarjetaT > (double)cfg.esperaSeg) {
+      std::printf("[serve] tarjeta sin respuesta, se retira (%s)\n", tarjetaUuid.c_str());
+      std::fflush(stdout);
+      ov.hideAsk();
+      tarjetaUuid.clear();
+    }
+
+    if (hayTarjeta) {
+      if (std::string acto = ov.takeAction(); !acto.empty()) {
+        ov.hideAsk();
+        if (acto == "close") {
+          std::printf("[serve] tarjeta cerrada sin elegir (%s)\n", tarjetaUuid.c_str());
+        } else {
+          accion = acto;
+          avisoUuid = tarjetaUuid;
+          std::printf("[serve] tarjeta -> %s (%s)\n", acto.c_str(), avisoUuid.c_str());
+          if (ov.remember() && !tarjetaApp.empty() && acto != "flat") {
+            cfg.porApp[tarjetaApp] = acto;
+            guardarAutoEnDisco(tarjetaApp, acto);
+            std::printf("[serve] apuntado: %s pasa directo a %s sin preguntar\n", tarjetaApp.c_str(), acto.c_str());
+          }
+        }
+        tarjetaApp.clear();
+        ov.setRemember(false);
+        tarjetaUuid.clear();
+        std::fflush(stdout);
+      }
+    }
+
     if (!avisoId.empty() && now - avisoT > (double)cfg.esperaSeg) {
       std::printf("[serve] aviso sin respuesta, se retira (%s)\n", avisoUuid.c_str());
       std::fflush(stdout);
@@ -1687,7 +1825,31 @@ static int cmdServe(int argc, char **argv) {
       WindowInfo w{};
       if (wm.fullscreenCandidate(w, {}) && !ignoredApp(w, cfg.ignore) && !preguntadas.count(w.uuid)) {
         preguntadas.insert(w.uuid);
-        if (cfg.modo == "ask") {
+        const std::string app = strLower(w.appId);
+        auto fija = cfg.porApp.find(app);
+        if (fija != cfg.porApp.end()) {
+          if (dry) {
+            std::printf("[serve] (dry) %s ya está ajustada a %s, no se pregunta\n", app.c_str(), fija->second.c_str());
+            std::fflush(stdout);
+            if (unaVez) break;
+          } else {
+            hijo = spawnViewer(exe, w.uuid, fija->second);
+            hijoUuid = w.uuid;
+            std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
+            std::fflush(stdout);
+            if (hijo > 0 && unaVez) break;
+          }
+        } else if (cfg.modo == "ask" && hayTarjeta) {
+          std::string titulo = "¿Convertir el vídeo actual a 3D?";
+          std::string cuerpo = w.title.empty() ? w.appId : w.title;
+          cuerpo += "  ·  " + std::to_string(w.w) + "x" + std::to_string(w.h);
+          ov.showAsk(titulo, cuerpo);
+          tarjetaUuid = w.uuid;
+          tarjetaApp = app;
+          tarjetaT = now;
+          std::printf("[serve] tarjeta puesta por %s | %s (%s)\n", w.appId.c_str(), w.title.c_str(), w.uuid.c_str());
+          std::fflush(stdout);
+        } else if (cfg.modo == "ask") {
           std::string id = "odyssey3d-" + w.uuid.substr(0, 8);
           std::vector<std::pair<std::string, std::string>> botones = {
               {"sbs", "3D lado a lado"}, {"tb", "3D arriba y abajo"}, {"flat", "2D plano"}};
@@ -1722,6 +1884,7 @@ static int cmdServe(int argc, char **argv) {
   }
 
   if (!avisoId.empty()) nt.remove(avisoId);
+  if (hayTarjeta) ov.hideAsk();
   if (hijo > 0) {
     ::kill(hijo, SIGTERM);
     int st = 0;
@@ -1763,6 +1926,9 @@ int main(int argc, char **argv) {
     if (sub == "panel") return cmdPanel(argc - 3, argv + 3);
     if (sub == "windows") return cmdWindows(argc - 3, argv + 3);
     if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
+#ifdef HAVE_WAYLAND_WM
+    if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);
+#endif
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);
     if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
     if (sub == "vkprobe") return cmdVkProbe(argc - 3, argv + 3);

@@ -52,6 +52,12 @@ public:
   State &state() { return st_; }
   const State &state() const { return st_; }
   void setInfo(const std::string &s) { info_ = s; }
+  /* texto del aviso: por defecto el de la aplicacion oficial; el servicio pone aqui
+     el titulo de la pelicula que esta dando pantalla completa */
+  void setAskText(const std::string &titulo, const std::string &cuerpo) {
+    askTitulo_ = titulo;
+    askCuerpo_ = cuerpo;
+  }
 
   /* ---- cuadro de la superposición y pruebas de golpe de ratón ---- */
   void begin(int w, int h);            /* limpia y calcula la disposición */
@@ -69,6 +75,12 @@ public:
 
   /* Área útil de la ventana: lo que hay debajo de la pastilla sigue dibujando vídeo. */
   bool overlayVisible() const { return st_.overlayOn; }
+
+  /* Cuadro ocupado por el aviso / la pastilla en la disposicion actual, en pixeles
+     reales de la ventana (los mismos que llevan los vertices). Lo usa la superposicion
+     de Wayland para recortar su ventana justo a esa esquina. */
+  bool askBounds(float *x, float *y, float *w, float *h) const;
+  bool pillBounds(float *x, float *y, float *w, float *h) const;
 
 private:
   struct Glyph {
@@ -100,6 +112,7 @@ private:
   State st_{};
   float mx_ = -1.0f, my_ = -1.0f;
   std::string info_;
+  std::string askTitulo_, askCuerpo_;   /* vacio = texto oficial */
   std::vector<HudVertex> v_;
   int W_ = 0, H_ = 0;      /* tamano real de la ventana */
   float sc_ = 1.0f;      /* escala de la interfaz: 1 en 1080, hasta 2 en 2160 */

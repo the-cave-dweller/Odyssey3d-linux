@@ -1,0 +1,8 @@
+Protocolos Wayland que no vienen en el paquete wayland-protocols de la distribución.
+
+wlr-layer-shell-unstable-v1.xml  — copia de la del proyecto swaybg (MIT), que es la
+misma que implementan wlroots y KWin (KWin lo anuncia como zwlr_layer_shell_v1, versión 5).
+Lo usa src/overlay.cpp para poner la interfaz del hub POR ENCIMA de un video a pantalla
+completa: en Wayland no hay una orden de "mantener arriba", y la capa "overlay" de este
+protocolo es lo que hace falta (las notificaciones de KDE se quedan detrás del video).
+Se genera con wayland-scanner al compilar; no se reparte con el programa.

@@ -75,13 +75,51 @@ if(WAYLAND_CLIENT_FOUND)
     set(WAYLAND_CLIENT_FOUND OFF)
   else()
     get_filename_component(PLASMA_PROTO_DIR ${PLASMA_WM_XML} DIRECTORY)
+    set(PROTO_XML_plasma-window-management ${PLASMA_PROTO_DIR}/plasma-window-management.xml)
+    set(PROTO_XML_zkde-screencast-unstable-v1 ${PLASMA_PROTO_DIR}/zkde-screencast-unstable-v1.xml)
+    # wlr-layer-shell no esta en el paquete wayland-protocols: lo llevamos nosotros
+    # (la copia es la de swaybg, MIT; ver protocols/LEEME.txt).
+    set(PROTO_XML_wlr-layer-shell-unstable-v1 ${CMAKE_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml)
+    list(APPEND PROTO_PROTOCOLS wlr-layer-shell-unstable-v1)
+    # layer-shell menciona xdg_popup en get_popup, así que el código generado
+    # enlaza contra la interfaz de xdg-shell aunque nunca usemos ese pedido
+    find_file(XDG_SHELL_XML NAMES xdg-shell.xml
+              PATHS /usr/share/wayland-protocols/stable/xdg-shell /usr/local/share/wayland-protocols/stable/xdg-shell)
+    if(XDG_SHELL_XML)
+      set(PROTO_XML_xdg-shell ${XDG_SHELL_XML})
+      list(APPEND PROTO_PROTOCOLS xdg-shell)
+    else()
+      message(STATUS "sin xdg-shell.xml: layer-shell no se puede generar")
+    endif()
+    # escala fraccionaria: sirve para que la interfaz se vea nitida cuando el escritorio
+    # esta por ejemplo al 150 %. Si la distribucion no la trae, usamos la escala entera.
+    find_file(WP_FRACTIONAL_XML NAMES fractional-scale-v1.xml
+              PATHS /usr/share/wayland-protocols/staging/fractional-scale)
+    # el tamano logico del monitor (zxdg_output) es la unica forma fiable de saber la
+    # escala real: con el escritorio al 150 % el wl_output anuncia escala entera 2
+    find_file(XDG_OUTPUT_XML NAMES xdg-output-unstable-v1.xml
+              PATHS /usr/share/wayland-protocols/unstable/xdg-output)
+    if(XDG_OUTPUT_XML)
+      set(PROTO_XML_xdg-output-unstable-v1 ${XDG_OUTPUT_XML})
+      list(APPEND PROTO_PROTOCOLS xdg-output-unstable-v1)
+    endif()
+    find_file(WP_VIEWPORTER_XML NAMES viewporter.xml
+              PATHS /usr/share/wayland-protocols/stable/viewporter)
+    if(WP_FRACTIONAL_XML AND WP_VIEWPORTER_XML)
+      set(PROTO_XML_fractional-scale-v1 ${WP_FRACTIONAL_XML})
+      set(PROTO_XML_viewporter ${WP_VIEWPORTER_XML})
+      list(APPEND PROTO_PROTOCOLS fractional-scale-v1 viewporter)
+      add_compile_definitions(HAVE_FRACTIONAL_SCALE=1)
+    else()
+      message(STATUS "sin fractional-scale/viewporter: la superposicion usara la escala entera del monitor")
+    endif()
     foreach(p ${PROTO_PROTOCOLS})
       add_custom_command(
         OUTPUT ${PROTO_DIR}/${p}-client-protocol.h ${PROTO_DIR}/${p}-protocol.c
         COMMAND ${CMAKE_COMMAND} -E make_directory ${PROTO_DIR}
-        COMMAND ${WAYLAND_SCANNER} client-header ${PLASMA_PROTO_DIR}/${p}.xml ${PROTO_DIR}/${p}-client-protocol.h
-        COMMAND ${WAYLAND_SCANNER} private-code ${PLASMA_PROTO_DIR}/${p}.xml ${PROTO_DIR}/${p}-protocol.c
-        DEPENDS ${PLASMA_PROTO_DIR}/${p}.xml
+        COMMAND ${WAYLAND_SCANNER} client-header ${PROTO_XML_${p}} ${PROTO_DIR}/${p}-client-protocol.h
+        COMMAND ${WAYLAND_SCANNER} private-code ${PROTO_XML_${p}} ${PROTO_DIR}/${p}-protocol.c
+        DEPENDS ${PROTO_XML_${p}}
         COMMENT "generando ${p} (wayland-scanner)")
       list(APPEND PROTO_GEN ${PROTO_DIR}/${p}-protocol.c)
     endforeach()
@@ -117,7 +155,7 @@ add_dependencies(odyssey3d shaders)
 target_compile_definitions(odyssey3d PRIVATE ODYSSEY3D_VERSION="${ODYSSEY3D_VERSION_STRING}")
 
 if(WAYLAND_CLIENT_FOUND)
-  target_sources(odyssey3d PRIVATE src/wm.cpp ${PROTO_GEN})
+  target_sources(odyssey3d PRIVATE src/wm.cpp src/overlay.cpp ${PROTO_GEN})
   if(PIPEWIRE_FOUND)
     target_sources(odyssey3d PRIVATE src/capture.cpp)
     target_compile_definitions(odyssey3d PRIVATE HAVE_CAPTURE=1)

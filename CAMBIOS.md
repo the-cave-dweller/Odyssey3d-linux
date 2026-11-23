@@ -2,6 +2,31 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## tarjeta superpuesta encima del vídeo a pantalla completa
+- Antes, al poner un vídeo a pantalla completa, `serve` mandaba una notificación por el portal D-Bus:
+  con «No molestar» activado se archiva y KWin la dibuja **debajo** del vídeo, así que no servía de nada.
+- Ahora `src/overlay.*` es un cliente de `zwlr-layer-shell_v1` (KWin lo expone, v5) que pone una capa
+  en `layer = overlay`, anclada abajo a la derecha y con `exclusive_zone = -1`: esa capa va **por encima
+  de cualquier ventana, incluidas las a pantalla completa**, y no se come el teclado (no pedimos
+  `keyboard_interactivity`), así que el vídeo sigue recibiendo sus teclas.
+- El dibujo es el mismo `Hud` del visor (`src/vkui.*`) pero rasterizado en CPU sobre un búfer ARGB8888
+  de memoria compartida: los mismos rectángulos, la misma fuente FreeType y los mismos iconos, así la
+  tarjeta es idéntica a la del hub oficial. `Hud::askBounds`/`pillBounds` dan el rectángulo para el
+  lienzo; el ratón entra por `wl_pointer` (coordenadas lógicas, se multiplican por la escala del monitor)
+  y se reutiliza `Hud::hit`, que ya trabaja en píxeles reales.
+- **Escala**: hay que derivarla del tamaño lógico (`zxdg_output_v1.logical_size` entre el modo físico),
+  no del `wl_output.scale`, que en este monitor anuncia 2 con el escritorio al 150 %; con 1.50 correcto
+  la tarjeta sale nítida y del tamaño justo (3840x2160 físicos, 2560x1440 lógicos).
+- La casilla «guardar el tipo y no volver a preguntar» ya hace algo: al elegir un botón con la casilla
+  marcada se añade `auto = app:modo` al final de `~/.config/odyssey3d/serve.conf` (se conservan los
+  comentarios) y desde entonces esa aplicación pasa directa sin mostrar la tarjeta. `serve --dry` lo
+  avisa: `(dry) mpv ya está ajustada a sbs, no se pregunta`.
+- Comprobación: con mpv a pantalla completa y `serve` en seco, la captura de pantalla muestra la tarjeta
+  encima del vídeo y el registro dice `[serve] tarjeta puesta por mpv | Voyager_3D_sbs.wmv - mpv`.
+- Orden nueva para verla sin ningún vídeo: `odyssey3d ctl overlay [--segundos 12] [--dump CARDEN.png]
+  [--titulo TEXTO] [--cuerpo TEXTO]`.
+- El aviso por notificación se queda como respaldo por si el compositor no expone layer-shell.
+
 ## rastreo de cabeza (integrado en el visor, sobre v0.5)
 - **Calibración de fábrica leída del propio monitor**: `ctl calib` pregunta por el puerto serie
   de la lente (`SR+CALCAM`, `SR+CALET`, `SR+CAL3D`, `SR+CHIP`) y guarda los datos en `calib/`.
