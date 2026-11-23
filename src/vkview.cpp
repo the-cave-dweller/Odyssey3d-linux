@@ -642,13 +642,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* sin desplazamiento no hay relieve: arrancar arriba del todo del termino medio. Con el
          deslizador a 60 el tope de separacion entre el ojo izquierdo y el derecho es de ~85 px a
          3840 de ancho; ahi es donde aun se ve un solo volumen y no dos imagenes despegadas. */
-      ui.hud.state().popout = 60;
-      if (ui.hud.state().depth == 50) ui.hud.state().depth = 60;   /* mas cosas por delante del cristal */
+      ui.hud.state().popout = 55;
+      if (ui.hud.state().depth == 50) ui.hud.state().depth = 55;   /* algo por delante, sin pasarse */
       std::printf("[conversor] video normal a 3D con %s, cada %d cuadros (tecla C para apagar)\n",
                   red.device().c_str(), cadaConv);
       std::printf("[conversor] arranque: relieve %d (%.0f px de separacion entre ojos a %d px de ancho), "
                   "plano de referencia %d -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
-                  ui.hud.state().popout, (0.004 + ui.hud.state().popout / 100.0 * 0.036) * 3840.0,
+                  ui.hud.state().popout, (0.003 + ui.hud.state().popout / 100.0 * 0.026) * 3840.0,
                   3840, ui.hud.state().depth);
       ui.convInfo = true;
       ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
@@ -812,8 +812,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           convActivo = true;
           ui.hud.state().weaveOn = true;   /* hace falta la trama: el relieve sale de ahi */
           ui.tune.topBottom = false;
-          if (ui.hud.state().popout < 60) ui.hud.state().popout = 60;   /* plano = sin relieve */
-          if (ui.hud.state().depth == 50) ui.hud.state().depth = 60;
+          if (ui.hud.state().popout < 55) ui.hud.state().popout = 55;   /* plano = sin relieve */
+          if (ui.hud.state().depth == 50) ui.hud.state().depth = 55;
           std::printf("[conversor] video normal a 3D encendido con %s (tecla C para apagar): "
                       "relieve %d, plano %d -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
                       red.device().c_str(), ui.hud.state().popout, ui.hud.state().depth);
@@ -1124,8 +1124,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* los dos deslizadores de siempre mandan aqui: "3D Depth" pone el plano que se queda
          quieto y "3D Popout" cuanto se separan la vista izquierda y la derecha */
       /* "3D Salida" (relieve) manda aqui: 0 deja la imagen plana y 100 separa las dos vistas
-         un 3,6 % del ancho de la pantalla, que es donde este panel todavía se fusiona comodo. */
-      const float ganancia = 0.004f + (float)st.popout / 100.0f * 0.036f;
+         un 2,6 % del ancho de la pantalla. A 55 son ~66 px de separacion entre ojos: con 50 px (la curva
+         vieja) no se notaba y con 98 molestaba, ahi esta el termino medio medido en el panel. */
+      const float ganancia = 0.003f + (float)st.popout / 100.0f * 0.026f;
       wv.setConverter(ganancia, (float)st.depth / 100.0f, wv.hasDepthMap());
     }
 #endif
