@@ -322,13 +322,29 @@ odyssey3d ctl flujo --uuid '{...}' --segundos 5        # fotogramas por segundo 
 Si marca 0 fotogramas/s con el vídeo sonando, el que dejó de pintar es el navegador. Tiene arreglo del lado
 del navegador:
 
-- **Firefox o Zen**: en `about:config`, poner `widget.wayland.vsync.keep-firing-at-idle` en `true`
-  (con eso el navegador sigue pintando aunque esté tapado: con un vídeo local en Zen se midieron 25 f/s
-  estables con la capa encima, cuando sin la preferencia el mismo montaje se secaba a 0-1 f/s). La variante
-  más brusca es `widget.wayland.vsync.enabled = false`, también verificada con vídeo local (30 f/s).
+- **Firefox o Zen**: en `about:config`, poner `gfx.vsync.compositor.unobserve-count` en `0` y reiniciar el
+  navegador. Medido con un vídeo de YouTube en bucle, el panel en modo 3D (3840x2160 a 119,88 Hz) y nuestra
+  capa encima: **30,9 f/s** con la preferencia, frente a 0,1 f/s sin ella. Zen guarda el cambio solo si se
+  pone en `about:config`; el proyecto deja además una nota en el perfil (`user.js`) para que no se pierda.
+- **No uses `widget.wayland.vsync.enabled = false`**: probado en esta máquina, empeora las cosas (con el
+  panel en modo 3D el propio navegador bajó de 0,4 f/s, con capa o sin ella). El valor por defecto, `true`,
+  es el que hay que dejar.
 - **Chrome o Chromium**: arrancarlos con `--disable-gpu-vsync` (sin probar en esta máquina).
 - **mpv, VLC, haruna, toc**: no necesitan tocar nada. Recomendado para ver en 3D:
-  `odyssey3d play archivo.mp4` usa mpv y el flujo se mantiene.
+  `odyssey3d play archivo.mp4` usa mpv y el flujo se mantiene (60-63 f/s con el hardware en marcha).
+
+Lo segundo que hace el navegador es **pausar el vídeo él solo** al cambiar el modo del monitor o al quedar
+tapado: el flujo de KWin sigue llegando (se midieron 51 f/s) pero la imagen no avanza. Como el visor se queda
+el teclado y el ratón de la pantalla, no se puede pulsar el botón de pausa del reproductor, así que el visor lo
+hace por MPRIS (Zen, Firefox y Chrome publican un reproductor en la sesión):
+
+- al arrancar la sesión, si el vídeo estaba parado lo reanuda solo (`[video] el navegador habia parado el
+  video (Paused): se reanuda solo`);
+- **`P` o espacio** pausan y reanudan el vídeo sin quitar la capa;
+- desde una terminal, en cualquier momento: `odyssey3d ctl video status|pause|play|toggle`.
+
+Si aun así hace falta usar el ratón sobre el reproductor (cambiar la calidad, buscar en la línea de tiempo),
+la salida limpia es `ESC`: cierra la sesión, devuelve el panel a 2D y vuelve a aparecer la tarjeta del hub.
 
 El visor hace lo que puede por su parte: si el flujo se corta lo vuelve a pedir una y otra vez mientras
 dure la sesión, no vuelve a gastar GPU presentando el mismo cuadro (`--siempre` recupera el ritmo de panel

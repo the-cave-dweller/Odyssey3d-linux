@@ -148,6 +148,7 @@ add_executable(odyssey3d
   src/vkui.cpp
   src/session.cpp
   src/vkview.cpp
+  src/mpris.cpp
 )
 
 add_dependencies(odyssey3d shaders)

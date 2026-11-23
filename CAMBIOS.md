@@ -2,6 +2,35 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El navegador vuelve a pintar y se puede pausar sin quitar la capa (v0.9)
+- **La preferencia que arregla el congelado de YouTube es `gfx.vsync.compositor.unobserve-count = 0`**, no la
+  que decíamos antes (`widget.wayland.vsync.keep-firing-at-idle` no existe en este Zen; estaba mal escrita).
+  Medido con el YouTube real del usuario, en bucle y a pantalla completa, comprobando además que la imagen se
+  mueve (dos capturas separadas 1 s):
+  | panel | sin nuestra capa | con nuestra capa |
+  |---|---|---|
+  | normal (modo 2, 164,98 Hz, escala 1,5) | 62,7 f/s | — |
+  | modo 3D (119,88 Hz, escala 1) | 51,7 f/s | **30,9 f/s** |
+  Antes de la preferencia, el mismo montaje con capa daba 0,1 f/s.
+- **Descartada `widget.wayland.vsync.enabled = false`**: con esa preferencia el navegador del usuario pintaba
+  a 0,4 f/s en el modo 3D *incluso sin nuestra capa*, así que empeoraba. Quito del aviso y del `user.js` del
+  perfil (ahí queda fijada en su valor por defecto, `true`, para que no se escape).
+- **El navegador también pausa el vídeo solo**, sobre todo al cambiar el modo del monitor: el flujo de KWin
+  seguía a 51,7 f/s pero la imagen no avanzaba. Como nuestra ventana a pantalla completa se queda el teclado y
+  el ratón, no se puede pulsar el botón de pausa del reproductor. Añadido control por **MPRIS** (`src/mpris.*`,
+  con sd-bus, la librería de los avisos):
+  1. al arrancar la sesión, si el vídeo estaba parado lo reanuda sola:
+     `[video] el navegador habia parado el video (Paused): se reanuda solo` (verificado con YouTube: de
+     `Paused` a `Playing`);
+  2. **`P` o espacio** en el visor pausan y reanudan el vídeo sin quitar la capa, y la frase de estado bajo la
+     pastilla dice `video en pausa`;
+  3. comando nuevo `odyssey3d ctl video [status|pause|play|toggle]` para manejarlo desde una terminal.
+  Reanuda solo como mucho 6 veces por sesión y nunca si el usuario pausó con `P`.
+- Recordatorio en el aviso de flujo cortado: la vía rápida para el ratón sigue siendo `ESC` (cerrar la sesión
+  devuelve el panel, la lente y el scaler y vuelve la tarjeta del hub).
+- Para ver en 3D sin depender del navegador, la ruta sana sigue siendo `odyssey3d play ARCHIVO` (mpv): con el
+  hardware en marcha se midieron 60-63 f/s.
+
 ## Señal de cierre y estado del panel (v0.8)
 - **Una sesión cortada de golpe dejaba el monitor en modo 3D.** `kill`/`systemctl stop` mandan SIGTERM y
   la sesión no tenía manejador: moría a seco, con la lente encendida, el scaler en 3D y el panel en

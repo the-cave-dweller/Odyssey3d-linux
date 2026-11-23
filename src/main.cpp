@@ -7,6 +7,7 @@
 #include "camera.h"
 #include "track.h"
 #include "panel.h"
+#include "mpris.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
 #include "overlay.h"
@@ -77,6 +78,7 @@ static const char *kUsage =
       "                                        muestra y guarda un fotograma leido en Vulkan\n"
     "  odyssey3d ctl notify [--wait N]\n"
     "  odyssey3d ctl flujo [--uuid ID] [--segundos N]  medir si el compositor manda fotogramas nuevos\n"
+    "  odyssey3d ctl video  [status|pause|play|toggle]   pausar y reanudar el video sin quitar la capa\n"
     "  odyssey3d ctl overlay [--segundos 12] [--dump F.png] [--titulo T] [--cuerpo T]\n"
     "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
     "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
@@ -1656,6 +1658,68 @@ static int cmdVentana(int argc, char **argv) {
   return 0;
 }
 
+/* ctl video [status|pause|play|toggle] · pausar y reanudar el video sin quitar la capa 3D.
+   Zen, Firefox y Chrome publican un reproductor MPRIS en la sesion, y ese es el unico camino
+   que queda mientras el visor se queda con el teclado y el raton de la pantalla. */
+static int cmdVideo(int argc, char **argv) {
+  std::string accion = "status";
+  if (argc > 0 && argv[0] && argv[0][0] != '-') accion = argv[0];
+  Mpris m;
+  std::string err;
+  if (!m.open(&err)) {
+    std::fprintf(stderr, "[video] %s\n", err.c_str());
+    return 1;
+  }
+  std::string st;
+  if (accion == "status") {
+    if (!m.status(&st, &err)) {
+      std::fprintf(stderr, "[video] %s\n", err.c_str());
+      return 1;
+    }
+    std::printf("[video] %s · %s\n", m.playerName().c_str(), st.c_str());
+    return 0;
+  }
+  if (accion == "toggle") {
+    if (!m.playPause(&err)) {
+      std::fprintf(stderr, "[video] %s\n", err.c_str());
+      return 1;
+    }
+    m.status(&st);
+    std::printf("[video] %s · %s\n", m.playerName().c_str(), st.empty() ? "cambiado" : st.c_str());
+    return 0;
+  }
+  if (accion == "play" || accion == "reanudar") {
+    if (!m.status(&st, &err)) {
+      std::fprintf(stderr, "[video] %s\n", err.c_str());
+      return 1;
+    }
+    if (st == "Playing") {
+      std::printf("[video] ya estaba en marcha (%s)\n", m.playerName().c_str());
+      return 0;
+    }
+    if (!m.resumeIfNeeded(&err)) {
+      std::fprintf(stderr, "[video] %s\n", err.c_str());
+      return 1;
+    }
+    std::printf("[video] en marcha (%s)\n", m.playerName().c_str());
+    return 0;
+  }
+  if (accion == "pause" || accion == "pausa") {
+    if (m.status(&st) && st != "Playing") {
+      std::printf("[video] ya estaba parado (%s)\n", st.c_str());
+      return 0;
+    }
+    if (!m.playPause(&err)) {
+      std::fprintf(stderr, "[video] %s\n", err.c_str());
+      return 1;
+    }
+    std::printf("[video] en pausa (%s)\n", m.playerName().c_str());
+    return 0;
+  }
+  std::fprintf(stderr, "accion desconocida: %s (status|pause|play|toggle)\n", accion.c_str());
+  return 2;
+}
+
 static int cmdFlujo(int argc, char **argv) {
 #ifndef HAVE_CAPTURE
   (void)argc; (void)argv;
@@ -2078,6 +2142,7 @@ int main(int argc, char **argv) {
     if (sub == "windows") return cmdWindows(argc - 3, argv + 3);
     if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
 #ifdef HAVE_WAYLAND_WM
+    if (sub == "video") return cmdVideo(argc - 3, argv + 3);
     if (sub == "flujo") return cmdFlujo(argc - 3, argv + 3);
     if (sub == "ventana") return cmdVentana(argc - 3, argv + 3);
     if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);

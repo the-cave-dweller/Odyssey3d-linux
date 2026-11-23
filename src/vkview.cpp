@@ -15,6 +15,7 @@
 #include "trackfeed.h"
 #endif
 #include "session.h"
+#include "mpris.h"
 #include "util.h"
 #include "vkui.h"
 #include "vkweave.h"
@@ -41,6 +42,13 @@ struct VkUi {
   Hud::Hit dragging = Hud::HitNone;
   bool inputChanged = true;  /* forzar cuadro cuando el raton o el teclado se movieron */
   int fbW = 0, fbH = 0;
+  /* El visor se queda el teclado y el raton de la pantalla (por eso el navegador deja de
+     responder): para poder pausar el video sin quitar la capa hablamos con el reproductor
+     MPRIS del navegador. mediaPausaManual evita reanudar un video que el usuario pauso a proposito. */
+  Mpris *media = nullptr;
+  bool mediaPausaManual = false;
+  std::string extraInfo;     /* " · video en pausa" y cosas asi, detras de la frase de estado */
+  double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
 };
 
 /* senal de cierre (systemctl stop, kill, o el propio serve): la sesion tiene que salir por la
@@ -57,7 +65,8 @@ void printTuning(const VkUi &ui, const char *what) {
 }
 
 /* frase breve bajo la pastilla: qué se está viendo y en qué estado está el hardware */
-std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int w, int h) {
+std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int w, int h,
+                     const std::string &extra = "") {
   char buf[192];
   std::snprintf(buf, sizeof buf, "%dx%d  %s  %s  %s", w, h, kind == SourceKind::Capture ? "ventana" : "prueba",
                 st.weaveOn ? (st.ask ? "" : "") : "", "");
@@ -69,6 +78,7 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
   out += (rig.lensOk ? "3D" : "2D");
   out += " · scaler ";
   out += (rig.scalerOn ? "3D" : "apagado");
+  out += extra;
   return out;
 }
 
@@ -138,6 +148,30 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
       default: break;
     }
     if (tag) printTuning(*ui, tag);
+    return;
+  }
+  /* P o la tecla de reproduccion: pausar y reanudar el video del navegador sin quitar la
+     capa. Hace falta porque el visor se queda el teclado y el raton de la pantalla. */
+  if (key == GLFW_KEY_P || key == GLFW_KEY_SPACE) {
+    if (!ui->media || !ui->media->playerFound()) {
+      std::printf("[video] no hay ningun reproductor MPRIS en sesion: el navegador tendra que"
+                  " pausarse a mano (Ctrl+Shift+2 quita la capa y deja usar el raton)\n");
+      return;
+    }
+    std::string antes, despues, e;
+    ui->media->status(&antes);
+    if (!ui->media->playPause(&e)) {
+      std::printf("[video] el reproductor no acepto la pausa: %s\n", e.c_str());
+      return;
+    }
+    ui->media->status(&despues);
+    const bool pausado = despues.empty() ? (antes != "Paused") : (despues == "Paused" || despues == "Stopped");
+    ui->mediaPausaManual = pausado;
+    ui->extraInfo = pausado ? " · video en pausa" : " · video en marcha";
+    ui->extraHasta = glfwGetTime() + 8.0;
+    std::printf("[video] %s (%s) · otra vez P para %s\n", pausado ? "pausado" : "en marcha",
+                ui->media->playerName().c_str(), pausado ? "reanudar" : "pausar");
+    std::fflush(stdout);
     return;
   }
   const char *tag = nullptr;
@@ -420,6 +454,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double ultimoPresente = 0.0;
   bool haveCap = false;
   bool sizeWarned = false, importWarned = false;
+  Mpris media;                       /* pausar/reanudar el video del navegador sin quitar la capa */
+  double nextMediaCheck = 0.0;
+  int reanudados = 0;
   if (kind == SourceKind::Capture) {
     if (!cap.start(opts.captureUuid, &err)) {
       std::fprintf(stderr, "[error] captura: %s\n", err.c_str());
@@ -433,6 +470,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     haveCap = true;
     std::printf("[captura] pidiendo el flujo de la ventana %s\n", opts.captureUuid.c_str());
+    std::string merr;
+    if (media.open(&merr))
+      std::printf("[video] mando el video por MPRIS (%s): P lo pausa y lo reanuda\n", media.playerName().c_str());
+    else
+      std::printf("[video] sin reproductor MPRIS (%s): el video habra que pausarlo a mano\n", merr.c_str());
+    ui.media = &media;
+    std::fflush(stdout);
   }
 #endif
 
@@ -443,7 +487,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 
   std::printf("\n  teclas  ESC salir · 3 2D/3D · F invertir profundidad · ←/→ fase · RePag/SavPg paso de lente\n"
               "          ↑/↓ crosstalk · , . pendiente de filtro · 9/0 convergencia · 8 reiniciar ajuste\n");
-  std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n\n");
+  std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n");
+  std::printf("          P o espacio  pausa o reanuda el video · Ctrl+Shift+2 quita la capa para usar el raton\n\n");
   std::fflush(stdout);
 
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
@@ -515,6 +560,26 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           newSource = true;
         }
       }
+      /* El navegador suele dejar el video en pausa cuando cambiamos el modo del monitor o
+         cuando la ventana queda tapada por la nuestra. Como el flujo sigue llegando, el visor
+         no se da cuenta: miramos el estado MPRIS y lo reanudamos, salvo que el usuario lo
+         pausara el con P. */
+      if (media.playerFound() && now >= nextMediaCheck) {
+        nextMediaCheck = now + 3.0;
+        std::string mst, merr;
+        if (media.status(&mst, &merr) && mst != "Playing" && !ui.mediaPausaManual && reanudados < 6) {
+          ++reanudados;
+          if (media.resumeIfNeeded(&merr)) {
+            std::printf("[video] el navegador habia parado el video (%s): se reanuda solo\n", mst.c_str());
+            ui.extraInfo = " · video reanudado";
+            ui.extraHasta = now + 8.0;
+          } else {
+            std::printf("[video] el video estaba parado (%s) y no se pudo reanudar: %s\n", mst.c_str(),
+                        merr.c_str());
+          }
+          std::fflush(stdout);
+        }
+      }
       if (now - lastPoll > 1.0) {
         lastPoll = now;
         if (!cap.streamCreated()) {
@@ -536,7 +601,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             if (pareceNavegador(est) && avisosFlujo == 1) {
               std::printf("[captura] el navegador dejo de pintar porque el compositor ya no le manda el sincronismo"
                           " (la tapamos por completo).\n"
-                          "            Firefox o Zen: about:config -> widget.wayland.vsync.keep-firing-at-idle = true\n"
+                          "            Firefox o Zen: about:config -> gfx.vsync.compositor.unobserve-count = 0"
+                          " y reiniciar el navegador\n"
                           "            Chrome o Chromium: arrancarlos con --disable-gpu-vsync\n"
                           "            mpv, VLC y reproductores parecidos no necesitan nada\n");
             }
@@ -599,7 +665,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     t.conv = ui.convBase + (float)st.popout / 50.0f * 0.004f;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);
     ui.hud.state().hud = rig.hud();
-    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH));
+    /* la frase extra del video se quita sola, salvo si estamos en pausa a proposito */
+    if (!ui.extraInfo.empty() && ui.extraHasta > 0.0 && now >= ui.extraHasta && !ui.mediaPausaManual) {
+      ui.extraInfo.clear();
+      ui.extraHasta = 0.0;
+    }
+    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo));
     ui.hud.begin(fbW, fbH);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
