@@ -1748,6 +1748,18 @@ static int cmdServe(int argc, char **argv) {
 
     /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
     /* lo mismo con la tarjeta: si nadie pulsa, se retira */
+    if (!tarjetaUuid.empty()) {
+      WindowInfo actual{};
+      if (!(wm.fullscreenCandidate(actual, {}) && actual.uuid == tarjetaUuid)) {
+        std::printf("[serve] %s ya no está a pantalla completa, se quita la tarjeta\n", tarjetaUuid.c_str());
+        std::fflush(stdout);
+        ov.hideAsk();
+        preguntadas.erase(tarjetaUuid);   /* si vuelve a pantalla completa, se vuelve a ofrecer */
+        tarjetaUuid.clear();
+        tarjetaApp.clear();
+      }
+    }
+
     if (!tarjetaUuid.empty() && now - tarjetaT > (double)cfg.esperaSeg) {
       std::printf("[serve] tarjeta sin respuesta, se retira (%s)\n", tarjetaUuid.c_str());
       std::fflush(stdout);

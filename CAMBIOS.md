@@ -23,6 +23,8 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   avisa: `(dry) mpv ya está ajustada a sbs, no se pregunta`.
 - Comprobación: con mpv a pantalla completa y `serve` en seco, la captura de pantalla muestra la tarjeta
   encima del vídeo y el registro dice `[serve] tarjeta puesta por mpv | Voyager_3D_sbs.wmv - mpv`.
+- La tarjeta se retira sola si la ventana deja de estar a pantalla completa (o al caducar `espera`), y
+  al retirarla se olvida la ventana: si vuelve a pantalla completa se vuelve a ofrecer.
 - Orden nueva para verla sin ningún vídeo: `odyssey3d ctl overlay [--segundos 12] [--dump CARDEN.png]
   [--titulo TEXTO] [--cuerpo TEXTO]`.
 - El aviso por notificación se queda como respaldo por si el compositor no expone layer-shell.
