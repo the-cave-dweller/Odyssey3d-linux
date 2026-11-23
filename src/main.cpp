@@ -104,6 +104,7 @@ static const char *kUsage =
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
     "  --sin-interfaz    no dibujar la superposicion del hub (solo Vulkan)\n"
+    "  --ui-escala X     tamano de la pastilla: 1 pequena, 2 grande (por defecto x2 en 4K)\n"
     "  --sin-borde       ventana sin bordes maximada en vez de pantalla completa\n"
     "  --siempre         representar a ritmo de panel aunque no llegue video nuevo\n"
     "  --pos X,Y         colocar la ventana en una esquina de la salida capturada\n"
@@ -111,7 +112,7 @@ static const char *kUsage =
     "\n"
     "teclas: ESC salir · 3 2D/3D · F invertir profundidad · flechas fase/paso/crosstalk · , . filtro\n"
     "        9/0 convergencia · 8 reiniciar ajuste · espacio pausa · - = saltar 5 s · [ ] cuadro\n"
-    "        con Vulkan: raton sobre la pastilla · Ctrl+Shift 1..6 como el hub oficial\n";
+    "        con Vulkan: raton sobre la pastilla · Ctrl+Shift 1..6 como el hub oficial · 7/8 tamano de la pastilla\n";
 
 static std::string flag(int argc, char **argv, const char *name) {
   for (int i = 0; i < argc; i++)
@@ -1193,6 +1194,10 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--2d") { o.no3d = true; o.fmtGiven = true; }
     else if (a == "--tb" || a == "--top-bottom") { o.topBottom = true; o.fmtGiven = true; }
     else if (a == "--sbs" || a == "--side-by-side") o.fmtGiven = true;
+    else if (a == "--ui-escala" || a == "--ui-scale") {
+      if (!need("ui-escala")) return false;
+      o.uiScale = (float)std::atof(argv[++i]);
+    }
     else if (a == "--sin-interfaz") o.noHud = true;
     else if (a == "--sin-borde") o.borderless = true;
     else if (a == "--siempre") o.alwaysRender = true;

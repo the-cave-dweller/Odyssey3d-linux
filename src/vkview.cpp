@@ -76,18 +76,18 @@ void printTuning(const VkUi &ui, const char *what) {
 /* frase breve bajo la pastilla: qué se está viendo y en qué estado está el hardware */
 std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int w, int h,
                      const std::string &extra = "", const std::string &fmt = "") {
-  char buf[192];
-  std::snprintf(buf, sizeof buf, "%dx%d  %s  %s  %s", w, h, kind == SourceKind::Capture ? "ventana" : "prueba",
-                st.weaveOn ? (st.ask ? "" : "") : "", "");
-  std::string out = buf;
-  out = kind == SourceKind::Capture ? "ventana capturada " : "patron de prueba ";
-  out += st.weaveOn ? (st.ask ? "sin elegir" : (st.hud >= 0 ? "" : "")) : "2D plano";
-  if (st.weaveOn) out += " · tramado ";
+  std::string out = kind == SourceKind::Capture ? "ventana capturada " : "patron de prueba ";
+  out += std::to_string(w) + "x" + std::to_string(h);
+  out += st.weaveOn ? (st.ask ? " sin formato elegido" : " con trama") : " 2D plano";
+  if (st.weaveOn) out += fmt;   /* el formato elegido en la tarjeta: lado a lado / arriba y abajo */
   out += " · lente ";
   out += (rig.lensOk ? "3D" : "2D");
   out += " · scaler ";
   out += (rig.scalerOn ? "3D" : "apagado");
-  if (st.weaveOn) out += fmt;   /* el formato elegido en la tarjeta: lado a lado / arriba y abajo */
+  /* el aviso que faltaba: la trama solo da profundidad si el video trae dos imagenes. Con un video
+     normal lo que sale es una imagen doble y movida, y es lo que se ve "regular" en el monitor. */
+  if (st.weaveOn && !fmt.empty())
+    out += " · si el video es normal (una sola imagen) se vera doble: tecla 3 o 2D plano";
   out += extra;
   return out;
 }
@@ -162,7 +162,8 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     if (!ui->entregada && !ui->entregar) ui->entregar = true;
     return;
   }
-  /* atajos del hub oficial: Ctrl+Shift+1 3D · 2 superposición · 3/4 profundidad · 5/6 relieve */
+  /* atajos del hub oficial: Ctrl+Shift+1 3D · 2 superposición · 3/4 profundidad · 5/6 relieve
+     y 7/8, que son nuestros: achicar o agrandar la pastilla */
   if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT)) {
     const char *tag = nullptr;
     switch (key) {
@@ -172,6 +173,16 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
       case GLFW_KEY_4: ui->hud.nudgeDepth(+5); tag = "profundidad +"; break;
       case GLFW_KEY_5: ui->hud.nudgePopout(-5); tag = "relieve -"; break;
       case GLFW_KEY_6: ui->hud.nudgePopout(+5); tag = "relieve +"; break;
+      /* 7 / 8: tamano de la pastilla. El panel cambia de escala al pasar al modo 3D (se queda en
+         1) y a cada quien le viene bien un tamano distinto, asi que se puede mover en marcha. */
+      case GLFW_KEY_7:
+      case GLFW_KEY_8: {
+        const float s = ui->hud.scale() + (key == GLFW_KEY_8 ? 0.25f : -0.25f);
+        const float fija = s < 0.5f ? 0.5f : (s > 3.0f ? 3.0f : s);
+        ui->hud.setScale(fija);
+        std::printf("[pastilla] tamano x%.2f\n", (double)fija);
+        break;
+      }
       default: break;
     }
     if (tag) printTuning(*ui, tag);
@@ -368,16 +379,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   VkUi ui;
   ui.fbW = fbW;
   ui.fbH = fbH;
-  /* El tamano de la interfaz se mide en los puntos logicos del escritorio, no en los pixeles del
-     panel: con 3840x2160 y el escritorio al 150% el alto logico son 1440, y tomando 2160 la
-     pastilla y la tarjeta salian la mitad mas grandes de lo normal. */
+  /* La interfaz del visor se mide en pixeles FISICOS del panel, no en los puntos logicos del
+     escritorio. Al poner el modo 3D el panel se queda con escala 1 (la escala del 150% del
+     escritorio se va con el modo 2), y si la escala de la interfaz sale del tamano logico en el
+     3D sale a 1,0: la pastilla se ve a media altura de lo comodo. Midiendola en pixeles fisicos
+     la pastilla mide siempre lo mismo, con el panel en modo 2 o en modo 3. La tarjeta del hub si
+     se mide en puntos logicos, porque esa vive en el escritorio y no encima del panel en 3D. */
   {
     int lw = 0, lh = 0;
     glfwGetWindowSize(win, &lw, &lh);
     if (lh <= 0) lh = (int)std::lround((float)fbH / std::max(0.25f, sx));
     ui.logH = lh;
-    std::printf("[ventana] lienzo %dx%d, ventana logica %dx%d: la interfaz se dibuja a escala %.2f\n", fbW, fbH, lw,
-                lh, lh > 0 ? (double)fbH / (double)lh : 1.0);
+    std::printf("[ventana] lienzo %dx%d fisicos, ventana logica %dx%d: la interfaz se dibuja a %.2f veces\n",
+                fbW, fbH, lw, lh, std::max(1.0, std::min(2.0, (double)fbH / 1080.0)));
   }
   ui.win = win;
   ui.rig = &rig;
@@ -392,6 +406,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      del video. */
   ui.hud.state().ask = (kind == SourceKind::Capture) && !opts.noHud && !opts.fmtGiven;
   ui.hud.state().overlayOn = !opts.noHud;
+  /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
+  if (opts.uiScale > 0.25f) {
+    ui.hud.setScale(opts.uiScale);
+    std::printf("[pastilla] tamano fijo x%.2f (Ctrl+Shift+7 mas pequena, Ctrl+Shift+8 mas grande)\n",
+                opts.uiScale);
+  }
   glfwSetWindowUserPointer(win, &ui);
   glfwSetKeyCallback(win, onKeyVK);
   glfwSetCursorPosCallback(win, onCursorVK);
@@ -540,6 +560,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("\n  teclas  ESC salir · 3 2D/3D · F invertir profundidad · ←/→ fase · RePag/SavPg paso de lente\n"
               "          ↑/↓ crosstalk · , . pendiente de filtro · 9/0 convergencia · 8 reiniciar ajuste\n");
   std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n");
+  std::printf("                 Ctrl+Shift+7 achica la pastilla · Ctrl+Shift+8 la agranda\n");
   std::printf("          P o espacio  pausa o reanuda el video · Tab entrega la pantalla al navegador (nos\n");
   std::printf("          minimizamos y el panel vuelve a 2D; Meta+Alt+Tab o un clic en la barra de tareas la\n          "
               "devuelve y el 3D se reanuda solo\n");
@@ -759,7 +780,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.extraHasta = 0.0;
     }
     ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo));
-    ui.hud.begin(fbW, fbH, (float)ui.logH);
+    ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
 

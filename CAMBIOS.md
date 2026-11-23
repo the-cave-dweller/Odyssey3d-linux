@@ -2,6 +2,30 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La pastilla se veía pequeña en el modo 3D: regla corregida y tamaño ajustable en marcha (v0.11)
+- **Por qué se veía pequeña.** En v0.10 la interfaz del visor se medía con el tamaño *lógico* del
+  escritorio. El problema es que el modo 3D del panel **se lleva la escala del escritorio**: al pasar al
+  modo 3 el panel queda a `3840x2160 con escala 1`, así que ventana lógica y lienzo son lo mismo y la
+  escala de la interfaz salía **1,00**. La pastilla está dibujada con letras de 11 a 15 unidades, que a
+  escala 1 son 11–15 píxeles reales en un panel de 4K: ilegible. Se veía en el propio registro de la
+  sesión: `[ventana] lienzo 3840x2160, ventana logica 3840x2160: la interfaz se dibuja a escala 1.00`.
+- **Regla nueva, distinta para cada capa.** El visor se mide en **píxeles físicos** del panel (aquí ×2),
+  así que la pastilla mide siempre lo mismo con el panel en modo 2 o en modo 3; la tarjeta del hub sigue
+  midiendo en puntos lógicos (×1,5 aquí) porque ésa vive en el escritorio y nunca aparece sobre el panel
+  en 3D. El registro lo dice: `lienzo 3840x2160 fisicos, ventana logica 2560x1440: la interfaz se dibuja
+  a 2.00 veces`.
+- **Tamaño a mano, sin recompilar.** `Ctrl+Shift+7` achica y `Ctrl+Shift+8` agranda la pastilla en marcha
+  (de 0,5× a 3×, de 0,25 en 0,25), y `--ui-escala X` arranca ya con ese tamaño. Probado con teclas
+  sintéticas (`uinput`) sobre una sesión real; el registro recogió la secuencia
+  `2.00 → 1.75 → 1.50 → 1.75 → 2.00 → 2.25` y las capturas muestran el crecimiento sin que la pastilla
+  se salga del panel.
+- **La frase bajo la pastilla ahora avisa de lo que de verdad arruina la imagen:**
+  `… · si el video es normal (una sola imagen) se vera doble: tecla 3 o 2D plano`. El registro del hub
+  muestra que las sesiones de prueba eran `sbs` sobre vídeos normales de YouTube (con lente en 3D, scaler
+  activado y el panel en modo 3, todo correcto): tramar un vídeo que no lleva dos imágenes produce justo
+  la imagen doble y movida de las capturas. Para comprobar el 3D sin vídeos existe el patrón real de
+  profundidad: `odyssey3d test` (ver abajo `test`).
+
 ## La interfaz deja de verse gigante y `Tab` devuelve el ratón al navegador (v0.10)
 - **La interfaz se medía con la regla equivocada.** La escala de la capa salía del alto *físico* del panel
   partido por 1080, o sea 2, y con el escritorio al 150 % salía todo un 50 % más grande de lo que tocaba.

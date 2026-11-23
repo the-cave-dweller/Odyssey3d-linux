@@ -25,6 +25,7 @@ struct ViewerOpts {
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */
   bool fmtGiven = false;   /* el formato ya lo eligio el hub: no hace falta volver a preguntar */
+  float uiScale = 0.0f;    /* tamano de la pastilla a mano (0 = el automatico del panel) */
   bool noHud = false;
   bool cpuPattern = false;   /* patron de prueba generado en la CPU (para comparar GL y Vulkan) */
   double eyeX = 0.0;       /* cm */

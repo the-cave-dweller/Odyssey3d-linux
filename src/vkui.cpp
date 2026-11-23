@@ -250,14 +250,15 @@ void Hud::begin(int w, int h, float altoLogico) {
   v_.clear();
   W_ = w;
   H_ = h;
-  /* La interfaz se mide en puntos logicos del escritorio y luego se escala al pixel real del
-     panel. Antes el escalon salia del alto fisico (2160 -> x2), y con el escritorio al 150% la
-     tarjeta y la pastilla salian la mitad mas grandes de lo que se ve en cualquier ventana.
-     Con el alto logico a la vista el escalon es simplemente la relacion de pixeles: 1,5 aqui.
-     Si nadie lo pasa, se conserva el criterio viejo de un lienzo de ~1080 px de alto. */
+  /* La interfaz se dibuja en un lienzo virtual y luego se escala al pixel real del panel.
+     Con tamano automatico: la tarjeta del hub usa el alto logico del escritorio (aqui 1440, o
+     sea x1,5) y el visor usa el alto fisico (2160, o sea x2), porque en el modo 3D el panel se
+     queda con escala 1 y si el visor siguiera el tamano logico la pastilla saldria a media altura.
+     Con --ui-escala o Ctrl+Shift+7 / 8 el tamano se fija a mano y manda sobre lo demas. */
   const float relacion = altoLogico > 0.0f ? (float)h / altoLogico : 0.0f;
-  sc_ = relacion > 0.25f ? std::max(1.0f, std::min(2.0f, relacion))
-                         : std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
+  sc_ = scUser_ > 0.25f ? std::max(0.5f, std::min(3.0f, scUser_))
+        : relacion > 0.25f ? std::max(1.0f, std::min(2.0f, relacion))
+                           : std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
   const int vw = (int)std::lround((float)w / sc_), vh = (int)std::lround((float)h / sc_);
   if (!st_.overlayOn && !st_.ask) return;
 

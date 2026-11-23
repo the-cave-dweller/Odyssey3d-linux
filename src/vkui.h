@@ -60,10 +60,14 @@ public:
   }
 
   /* ---- cuadro de la superposición y pruebas de golpe de ratón ---- */
-  /* altoLogico: alto de la pantalla en puntos logicos (los que ve el escritorio). Con un panel
-     a 3840x2160 y el escritorio al 150% son 1440: la interfaz se mide ahi y no en los 2160
-     fisicos; si no, la tarjeta y la pastilla salen un 50% mas grandes de lo razonable. */
+  /* altoLogico: alto de la pantalla en puntos logicos (los que ve el escritorio). Lo usa la
+     tarjeta del hub, que vive en el escritorio: con el panel al 150% son 1440 y no los 2160
+     fisicos. El visor NO lo pasa: cuando el panel entra en el modo 3D se queda con escala 1 y
+     alli la pastilla se dibuja en pixeles fisicos, asi que mide lo mismo con el panel en 2 o en 3.
+     setScale deja el tamano fijo a mano (Ctrl+Shift+7 / 8 en el visor, --ui-escala al arrancar). */
   void begin(int w, int h, float altoLogico = 0.0f);  /* limpia y calcula la disposición */
+  void setScale(float s) { scUser_ = s; }             /* 0 = tamano automatico */
+  float scale() const { return sc_; }
   const std::vector<HudVertex> &vertices() const { return v_; }
   int vertexCount() const { return (int)v_.size(); }
   Hit hit(float mx, float my) const;
@@ -119,6 +123,7 @@ private:
   std::vector<HudVertex> v_;
   int W_ = 0, H_ = 0;      /* tamano real de la ventana */
   float sc_ = 1.0f;      /* escala de la interfaz: 1 en 1080, hasta 2 en 2160 */
+  float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
   Rect pillPanel_, btn3D_, btnOv_, depTrack_, popTrack_, depKnob_, popKnob_;
   Rect askPanel_, askSbs_, askTop_, askFlat_, askDont_, askClose_;

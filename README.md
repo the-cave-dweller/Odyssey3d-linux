@@ -138,6 +138,8 @@ mismo fotograma:
 | `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`) |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
 | `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |
+| `Ctrl+Shift+7` `8` | achican / agrandan la pastilla (0,5× … 3×, útil al pasar del escritorio al modo 3D) |
+| `--ui-escala X` | arrancar la pastilla ya con ese tamaño (`1` pequeña, `2` grande; por defecto 2 en 4K) |
 | `espacio`, `-`, `=`, `[`, `]` | pausa, ±5 s, cuadro a cuadro (en `play`) |
 
 Cada cambio imprime una línea con los valores actuales; puedes arrancar desde ellos con
