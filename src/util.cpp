@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <unistd.h>
 #include <sys/wait.h>
 
 std::string strTrim(const std::string &s) {
@@ -65,6 +66,27 @@ bool readSmallFile(const std::string &path, std::string &out) {
   std::ostringstream ss;
   ss << f.rdbuf();
   out = ss.str();
+  return true;
+}
+
+bool fileExists(const std::string &path) {
+  return !path.empty() && access(path.c_str(), R_OK) == 0;
+}
+
+bool readBinaryFile(const std::string &path, std::vector<uint8_t> &out) {
+  out.clear();
+  std::ifstream f(path, std::ios::binary);
+  if (!f) return false;
+  f.seekg(0, std::ios::end);
+  const std::streamoff n = f.tellg();
+  if (n <= 0 || n > (std::streamoff)64 * 1024 * 1024) return false;
+  f.seekg(0, std::ios::beg);
+  out.resize((size_t)n);
+  f.read((char *)out.data(), n);
+  if (!f) {
+    out.clear();
+    return false;
+  }
   return true;
 }
 

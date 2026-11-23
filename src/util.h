@@ -15,6 +15,12 @@ std::string toHexUpper(const std::vector<uint8_t> &v);
 /* Lee un archivo pequeño (sysfs, config) en una cadena. False si no existe. */
 bool readSmallFile(const std::string &path, std::string &out);
 
+/* True si el archivo existe y se puede leer. */
+bool fileExists(const std::string &path);
+
+/* Lee un archivo binario completo (calibraciones, correctores). False si falta. */
+bool readBinaryFile(const std::string &path, std::vector<uint8_t> &out);
+
 /* Ejecuta un comando y captura stdout+stderr. Devuelve el código de salida. */
 int runCapture(const std::string &cmd, std::string &out);
 

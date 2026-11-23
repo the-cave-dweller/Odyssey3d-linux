@@ -5,8 +5,10 @@
 #ifndef ODYSSEY_LENS_H
 #define ODYSSEY_LENS_H
 
+#include <cstdint>
 #include <map>
 #include <string>
+#include <vector>
 
 class Lens {
 public:
@@ -26,6 +28,11 @@ public:
   bool on();
   bool off();
   bool authenticate();
+
+  /* Respuesta binaria de tamano fijo: tras el comando el tablero manda
+     "\r\n" + datos + "\r\nOK\r\n". Se usa con SR+CHIP, SR+CALCAM, SR+CALET y SR+CAL3D. */
+  bool readFixed(const std::string &command, size_t payloadSize, int wait_ms,
+                 std::vector<uint8_t> &out);
 
   std::string lastError() const { return last_error_; }
 

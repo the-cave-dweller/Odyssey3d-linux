@@ -214,3 +214,51 @@ bool Lens::authenticate() {
   cmd("SR+AUTH=" + toHexUpper(resp, 32));
   return authenticated();
 }
+
+bool Lens::readFixed(const std::string &command, size_t payloadSize, int wait_ms,
+                     std::vector<uint8_t> &out) {
+  out.clear();
+  if (fd_ < 0) {
+    last_error_ = "puerto cerrado";
+    return false;
+  }
+  tcflush(fd_, TCIFLUSH);
+  std::string line = command + "\r";
+  if (ssize_t w = ::write(fd_, line.data(), line.size()); w != (ssize_t)line.size()) {
+    last_error_ = "fallo escribiendo " + command;
+    return false;
+  }
+  /* El tablero responde "\r\n" + payload + "\r\nOK\r\n". El payload binario puede
+     contener CRLF o incluso "OK" dentro, asi que solo cuenta el tamano exacto. */
+  const size_t total = payloadSize + 8;
+  std::vector<uint8_t> buf;
+  buf.reserve(total);
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_ms);
+  while (buf.size() < total) {
+    int ms = (int)std::chrono::duration_cast<std::chrono::milliseconds>(deadline -
+                                                                        std::chrono::steady_clock::now())
+                 .count();
+    if (ms <= 0) break;
+    struct pollfd pf{fd_, POLLIN, 0};
+    int pr = poll(&pf, 1, ms);
+    if (pr <= 0) break;
+    uint8_t tmp[4096];
+    ssize_t n = ::read(fd_, tmp, sizeof tmp);
+    if (n > 0)
+      buf.insert(buf.end(), tmp, tmp + (size_t)n);
+    else if (n < 0 && errno != EAGAIN && errno != EINTR)
+      break;
+  }
+  if (buf.size() < total) {
+    last_error_ = command + ": respuesta corta (" + std::to_string(buf.size()) + " de " +
+                  std::to_string(total) + " bytes)";
+    return false;
+  }
+  if (buf[0] != '\r' || buf[1] != '\n' || memcmp(buf.data() + total - 6, "\r\nOK\r\n", 6) != 0) {
+    last_error_ = command + ": respuesta no reconocida";
+    return false;
+  }
+  out.assign(buf.begin() + 2, buf.begin() + 2 + payloadSize);
+  return true;
+}
+

@@ -94,6 +94,7 @@ add_executable(odyssey3d
   src/lens.cpp
   src/scaler.cpp
   src/ircam.cpp
+  src/calib.cpp
   src/panel.cpp
   src/glutil.cpp
   src/weave.cpp
