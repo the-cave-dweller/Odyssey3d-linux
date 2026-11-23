@@ -572,6 +572,7 @@ struct Overlay::Impl {
       case Hud::HitAskSbs: s->accion = "sbs"; break;
       case Hud::HitAskTop: s->accion = "tb"; break;
       case Hud::HitAskFlat: s->accion = "flat"; break;
+      case Hud::HitAskConv: s->accion = "conv"; break;
       case Hud::HitAskClose: s->accion = "close"; break;
       case Hud::HitAskDont:
         s->hud.state().remember = !s->hud.state().remember;

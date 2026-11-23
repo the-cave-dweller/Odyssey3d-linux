@@ -17,9 +17,11 @@ namespace {
 constexpr size_t kMaxHudVerts = 65536;
 /* std140: vec2 v2c[4] en 0, vec2 v3c[4] en 64, vec3 v4c[4] en 128 (paso 16, no 12),
    vec4 res en 192, tun1 en 208, tun2 en 224, tun3 en 240. */
-constexpr size_t kUboBytes = 256;
+/* Bloque std140 de weave.frag: cada arreglo de vec2 o vec3 ocupa 64 bytes (la alineacion de un
+   arreglo se redondea a 16) y despues vienen cinco vec4; el ultimo es el del conversor 2D/3D. */
+constexpr size_t kUboBytes = 288;
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
-                 kOffTun3 = 240;
+                 kOffTun3 = 240, kOffTun4 = 256;
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -42,9 +44,9 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   surface_ = surface;
   if (!createSwapchain(w, h, err)) return false;
 
-  /* conjunto de la trama: 0 fuente · 1 corrA · 2 corrB · 3 parámetros */
-  VkDescriptorSetLayoutBinding b[4]{};
-  for (int i = 0; i < 3; i++) {
+  /* conjunto de la trama: 0 fuente · 1 corrA · 2 corrB · 3 parámetros · 4 profundidad */
+  VkDescriptorSetLayoutBinding b[5]{};
+  for (int i : {0, 1, 2, 4}) {
     b[i].binding = (uint32_t)i;
     b[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     b[i].descriptorCount = 1;
@@ -55,7 +57,7 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   b[3].descriptorCount = 1;
   b[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   VkDescriptorSetLayoutCreateInfo dli{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dli.bindingCount = 4;
+  dli.bindingCount = 5;
   dli.pBindings = b;
   if (vkCreateDescriptorSetLayout(dev.device(), &dli, nullptr, &srcSetLay_) != VK_SUCCESS) {
     if (err) *err = "vkCreateDescriptorSetLayout de la trama falló";
@@ -71,7 +73,7 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   }
 
   /* un par de conjuntos por hueco del intercambio, mas los dos que pide un cuadro fuera de pantalla */
-  VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6 * (uint32_t)imgs_.size() + 8},
+  VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7 * (uint32_t)imgs_.size() + 10},
                                 {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 * (uint32_t)imgs_.size() + 4}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -92,6 +94,7 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   uploadRgba8(negro, 1, 1, black_, &e2);
   uploadR8(cero, 1, 1, corrA_, &e2);
   uploadR8(medio, 1, 1, corrB_, &e2);
+  uploadR8(medio, 1, 1, depth_, &e2);   /* el shader siempre necesita una textura valida */
   return createFrames(err);
 }
 
@@ -311,11 +314,12 @@ bool VkWeave::createPipelines(std::string *err) {
 
 void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer ubo) {
   const VkSampler samp = dev_->sampler();
-  VkDescriptorImageInfo si[3] = {{samp, srcView, VK_IMAGE_LAYOUT_GENERAL},
+  VkDescriptorImageInfo si[4] = {{samp, srcView, VK_IMAGE_LAYOUT_GENERAL},
                                  {samp, corrA_.view, VK_IMAGE_LAYOUT_GENERAL},
-                                 {samp, corrB_.view, VK_IMAGE_LAYOUT_GENERAL}};
+                                 {samp, corrB_.view, VK_IMAGE_LAYOUT_GENERAL},
+                                 {samp, depth_.view, VK_IMAGE_LAYOUT_GENERAL}};
   VkDescriptorBufferInfo bi{ubo, 0, kUboBytes};
-  VkWriteDescriptorSet wr[4]{};
+  VkWriteDescriptorSet wr[5]{};
   for (int i = 0; i < 3; i++) {
     wr[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     wr[i].dstSet = set;
@@ -330,7 +334,13 @@ void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer u
   wr[3].descriptorCount = 1;
   wr[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   wr[3].pBufferInfo = &bi;
-  vkUpdateDescriptorSets(dev_->device(), 4, wr, 0, nullptr);
+  wr[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  wr[4].dstSet = set;
+  wr[4].dstBinding = 4;
+  wr[4].descriptorCount = 1;
+  wr[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  wr[4].pImageInfo = &si[3];
+  vkUpdateDescriptorSets(dev_->device(), 5, wr, 0, nullptr);
 }
 
 void VkWeave::writeHudSet(VkDescriptorSet set, VkImageView atlasView) {
@@ -447,6 +457,22 @@ void VkWeave::destroy() {
   dev_->destroyImg(corrA_);
   dev_->destroyImg(corrB_);
   dev_->destroyImg(atlas_);
+  dev_->destroyImg(small_);
+  dev_->destroyImg(depth_);
+  if (smallStage_) vkDestroyBuffer(dev_->device(), smallStage_, nullptr);
+  if (smallStageMem_) vkFreeMemory(dev_->device(), smallStageMem_, nullptr);
+  if (mapStage_) vkDestroyBuffer(dev_->device(), mapStage_, nullptr);
+  if (mapStageMem_) vkFreeMemory(dev_->device(), mapStageMem_, nullptr);
+  mapStage_ = VK_NULL_HANDLE;
+  mapStageMem_ = VK_NULL_HANDLE;
+  depthW_ = depthH_ = 0;
+  if (smallUbo_) vkDestroyBuffer(dev_->device(), smallUbo_, nullptr);
+  if (smallUboMem_) vkFreeMemory(dev_->device(), smallUboMem_, nullptr);
+  smallStage_ = smallUbo_ = VK_NULL_HANDLE;
+  smallStageMem_ = smallUboMem_ = VK_NULL_HANDLE;
+  smallSet_ = VK_NULL_HANDLE;
+  smallW_ = smallH_ = 0;
+  depthUsable_ = false;
   if (weavePipe_) vkDestroyPipeline(dev_->device(), weavePipe_, nullptr);
   if (hudPipe_) vkDestroyPipeline(dev_->device(), hudPipe_, nullptr);
   if (weaveLay_) vkDestroyPipelineLayout(dev_->device(), weaveLay_, nullptr);
@@ -666,6 +692,10 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t3[1] = tune_.topBottom ? 1.0f : 0.0f;
   t3[2] = srcFlipY_ ? 1.0f : 0.0f;
   t3[3] = depthShift_;
+  float *t4 = (float *)(dst + kOffTun4);
+  t4[0] = (convOn_ && depthUsable_) ? 1.0f : 0.0f;   /* conversor activo de verdad */
+  t4[1] = convGain_;                                 /* cuanto desplaza cada ojo */
+  t4[2] = convRef_;                                  /* plano que se queda quieto */
   if (std::getenv("ODYSSEY_UBO")) {
     std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · v4 TL %.2f %.2f %.2f\n",
                  res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], v4[0], v4[1], v4[2]);
@@ -982,4 +1012,188 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err) {
     dev_->destroyImg(tgt);
   }
   return ok;
+}
+
+/* ---------------- conversor de video normal a 3D ----------------
+   El modelo de profundidad trabaja con una copia pequena de la imagen. Reducirla aqui, en el
+   propio GPU, cuesta casi nada y evita bajar los 33 MB del cuadro completo: baja un MB. */
+
+bool VkWeave::prepareConverter(int sz, std::string *err) {
+  if (!dev_) {
+    if (err) *err = "el trazador no está listo";
+    return false;
+  }
+  if (sz < 16) sz = 16;
+  if (small_.valid() && smallW_ == sz) return true;
+  waitIdle();
+  std::string e2;
+  if (!dev_->createImage(sz, sz, fmt_,
+                         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, small_, &e2)) {
+    if (err) *err = "imagen pequena del conversor: " + e2;
+    return false;
+  }
+  const VkDeviceSize pxBytes = (VkDeviceSize)sz * (VkDeviceSize)sz * 4u;
+  if (!dev_->createBuffer(pxBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, smallStage_,
+                          smallStageMem_, &e2)) {
+    if (err) *err = "buffer de paso del conversor: " + e2;
+    return false;
+  }
+  /* los parametros de este pase fijo son siempre los mismos: ventana del tamano de la copia y
+     trama apagada (en ese modo el programa pasa la imagen entera, sin mitades) */
+  uint8_t ub[kUboBytes];
+  memset(ub, 0, sizeof ub);
+  float *res = (float *)(ub + kOffRes);
+  res[0] = (float)sz, res[1] = (float)sz;
+  ((float *)(ub + kOffTun4))[3] = 1.0f;   /* copia pura desde el principio */
+  (void)0;   /* los parametros finos se ponen en readSmall, cuadro a cuadro */
+  if (!dev_->uploadBytes(ub, sizeof ub, smallUbo_, smallUboMem_, &e2)) {
+    if (err) *err = "buffer uniforme del conversor: " + e2;
+    return false;
+  }
+  smallSet_ = newSet(srcSetLay_);
+  if (!smallSet_) {
+    if (err) *err = "no hay sitio en el charco de descriptores para el conversor";
+    return false;
+  }
+  writeWeaveSet(smallSet_, black_.view, smallUbo_);   /* dejarlos escritos desde el principio */
+  smallW_ = sz, smallH_ = sz;
+  return true;
+}
+
+bool VkWeave::readSmall(std::vector<uint8_t> &rgba, std::string *err) {
+  if (!dev_ || !small_.valid() || !smallSet_) {
+    if (err) *err = "el conversor no está preparado";
+    return false;
+  }
+  /* leemos en la CPU: primero nos aseguramos de que la tarjeta no esté usando nada de esto */
+  waitIdle();
+  /* los mismos parametros del pase grande, pero con la ventana de la copia, la trama apagada y el
+     conversor apagado: asi la copia sale limpia y con la misma orientacion que la fuente */
+  {
+    uint8_t ub[kUboBytes];
+    memcpy(ub, uboData_, sizeof ub);
+    float *res = (float *)(ub + kOffRes);
+    res[0] = (float)smallW_, res[1] = (float)smallH_;
+    float *t2 = (float *)(ub + kOffTun2);
+    t2[2] = 0.0f;
+    float *t4 = (float *)(ub + kOffTun4);
+    t4[0] = 0.0f;
+    t4[3] = 1.0f;   /* copia pura: sin campo de la lente ni trama */
+    void *q = nullptr;
+    if (vkMapMemory(dev_->device(), smallUboMem_, 0, kUboBytes, 0, &q) != VK_SUCCESS) {
+      if (err) *err = "no se pudo actualizar los parametros de la copia pequena";
+      return false;
+    }
+    memcpy(q, ub, kUboBytes);
+    vkUnmapMemory(dev_->device(), smallUboMem_);
+  }
+  /* la foto que le toca a la red es la misma que se va a dibujar: puede ser un cuadro que todavia
+     no paso por frame() (next_) o el ultimo que si paso (keep_) */
+  const VkImg *fuente = next_.valid() ? &next_ : (!keep_.empty() ? &keep_.back().img : &black_);
+  const VkImageView srcView = fuente->view;
+  /* escribimos el juego completo de enlaces, no solo la imagen: las correcciones y el mapa de
+     profundidad cambian con el tiempo y un enlace sin escribir deja leer basura en los parametros */
+  writeWeaveSet(smallSet_, srcView, smallUbo_);
+  const VkDeviceSize pxBytes = (VkDeviceSize)smallW_ * (VkDeviceSize)smallH_ * 4u;
+  VkCommandBuffer cb = dev_->beginOneTime(err);
+  if (!cb) return false;
+  barrier(cb, small_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+  VkRenderingAttachmentInfo att{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+  att.imageView = small_.view;
+  att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO};
+  ri.renderArea = {{0, 0}, {(uint32_t)smallW_, (uint32_t)smallH_}};
+  ri.layerCount = 1;
+  ri.colorAttachmentCount = 1;
+  ri.pColorAttachments = &att;
+  VkViewport vpc{0.0f, 0.0f, (float)smallW_, (float)smallH_, 0.0f, 1.0f};
+  VkRect2D scis{{0, 0}, {(uint32_t)smallW_, (uint32_t)smallH_}};
+  vkCmdSetViewport(cb, 0, 1, &vpc);
+  vkCmdSetScissor(cb, 0, 1, &scis);
+  vkCmdBeginRendering(cb, &ri);
+  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weavePipe_);
+  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weaveLay_, 0, 1, &smallSet_, 0, nullptr);
+  vkCmdDraw(cb, 3, 1, 0, 0);
+  vkCmdEndRendering(cb);
+  barrier(cb, small_.img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+  VkBufferImageCopy cp{};
+  cp.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  cp.imageExtent = {(uint32_t)smallW_, (uint32_t)smallH_, 1};
+  vkCmdCopyImageToBuffer(cb, small_.img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, smallStage_, 1, &cp);
+  if (!dev_->endOneTime(cb, err)) return false;
+
+  void *p = nullptr;
+  if (vkMapMemory(dev_->device(), smallStageMem_, 0, pxBytes, 0, &p) != VK_SUCCESS) {
+    if (err) *err = "no se pudo leer la copia pequena";
+    return false;
+  }
+  rgba.resize((size_t)pxBytes);
+  const uint8_t *src = (const uint8_t *)p;
+  const bool bgra = (fmt_ == VK_FORMAT_B8G8R8A8_UNORM || fmt_ == VK_FORMAT_B8G8R8A8_SRGB);
+  for (size_t i = 0; i < (size_t)pxBytes; i += 4) {
+    if (bgra) {
+      rgba[i] = src[i + 2];
+      rgba[i + 1] = src[i + 1];
+      rgba[i + 2] = src[i];
+    } else {
+      rgba[i] = src[i];
+      rgba[i + 1] = src[i + 1];
+      rgba[i + 2] = src[i + 2];
+    }
+    rgba[i + 3] = 255;
+  }
+  vkUnmapMemory(dev_->device(), smallStageMem_);
+  return true;
+}
+
+bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
+  if (!dev_ || !g || w <= 0 || h <= 0) {
+    if (err) *err = "mapa de profundidad vacio";
+    return false;
+  }
+  waitIdle();   /* el mapa anterior puede estar en manos de un cuadro en vuelo */
+  const VkDeviceSize n = (VkDeviceSize)w * (VkDeviceSize)h;
+  if (!depth_.valid() || depthW_ != w || depthH_ != h) {
+    /* la primera vez, o si cambia el tamano del modelo: imagen nueva y buffer de paso a su medida */
+    if (mapStage_) {
+      vkDestroyBuffer(dev_->device(), mapStage_, nullptr);
+      vkFreeMemory(dev_->device(), mapStageMem_, nullptr);
+      mapStage_ = VK_NULL_HANDLE;
+      mapStageMem_ = VK_NULL_HANDLE;
+    }
+    if (!uploadR8(g, w, h, depth_, err)) return false;
+    if (!dev_->createBuffer(n, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mapStage_,
+                            mapStageMem_, err))
+      return false;
+    depthW_ = w, depthH_ = h;
+  } else {
+    /* y ya solo movemos bytes dentro de la misma imagen: crear y borrar una imagen cada cuadro
+       acabó dejando a la tarjeta sin memoria de dispositivo */
+    void *p = nullptr;
+    if (vkMapMemory(dev_->device(), mapStageMem_, 0, n, 0, &p) != VK_SUCCESS) {
+      if (err) *err = "no se pudo preparar el mapa de profundidad";
+      return false;
+    }
+    memcpy(p, g, (size_t)n);
+    vkUnmapMemory(dev_->device(), mapStageMem_);
+    VkCommandBuffer cb = dev_->beginOneTime(err);
+    if (!cb) return false;
+    barrier(cb, depth_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+            VK_ACCESS_TRANSFER_WRITE_BIT);
+    VkBufferImageCopy reg{};
+    reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    reg.imageExtent = {(uint32_t)w, (uint32_t)h, 1};
+    vkCmdCopyBufferToImage(cb, mapStage_, depth_.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &reg);
+    barrier(cb, depth_.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+            VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    if (!dev_->endOneTime(cb, err)) return false;
+  }
+  depthUsable_ = true;
+  return true;
 }

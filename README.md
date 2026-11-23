@@ -25,12 +25,14 @@ inclinación) son las nominales del G90XF, que son idénticas en todas las unida
   (`vulkan-icd-loader` + `vulkan-headers` + `glslang` para compilar los shaders) y `freetype2`
   para la interfaz. Para el servicio de ventanas y la captura: `wayland`,
   `plasma-wayland-protocols`, `libpipewire`, `systemd-libs`. `mpv` es opcional (sólo `play`).
+  Para el conversor de vídeo normal a 3D hacen falta además `onnxruntime-cuda` (o `onnxruntime` a
+  secas, que va por CPU y mucho más lento) y, en tiempo de ejecución, `cuda` y `cudnn`.
   En CachyOS/Arch:
 
   ```sh
   sudo pacman -S --needed cmake gcc pkgconf glfw openssl libpng freetype2 \
       vulkan-icd-loader vulkan-headers glslang \
-      wayland plasma-wayland-protocols libpipewire systemd-libs mpv
+      wayland plasma-wayland-protocols libpipewire systemd-libs mpv       onnxruntime-cuda cuda cudnn
   ```
 
 * Una GPU con **Vulkan 1.3 o más** (probado en RTX 4090, RTX 5080 y AMD con RADV). Todo el
@@ -119,6 +121,41 @@ mismo fotograma:
 
   Si ves artefactos o congelaciones, prueba `--hwdec no` (decodificación por CPU).
 
+### Vídeo normal (2D) a 3D
+
+Sirve para lo que no viene en side-by-side: un vídeo o una página normales. El visor estima la
+profundidad de cada fotograma y desplaza cada ojo unas decenas de píxeles según esa profundidad, así
+que lo cercano sale por delante de la pantalla y lo lejano se queda dentro. Es lo que Samsung llama
+**«3D Re-Mastering»** en su programa de Windows; aquí se hace en la máquina, con dos diferencias
+honestas: la profundidad la deduce una red neuronal a partir de una sola imagen (no hay dos cámaras),
+así que se equivoca en reflejos, vallas y pelo suelto, y hay que calcularla, así que el relieve
+aparece una fracción de segundo después que el vídeo.
+
+```sh
+odyssey3d capture3d --uuid '<id>' --conver            # video normal, con la red en la GPU 0
+odyssey3d capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si la 0 esta llena)
+```
+
+* `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
+  tecla `C` o con la cuarta tarjeta («Vídeo normal · 2D a 3D»).
+* `--modelo RUTA` cambia la red. La por defecto es *Depth Anything V2 Small* en ONNX,
+  `~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx` (99 MB). Si falta, el visor lo dice
+  y el resto del 3D sigue funcionando sin conversión; el registro trae el `curl` para bajarla:
+
+  ```sh
+  mkdir -p ~/.local/share/odyssey3d/modelos && curl -fLo ~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx \
+      https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/model.onnx
+  ```
+* `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
+  conviene 2; si la GPU va justa, 4 o 5.
+* `--red N` pone la red en la GPU `N` (`0` por defecto). Si la primera tarjeta está llena —con el 4090
+  ocupado por otra aplicación los repartos fallan y ONNX responde «sin memoria de dispositivo»— la red
+  pasa **sola** a la segunda y el registro lo avisa; `--red 1` es la forma de fijarlo de antemano.
+
+Se ve en el registro: `[conversor] video normal a 3D encendido con NVIDIA`; una estimación tarda
+~9 ms en una RTX 4090. La fuerza del relieve la siguen moviendo **3D Salida** (`Ctrl+Shift+5/6`) y
+la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo estéreo.
+
 ## Ajuste fino (teclas)
 
 | tecla | efecto |
@@ -128,6 +165,8 @@ mismo fotograma:
 | `P` | pausar / reanudar el vídeo del navegador (por MPRIS, sin quitar la capa) |
 | `3` | pase 2D (sin tramar) / 3D |
 | `F` | invertir profundidad (si se ve pseudoscópico: lo de dentro fuera) |
+| `M` | cambiar el formato del vídeo: lado a lado → arriba y abajo → 2D plano → vídeo normal (2D a 3D) |
+| `C` | encender / apagar el conversor de **vídeo normal a 3D** (lo mismo que la cuarta tarjeta) |
 | `←` `→` | fase de la trama (±0.002 ciclos) |
 | `RePag` `SavPg` | paso de lente (±0.0002); se usa si el paso real difiere del nominal |
 | `↑` `↓` | crosstalk dinámico (±0.002) |
@@ -196,7 +235,7 @@ systemctl --user edit odyssey3d-serve        # cambiarlo si hace falta
 ```
 
 Qué hace: escucha `org_kde_plasma_window_management` de KWin; cuando una ventana pasa a **pantalla
-completa** dibuja en la esquina una **tarjeta propia** (la misma interfaz del visor) con tres botones.
+completa** dibuja en la esquina una **tarjeta propia** (la misma interfaz del visor) con cuatro botones.
 Va en una capa `overlay` de `zwlr_layer_shell_v1`, así que **se ve por encima del vídeo a pantalla
 completa**, cosa que las notificaciones de KDE no logran (KWin las dibuja detrás, y con «No molestar»
 ni siquiera aparecen). Si el compositor no expone ese protocolo se vuelve al aviso de KDE. Al pulsar un
@@ -208,9 +247,12 @@ el modo del panel) y, si había una sesión 3D abierta, la cierra devolviendo el
 Cuando la ventana del vídeo se cierra, la sesión 3D también se cierra sola.
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
-`espera` (segundos que queda la tarjeta) y `modo` (`ask`, `sbs`, `tb`, `flat`). Si marcada la casilla
-de la tarjeta se pulsa un botón, se guarda una línea `auto = app:modo` en ese archivo y desde entonces
-esa aplicación pasa directa sin preguntar (puedes editar o borrar esa línea a mano). Si no aparece la
+`espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué
+GPU corre la red del conversor) y `cada` (cada cuántos fotogramas se calcula la profundidad). Si se
+marca la casilla de la tarjeta y se pulsa un botón, se guarda una línea `auto = app:modo` en ese
+archivo y desde entonces esa aplicación pasa directa sin preguntar (puedes editar o borrar esa línea a
+mano). `conv` es el vídeo normal pasado a 3D: con `auto = zen:conv` el navegador entra directo en
+conversión. Si no aparece la
 tarjeta:
 
 1. `systemctl --user is-active odyssey3d-serve` → tiene que estar `active`;

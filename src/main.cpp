@@ -863,7 +863,8 @@ static int cmdNotify(int argc, char **argv) {
   }
   std::printf("portal de avisos: version %u\n", n.version());
   std::vector<std::pair<std::string, std::string>> botones = {
-      {"sbs", "3D lado a lado"}, {"tb", "3D arriba/abajo"}, {"flat", "Solo lente"}, {"no", "No"}};
+      {"sbs", "3D lado a lado"}, {"tb", "3D arriba/abajo"}, {"conv", "Video normal a 3D"},
+      {"flat", "Solo lente"}, {"no", "No"}};
   if (!n.send("odyssey3d-prueba", "Video a pantalla completa detectado",
               "Elige como quieres verlo en el Odyssey 3D", botones, &err)) {
     std::fprintf(stderr, "%s\n", err.c_str());
@@ -902,12 +903,15 @@ static int cmdWindows(int argc, char **argv) {
     return 1;
   }
   wm.settle();
-  std::printf("%-34s  %-20s  %-30s  %-24s  %-11s  %s\n", "uuid", "app_id", "titulo", "estado", "tamano", "pid");
+  std::printf("%-34s  %-20s  %-30s  %-24s  %-17s  %s\n", "uuid", "app_id", "titulo", "estado", "posicion y tamano",
+              "pid");
   for (const auto &w : wm.windows()) {
     std::string t = w.title;
     if (t.size() > 28) t = t.substr(0, 27) + "\xe2\x80\xa6";
-    std::printf("%-34s  %-20s  %-30s  %-24s  %4ux%-6u  %u\n", w.uuid.c_str(), w.appId.c_str(), t.c_str(),
-                WindowInfo::stateList(w.states).c_str(), w.w, w.h, w.pid);
+    char geo[32];
+    std::snprintf(geo, sizeof geo, "%5d,%-4d %ux%u", w.x, w.y, w.w, w.h);
+    std::printf("%-34s  %-20s  %-30s  %-24s  %-17s  %u\n", w.uuid.c_str(), w.appId.c_str(), t.c_str(),
+                WindowInfo::stateList(w.states).c_str(), geo, w.pid);
   }
   WindowInfo cand;
   if (wm.fullscreenCandidate(cand, {}))
@@ -1194,6 +1198,21 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--2d") { o.no3d = true; o.fmtGiven = true; }
     else if (a == "--tb" || a == "--top-bottom") { o.topBottom = true; o.fmtGiven = true; }
     else if (a == "--sbs" || a == "--side-by-side") o.fmtGiven = true;
+    else if (a == "--conver" || a == "--convert") {
+      o.conver = true;
+      o.fmtGiven = true;   /* el formato ya esta elegido: no hace falta volver a preguntar */
+    }
+    else if (a == "--modelo" || a == "--model") {
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a); return 2; }
+      o.modelPath = argv[++i];
+      o.conver = true;
+    } else if (a == "--red" || a == "--red-gpu") {
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a); return 2; }
+      o.convGpu = std::max(0, std::atoi(argv[++i]));
+    } else if (a == "--cada") {
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a); return 2; }
+      o.convEach = std::max(1, std::atoi(argv[++i]));
+    }
     else if (a == "--ui-escala" || a == "--ui-scale") {
       if (!need("ui-escala")) return false;
       o.uiScale = (float)std::atof(argv[++i]);
@@ -1511,7 +1530,9 @@ static void onServeSignal(int) { g_stopServe = 1; }
 struct ServeCfg {
   std::vector<std::string> ignore;
   int esperaSeg = 40;
-  std::string modo = "ask";   /* ask = preguntar con un aviso; sbs/tb/flat = arrancar sin preguntar */
+  std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
+  int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
+  int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -1557,6 +1578,8 @@ static void loadServeCfg(ServeCfg &cfg) {
     std::string k = strLower(strTrim(l.substr(0, eq))), v = strTrim(l.substr(eq + 1));
     if (k == "ignore") splitList(v, cfg.ignore);
     else if (k == "espera") cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
+    else if (k == "red") cfg.red = std::max(0, std::atoi(v.c_str()));
+    else if (k == "cada") cfg.cada = std::max(1, std::atoi(v.c_str()));
     else if (k == "modo") cfg.modo = strLower(v);
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
@@ -1566,7 +1589,7 @@ static void loadServeCfg(ServeCfg &cfg) {
         size_t dd = par.find(':');
         if (dd == std::string::npos) continue;
         std::string app = strLower(strTrim(par.substr(0, dd))), md = strLower(strTrim(par.substr(dd + 1)));
-        if (!app.empty() && (md == "sbs" || md == "tb" || md == "flat")) cfg.porApp[app] = md;
+        if (!app.empty() && (md == "sbs" || md == "tb" || md == "flat" || md == "conv")) cfg.porApp[app] = md;
       }
     }
     (void)last;
@@ -1596,13 +1619,22 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
   return false;
 }
 
-static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo) {
+static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo, int red = 0,
+                        int cada = 3) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
+  if (modo == "conv") {
+    /* video normal: la red de profundidad decide cuanto desplazar cada ojo */
+    args.push_back("--conver");
+    args.push_back("--cada");
+    args.push_back(std::to_string(cada));
+    args.push_back("--red");
+    args.push_back(std::to_string(red));
+  }
   std::vector<char *> av;
   for (std::string &a : args) av.push_back(const_cast<char *>(a.c_str()));
   av.push_back(nullptr);
@@ -1853,6 +1885,8 @@ static int cmdServe(int argc, char **argv) {
   bool dry = hasFlag(argc, argv, "--dry");
   bool unaVez = hasFlag(argc, argv, "--once");
   if (std::string v = flag(argc, argv, "--espera"); !v.empty()) cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
+  if (std::string v = flag(argc, argv, "--red"); !v.empty()) cfg.red = std::max(0, std::atoi(v.c_str()));
+  if (std::string v = flag(argc, argv, "--cada"); !v.empty()) cfg.cada = std::max(1, std::atoi(v.c_str()));
   if (std::string v = flag(argc, argv, "--modo"); !v.empty()) cfg.modo = strLower(v);
   if (std::string v = flag(argc, argv, "--ignore"); !v.empty()) splitList(v, cfg.ignore);
   if (cfg.modo == "preguntar") cfg.modo = "ask";
@@ -2015,7 +2049,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada);
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
@@ -2051,7 +2085,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada);
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
             std::fflush(stdout);
@@ -2070,7 +2104,8 @@ static int cmdServe(int argc, char **argv) {
         } else if (cfg.modo == "ask") {
           std::string id = "odyssey3d-" + w.uuid.substr(0, 8);
           std::vector<std::pair<std::string, std::string>> botones = {
-              {"sbs", "3D lado a lado"}, {"tb", "3D arriba y abajo"}, {"flat", "2D plano"}};
+              {"sbs", "3D lado a lado"}, {"tb", "3D arriba y abajo"}, {"conv", "Vídeo normal a 3D"},
+              {"flat", "2D plano"}};
           std::string titulo = "¿Poner en 3D?";
           std::string cuerpo = w.title.empty() ? w.appId : w.title;
           cuerpo += "  ·  " + std::to_string(w.w) + "x" + std::to_string(w.h);
@@ -2095,7 +2130,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada);
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
           std::fflush(stdout);

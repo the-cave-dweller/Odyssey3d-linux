@@ -47,6 +47,18 @@ public:
      (para --dump, sin tocar el panel). Devuelve RGBA con la primera fila arriba. */
   bool grab(std::vector<uint8_t> &rgbaTopFirst, std::string *err);
 
+  /* --- conversor de video normal a 3D -------------------------------------------------
+     El modelo de profundidad necesita una copia pequena de la imagen (se reduce en el propio
+     GPU: 1 MB en lugar de los 33 MB del cuadro completo) y devuelve un mapa de 8 bits por punto
+     que el shader de la trama usa para desplazar la vista de cada ojo. */
+  bool prepareConverter(int sz, std::string *err);      /* crear la copia pequena y el mapa */
+  bool converterReady() const { return small_.valid(); }
+  int converterSize() const { return smallW_; }
+  bool readSmall(std::vector<uint8_t> &rgba, std::string *err);   /* fuente -> RGBA sz x sz */
+  bool setDepthMap(const uint8_t *g, int w, int h, std::string *err);
+  bool hasDepthMap() const { return depthUsable_; }
+  void setConverter(float gain, float ref, bool on) { convGain_ = gain, convRef_ = ref, convOn_ = on; }
+
   /* un cuadro completo: adquirir, dibujar trama + interfaz, presentar */
   bool frame(std::string *err);
   bool resize(int w, int h);   /* intercambio perdido (ventana cambiada o fuera de fecha) */
@@ -112,6 +124,21 @@ private:
   VkImg corrA_{};          /* neutros si no hay ficheros */
   VkImg corrB_{};
   VkImg atlas_{};
+  VkImg small_{};          /* copia pequena de la fuente, para el modelo de profundidad */
+  VkBuffer smallStage_ = VK_NULL_HANDLE;   /* por donde baja la copia a la CPU */
+  VkDeviceMemory smallStageMem_ = VK_NULL_HANDLE;
+  VkBuffer smallUbo_ = VK_NULL_HANDLE;     /* parametros fijos del pase pequeno */
+  VkDeviceMemory smallUboMem_ = VK_NULL_HANDLE;
+  VkDescriptorSet smallSet_ = VK_NULL_HANDLE;
+  VkImg depth_{};          /* mapa de profundidad (R8) que lee el shader de la trama */
+  bool depthUsable_ = false;
+  int smallW_ = 0, smallH_ = 0;
+  VkBuffer mapStage_ = VK_NULL_HANDLE;    /* por aqui sube el mapa de profundidad, sin crear y
+                                             borrar una imagen cada cuadro */
+  VkDeviceMemory mapStageMem_ = VK_NULL_HANDLE;
+  int depthW_ = 0, depthH_ = 0;
+  float convGain_ = 0.0f, convRef_ = 0.5f;
+  bool convOn_ = false;
   std::vector<HudVertex> hud_;
   bool atlasDirty_ = false;
 
@@ -126,7 +153,7 @@ private:
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   int pw_ = 3840, ph_ = 2160;
   bool cornersDirty_ = true;
-  uint8_t uboData_[256]{};  /* tamano real del bloque std140 de weave.frag */
+  uint8_t uboData_[288]{};  /* tamano del bloque std140 de weave.frag (ver kUboBytes en el .cpp) */
 };
 
 #endif

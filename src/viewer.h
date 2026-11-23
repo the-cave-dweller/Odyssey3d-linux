@@ -21,6 +21,12 @@ struct ViewerOpts {
   bool noScaler = false;
   bool noPanel = false;
   bool no3d = false;       /* arrancar en pase 2D */
+  /* conversor de video normal (2D) a 3D: la red de profundidad dice cuanto desplazar cada ojo.
+     vacio = el modelo que esta en ~/.local/share/odyssey3d/modelos */
+  bool conver = false;
+  std::string modelPath;
+  int convEach = 3;          /* cada cuantos cuadros se vuelve a calcular la profundidad */
+  int convGpu = 0;           /* 0 = primera tarjeta NVIDIA, 1 = la otra (la primera puede estar llena) */
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */

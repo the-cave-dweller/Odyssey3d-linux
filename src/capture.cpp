@@ -322,6 +322,8 @@ struct WindowCapture::Impl {
     else
       std::snprintf(cc, sizeof cc, "#%u", f);
     s->fmtName = cc;
+    std::fprintf(stderr, "[captura] formato del flujo: %s %dx%d modificador 0x%016llx\n", cc, s->fmtW,
+                 s->fmtH, (unsigned long long)s->fmtModifier);
   }
   static void pwAddBuffer(void *, pw_buffer *) {}
   static void pwRemoveBuffer(void *, pw_buffer *) {}
@@ -358,6 +360,11 @@ struct WindowCapture::Impl {
     if (!b) return;
     spa_buffer *buf = b->buffer;
     if (buf && buf->n_datas > 0) {
+      if (buf->n_datas > 1) {
+        static int avisan = 3;
+        if (avisan-- > 0)
+          std::fprintf(stderr, "[captura] el fotograma trae %u planos (no es RGBA directo)\n", buf->n_datas);
+      }
       spa_data &d = buf->datas[0];
       const size_t sz = d.chunk && d.chunk->size ? d.chunk->size : d.maxsize;
       const int chunkStride = d.chunk ? static_cast<int>(d.chunk->stride) : 0;

@@ -324,7 +324,7 @@ void Hud::begin(int w, int h, float altoLogico) {
 
   /* ---- aviso abajo a la derecha ---- */
   if (st_.ask) {
-    float aw = std::min(520.0f, (float)vw - 48.0f), ah = 216.0f;
+    float aw = std::min(660.0f, (float)vw - 48.0f), ah = 216.0f;
     float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 14.0f, 0.06f, 0.07f, 0.08f, 0.92f);
@@ -351,14 +351,15 @@ void Hud::begin(int w, int h, float altoLogico) {
     text(encaja(askCuerpo_.empty() ? "Elige el formato de la imagen que estás viendo." : askCuerpo_, 13.0f,
                 aw - 48.0f),
          ax + 24.0f, ay + 52.0f, 13.0f, dim[0], dim[1], dim[2], dim[3]);
-    float tw = (aw - 48.0f - 24.0f) / 3.0f;
+    float tw = (aw - 48.0f - 36.0f) / 4.0f;
     askSbs_ = {ax + 24.0f, ay + 86.0f, tw, 78.0f};
     askTop_ = {ax + 24.0f + tw + 12.0f, ay + 86.0f, tw, 78.0f};
     askFlat_ = {ax + 24.0f + 2.0f * (tw + 12.0f), ay + 86.0f, tw, 78.0f};
-    Rect tiles[3] = {askSbs_, askTop_, askFlat_};
-    const char *names[3] = {"Lado a lado", "Arriba y abajo", "2D plano"};
-    const char *subs[3] = {"estéreo horizontal", "estéreo vertical", "sin profundidad"};
-    for (int i = 0; i < 3; i++) {
+    askConv_ = {ax + 24.0f + 3.0f * (tw + 12.0f), ay + 86.0f, tw, 78.0f};
+    Rect tiles[4] = {askSbs_, askTop_, askFlat_, askConv_};
+    const char *names[4] = {"Lado a lado", "Arriba y abajo", "2D plano", "Vídeo normal"};
+    const char *subs[4] = {"estéreo horizontal", "estéreo vertical", "sin profundidad", "2D a 3D"};
+    for (int i = 0; i < 4; i++) {
       bool hov = tiles[i].inside(mx_, my_);
       mask9(tiles[i], 1, 10.0f, hov ? 0.20f : 0.15f, hov ? 0.22f : 0.16f, hov ? 0.24f : 0.18f, 0.98f);
       if (hov) mask9(tiles[i], 1, 10.0f, accent[0], accent[1], accent[2], 0.35f);
@@ -370,11 +371,18 @@ void Hud::begin(int w, int h, float altoLogico) {
       } else if (i == 1) {
         solid(ix, iy, 20.0f, 6.0f, 0.85f, 0.86f, 0.9f, 0.9f);
         solid(ix, iy + 8.0f, 20.0f, 6.0f, 0.55f, 0.58f, 0.66f, 0.9f);
-      } else {
+      } else if (i == 2) {
         solid(ix, iy, 44.0f, 14.0f, 0.7f, 0.72f, 0.78f, 0.9f);
+      } else {
+        /* dos vistas de la misma imagen, desplazadas: eso hace el conversor */
+        solid(ix, iy, 22.0f, 14.0f, 0.35f, 0.37f, 0.42f, 0.9f);
+        solid(ix + 12.0f, iy, 22.0f, 14.0f, 0.85f, 0.86f, 0.9f, 0.95f);
       }
-      text(names[i], tiles[i].x + 10.0f, tiles[i].y + 38.0f, 14.0f, ink[0], ink[1], ink[2], 1.0f);
-      text(subs[i], tiles[i].x + 10.0f, tiles[i].y + 58.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+      /* en ventanas pequenas las cuatro tarjetas se aprietan: letra menor y texto recortado */
+      float fs = tw < 110.0f ? 11.0f : 14.0f, fss = tw < 110.0f ? 9.5f : 11.0f;
+      text(encaja(names[i], fs, tw - 20.0f), tiles[i].x + 10.0f, tiles[i].y + 38.0f, fs, ink[0], ink[1], ink[2], 1.0f);
+      text(encaja(subs[i], fss, tw - 20.0f), tiles[i].x + 10.0f, tiles[i].y + 58.0f, fss, dim[0], dim[1], dim[2],
+           dim[3]);
     }
     askDont_ = {ax + 24.0f, ay + 180.0f, 20.0f, 20.0f};
     mask9(askDont_, 1, 5.0f, 0.25f, 0.27f, 0.30f, 1.0f);
@@ -429,6 +437,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
     if (askSbs_.inside(mx, my)) return HitAskSbs;
     if (askTop_.inside(mx, my)) return HitAskTop;
     if (askFlat_.inside(mx, my)) return HitAskFlat;
+    if (askConv_.inside(mx, my)) return HitAskConv;
     if (askDont_.inside(mx, my)) return HitAskDont;
   }
   if (!st_.overlayOn) return HitNone;

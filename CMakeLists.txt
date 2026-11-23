@@ -23,6 +23,12 @@ pkg_check_modules(LIBSYSTEMD libsystemd)           # opcional: aviso por portal 
 pkg_check_modules(VULKAN REQUIRED vulkan)          # todo el dibujado va por Vulkan
 pkg_check_modules(OPENCV opencv5)   # opcional: rastreo de cabeza (cara, ojos, triangulacion)
 
+# --- conversor 2D a 3D (opcional): ONNX Runtime + un modelo de profundidad --------
+# Con ONNX Runtime para CUDA (paquete onnxruntime-cuda) un cuadro de 518x518 sale en unos
+# 7 milisegundos en una tarjeta NVIDIA; sin tarjeta se hace con la CPU y va mucho mas lento.
+find_path(ORT_DIR NAMES onnxruntime/onnxruntime_cxx_api.h)
+find_library(ORT_LIB NAMES onnxruntime)
+
 # --- shaders: GLSL -> SPIR-V -> cabecera C++ -------------------------------------
 # Se compilan durante la propia compilación y se incrustan como bytes: el programa no
 # lleva ficheros de shaders encima ni tiene que buscar rutas.
@@ -149,6 +155,7 @@ add_executable(odyssey3d
   src/session.cpp
   src/vkview.cpp
   src/mpris.cpp
+  src/depth.cpp
 )
 
 add_dependencies(odyssey3d shaders)
@@ -205,6 +212,15 @@ if(PNG_FOUND)
   target_include_directories(odyssey3d PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(odyssey3d PRIVATE ${PNG_LIBRARIES})
   target_compile_definitions(odyssey3d PRIVATE HAVE_PNG=1)
+endif()
+
+if(ORT_DIR AND ORT_LIB)
+  target_include_directories(odyssey3d PRIVATE ${ORT_DIR}/onnxruntime)
+  target_link_libraries(odyssey3d PRIVATE ${ORT_LIB} dl)
+  target_compile_definitions(odyssey3d PRIVATE HAVE_ORT=1)
+  message(STATUS "ONNX Runtime encontrado (${ORT_LIB}): el conversor 2D a 3D se compilara")
+else()
+  message(STATUS "Sin ONNX Runtime: el conversor 2D a 3D no estara disponible (paquete onnxruntime-cuda)")
 endif()
 
 install(TARGETS odyssey3d RUNTIME DESTINATION bin)

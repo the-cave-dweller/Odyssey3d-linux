@@ -2,6 +2,48 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Los vídeos normales también salen en relieve: conversor 2D a 3D en tiempo real (v0.12)
+- **Qué hace.** Ya no hace falta que el vídeo traiga dos imágenes. Con el conversor puesto, el visor
+  mira el fotograma normal, deduce qué está cerca y qué está lejos, y desplaza cada ojo unas decenas de
+  píxeles según esa profundidad: lo cercano se sale por delante del cristal y lo lejano se mete dentro.
+  Es el equivalente local del «3D Re-Mastering» del programa de Windows. Se ve en el mapa guardado con
+  `--dump`: de una página de texto con una foto, la red separa la cara y las manos de la pared del fondo.
+- **Cómo se mide la profundidad.** *Depth Anything V2 Small* en ONNX (99 MB, en
+  `~/.local/share/odyssey3d/modelos/`), con el complemento de CUDA: **9,2 ms** por cuadro de 518×518.
+  La imagen de la ventana se reduce a ese tamaño en la propia GPU (un pipeline pequeño del visor), se
+  copia a un mapa de 8 bits y ése es el que usa la trama. Como el visor va a ~25 fotogramas por segundo
+  y la red no da para uno por cuadro, la profundidad se recalcula **cada `--cada N` fotogramas**
+  (por defecto 3) y se suaviza entre estimaciones; el desplazamiento se aplica en el shader de la trama,
+  que es gratis.
+- **Dos fallos que hubo que cazar.** (1) El pase pequeño muestreaba con la coordenada del shader de
+  vértices, que ya lleva dentro el campo afín de la lente: salían franjas de colores en vez de la
+  imagen. Ahora ese pase usa la coordenada normal («copia pura»). (2) El signo del desplazamiento estaba
+  al revés: lo cercano se metía dentro. Corregido y medido sobre un cuadro sintético: el objeto que
+  sale da +4,9 px de disparidad y el fondo −5,3 px. También se bajó la ganancia, que era 20 veces
+  excesiva: ahora es `0,003 + 3D Salida/100 × 0,020`, o sea ±28 px a 3840 con el relieve a medias.
+- **Dónde se activa.** Cuarta tarjeta del hub («Vídeo normal · 2D a 3D») junto a las otras tres, tecla
+  `C` para encenderla y apagarla, y `M` para recorrer los cuatro formatos. La casilla de «no volver a
+  preguntar» guarda `auto = app:conv`; en `serve.conf` valen `modo = conv`, `red = N` y `cada = N`.
+  Comprobado con clic simulado sobre la tarjeta: los cuatro botones caen donde se ven.
+- **Con la GPU ocupada la red se mueve sola.** Con el 4090 lleno (20,7 GB de otra aplicación) los
+  repartos de la red fallaban con «sin memoria de dispositivo» y el conversor se quedaba mudo. Ahora, si
+  el reparto en la gráfica 0 falla, se reintenta en la 1 y el registro lo dice; `--red 1` (o `red = 1` en
+  `serve.conf`) es la forma de fijarlo de antemano. En la 5080 la estimación tarda lo mismo (9,3 ms). El
+  error de ONNX Runtime, que venía con rutas de compilación y plantillas de C++ por delante, se resume en
+  una línea: `[conversor] el modelo no abrio: CUDA failure 101: invalid device ordinal`.
+- **Ratón descolocado en la ventana del visor.** La interfaz se dibuja en píxeles físicos del panel
+  (decisión de v0.11) pero GLFW entrega la posición del ratón en puntos lógicos de la ventana: con el
+  panel en modo normal (escala 1,5) los clics caían a dos tercios de donde estaba el botón, así que las
+  tarjetas y la pastilla eran imposibles de pulsar a escala fraccionaria. Ahora la posición se
+  reescala al lienzo antes de mirar qué se pulsó.
+- **Herramientas de prueba.** `tools/prueba_red.cpp` (la red suelta sobre una foto),
+  `tools/prueba_profundidad.cpp` (mapa de profundidad a PGM) y `tools/prueba_dibr.cpp` (señal de
+  disparidad sobre un cuadro sintético). `--dump RUTA` vuelca también la copia de 518 que ve la red
+  (`RUTA-chico.ppm`) y el mapa que produce (`RUTA-profundidad.pgm`), que es como se verificó esto.
+- **Rendimiento medido.** Sin conversor: 62,7 f/s en modo normal y ~30 f/s en modo 3 real. Con
+  conversor: 25–26 f/s en ventana y 25,7–27,8 f/s en modo 3. El presupuesto por cuadro en modo 3 es
+  8,3 ms, y de ahí que la red vaya cada varios cuadros y no en cada uno.
+
 ## La pastilla se veía pequeña en el modo 3D: regla corregida y tamaño ajustable en marcha (v0.11)
 - **Por qué se veía pequeña.** En v0.10 la interfaz del visor se medía con el tamaño *lógico* del
   escritorio. El problema es que el modo 3D del panel **se lleva la escala del escritorio**: al pasar al

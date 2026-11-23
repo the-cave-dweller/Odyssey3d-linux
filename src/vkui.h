@@ -37,6 +37,7 @@ public:
     HitAskSbs,
     HitAskTop,
     HitAskFlat,
+    HitAskConv,
     HitAskDont,
     HitAskClose
   };
@@ -126,7 +127,7 @@ private:
   float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
   Rect pillPanel_, btn3D_, btnOv_, depTrack_, popTrack_, depKnob_, popKnob_;
-  Rect askPanel_, askSbs_, askTop_, askFlat_, askDont_, askClose_;
+  Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
 };
 
 #endif

@@ -10,6 +10,7 @@
 layout(set = 0, binding = 0) uniform sampler2D uSrc;    /* estéreo: lado a lado o arriba/abajo */
 layout(set = 0, binding = 1) uniform sampler2D uCorrA;  /* mapa de corrección A (R8) */
 layout(set = 0, binding = 2) uniform sampler2D uCorrB;  /* mapa de corrección B (R8) */
+layout(set = 0, binding = 4) uniform sampler2D uDepth;  /* profundidad estimada (R8, 255 = cerca) */
 
 layout(set = 0, binding = 3) uniform WeaveParams {
     vec2 v2c[4];   /* campo v2 en TL, TR, BL, BR */
@@ -19,6 +20,7 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun1;     /* x crosstalk dinámico · y contraste · z escala de corrA · w convergencia */
     vec4 tun2;     /* x desfase de fase · y paso de lente · z tramado activo · w invertir ojos */
     vec4 tun3;     /* x estado del indicador · y disposición (0 lado a lado, 1 arriba/abajo) · z invertir Y · w profundidad */
+    vec4 tun4;     /* conversor 2D/3D: x activo · y cuanto se desplaza cada ojo · z plano de referencia · w copia pura */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -49,9 +51,25 @@ void main()
     vec2 v3 = P.v3c[0] * w00.x + P.v3c[1] * w10.x + P.v3c[2] * w01.x + P.v3c[3] * w11.x;
     vec3 v4 = P.v4c[0] * w00.y + P.v4c[1] * w10.y + P.v4c[2] * w01.y + P.v4c[3] * w11.y;
 
-    /* pase 2D: sin tramar (la lente y el scaler pueden seguir activos) */
+    /* pase de copia pura (lo usa el conversor para alimentarse a si mismo): ni campo de la lente
+       ni trama, la imagen tal cual. Con el campo de la lente los desplazamientos subpixel del
+       tramado se convierten en franjas de colores y la red ve una imagen falsa. */
+    if (P.tun4.w == 1.0) {
+        vec2 qc = vec2(u, v);
+        if (P.tun3.z == 1.0)
+            qc.y = 1.0 - qc.y;          /* la fuente puede venir con la primera fila abajo */
+        o = vec4(texture(uSrc, qc).rgb, 1.0);
+        return;
+    }
+
+    /* pase 2D: sin tramar (la lente y el scaler pueden seguir activos). Aqui se muestrea la
+       imagen ENTERA: si se usara srcHalf se veria solo media pantalla ampliada al doble, que es
+       exactamente el "se ve enorme y cortado" con un video que no tiene dos vistas. */
     if (P.tun2.z == 0.0) {
-        o = vec4(srcHalf(fuv, 0.0), 1.0);
+        vec2 q2 = fuv;
+        if (P.tun3.z == 1.0)
+            q2.y = 1.0 - q2.y;          /* la fuente puede venir con la primera fila abajo */
+        o = vec4(texture(uSrc, q2).rgb, 1.0);
         return;
     }
 
@@ -74,8 +92,26 @@ void main()
        "3D Popout" corre el par entero (mueve el plano de convergencia). */
     float dep = P.tun3.w;
     float cnv = P.tun1.w;
-    vec3 L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);
-    vec3 R = srcHalf(fuv + vec2(cnv - dep, 0.0), rx);
+    vec3 L, R;
+    if (P.tun4.x == 1.0) {
+        /* Video normal (una sola imagen): el mapa de profundidad dice cuanto hay que desplazar
+           cada ojo. Lo que esta en el plano de referencia (tun4.z) no se mueve; lo que esta por
+           delante sale hacia fuera de la pantalla y el fondo hacia dentro. */
+        float cerca = texture(uDepth, fuv).r;   /* el mapa ya esta derecho: viene del pase pequeno */
+        float s = (cerca - P.tun4.z) * P.tun4.y;
+        vec2 q4 = fuv;
+        if (P.tun3.z == 1.0)
+            q4.y = 1.0 - q4.y;                  /* la fuente puede venir con la primera fila abajo */
+        /* lo que esta por delante del plano de referencia va hacia fuera en la pantalla: en la
+           vista izquierda el contenido se corre a la derecha y en la derecha a la izquierda (se
+           muestrea al reves de hacia donde se mueve) */
+        L = texture(uSrc, q4 + vec2(-s + cnv, 0.0)).rgb;
+        R = texture(uSrc, q4 + vec2(s + cnv, 0.0)).rgb;
+        if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
+    } else {
+        L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);
+        R = srcHalf(fuv + vec2(cnv - dep, 0.0), rx);
+    }
     L = (L - 0.5) * P.tun1.y + 0.5;
     R = (R - 0.5) * P.tun1.y + 0.5;
     vec3 dRL = R - L;

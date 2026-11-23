@@ -17,6 +17,9 @@
 #include "session.h"
 #include "mpris.h"
 #include "util.h"
+#ifdef HAVE_ORT
+#include "depth.h"
+#endif
 #include "vkui.h"
 #include "vkweave.h"
 
@@ -56,7 +59,10 @@ struct VkUi {
   Mpris *media = nullptr;
   bool mediaPausaManual = false;
   std::string fmtInfo;       /* " · lado a lado": recuerda que formato se esta entrelazando */
+  bool convToggle = false;   /* la tecla C: el bucle del visor enciende o apaga el conversor */
   std::string extraInfo;     /* " · video en pausa" y cosas asi, detras de la frase de estado */
+  bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
+  bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
 };
 
@@ -75,7 +81,7 @@ void printTuning(const VkUi &ui, const char *what) {
 
 /* frase breve bajo la pastilla: qué se está viendo y en qué estado está el hardware */
 std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int w, int h,
-                     const std::string &extra = "", const std::string &fmt = "") {
+                     const std::string &extra = "", const std::string &fmt = "", bool convOn = false) {
   std::string out = kind == SourceKind::Capture ? "ventana capturada " : "patron de prueba ";
   out += std::to_string(w) + "x" + std::to_string(h);
   out += st.weaveOn ? (st.ask ? " sin formato elegido" : " con trama") : " 2D plano";
@@ -86,7 +92,9 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
   out += (rig.scalerOn ? "3D" : "apagado");
   /* el aviso que faltaba: la trama solo da profundidad si el video trae dos imagenes. Con un video
      normal lo que sale es una imagen doble y movida, y es lo que se ve "regular" en el monitor. */
-  if (st.weaveOn && !fmt.empty())
+  if (convOn)
+    out += " · conversor de video normal (C lo apaga)";
+  else if (st.weaveOn && !fmt.empty())
     out += " · si el video es normal (una sola imagen) se vera doble: tecla 3 o 2D plano";
   out += extra;
   return out;
@@ -123,6 +131,11 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       st.ask = false;
       st.weaveOn = false;
       printTuning(ui, "2D plano");
+      break;
+    case Hud::HitAskConv:
+      st.ask = false;
+      ui.convWant = true;   /* el bucle del visor enciende el conversor (necesita la red ONNX) */
+      printTuning(ui, "video normal a 3D");
       break;
     case Hud::HitAskDont:
       st.remember = !st.remember;
@@ -212,6 +225,33 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     std::fflush(stdout);
     return;
   }
+  /* M: cambiar el formato del video sin salir de la sesion. Es la tecla que salva cuando se eligio
+     "lado a lado" sobre un video que en realidad no tiene dos imagenes: cada ojo queda viendo media
+     pantalla ampliada al doble, o sea una imagen enorme y cortada por los bordes. Los tres estados
+     del ciclo son lado a lado, arriba y abajo, y 2D plano (el video tal cual). */
+  if (key == GLFW_KEY_C) {
+    ui->convToggle = true;   /* el bucle del visor enciende o apaga el conversor */
+    return;
+  }
+  if (key == GLFW_KEY_M) {
+    Hud::State &st = ui->hud.state();
+    if (!st.weaveOn) {
+      st.weaveOn = true;
+      ui->tune.topBottom = false;
+      ui->fmtInfo = " · lado a lado";
+      std::printf("[formato] lado a lado (dos imagenes una al lado de otra)\n");
+    } else if (!ui->tune.topBottom) {
+      ui->tune.topBottom = true;
+      ui->fmtInfo = " · arriba y abajo";
+      std::printf("[formato] arriba y abajo (dos imagenes una sobre otra)\n");
+    } else {
+      st.weaveOn = false;
+      std::printf("[formato] 2D plano: el video se ve tal cual, sin relieve\n");
+    }
+    std::fflush(stdout);
+    printTuning(*ui, "formato");
+    return;
+  }
   const char *tag = nullptr;
   if (tuningKey(ui->tune, key, &tag)) {
     if (key == GLFW_KEY_0 || key == GLFW_KEY_9) ui->convBase = ui->tune.conv; /* la tecla gana sobre el deslizador */
@@ -219,14 +259,47 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   }
 }
 
+/* GLFW da la posicion del raton en los puntos logicos de la ventana, pero la interfaz se dibuja
+   sobre el lienzo de pixeles reales del panel. Con el panel en modo normal (escala 1,5) son
+   medidas distintas: sin este paso los clics caen por encima de lo que se ve. */
+void pointerScale(GLFWwindow *win, const VkUi *ui, float &kx, float &ky) {
+  int lw = 0, lh = 0;
+  glfwGetWindowSize(win, &lw, &lh);
+  kx = lw > 0 && ui->fbW > 0 ? (float)ui->fbW / (float)lw : 1.0f;
+  ky = lh > 0 && ui->fbH > 0 ? (float)ui->fbH / (float)lh : 1.0f;
+}
+
 void onCursorVK(GLFWwindow *win, double x, double y) {
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
   if (!ui) return;
+  float kx = 1.0f, ky = 1.0f;
+  pointerScale(win, ui, kx, ky);
+  x *= kx;
+  y *= ky;
+  bool dentro = x >= 0 && y >= 0 && x < (double)ui->fbW && y < (double)ui->fbH;
+  if (std::getenv("ODYSSEY_CONV")) {
+    static double ultimo = 0.0;
+    double t = glfwGetTime();
+    if (t - ultimo > 0.2) {
+      ultimo = t;
+      std::printf("[tarjeta] puntero %.0f,%.0f\n", x, y);
+      std::fflush(stdout);
+    }
+  }
+  (void)dentro;
   ui->mx = x;
   ui->my = y;
   ui->inputChanged = true;
   ui->hud.setMouse((float)x, (float)y);
   if (ui->dragging != Hud::HitNone) ui->hud.dragTo(ui->dragging, (float)x);
+}
+
+void onEnterVK(GLFWwindow *win, int entered) {
+  if (!std::getenv("ODYSSEY_CONV")) return;
+  VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
+  std::printf("[tarjeta] el puntero %s la ventana (ahora %.0f,%.0f)\n", entered ? "entra en" : "sale de",
+              ui ? ui->mx : -1.0, ui ? ui->my : -1.0);
+  std::fflush(stdout);
 }
 
 void onButtonVK(GLFWwindow *win, int button, int action, int) {
@@ -238,6 +311,13 @@ void onButtonVK(GLFWwindow *win, int button, int action, int) {
     return;
   }
   Hud::Hit hit = ui->hud.hit((float)ui->mx, (float)ui->my);
+  if (std::getenv("ODYSSEY_CONV")) {   /* mira donde cae el puntero: depuracion de la tarjeta */
+    float bx = 0, by = 0, bw = 0, bh = 0;
+    ui->hud.askBounds(&bx, &by, &bw, &bh);
+    std::printf("[tarjeta] puntero %.0f,%.0f escala %.2f golpe %d panel %.0f,%.0f %.0fx%.0f\n", ui->mx, ui->my,
+                ui->hud.scale(), (int)hit, bx, by, bw, bh);
+    std::fflush(stdout);
+  }
   applyHit(*ui, hit);
 }
 
@@ -415,6 +495,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   glfwSetWindowUserPointer(win, &ui);
   glfwSetKeyCallback(win, onKeyVK);
   glfwSetCursorPosCallback(win, onCursorVK);
+  glfwSetCursorEnterCallback(win, onEnterVK);
   glfwSetMouseButtonCallback(win, onButtonVK);
   glfwSetWindowFocusCallback(win, onFocusVK);
   /* cursor visible, como en el hub oficial */
@@ -467,6 +548,52 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   }
   wv.setPanelPixels(fbW, fbH);
   wv.setField(LensField{}, EyePose{opts.eyeX, opts.eyeY, opts.eyeZ});
+
+  /* conversor de video normal a 3D: la red de profundidad corre en este mismo hilo, pero sólo
+     cada varios cuadros. Medido: unos 7 milisegundos con la tarjeta NVIDIA, y el presupuesto por
+     cuadro en el modo 3D es de 8, así que hacerla en cada cuadro hundiría la tasa de imagen. */
+#ifdef HAVE_ORT
+  DepthNet red;
+  std::vector<uint8_t> chico, mapa;
+  bool convActivo = opts.conver;
+  int convSalto = 0;
+  long long convHechas = 0, convFallos = 0;
+  double convMs = 0.0, ultimaEstim = 0.0;
+  int convGpu = opts.convGpu;   /* se sube solo a la 1 si la 0 esta llena (strata, juegos, ...) */
+  auto arrancarRed = [&](int &gpu, std::string *e) {
+    if (red.init(opts.modelPath, e, gpu)) return true;
+    if (gpu == 0) {   /* la GPU de la pantalla suele estar ocupada: probar la siguiente tarjeta */
+      std::fprintf(stderr, "[conversor] %s\n[conversor] se prueba en la grafica 1 (se fuerza con --red N)\n",
+                   e->c_str());
+      std::fflush(stderr);
+      if (red.init(opts.modelPath, e, 1)) {
+        gpu = 1;
+        return true;
+      }
+    }
+    return false;
+  };
+  if (convActivo) {
+    std::string rerr;
+    if (!arrancarRed(convGpu, &rerr)) {
+      std::fprintf(stderr, "[conversor] %s\n", rerr.c_str());
+      convActivo = false;
+    } else if (!wv.prepareConverter(red.size(), &rerr)) {
+      std::fprintf(stderr, "[conversor] %s\n", rerr.c_str());
+      convActivo = false;
+    } else {
+      std::printf("[conversor] video normal a 3D con %s, cada %d cuadros (tecla C para apagar)\n",
+                  red.device().c_str(), opts.convEach);
+      ui.convInfo = true;
+      std::fflush(stdout);
+      ui.hud.state().popout = 50;   /* sin desplazamiento no hay relieve: empezar en el medio */
+    }
+  }
+#else
+  if (opts.conver)
+    std::fprintf(stderr, "[conversor] este programa se compiló sin ONNX Runtime: no puede convertir "
+                         "video normal a 3D (paquete onnxruntime-cuda)\n");
+#endif
 
   /* rastreo de cabeza: un hilo mira la camara IR y aqui se lee lo ultimo que vio */
 #ifdef HAVE_OPENCV
@@ -564,7 +691,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("          P o espacio  pausa o reanuda el video · Tab entrega la pantalla al navegador (nos\n");
   std::printf("          minimizamos y el panel vuelve a 2D; Meta+Alt+Tab o un clic en la barra de tareas la\n          "
               "devuelve y el 3D se reanuda solo\n");
-  std::printf("          teclas sueltas  3 sin tramado (2D) · F invierte los ojos · flechas fase, paso y crosstalk\n\n");
+  std::printf("          teclas sueltas  3 sin tramado (2D) · F invierte los ojos · M cambia el formato del video\n"
+              "                            (lado a lado, arriba y abajo, 2D plano) · C conversor de video normal a 3D\n\n");
   std::fflush(stdout);
 
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
@@ -578,7 +706,58 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::fflush(stdout);
       ui.quit = true;
     }
+    /* depuracion de la tarjeta del hub: ODYSSEY_GOLPE="x,y" simula un clic del raton ahi (en
+       coordenadas logicas de la ventana) para probar las cuatro tarjetas sin raton de verdad */
+    if (const char *g = std::getenv("ODYSSEY_GOLPE")) {
+      static bool hecho = false;
+      if (!hecho && ui.hud.state().ask && frames >= 3) {   /* hace falta un cuadro trazado para saber
+                                                              donde cae cada tarjeta */
+        int gx = 0, gy = 0;
+        if (std::sscanf(g, "%d,%d", &gx, &gy) == 2) {
+          float kx = 1.0f, ky = 1.0f;
+          pointerScale(win, &ui, kx, ky);
+          Hud::Hit hit = ui.hud.hit((float)gx * kx, (float)gy * ky);
+          float bx = 0, by = 0, bw = 0, bh = 0;
+          ui.hud.askBounds(&bx, &by, &bw, &bh);
+          std::printf("[tarjeta] clic simulado en %.0f,%.0f (lienzo %.0f,%.0f) -> golpe %d · tarjeta %.0f,%.0f "
+                      "%.0fx%.0f escala %.2f\n",
+                      (double)gx, (double)gy, (double)(gx * kx), (double)(gy * ky), (int)hit, (double)bx, (double)by,
+                      (double)bw, (double)bh, (double)ui.hud.scale());
+          std::fflush(stdout);
+          applyHit(ui, hit);
+        }
+        hecho = true;
+      }
+    }
     glfwPollEvents();
+#ifdef HAVE_ORT
+    /* la tecla C: encender o apagar el conversor de video normal a 3D */
+    if (ui.convToggle || ui.convWant) {
+      const bool pidiendo = ui.convWant;
+      ui.convToggle = false, ui.convWant = false;
+      std::string cerr0;
+      if (!convActivo) {
+        if (!red.ready() && !arrancarRed(convGpu, &cerr0)) {
+          std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
+        } else if (!wv.converterReady() && !wv.prepareConverter(red.size(), &cerr0)) {
+          std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
+        } else {
+          convActivo = true;
+          ui.hud.state().weaveOn = true;   /* hace falta la trama: el relieve sale de ahi */
+          ui.tune.topBottom = false;
+          if (ui.hud.state().popout == 0) ui.hud.state().popout = 50;
+          std::printf("[conversor] video normal a 3D encendido con %s (tecla C para apagar)\n",
+                      red.device().c_str());
+          ui.convInfo = true;
+        }
+      } else if (!pidiendo) {
+        convActivo = false;
+        std::printf("[conversor] video normal a 3D apagado\n");
+        ui.convInfo = false;
+      }
+      std::fflush(stdout);
+    }
+#endif
     /* Entregar y recuperar la pantalla (Tab). Somos una ventana a pantalla completa por encima
        del navegador, asi que la unica forma de que el raton llegue al video es irnos nosotros:
        apagamos el 3D del panel y nos minimizamos. Mientras estamos aparte no tiene sentido
@@ -773,13 +952,85 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     const Hud::State &st = ui.hud.state();
     t.conv = ui.convBase + (float)st.popout / 50.0f * 0.004f;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);
+#ifdef HAVE_ORT
+    /* conversor de video normal a 3D: reducir la imagen en la tarjeta, bajarla (1 MB), pasar la
+       red y volver a subir el mapa. Se hace cada opts.convEach cuadros y solo cuando el
+       compositor mando un cuadro nuevo: la red tarda ~7 ms y el presupuesto por cuadro en el
+       modo 3D anda por los 8 ms. */
+    if (convActivo && red.ready() && wv.converterReady()) {
+      if (std::getenv("ODYSSEY_CONV")) {
+        static long long dep = 0;
+        if (++dep % 200 == 0)
+          std::printf("[conv-debug] t=%.2f ultima=%.2f salto=%d cada=%d fuente=%d nuevo=%d hechas=%lld fallos=%lld\n",
+                      now, ultimaEstim, convSalto, opts.convEach, wv.hasSource() ? 1 : 0, newSource ? 1 : 0,
+                      convHechas, convFallos);
+      }
+      /* con el video quieto no hace falta repetir la red, pero tampoco queremos un mapa
+         congelado si el cuadro no cambia: como mucho una vez cada medio segundo */
+      if ((newSource || now - ultimaEstim > 0.5) && wv.hasSource() && ++convSalto >= opts.convEach) {
+        convSalto = 0;
+        ultimaEstim = now;
+        std::string cerr;
+        bool ok = wv.readSmall(chico, &cerr);
+        if (ok) ok = red.estimate(chico.data(), wv.converterSize(), wv.converterSize(), mapa, &cerr);
+        if (ok) ok = wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
+        if (ok) {
+          convMs = red.lastMs();
+          /* con --dump guardamos tambien el mapa del primer cuadro: sirve para ver si la red
+             esta entendiendo bien la escena (claro = cerca, oscuro = lejos) */
+          if (!opts.dumpPath.empty() && (convHechas == 0 || convHechas == 8)) {
+            /* guardamos tambien lo que realmente le llega a la red: si aqui no esta la imagen de
+               la ventana capturada, el problema esta en la lectura pequena y no en el modelo */
+            const std::string cp = opts.dumpPath + "-chico.ppm";
+            const int cs = wv.converterSize();
+            FILE *cf = std::fopen(cp.c_str(), "wb");
+            if (cf) {
+              std::fprintf(cf, "P6\n%d %d\n255\n", cs, cs);
+              for (int yy = 0; yy < cs; yy++)
+                for (int xx = 0; xx < cs; xx++)
+                  std::fwrite(chico.data() + (((size_t)yy * (size_t)cs + (size_t)xx) * 4), 1, 3, cf);
+              std::fclose(cf);
+              std::printf("[volcado] %s (%dx%d lo que ve la red, estimacion %lld)\n", cp.c_str(), cs, cs,
+                          convHechas + 1);
+            }
+            const std::string mp = opts.dumpPath + "-profundidad.pgm";
+            FILE *pf = std::fopen(mp.c_str(), "wb");
+            if (pf) {
+              std::fprintf(pf, "P5\n%d %d\n255\n", red.size(), red.size());
+              std::fwrite(mapa.data(), 1, mapa.size(), pf);
+              std::fclose(pf);
+              std::printf("[volcado] %s (%dx%d, estimacion %lld)\n", mp.c_str(), red.size(), red.size(),
+                          convHechas + 1);
+            }
+          }
+          if (++convHechas == 1 || convHechas % 150 == 0)
+            std::printf("[conversor] profundidad en %.1f ms con %s (cuadro %lld)\n", convMs,
+                        red.device().c_str(), (long long)convHechas);
+          std::fflush(stdout);
+        } else {
+          /* si falla, decirlo en vez de quedarse mudo: casi siempre es el cuadro que no llego a
+             importar, y conviene verlo en el registro */
+          if (++convFallos == 1 || convFallos % 100 == 0)
+            std::fprintf(stderr, "[conversor] fallo (%d): %s\n", (int)convFallos, cerr.c_str());
+          if (!convHechas) {
+            std::fprintf(stderr, "[conversor] %s\n", cerr.c_str());
+            convActivo = false;   /* no insistir cuadro tras cuadro con el mismo fallo */
+          }
+        }
+      }
+      /* los dos deslizadores de siempre mandan aqui: "3D Depth" pone el plano que se queda
+         quieto y "3D Popout" cuanto se separan la vista izquierda y la derecha */
+      wv.setConverter(0.003f + (float)st.popout / 100.0f * 0.020f, (float)st.depth / 100.0f,
+                      wv.hasDepthMap());
+    }
+#endif
     ui.hud.state().hud = rig.hud();
     /* la frase extra del video se quita sola, salvo si estamos en pausa a proposito */
     if (!ui.extraInfo.empty() && ui.extraHasta > 0.0 && now >= ui.extraHasta && !ui.mediaPausaManual) {
       ui.extraInfo.clear();
       ui.extraHasta = 0.0;
     }
-    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo));
+    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo, ui.convInfo));
     ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
