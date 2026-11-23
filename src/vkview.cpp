@@ -562,6 +562,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
   int cadaConv = opts.convEach;
+  bool apoyoAuto = true;      /* el plano de apoyo lo sigue la red; Ctrl+Shift+3/4 lo vuelve manual */
+  int profundidadVista = ui.hud.state().depth;
    /* La red puede tardar cientos de ms si le toca la CPU (cuando las dos tarjetas estan llenas).
       Para no congelar el cuadro, la estimacion corre en su propio hilo: aqui solo se reduce la
       imagen en la tarjeta y se le manda la copia; el mapa vuelve cuando esta terminado y se sube
@@ -639,17 +641,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         std::printf("[conversor] la red va por CPU: la profundidad se recalcula cada %d cuadros "
                     "(se cambia con --cada N)\n", cadaConv);
       }
-      /* sin desplazamiento no hay relieve: arrancar arriba del todo del termino medio. Con el
-         deslizador a 60 el tope de separacion entre el ojo izquierdo y el derecho es de ~85 px a
-         3840 de ancho; ahi es donde aun se ve un solo volumen y no dos imagenes despegadas. */
-      ui.hud.state().popout = 55;
+      /* sin desplazamiento no hay relieve: arrancar en el termino medio de la curva nueva. Con el
+         deslizador a 50 la separacion entre el ojo izquierdo y el derecho es de ~65 px a 3840 de
+         ancho; ahi es donde aun se ve un solo volumen y no dos imagenes despegadas. */
+      ui.hud.state().popout = 50;
       if (ui.hud.state().depth == 50) ui.hud.state().depth = 55;   /* algo por delante, sin pasarse */
+      apoyoAuto = true;
+      profundidadVista = ui.hud.state().depth;
       std::printf("[conversor] video normal a 3D con %s, cada %d cuadros (tecla C para apagar)\n",
                   red.device().c_str(), cadaConv);
       std::printf("[conversor] arranque: relieve %d (%.0f px de separacion entre ojos a %d px de ancho), "
-                  "plano de referencia %d -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
-                  ui.hud.state().popout, (0.003 + ui.hud.state().popout / 100.0 * 0.026) * 3840.0,
-                  3840, ui.hud.state().depth);
+                  "plano de apoyo automatico -- Ctrl+Shift+6 sube el relieve, Ctrl+Shift+5 lo baja\n",
+                  ui.hud.state().popout, (0.003 + ui.hud.state().popout / 100.0 * 0.028) * 3840.0,
+                  3840);
+      std::printf("[conversor] limpieza del mapa: filtro guiado (radio 8) + dilate 3 + corte de plano "
+                  "(umbral 0,12, descanso 15 cuadros); apoyo por saliencia\n");
       ui.convInfo = true;
       ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
       ui.extraHasta = glfwGetTime() + 9.0;
@@ -812,11 +818,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           convActivo = true;
           ui.hud.state().weaveOn = true;   /* hace falta la trama: el relieve sale de ahi */
           ui.tune.topBottom = false;
-          if (ui.hud.state().popout < 55) ui.hud.state().popout = 55;   /* plano = sin relieve */
+          if (ui.hud.state().popout < 50) ui.hud.state().popout = 50;   /* plano = sin relieve */
           if (ui.hud.state().depth == 50) ui.hud.state().depth = 55;
+          apoyoAuto = true;
+          profundidadVista = ui.hud.state().depth;
           std::printf("[conversor] video normal a 3D encendido con %s (tecla C para apagar): "
-                      "relieve %d, plano %d -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
-                      red.device().c_str(), ui.hud.state().popout, ui.hud.state().depth);
+                      "relieve %d, apoyo automatico -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
+                      red.device().c_str(), ui.hud.state().popout);
           ui.convInfo = true;
           ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
           ui.extraHasta = glfwGetTime() + 9.0;
@@ -1099,9 +1107,15 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                 std::fprintf(stderr, "[volcado] trama con mapa: %s\n", cerr.c_str());
             }
           }
+          if (red.lastCut())
+            std::printf("[conversor] cambio de plano (%ld): se reinicia la escala de profundidad y el apoyo\n",
+                        red.cutCount());
           if (++convHechas == 1 || convHechas % 150 == 0)
             std::printf("[conversor] profundidad en %.1f ms con %s (cuadro %lld)\n", convMs,
                         red.device().c_str(), (long long)convHechas);
+          if (convHechas == 2 || convHechas % 60 == 0)
+            std::printf("[conversor] apoyo %d%% del rango de profundidad (cortes %ld, mapa %d x %d)\n",
+                        (int)(red.focusPlane() * 100.0f), red.cutCount(), wv.converterSize(), wv.converterSize());
           std::fflush(stdout);
         } else {
           /* si falla, decirlo en vez de quedarse mudo: casi siempre es el cuadro que no llego a
@@ -1124,10 +1138,25 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* los dos deslizadores de siempre mandan aqui: "3D Depth" pone el plano que se queda
          quieto y "3D Popout" cuanto se separan la vista izquierda y la derecha */
       /* "3D Salida" (relieve) manda aqui: 0 deja la imagen plana y 100 separa las dos vistas
-         un 2,6 % del ancho de la pantalla. A 55 son ~66 px de separacion entre ojos: con 50 px (la curva
+         un 2,8 % del ancho de la pantalla. A 50 son ~65 px de separacion entre ojos: con 50 px (la curva
          vieja) no se notaba y con 98 molestaba, ahi esta el termino medio medido en el panel. */
-      const float ganancia = 0.003f + (float)st.popout / 100.0f * 0.026f;
-      wv.setConverter(ganancia, (float)st.depth / 100.0f, wv.hasDepthMap());
+      const float ganancia = 0.003f + (float)st.popout / 100.0f * 0.028f;
+      /* El plano de apoyo (lo que se queda quieto en la pantalla) lo sigue la red: toma el pico del
+         histograma del mapa ya limpio, o sea el sujeto. Con el sujeto apoyado en la pantalla el
+         relieve se abre hacia atras y cansa menos la vista con el mismo relieve. Si el usuario mueve
+         Ctrl+Shift+3/4 se le deja el suyo; apagar y volver a encender el conversor (tecla C) lo
+         devuelve al automatico. */
+      if (st.depth != profundidadVista) {
+        profundidadVista = st.depth;
+        if (apoyoAuto) {
+          apoyoAuto = false;
+          std::printf("[conversor] plano de referencia manual %d (tecla C dos veces lo devuelve a automatico)\n",
+                      st.depth);
+          std::fflush(stdout);
+        }
+      }
+      wv.setConverter(ganancia, apoyoAuto ? red.focusPlane() : (float)st.depth / 100.0f,
+                      wv.hasDepthMap());
     }
 #endif
     ui.hud.state().hud = rig.hud();

@@ -58,6 +58,87 @@ void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) 
   }
 }
 
+/* Media en una ventana cuadrada de radio r, con pasada separable (suma deslizante): lo que hace
+   falta para el filtro guiado, y sale barato a 518 x 518. */
+void caja(const float *entra, float *temp, float *sale, int n, int r) {
+  const float inv = 1.0f / (float)(2 * r + 1);
+  for (int y = 0; y < n; y++) {                      /* filas */
+    const float *fila = entra + (size_t)y * n;
+    float *o = temp + (size_t)y * n;
+    float suma = 0.0f;
+    for (int x = -r; x <= r; x++) suma += fila[x < 0 ? 0 : (x >= n ? n - 1 : x)];
+    for (int x = 0; x < n; x++) {
+      o[x] = suma * inv;
+      const int fuera = x - r, nuevo = x + r + 1;
+      suma -= fila[fuera < 0 ? 0 : fuera];
+      suma += fila[nuevo >= n ? n - 1 : nuevo];
+    }
+  }
+  for (int x = 0; x < n; x++) {                      /* columnas */
+    float suma = 0.0f;
+    for (int y = -r; y <= r; y++) suma += temp[(size_t)(y < 0 ? 0 : (y >= n ? n - 1 : y)) * n + x];
+    for (int y = 0; y < n; y++) {
+      sale[(size_t)y * n + x] = suma * inv;
+      const int viejo = y - r, nuevo = y + r + 1;
+      suma -= temp[(size_t)(viejo < 0 ? 0 : viejo) * n + x];
+      suma += temp[(size_t)(nuevo >= n ? n - 1 : nuevo) * n + x];
+    }
+  }
+}
+
+/* Filtro guiado (He et al., 2010): suaviza el mapa de profundidad pero parandose en los bordes de
+   la foto. Es el que usa el programa de Samsung (radio 8, epsilon 0,04) y es lo que evita que el
+   relieve se coma los cantos de los objetos o los haga temblar. */
+void filtroGuiado(const float *guia, const float *prof, float *fuera, int n, int r, float eps,
+                  float *trabajo) {
+  const size_t plane = (size_t)n * (size_t)n;
+  float *mI = trabajo, *mP = trabajo + plane, *cII = trabajo + 2 * plane, *cIP = trabajo + 3 * plane,
+        *a = trabajo + 4 * plane, *b = trabajo + 5 * plane, *aux = trabajo + 6 * plane;
+  caja(guia, aux, mI, n, r);
+  caja(prof, aux, mP, n, r);
+  for (size_t i = 0; i < plane; i++) aux[i] = guia[i] * guia[i];
+  caja(aux, trabajo + 7 * plane, cII, n, r);
+  for (size_t i = 0; i < plane; i++) aux[i] = guia[i] * prof[i];
+  caja(aux, trabajo + 7 * plane, cIP, n, r);
+  for (size_t i = 0; i < plane; i++) {
+    const float var = cII[i] - mI[i] * mI[i];
+    const float aa = (cIP[i] - mI[i] * mP[i]) / (var + eps);
+    a[i] = aa;
+    b[i] = mP[i] - aa * mI[i];
+  }
+  float *mA = mI, *mB = mP;              /* reusar huecos: ya no hacen falta las medias */
+  caja(a, aux, mA, n, r);
+  caja(b, aux, mB, n, r);
+  for (size_t i = 0; i < plane; i++) fuera[i] = mA[i] * guia[i] + mB[i];
+}
+
+/* Dilatar lo cercano unos puntos: tras suavizar, los objetos encogen y el canto queda corrido hacia
+   dentro. Radio 3 puntos a 518 de ancho, que es lo que equivale la cifra de Samsung (0,006). */
+void dilatar(float *mapa, float *aux, int n, int r) {
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      float m = mapa[(size_t)y * n + x];
+      for (int k = -r; k <= r; k++) {
+        const int xx = x + k;
+        if (xx < 0 || xx >= n) continue;
+        const float v = mapa[(size_t)y * n + (size_t)xx];
+        if (v > m) m = v;
+      }
+      aux[(size_t)y * n + x] = m;
+    }
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      float m = aux[(size_t)y * n + x];
+      for (int k = -r; k <= r; k++) {
+        const int yy = y + k;
+        if (yy < 0 || yy >= n) continue;
+        const float v = aux[(size_t)yy * n + (size_t)x];
+        if (v > m) m = v;
+      }
+      mapa[(size_t)y * n + x] = m;
+    }
+}
+
 }  // namespace
 
 #ifdef HAVE_ORT
@@ -115,6 +196,8 @@ static std::vector<long> vramLibreMiB() {
 bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   const std::string path = model.empty() ? defaultModelPath() : model;
   gpu_ = gpu < 0 ? 0 : gpu;
+  if (const char *lim = std::getenv("ODYSSEY3D_LIMPIEZA"))   /* 0 deja el mapa en crudo: para comparar */
+    limpieza_ = lim[0] != '0';
   struct stat stt {};
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
@@ -241,6 +324,11 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   const auto t0 = std::chrono::steady_clock::now();
   const size_t plane = (size_t)sz_ * (size_t)sz_;
   sampleBilinear(rgba, w, h, im->in.data(), sz_);
+  /* guia para limpiar el mapa despues: la luminancia de la foto, tomada antes de normalizarla
+     para la red (es la que dice donde estan los cantos de los objetos) */
+  guia_.resize(plane);
+  for (size_t i = 0; i < plane; i++)
+    guia_[i] = 0.299f * im->in[i] + 0.587f * im->in[plane + i] + 0.114f * im->in[2 * plane + i];
   /* normalizacion de la foto: la misma con la que se entreno el modelo */
   static const float mean[3] = {0.485f, 0.456f, 0.406f}, sd[3] = {0.229f, 0.224f, 0.225f};
   for (int c = 0; c < 3; c++) {
@@ -282,6 +370,30 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     }
   }
   if (hi - lo < 1e-4f) hi = lo + 1e-4f;
+  const float invCrudo = 1.0f / (hi - lo);
+
+  /* cambio de plano: si el mapa nuevo no se parece nada al anterior, la escala que llevamos
+     acumulada ya no vale y hay que reiniciarla de golpe (si no, los pocos cuadros siguientes salen
+     con el rango del plano viejo: el relieve se ve apagado o quemado). Las cifras son las del
+     programa de Samsung: diferencia media de 0,12 y descanso de 15 cuadros entre reinicios. */
+  float dif = 0.0f;
+  size_t tomadas = 0;
+  if (prev_.size() == plane && n == plane) {
+    for (size_t i = 0; i < n; i += 41) {
+      dif += std::fabs((d[i] - lo) * invCrudo * 255.0f - (float)prev_[i]);
+      tomadas++;
+    }
+    if (tomadas) dif /= (float)tomadas * 255.0f;
+  }
+  corte_ = tomadas > 0 && dif > 0.12f && cuadrosDesdeCorte_ >= 15;
+  if (corte_) {
+    cuadrosDesdeCorte_ = 0;
+    cortes_++;
+    haveScale_ = false;
+  } else {
+    cuadrosDesdeCorte_++;
+  }
+
   if (!haveScale_) {
     loS_ = lo, hiS_ = hi;
     haveScale_ = true;
@@ -293,43 +405,92 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   }
   const float inv = 1.0f / (hiS_ - loS_);
 
-  out.resize(plane);
-  const bool suavizar = prev_.size() == plane && smooth_ > 0.0f;
-  const float q = 1.0f - smooth_;
-  const bool mismoTamano = (n == plane);
   auto shp = info.GetShape();
   int ow = sz_, oh = sz_;
   if (shp.size() >= 2) {
     ow = (int)shp[shp.size() - 1];
     oh = (int)shp[shp.size() - 2];
   }
-  if (!mismoTamano && (ow < 2 || oh < 2 || (size_t)ow * (size_t)oh != n)) ow = oh = 0;
-  if (mismoTamano || ow == 0) {
-    for (size_t i = 0; i < plane; i++) {
-      float v = (i < n ? (d[i] - loS_) * inv : 0.0f);
-      if (v < 0.0f) v = 0.0f;
-      if (v > 1.0f) v = 1.0f;
-      int b = (int)(v * 255.0f + 0.5f);
-      if (suavizar) b = (int)(b * q + (int)prev_[i] * smooth_ + 0.5f);
-      out[i] = (uint8_t)(b < 0 ? 0 : (b > 255 ? 255 : b));
-    }
-  } else {
-    /* si el modelo respondio a otra resolucion, la llevamos a la nuestra con muestreo simple */
+  if ((size_t)ow * (size_t)oh != n) ow = oh = 0;   /* respondio a otra resolucion: remuestreamos */
+
+  std::vector<float> mapa(plane), limpio(plane), salida(plane), trabajo((size_t)8 * plane);
+  if (ow == 0) {
     for (int y = 0; y < sz_; y++) {
-      int sy = (int)((float)y * (float)oh / (float)sz_);
-      if (sy >= oh) sy = oh - 1;
+      const int sy = (int)((float)y * (float)oh / (float)sz_);
       for (int x = 0; x < sz_; x++) {
-        int sx = (int)((float)x * (float)ow / (float)sz_);
-        if (sx >= ow) sx = ow - 1;
-        float v = (d[(size_t)sy * (size_t)ow + (size_t)sx] - loS_) * inv;
-        if (v < 0.0f) v = 0.0f;
-        if (v > 1.0f) v = 1.0f;
-        const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
-        int b = (int)(v * 255.0f + 0.5f);
-        if (suavizar) b = (int)(b * q + (int)prev_[o] * smooth_ + 0.5f);
-        out[o] = (uint8_t)(b < 0 ? 0 : (b > 255 ? 255 : b));
+        const int sx = (int)((float)x * (float)ow / (float)sz_);
+        float v = (d[(size_t)(sy < oh ? sy : oh - 1) * (size_t)ow + (sx < ow ? sx : ow - 1)] - loS_) * inv;
+        mapa[(size_t)y * (size_t)sz_ + (size_t)x] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
       }
     }
+  } else {
+    for (size_t i = 0; i < plane; i++) {
+      float v = (d[i] - loS_) * inv;
+      mapa[i] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    }
+  }
+
+  /* en el tiempo: el mapa nuevo entra con el peso que pide el usuario, salvo en un cambio de plano,
+     que se toma tal cual para no arrastrar el cuadro anterior sobre el plano nuevo. */
+  const bool suavizar = prev_.size() == plane && smooth_ > 0.0f && !corte_;
+  const float q = 1.0f - smooth_;
+  if (suavizar) {
+    for (size_t i = 0; i < plane; i++)
+      limpio[i] = mapa[i] * q + ((float)prev_[i] / 255.0f) * smooth_;
+  } else {
+    limpio = mapa;
+  }
+
+  /* limpiar el mapa siguiendo los bordes de la foto y dilatar lo cercano unos puntos: con esto los
+     cantos de los objetos quedan en su sitio y el relieve deja de temblar cuadro a cuadro. Con
+     ODYSSEY3D_LIMPIEZA=0 se apaga, para comparar en el panel la misma red con el mapa en crudo. */
+  if (limpieza_) {
+    filtroGuiado(guia_.data(), limpio.data(), salida.data(), sz_, 8, 0.04f, trabajo.data());
+    dilatar(salida.data(), mapa.data(), sz_, 3);
+  } else {
+    salida = limpio;
+  }
+
+  /* plano de apoyo: el pico del histograma ponderado (mas peso en el centro y en los cantos, que es
+     donde suele estar el sujeto). Con el apoyo ahi el sujeto se queda en el plano de la pantalla y
+     el relieve se abre detras, que es como menos cansa la vista. De suelo se usa la mediana, para
+     que nunca quede mas de media imagen por delante de la pantalla: ahi es donde molesta a los ojos. */
+  {
+    float hist[32] = {0.0f};
+    float total = 0.0f;
+    for (int y = 1; y < sz_ - 1; y++) {
+      for (int x = 1; x < sz_ - 1; x++) {
+        const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
+        const float gx = std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + sz_] - guia_[o - sz_]);
+        float w = 0.15f + 5.0f * gx;
+        if (w > 1.0f) w = 1.0f;
+        const bool dentro = x >= sz_ * 2 / 10 && x < sz_ * 8 / 10 && y >= sz_ * 2 / 10 && y < sz_ * 8 / 10;
+        w *= dentro ? 1.0f : 0.45f;      /* sesgo suave al centro: un sujeto apartado tambien ancla */
+        const int bin = (int)(salida[o] * 31.99f);
+        hist[bin] += w;
+        total += w;
+      }
+    }
+    int mejor = 0;
+    for (int i = 1; i < 32; i++)
+      if (hist[i] > hist[mejor]) mejor = i;
+    int mediana = 31;
+    if (total > 0.0f) {
+      float acum = 0.0f;
+      for (int i = 0; i < 32; i++) {
+        acum += hist[i];
+        if (acum >= 0.5f * total) { mediana = i; break; }
+      }
+    }
+    float nuevo = ((float)(mejor > mediana ? mejor : mediana) + 0.5f) / 32.0f;
+    if (corte_ || std::fabs(nuevo - focus_) >= 0.01f)
+      focus_ += (nuevo - focus_) * (corte_ ? 1.0f : 0.06f);   /* Samsung usa 0,02; 0,06 responde antes */
+  }
+
+  out.resize(plane);
+  for (size_t i = 0; i < plane; i++) {
+    const float v = salida[i] < 0.0f ? 0.0f : (salida[i] > 1.0f ? 1.0f : salida[i]);
+    out[i] = (uint8_t)(v * 255.0f + 0.5f);
   }
   prev_ = out;
   ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();

@@ -26,6 +26,19 @@ public:
   void setSmoothing(float a) { smooth_ = a < 0.0f ? 0.0f : (a > 0.95f ? 0.95f : a); }
   float smoothing() const { return smooth_; }
 
+  /* plano de enfoque: donde deberia apoyarse el plano de la pantalla (0 = fondo, 1 = lo mas cerca).
+     Sale del histograma del mapa ya limpio, ponderando el centro del cuadro y los cantos, para que
+     el sujeto quede apoyado en la pantalla y el relieve se abra detras. Se mueve despacio para que
+     el apoyo no baile, y de golpe en cada cambio de plano. */
+  float focusPlane() const { return focus_; }
+  bool lastCut() const { return corte_; }    /* hubo cambio de plano en la ultima estimacion */
+  long cutCount() const { return cortes_; }  /* cambios de plano contados desde el arranque */
+
+  /* limpieza del mapa (filtro guiado + dilatar). Se apaga con ODYSSEY3D_LIMPIEZA=0 para comparar en
+     el panel la misma red con el mapa en crudo. */
+  void setCleaning(bool on) { limpieza_ = on; }
+  bool cleaning() const { return limpieza_; }
+
 private:
   bool ready_ = false;
   int sz_ = 518;
@@ -37,6 +50,12 @@ private:
   std::vector<uint8_t> prev_;            /* mapa anterior, para suavizar */
   float loS_ = 0.0f, hiS_ = 1.0f;        /* escala en el tiempo (min/max suavizados) */
   bool haveScale_ = false;
+  float focus_ = 0.5f;                  /* plano de enfoque seguido automaticamente */
+  bool corte_ = false;                  /* cambio de plano en la ultima estimacion */
+  long cortes_ = 0;
+  int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */
+  std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */
+  bool limpieza_ = true;                /* filtro guiado + dilatar activados */
 };
 
 #endif

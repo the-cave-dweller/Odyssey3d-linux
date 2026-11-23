@@ -2,6 +2,65 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El relieve se apoya solo: plano del sujeto, mapa limpio y cortes de escena (v0.14)
+- **El plano de apoyo lo elige la imagen, no un deslizador fijo.** Se hace un histograma del mapa de
+  profundidad donde cada celda vale más si tiene cantos al lado y si cae en el centro del cuadro; el
+  pico de ese histograma es el plano donde la separación entre ojos vale cero, o sea lo que queda
+  "pegado al cristal". Tiene un suelo en la mediana para que un sujeto pequeño no arrastre el apoyo al
+  fondo, y se mueve de forma suave (peso 0,06) para que el relieve no respire. Con las cifras nuevas el
+  apoyo automático queda en 44–48 % del rango, justo donde antes había que ponerlo a mano en 55.
+  `Ctrl+Shift+3`/`4` ahora **anulan** el apoyo automático (el visor se da cuenta de que moviste la
+  profundidad y deja de perseguir la imagen); al reencender el conversor con `C` vuelve lo automático.
+- **El mapa llega limpio al tramado.** Antes el mapa de la red se usaba tal cual. Ahora pasa por un
+  filtro guiado (radio 8, épsilon 0,04) que usa la propia foto como guía para no comerse los cantos,
+  un dilatar de 3 puntos para que el sujeto tape su propio borde, y el suavizado en el tiempo de
+  siempre. Los números están copiados del programa oficial del Odyssey (sección `filter.depth`). Coste
+  medido: de 9,6–12,2 ms a 13,0–15,5 ms por estimación, y como la red va en su propio hilo el cuadro no
+  se entera (sigue a 106,9–112,6 cuadros/s en ventana y 37,8–38,4 en el modo 3D real del panel).
+- **Los cambios de plano cortan, no arrastran.** Se compara la profundidad media con la anterior
+  (muestra cada 41 celdas); si la diferencia pasa de 0,12 y hace más de 15 estimaciones del último
+  corte, se tiran la escala acumulada y el apoyo y se fijan de golpe al cuadro nuevo. Sin eso, al pasar
+  de un plano a otro el relieve se queda torcido medio segundo. Sale en el registro:
+  `[conversor] cambio de plano (n): se reinicia la escala de profundidad y el apoyo`, y de vez en vez
+  `[conversor] apoyo 46% del rango de profundidad (cortes 1, mapa 518 x 518)`.
+- **Curva del relieve recalibrada y arranque dentro del rango.** La ganancia ahora es
+  `0,003 + 3D Salida/100 × 0,028`, o sea **65 px de separación entre ojos** a 3840 px de ancho con el
+  deslizador a 50 (32,5 px por ojo). El arranque del conversor ya no pone 55: los deslizadores de la
+  pastilla solo dejan mover el relieve entre −50 y +50, así que 55 quedaba fuera y cualquier tecla lo
+  recortaba sin que se notara por qué. Al encenderlo el registro dice los píxeles exactos.
+- **Medido, no a ojo.** Con la limpieza apagada (`ODYSSEY3D_LIMPIEZA=0`) sobre ocho fotogramas reales:
+  aspereza del mapa 0,68 con limpieza frente a 0,70 sin ella, y temblor entre cuadros 11,42 frente a
+  11,51 niveles sobre 255. La limpieza apenas cambia cifras porque el mapa de la red ya venía suave; lo
+  que de verdad se nota es el apoyo en el sujeto y el corte en los cambios de plano. El canto del sujeto
+  se conserva igual (6 celdas con y sin filtro), que era el riesgo.
+
+## Que hace el programa de Samsung por dentro (analisis, sin tocar codigo nuestro)
+- **La cadena de etapas esta identificada**, en `Conversion\`: `depth.dll` + `mde.dll` (red de
+  profundidad) → `disparity.dll` (una red pequena de disparidad) → `warp.dll` (desplazamiento por ojo)
+  → `inpaint.dll` (relleno de huecos en cantos) → `degraph.dll` (compensacion de fantasma). El envoltorio
+  `ConversionWrapper.dll` solo exporta `GetFPS`, `Start` y `Stop`.
+- **Las siete DLL de etapa exportan unicamente `get_proc_address`** y estan empaquetadas (secciones con
+  nombres basura), asi que desarmarlas sin un volcado de memoria en marcha no da nada util. Los seis
+  volcados que ya habia en la carpeta tampoco sirven: cero apariciones del modelo.
+- **El "cifrado" de la configuracion y de los modelos es un XOR con una clave fija de 229 bytes**,
+  alineada en el offset 0, la misma para todo. Con la clave en la mano el config
+  (`conversion-config.json.bin`, 4521 bytes) se lee y se reescribe. Los cuatro modelos `.onnx.bin` del
+  programa **traen los pesos sustituidos por relleno** (`[DUMMY_START]` + 1/3/3 MiB de datos aleatorios
+  + `[DUMMY_END]`) y el config lleva `model_update: true`: los pesos reales se descargan. El de
+  disparidad (`Disp_Disp_1008_ver1.onnx.bin`, 465 KB) si trae pesos reales.
+- **Cifras oficiales que si copiamos**: filtro guiado radio 8 / epsilon 0,04 / dilatar, umbral de cambio
+  de escena 0,12 con descanso de 15 cuadros, apoyo por saliencia con peso real 0,02, presupuesto angular
+  `virt.min_disparity = -0,0026` y `max_disparity = +0,0033` (unos -10/+13 px, que entendemos por ojo:
+  unas tres veces menos que lo nuestro), y las etapas que vienen apagadas de fabrica (`vcsr`, `degraph`,
+  `jbu`, `depth_blur`, `gauss_blur`). No se ha guardado el config ni la clave en el repositorio: son
+  propiedad de Samsung; las copias estan en `../analisis-samsung/`.
+- **Lo que falta saber se pidio a un agente de Windows**: el prompt listo para ese trabajo esta en
+  `../prompt-qwen-windows.md`.
+
+## El relieve baja de 98 a ~66 px (valor de fabrica)
+- Con 98 px de separacion entre ojos molestaba a los ojos, y con 50 casi no se notaba. Se fijo el
+  arranque en el termino medio (~66 px, luego 65 px con la curva nueva).
+
 ## El relieve se sube: curva mas fuerte, arranque plano y medicion en pantalla
 - **Curva del deslizador "3D Salida" casi duplicada.** Antes, a mitad de deslizador, la separacion
   maxima entre la vista del ojo izquierdo y la del derecho era de ~50 px en una pantalla de 3840 px de
