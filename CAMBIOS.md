@@ -21,6 +21,11 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
 - `serve` se instala como **unidad de systemd de usuario** que arranca con la sesión gráfica
   (`systemd/odyssey3d-serve.service`, activada por `install.sh`) y se configura en
   `~/.config/odyssey3d/serve.conf` (`ignore`, `espera`, `modo`).
+- `capture3d` acepta por fin `--uuid` (era exactamente lo que lanzaba el servicio al pulsar el
+  aviso y moría con «opción desconocida») y el volcado de diagnóstico espera al primer fotograma
+  del portal en vez de salir en negro. Probado de punta a punta: mpv a pantalla completa → KWin →
+  PipeWire (DMA-BUF 3840x2160 XR24) → imagen Vulkan → trama, con `--no-panel --no-lens
+  --no-scaler` para no tocar el monitor.
 - Diagnóstico: `ctl hud` prueba la interfaz sin abrir ventana (atlas, vértices, golpes de ratón y
   arrastre de deslizadores) y `ctl vkprobe` importa un DMA-BUF de KWin y lo dibuja en Vulkan.
 - Correcciones: el búfer de parámetros de la trama **no seguía `std140`** (`vec3 v4c[4]` con paso
