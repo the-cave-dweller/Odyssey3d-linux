@@ -443,7 +443,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       errStreak = 0;
     }
 #ifdef HAVE_PNG
-    if (!opts.dumpPath.empty() && frames == 6) {
+    /* con captura hay que esperar al primer fotograma del compositor: el portal tarda alrededor
+       de un segundo en crear el flujo, y si no llegan fotogramas el volcado sale en negro */
+    bool fuenteLista = true;
+#ifdef HAVE_CAPTURE
+    if (kind == SourceKind::Capture) fuenteLista = lastFrameCount > 0;
+#endif
+    if (!opts.dumpPath.empty() && ((fuenteLista && frames >= 4) || frames >= 150)) {
       std::vector<uint8_t> rgba;
       if (wv.grab(rgba, &err)) {
         std::string a = opts.dumpPath + "-trama-vulkan.png";
@@ -453,6 +459,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", a.c_str());
         if (kind == SourceKind::Test && !testPx.empty())
           glPngSave(opts.dumpPath + "-origen.png", fbW, fbH, testPx.data());
+#ifdef HAVE_CAPTURE
+        if (kind == SourceKind::Capture)
+          std::printf("[captura] fotogramas recibidos del compositor: %llu · %s\n",
+                      (unsigned long long)lastFrameCount, cap.describe().c_str());
+#endif
       } else {
         std::fprintf(stderr, "[volcado] %s\n", err.c_str());
       }

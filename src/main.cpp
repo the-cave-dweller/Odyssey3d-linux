@@ -796,6 +796,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--align") { if (!need("align")) return false; o.align = atof(argv[++i]); }
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
+    else if (a == "--uuid") { if (!need("uuid")) return false; o.captureUuid = argv[++i]; }
     else if (a == "--help" || a == "-h") { std::fputs(kUsage, stdout); exit(0); }
     else if (!a.empty() && a[0] == '-') { std::fprintf(stderr, "opcion desconocida: %s\n", a.c_str()); return false; }
     else if (o.file.empty()) o.file = a;
