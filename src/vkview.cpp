@@ -497,7 +497,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("\n  teclas  ESC salir · 3 2D/3D · F invertir profundidad · ←/→ fase · RePag/SavPg paso de lente\n"
               "          ↑/↓ crosstalk · , . pendiente de filtro · 9/0 convergencia · 8 reiniciar ajuste\n");
   std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n");
-  std::printf("          P o espacio  pausa o reanuda el video · Ctrl+Shift+2 quita la capa para usar el raton\n\n");
+  std::printf("          P o espacio  pausa o reanuda el video · Ctrl+Shift+2 quita la capa para usar el raton\n");
+  std::printf("          teclas sueltas  3 sin tramado (2D) · F invierte los ojos · flechas fase, paso y crosstalk\n\n");
   std::fflush(stdout);
 
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
