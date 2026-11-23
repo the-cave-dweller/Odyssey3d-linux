@@ -2,6 +2,25 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## rastreo de cabeza (en preparación, sobre v0.5)
+- **Calibración de fábrica leída del propio monitor**: `ctl calib` pregunta por el puerto serie
+  de la lente (`SR+CALCAM`, `SR+CALET`, `SR+CAL3D`, `SR+CHIP`) y guarda los datos en `calib/`.
+  En este G90XF la cámara izquierda sale fx 474.3 fy 474.4 cx 322.2 cy 242.1, la derecha fx 476.2
+  fy 476.4 cx 321.6 cy 249.2, con 8 términos de distorsión cada una, base de 69.97 mm y la lente
+  separada 3.60 x −17.96 x 0.41 cm con 0.45/0.12/0.28 grados de giro.
+- **Cámara infrarroja en V4L2** (`src/camera.*`): 1280x480 MJPG a 60 fps, dos mitades de 640x480,
+  igual que `StereoCamera.swift`. Avisa de un defecto del enumerador de este dispositivo: los
+  intervalos de imagen se indexan en la lista plana de tamaños, no por formato.
+- **Rastreo** (`src/track.*`, `ctl track`): YuNet con `cv::FaceDetectorYN` (448x320, 0.7 de la
+  vista), triangulación estéreo con la calibración de fábrica (`undistortPoints` +
+  `triangulatePoints` + comprobación de error de reproyección) y la transformación de panel
+  `DisplayTransform` del hub, con mediana de tres y filtro de salto.
+- Pruebas sin tocar la cámara: `ctl track --sintetico` proyecta un punto 3D conocido y lo devuelve
+  por toda la cadena (recupera 600.0 mm de 600.0 mm, error 0.000 px) y `ctl track --foto imagen.png`
+  mide detección y geometría sobre un par lateral pegado. Con un par sintético a 55 px de desfase
+  sale 622.9 mm y −9.35/17.19/62.59 cm en el panel: la dirección del desfase es la que dicta la
+  calibración (la vista derecha va hacia la **derecha**).
+
 ## v0.5 — Vulkan, interfaz con cursor y servicio al arrancar (2026-11-23)
 - **Todo el dibujado pasa a Vulkan** (dynamic rendering de Vulkan 1.3; los shaders GLSL 450 de
   `shaders/` se compilan a SPIR-V con `glslangValidator` al construir y se incrustan en el

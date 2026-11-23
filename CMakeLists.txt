@@ -21,6 +21,7 @@ pkg_check_modules(WAYLAND_CLIENT wayland-client)   # vigilancia de ventanas / ca
 pkg_check_modules(PIPEWIRE libpipewire-0.3)        # opcional: fotogramas de la captura
 pkg_check_modules(LIBSYSTEMD libsystemd)           # opcional: aviso por portal (sd-bus)
 pkg_check_modules(VULKAN REQUIRED vulkan)          # todo el dibujado va por Vulkan
+pkg_check_modules(OPENCV opencv5)   # opcional: rastreo de cabeza (cara, ojos, triangulacion)
 
 # --- shaders: GLSL -> SPIR-V -> cabecera C++ -------------------------------------
 # Se compilan durante la propia compilación y se incrustan como bytes: el programa no
@@ -95,6 +96,7 @@ add_executable(odyssey3d
   src/scaler.cpp
   src/ircam.cpp
   src/calib.cpp
+  src/camera.cpp
   src/panel.cpp
   src/glutil.cpp
   src/weave.cpp
@@ -152,6 +154,14 @@ if(FREETYPE_FOUND)
   target_compile_definitions(odyssey3d PRIVATE HAVE_FREETYPE=1)
 endif()
 
+if(OPENCV_FOUND)
+  target_sources(odyssey3d PRIVATE src/track.cpp)
+  target_include_directories(odyssey3d PRIVATE ${OPENCV_INCLUDE_DIRS})
+  target_link_directories(odyssey3d PRIVATE ${OPENCV_LIBRARY_DIRS})
+  target_link_libraries(odyssey3d PRIVATE opencv_objdetect opencv_dnn opencv_geometry opencv_imgcodecs opencv_imgproc opencv_core)
+  target_compile_definitions(odyssey3d PRIVATE HAVE_OPENCV=1)
+endif()
+
 if(PNG_FOUND)
   target_include_directories(odyssey3d PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(odyssey3d PRIVATE ${PNG_LIBRARIES})
@@ -161,3 +171,6 @@ endif()
 install(TARGETS odyssey3d RUNTIME DESTINATION bin)
 install(FILES udev/70-odyssey-3d.rules DESTINATION /etc/udev/rules.d)
 install(FILES calib/3DStackCorrection_A.png calib/3DStackCorrection_B.png DESTINATION share/odyssey3d/calib)
+if(EXISTS "${CMAKE_SOURCE_DIR}/modelos/face_detection_yunet_2023mar.onnx")
+  install(FILES modelos/face_detection_yunet_2023mar.onnx DESTINATION share/odyssey3d/modelos)
+endif()

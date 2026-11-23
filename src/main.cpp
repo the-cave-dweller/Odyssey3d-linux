@@ -3,6 +3,9 @@
    iluminador IR y modo del panel. */
 #include "ircam.h"
 #include "lens.h"
+#include "calib.h"
+#include "camera.h"
+#include "track.h"
 #include "panel.h"
 #include "wm.h"
 #include "capture.h"
@@ -30,9 +33,13 @@
 #include <set>
 #include <sys/wait.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -53,6 +60,10 @@ static const char *kUsage =
     "  odyssey3d ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odyssey3d ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odyssey3d ctl ir     [on|off] [--dev /dev/video2]\n"
+    "  odyssey3d ctl calib  [--out calib]   leer calibracion de fabrica (camara IR y transformada)\n"
+    "  odyssey3d ctl camera [--dev N] [--size 1280x480] [--format MJPG]   probar la camara\n"
+    "  odyssey3d ctl track  [--segundos 20] [--dump foto.jpg]   rastreo de cabeza (cara y ojos)\n"
+    "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
     "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry]\n"
     "  odyssey3d ctl windows [--watch]\n"
     "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
@@ -144,6 +155,368 @@ static int cmdLens(int argc, char **argv) {
   return 2;
 }
 
+static bool saveBlobFile(const std::string &dir, const char *name, const std::vector<uint8_t> &blob) {
+  std::error_code ec;
+  std::filesystem::create_directories(dir, ec);
+  const std::string path = dir + "/" + name;
+  std::ofstream f(path, std::ios::binary | std::ios::trunc);
+  if (!f) {
+    std::fprintf(stderr, "no se pudo escribir %s\n", path.c_str());
+    return false;
+  }
+  f.write((const char *)blob.data(), (std::streamsize)blob.size());
+  f.close();
+  std::printf("  %-14s %6zu bytes -> %s\n", name, blob.size(), path.c_str());
+  return true;
+}
+
+static int cmdCalib(int argc, char **argv) {
+  std::string port = flag(argc, argv, "--port");
+  std::string out = flag(argc, argv, "--out");
+  if (out.empty()) out = "calib";
+  if (port.empty()) {
+    port = Lens::findPort();
+    if (port.empty()) {
+      std::fprintf(stderr, "no se encontro el puerto de la lente (buscado por USB 354b:0116)\n");
+      return 1;
+    }
+  }
+  Lens lens;
+  if (!lens.open(port)) {
+    std::fprintf(stderr, "%s\n", lens.lastError().c_str());
+    return 1;
+  }
+  std::printf("puerto: %s\n", port.c_str());
+  if (!lens.authenticated() && !lens.authenticate()) {
+    std::fprintf(stderr, "hace falta autenticar el tablero para leer la calibracion: %s\n",
+                 lens.lastError().c_str());
+    return 1;
+  }
+  struct Pedido {
+    const char *cmd;
+    size_t tam;
+    int ms;
+    const char *archivo;
+  };
+  const Pedido pedidos[] = {
+      {"SR+CHIP", 32, 2000, "chip.bin"},
+      {"SR+CALCAM", 256, 2000, "SR+CALCAM.bin"},
+      {"SR+CALET", 256, 2000, "SR+CALET.bin"},
+      {"SR+CAL3D", 0x20000, 10000, "SR+CAL3D.bin"},
+  };
+  int fallos = 0;
+  std::vector<uint8_t> camBlob, letBlob;
+  for (const auto &p : pedidos) {
+    std::vector<uint8_t> blob;
+    if (!lens.readFixed(p.cmd, p.tam, p.ms, blob)) {
+      std::fprintf(stderr, "%s: %s\n", p.cmd, lens.lastError().c_str());
+      ++fallos;
+      continue;
+    }
+    saveBlobFile(out, p.archivo, blob);
+    if (std::string(p.cmd) == "SR+CALCAM") camBlob = blob;
+    if (std::string(p.cmd) == "SR+CALET") letBlob = blob;
+  }
+  CameraCalibration cam;
+  if (cam.fromBlob(camBlob)) {
+    for (int v = 0; v < 2; v++) {
+      const double *k = v ? cam.rightIntrinsics : cam.leftIntrinsics;
+      std::printf("  camara %-9s fx=%.3f fy=%.3f cx=%.3f cy=%.3f\n", v ? "derecha" : "izquierda", k[0],
+                  k[1], k[2], k[3]);
+    }
+    std::printf("  distorsion izquierda:");
+    for (int i = 0; i < 8; i++) std::printf(" %.6f", cam.leftDistortion[i]);
+    std::printf("\n  distorsion derecha :");
+    for (int i = 0; i < 8; i++) std::printf(" %.6f", cam.rightDistortion[i]);
+    std::printf("\n  rotacion vector: %.6f %.6f %.6f\n", cam.rotationVector[0], cam.rotationVector[1],
+                cam.rotationVector[2]);
+    std::printf("  traslacion     : %.4f %.4f %.4f\n", cam.translation[0], cam.translation[1],
+                cam.translation[2]);
+  } else if (!camBlob.empty()) {
+    std::fprintf(stderr, "SR+CALCAM no tiene la forma esperada\n");
+    ++fallos;
+  }
+  TrackerTransform tr;
+  if (tr.fromBlob(letBlob)) {
+    std::printf("  camara->panel: X=%.4f Y=%.4f Z=%.4f cm   giros X=%.4f Y=%.4f Z=%.4f grados\n",
+                tr.translationCentimetres[0], tr.translationCentimetres[1],
+                tr.translationCentimetres[2], tr.rotationDegrees[0], tr.rotationDegrees[1],
+                tr.rotationDegrees[2]);
+  } else if (!letBlob.empty()) {
+    std::fprintf(stderr, "SR+CALET no tiene la forma esperada\n");
+    ++fallos;
+  }
+  return fallos ? 1 : 0;
+}
+
+/* ruta del modelo de cara, buscada junto al programa y en los sitios de siempre */
+static std::string defaultModelPath() {
+  std::vector<std::string> bases;
+  bases.push_back(".");
+  bases.push_back("..");
+  char link[4096];
+  ssize_t n = readlink("/proc/self/exe", link, sizeof link - 1);
+  if (n > 0) {
+    link[n] = 0;
+    std::string dir = link;
+    size_t slash = dir.find_last_of('/');
+    if (slash != std::string::npos) dir = dir.substr(0, slash);
+    bases.push_back(dir);
+    bases.push_back(dir + "/..");
+    bases.push_back(dir + "/../share/odyssey3d");
+    bases.push_back("/usr/local/share/odyssey3d");
+    bases.push_back("/usr/share/odyssey3d");
+  }
+  for (const auto &b : bases) {
+    const std::string p = b + "/modelos/face_detection_yunet_2023mar.onnx";
+    if (fileExists(p)) return p;
+  }
+  return std::string();
+}
+
+static bool pickCameraDevice(std::string &dev, std::string *err) {
+  if (!dev.empty()) return true;
+  auto devs = IrCam::findDevices();
+  if (!devs.empty()) {
+    dev = devs.front();
+    return true;
+  }
+  for (int i = 0; i < 10; i++) {
+    const std::string p = "/dev/video" + std::to_string(i);
+    auto modes = Camera::modes(p);
+    if (!modes.empty()) {
+      dev = p;
+      return true;
+    }
+  }
+  if (err) *err = "no se encontro ninguna camara de video (/dev/video*)";
+  return false;
+}
+
+static int cmdCamera(int argc, char **argv) {
+  std::string dev = flag(argc, argv, "--dev");
+  std::string err;
+  if (!pickCameraDevice(dev, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("camara: %s\n", dev.c_str());
+  for (const auto &m : Camera::modes(dev))
+    std::printf("  modo   %s %dx%d @ %d fps\n", m.fourcc.c_str(), m.width, m.height, m.fps);
+  if (hasFlag(argc, argv, "--solo-modos")) return 0;
+
+  const std::string sizeS = flag(argc, argv, "--size");
+  const std::string format = flag(argc, argv, "--format").empty() ? "MJPG" : flag(argc, argv, "--format");
+  int fps = atoi(flag(argc, argv, "--fps").c_str());
+  if (fps <= 0) fps = 60;
+  int wanted = atoi(flag(argc, argv, "--frames").c_str());
+  if (wanted <= 0) wanted = 5;
+  int width = 1280, height = 480;
+  if (!sizeS.empty()) {
+    if (std::sscanf(sizeS.c_str(), "%dx%d", &width, &height) != 2) {
+      std::fprintf(stderr, "--size quiere decir WxH\n");
+      return 2;
+    }
+  }
+  Camera cam;
+  if (!cam.open(dev, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  if (!cam.setFormat(width, height, format, fps, &err)) {
+    std::fprintf(stderr, "ajuste de formato: %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("formato  %dx%d %s @ %d fps\n", cam.width(), cam.height(), format.c_str(), fps);
+  if (!cam.start(&err)) {
+    std::fprintf(stderr, "arranque del flujo: %s\n", err.c_str());
+    return 1;
+  }
+  const std::string out = flag(argc, argv, "--out");
+  int ok = 0;
+  for (int i = 0; i < wanted; i++) {
+    const uint8_t *data = nullptr;
+    size_t size = 0;
+    std::string why;
+    if (!cam.read(&data, &size, 4000, &why)) {
+      std::fprintf(stderr, "fotograma %d: %s\n", i + 1, why.c_str());
+      break;
+    }
+    ok++;
+    std::printf("fotograma %d: %zu bytes\n", i + 1, size);
+    if (!out.empty()) {
+      const std::string path = out + "." + (cam.mjpeg() ? "jpg" : "yuyv");
+      FILE *f = std::fopen(path.c_str(), "wb");
+      if (f) {
+        std::fwrite(data, 1, size, f);
+        std::fclose(f);
+        std::printf("         guardado en %s\n", path.c_str());
+      }
+    }
+    cam.release();
+  }
+  cam.stop();
+  std::printf("%d de %d fotogramas\n", ok, wanted);
+  return ok > 0 ? 0 : 1;
+}
+
+#ifdef HAVE_OPENCV
+static int cmdTrack(int argc, char **argv) {
+  TrackSettings set;
+  set.model = flag(argc, argv, "--track-model");
+  if (set.model.empty()) set.model = defaultModelPath();
+  if (set.model.empty()) {
+    std::fprintf(stderr, "falta el modelo de cara: descarga face_detection_yunet_2023mar.onnx en "
+                         "modelos/ o usa --track-model RUTA\n");
+    return 1;
+  }
+  if (!flag(argc, argv, "--score").empty()) set.score = (float)atof(flag(argc, argv, "--score").c_str());
+  if (!flag(argc, argv, "--suavizado").empty()) set.smoothing = atof(flag(argc, argv, "--suavizado").c_str());
+  if (!flag(argc, argv, "--salto").empty()) set.maxJumpCentimetres = atof(flag(argc, argv, "--salto").c_str());
+
+  std::string err;
+  CameraCalibration calib;
+  TrackerTransform xform;
+  const std::string dir = flag(argc, argv, "--calib-dir");
+  if (!loadFactoryCalib(dir, &calib, &xform, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("calibracion  %s\n", dir.empty() ? "calib/" : dir.c_str());
+  std::printf("modelo       %s\n", set.model.c_str());
+
+  const std::string dump = flag(argc, argv, "--dump");
+  const std::string foto = flag(argc, argv, "--foto");
+  if (!foto.empty()) {
+    HeadTracker tracker;
+    if (!tracker.init(calib, xform, set, &err)) {
+      std::fprintf(stderr, "rastreador: %s\n", err.c_str());
+      return 1;
+    }
+    TrackSample sample;
+    std::string info;
+    if (!HeadTracker::describeStill(foto, set, dump, tracker, &sample, &info, &err)) {
+      std::fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    std::printf("%s\n", info.c_str());
+    if (!dump.empty()) std::printf("anotado      %s\n", dump.c_str());
+    return sample.accepted ? 0 : 1;
+  }
+
+  HeadTracker tracker;
+  if (!tracker.init(calib, xform, set, &err)) {
+    std::fprintf(stderr, "rastreador: %s\n", err.c_str());
+    return 1;
+  }
+  if (hasFlag(argc, argv, "--sintetico")) {
+    /* Se comprime un punto 3D conocido en las dos vistas y se devuelve por toda
+       la cadena: asi se ve si la geometria y los signos cuadran sin camara. */
+    const double puntos[][3] = {{0, 0, 600},  {0, 0, 500},   {0, 0, 700},  {30, 0, 600},
+                                {-30, 0, 600}, {0, 30, 600}, {0, -30, 600}, {60, 0, 600},
+                                {-60, 0, 600}, {0, 60, 600}, {0, -60, 600}, {0, 0, 900}};
+    std::printf("punto pedido (mm)        pixeles izq/der                recuperado (mm)        panel (cm)\n");
+    for (const auto &p : puntos) {
+      double px[4];
+      if (!tracker.projectPoint(p, px, &err)) {
+        std::fprintf(stderr, "proyeccion: %s\n", err.c_str());
+        return 1;
+      }
+      tracker.reset();
+      TrackSample sample;
+      tracker.submitEyes(px, sample, &err);
+      std::printf("(%7.1f %7.1f %7.1f)  (%7.1f,%7.1f) (%7.1f,%7.1f)  (%7.1f %7.1f %7.1f)  (%6.2f %6.2f %6.2f)  %.3f px %s\n",
+                  p[0], p[1], p[2], px[0], px[1], px[2], px[3], sample.eyeMillimetres[0],
+                  sample.eyeMillimetres[1], sample.eyeMillimetres[2], sample.panelCentimetres[0],
+                  sample.panelCentimetres[1], sample.panelCentimetres[2], sample.reprojectionPx,
+                  sample.accepted ? "" : (sample.reason.empty() ? "descartada" : sample.reason.c_str()));
+    }
+    return 0;
+  }
+
+  std::string dev = flag(argc, argv, "--dev");
+  if (!pickCameraDevice(dev, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  Camera cam;
+  if (!cam.open(dev, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  struct Intento {
+    int w, h, fps;
+    const char *fourcc;
+  };
+  const Intento intentos[] = {{1280, 480, 60, "MJPG"}, {1280, 480, 15, "YUYV"}, {640, 480, 30, "YUYV"}};
+  bool listo = false;
+  for (const auto &it : intentos) {
+    if (cam.setFormat(it.w, it.h, it.fourcc, it.fps, &err)) {
+      std::printf("camara       %s %dx%d %s @ %d\n", dev.c_str(), it.w, it.h, it.fourcc, it.fps);
+      listo = true;
+      break;
+    }
+    std::fprintf(stderr, "aviso: %dx%d %s no fue posible (%s)\n", it.w, it.h, it.fourcc, err.c_str());
+  }
+  if (!listo) return 1;
+  if (!cam.start(&err)) {
+    std::fprintf(stderr, "arranque del flujo: %s\n", err.c_str());
+    return 1;
+  }
+  const int segundos = atoi(flag(argc, argv, "--segundos").c_str());
+  const int segundosLimite = segundos > 0 ? segundos : 20;
+  const int mostrarCada = std::max(1, atoi(flag(argc, argv, "--cada").c_str()) ? atoi(flag(argc, argv, "--cada").c_str()) : 15);
+  auto t0 = std::chrono::steady_clock::now();
+  int leidos = 0, aceptados = 0;
+  bool dumpHecho = false;
+  while (true) {
+    const auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double>(now - t0).count() >= (double)segundosLimite) break;
+    const uint8_t *data = nullptr;
+    size_t size = 0;
+    std::string why;
+    if (!cam.read(&data, &size, 2000, &why)) {
+      std::fprintf(stderr, "lectura: %s\n", why.c_str());
+      break;
+    }
+    leidos++;
+    std::vector<uint8_t> left, right;
+    int vw = 0, vh = 0;
+    if (!HeadTracker::decodeFrame(data, size, cam.width(), cam.height(), cam.mjpeg(), left, right, vw,
+                                  vh, &why)) {
+      cam.release();
+      std::fprintf(stderr, "decodificacion: %s\n", why.c_str());
+      continue;
+    }
+    const uint8_t *lp = left.data(), *rp = right.data();
+    TrackSample sample;
+    tracker.process(lp, rp, vw, vh, sample, &why);
+    if (sample.accepted && !sample.predicted) aceptados++;
+    if (!dump.empty() && !dumpHecho && sample.detected) {
+      std::string d2;
+      if (HeadTracker::saveAnnotated(lp, rp, vw, vh, set, dump, &d2))
+        std::printf("anotado      %s\n", dump.c_str());
+      else
+        std::fprintf(stderr, "anotado: %s\n", d2.c_str());
+      dumpHecho = true;
+    }
+    cam.release();
+    if (leidos % mostrarCada == 0) {
+      std::printf("cara %s  panel %7.2f %7.2f %7.2f cm  ipd %5.1f  error %4.2f px  %5.1f ms  %s\n",
+                  sample.detected ? "si " : "no ", sample.panelCentimetres[0],
+                  sample.panelCentimetres[1], sample.panelCentimetres[2], sample.ipdMillimetres,
+                  sample.reprojectionPx, sample.latencyMs,
+                  sample.accepted ? (sample.predicted ? "mantenida" : "valida")
+                                  : (sample.reason.empty() ? "sin usar" : sample.reason.c_str()));
+      std::fflush(stdout);
+    }
+  }
+  cam.stop();
+  std::printf("%d fotogramas leidos, %d poses validas\n", leidos, aceptados);
+  return aceptados > 0 ? 0 : 1;
+}
+#endif
+
 static int cmdScaler(int argc, char **argv) {
   std::string what = argc > 0 ? argv[0] : "off";
   std::string dev = flag(argc, argv, "--dev");
@@ -195,8 +568,29 @@ static int cmdIr(int argc, char **argv) {
     std::fprintf(stderr, "%s\n", cam.lastError().c_str());
     return 1;
   }
-  bool ok = what == "off" ? cam.irOff() : cam.irOn();
-  std::printf("ir %s: %s\n", what.c_str(), ok ? "ok" : "fallo");
+  /* El iluminador IR no necesita ninguna orden: la camara lo enciende sola cuando
+     manda video. El control que probamos (unidad 3, selector 2 del XU) hace que el
+     endpoint de control UVC deje de responder (timepo -110) y luego S_FMT /
+     STREAMON devuelven EIO hasta desenchufar el USB del monitor. Por eso solo se
+     manda si se pide de forma explicita con --unit y --sel. */
+  const std::string unitS = flag(argc, argv, "--unit"), selS = flag(argc, argv, "--sel"),
+                      bytesS = flag(argc, argv, "--bytes");
+  if (unitS.empty() || selS.empty()) {
+    std::printf("ir %s: no enviado a proposito\n", what.c_str());
+    std::printf("  la unidad 3 no responde a GET_LEN y el puerto de control se bloquea; la camara\n");
+    std::printf("  ya enciende el IR sola al mandar video.\n");
+    std::printf("  para experimentar: ctl ir %s --unit N --sel N [--bytes 01]\n", what.c_str());
+    return 0;
+  }
+  const int unit = atoi(unitS.c_str()), sel = atoi(selS.c_str());
+  std::vector<uint8_t> payload = bytesS.empty() ? std::vector<uint8_t>{(uint8_t)(what == "off" ? 0 : 1)}
+                                                : unhex(bytesS);
+  if (payload.empty()) {
+    std::fprintf(stderr, "--bytes vacio\n");
+    return 2;
+  }
+  const bool ok = cam.setCur(unit, sel, payload);
+  std::printf("ir %s (unidad %d selector %d): %s\n", what.c_str(), unit, sel, ok ? "ok" : "fallo");
   if (!ok) std::fprintf(stderr, "%s\n", cam.lastError().c_str());
   return ok ? 0 : 1;
 }
@@ -742,8 +1136,6 @@ static std::string exeDir() {
   size_t s = p.find_last_of('/');
   return s == std::string::npos ? std::string(".") : p.substr(0, s);
 }
-
-static bool fileExists(const std::string &p) { return !p.empty() && access(p.c_str(), R_OK) == 0; }
 
 /* Busca un archivo de datos junto al binario, en el directorio actual o en /usr/share. */
 static std::string findDataFile(const std::string &name, const std::string &calibDir) {
@@ -1346,6 +1738,11 @@ int main(int argc, char **argv) {
     if (sub == "lens") return cmdLens(argc - 3, argv + 3);
     if (sub == "scaler") return cmdScaler(argc - 3, argv + 3);
     if (sub == "ir") return cmdIr(argc - 3, argv + 3);
+    if (sub == "calib") return cmdCalib(argc - 3, argv + 3);
+    if (sub == "camera") return cmdCamera(argc - 3, argv + 3);
+#ifdef HAVE_OPENCV
+    if (sub == "track") return cmdTrack(argc - 3, argv + 3);
+#endif
     if (sub == "panel") return cmdPanel(argc - 3, argv + 3);
     if (sub == "windows") return cmdWindows(argc - 3, argv + 3);
     if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
