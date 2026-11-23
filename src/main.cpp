@@ -4,6 +4,13 @@
 #include "ircam.h"
 #include "lens.h"
 #include "panel.h"
+#include "wm.h"
+#include "capture.h"
+#include "glimport.h"
+
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include "notify.h"
 #include "scaler.h"
 #include "testsrc.h"
 #include "util.h"
@@ -11,6 +18,13 @@
 #include "weave.h"
 
 #include <GLFW/glfw3.h>
+
+#include <poll.h>
+
+#include <csignal>
+#include <map>
+#include <set>
+#include <sys/wait.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -36,6 +50,12 @@ static const char *kUsage =
     "  odyssey3d ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odyssey3d ctl ir     [on|off] [--dev /dev/video2]\n"
     "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry]\n"
+    "  odyssey3d ctl windows [--watch]\n"
+    "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
+    "  odyssey3d ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
+    "  odyssey3d ctl notify [--wait N]\n"
+    "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
+    "  odyssey3d serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
     "\n"
     "opciones:\n"
     "  --output NOMBRE   salida del panel (por defecto, la que tenga modo 3840x2160)\n"
@@ -169,6 +189,328 @@ static int cmdIr(int argc, char **argv) {
   std::printf("ir %s: %s\n", what.c_str(), ok ? "ok" : "fallo");
   if (!ok) std::fprintf(stderr, "%s\n", cam.lastError().c_str());
   return ok ? 0 : 1;
+}
+
+#ifdef HAVE_CAPTURE
+/* Elige la ventana a capturar: la del --uuid o, si no se dio, la primera a pantalla completa. */
+static bool pickWindow(int argc, char **argv, std::string &uuid, WindowInfo &win, bool &haveWin) {
+  uuid = flag(argc, argv, "--uuid");
+  haveWin = false;
+  if (!uuid.empty()) return true;
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return false;
+  }
+  wm.settle();
+  if (!wm.fullscreenCandidate(win, {})) {
+    std::fprintf(stderr, "no hay ventana a pantalla completa (usa --uuid con `ctl windows`)\n");
+    return false;
+  }
+  uuid = win.uuid;
+  haveWin = true;
+  std::printf("ventana: %s | %s | %ux%u uuid=%s\n", win.appId.c_str(), win.title.c_str(), win.w, win.h,
+              uuid.c_str());
+  return true;
+}
+#endif
+
+static int cmdCapture(int argc, char **argv) {
+#ifndef HAVE_CAPTURE
+  (void)argc; (void)argv;
+  std::fprintf(stderr, "compilado sin soporte de captura (hace falta libpipewire-0.3 y plasma-wayland-protocols)\n");
+  return 1;
+#else
+  std::string out = flag(argc, argv, "--out");
+  if (out.empty()) out = "captura.png";
+  int secs = 4;
+  std::string sd = flag(argc, argv, "--segundos");
+  if (!sd.empty()) secs = std::atoi(sd.c_str());
+
+  std::string uuid;
+  WindowInfo win;
+  bool haveWin = false;
+  if (!pickWindow(argc, argv, uuid, win, haveWin)) return 1;
+
+  std::string err;
+  WindowCapture cap;
+  std::string cls = flag(argc, argv, "--clase");
+  if (!cls.empty()) cap.setStreamClass(cls);
+  if (!cap.start(uuid, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("pidiendo el flujo de la ventana...\n");
+  for (int i = 0; i < secs * 2; ++i) {
+    struct pollfd pfd{cap.fd(), POLLIN, 0};
+    poll(&pfd, 1, 500);
+    cap.pump();
+    std::printf("%s\n", cap.describe().c_str());
+    std::fflush(stdout);
+    if (cap.framesFlowing()) break;
+  }
+  std::vector<uint8_t> px;
+  int w = 0, h = 0, stride = 0;
+  if (!cap.copyFrame(px, w, h, stride)) {
+    std::fprintf(stderr, "han llegado %llu fotogramas pero no se pueden leer con la CPU: %s\n",
+                  static_cast<unsigned long long>(cap.frameCount()), cap.lastError().c_str());
+    std::fprintf(stderr, "prueba `ctl capture-gl`, que usa el fotograma directamente en la GPU\n");
+    cap.stop();
+    return 1;
+  }
+  std::printf("fotograma: %dx%d paso %d (%zu bytes)\n", w, h, stride, px.size());
+  if (haveWin && win.w && w && (static_cast<int>(win.w) != w || static_cast<int>(win.h) != h))
+    std::printf("(ojo: la ventana mide %ux%u)\n", win.w, win.h);
+#ifndef HAVE_PNG
+  std::fprintf(stderr, "sin libpng: no se puede guardar el PNG\n");
+  cap.stop();
+  return 0;
+#else
+  std::vector<uint8_t> rgba(px.size());
+  for (size_t i = 0; i + 3 < px.size(); i += 4) {
+    rgba[i] = px[i + 2];
+    rgba[i + 1] = px[i + 1];
+    rgba[i + 2] = px[i];
+    rgba[i + 3] = px[i + 3];
+  }
+  if (!glPngSave(out, w, h, rgba.data())) {
+    std::fprintf(stderr, "no se pudo escribir %s\n", out.c_str());
+    cap.stop();
+    return 1;
+  }
+  std::printf("guardado %s\n", out.c_str());
+#endif
+  cap.stop();
+  return 0;
+#endif
+}
+
+#ifdef HAVE_CAPTURE
+/* Prueba de la ruta de la GPU: captura la ventana, importa el DMA-BUF como textura OpenGL y
+   lo vuelca a PNG. Sirve para comprobar que el compositor y el controlador cooperan. */
+static int cmdCaptureGl(int argc, char **argv) {
+  std::string uuid;
+  WindowInfo win;
+  bool haveWin = false;
+  if (!pickWindow(argc, argv, uuid, win, haveWin)) return 1;
+  std::string out = flag(argc, argv, "--out");
+  if (out.empty()) out = "captura-gl.png";
+  int secs = 4;
+  std::string sd = flag(argc, argv, "--segundos");
+  if (!sd.empty()) secs = std::atoi(sd.c_str());
+
+  if (!glfwInit()) {
+    std::fprintf(stderr, "glfwInit fallo\n");
+    return 1;
+  }
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+  GLFWwindow *winGl = glfwCreateWindow(320, 240, "odyssey3d-gl", nullptr, nullptr);
+  if (!winGl) {
+    std::fprintf(stderr, "no se pudo crear el contexto OpenGL\n");
+    glfwTerminate();
+    return 1;
+  }
+  glfwMakeContextCurrent(winGl);
+  std::printf("GL: %s | %s\n", reinterpret_cast<const char *>(glGetString(GL_VENDOR)),
+              reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
+  if (flag(argc, argv, "--verboso") == "1" || hasFlag(argc, argv, "--verboso")) {
+    std::string glx;
+    GLint nExt = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &nExt);
+    for (GLint i = 0; i < nExt; ++i) {
+      const char *e = reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
+      if (e) glx += std::string(e) + " ";
+    }
+    std::printf("extensiones GL (%d): %s\n", nExt, glx.c_str());
+    for (const char *needle : {"GL_OES_EGL_image", "GL_EXT_EGL_image_storage", "GL_OES_EGL_image_external"})
+      std::printf("  %s: %s\n", needle, glx.find(needle) != std::string::npos ? "sí" : "no");
+    const char *ee = eglQueryString(eglGetCurrentDisplay(), EGL_EXTENSIONS);
+    std::string egx = ee ? ee : "";
+    for (const char *needle : {"EGL_EXT_image_dma_buf_import", "EGL_EXT_image_dma_buf_import_modifiers",
+                               "EGL_EXT_gl_colorspace", "EGL_KHR_image_base"})
+      std::printf("  %s: %s\n", needle, egx.find(needle) != std::string::npos ? "sí" : "no");
+    std::fflush(stdout);
+  }
+
+  GpuImporter imp;
+  std::string err;
+  if (!imp.init(&err)) {
+    std::fprintf(stderr, "importación DMA-BUF no disponible: %s\n", err.c_str());
+    glfwDestroyWindow(winGl);
+    glfwTerminate();
+    return 1;
+  }
+  std::printf("ruta de importación: %s\n", imp.method().c_str());
+
+  WindowCapture cap;
+  std::string cls = flag(argc, argv, "--clase");
+  if (!cls.empty()) cap.setStreamClass(cls);
+  if (!cap.start(uuid, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    glfwDestroyWindow(winGl);
+    glfwTerminate();
+    return 1;
+  }
+  std::printf("pidiendo el flujo de la ventana...\n");
+  for (int i = 0; i < secs * 2; ++i) {
+    struct pollfd pfd{cap.fd(), POLLIN, 0};
+    poll(&pfd, 1, 500);
+    cap.pump();
+    glfwPollEvents();
+    if (cap.framesFlowing()) break;
+    if (i % 2 == 1) std::printf("%s\n", cap.describe().c_str());
+    std::fflush(stdout);
+  }
+  CapturedFrame cf;
+  if (!cap.lastFrame(cf)) {
+    std::fprintf(stderr, "no llegó ningún fotograma (%s)\n", cap.lastError().c_str());
+    cap.stop();
+    glfwDestroyWindow(winGl);
+    glfwTerminate();
+    return 1;
+  }
+  GpuFrame gf;
+  gf.fd = cf.fd;
+  gf.w = cf.w;
+  gf.h = cf.h;
+  gf.stride = cf.stride;
+  gf.offset = cf.offset;
+  gf.modifier = cf.modifier;
+  gf.fourcc = cf.fourcc;
+  gf.dmabuf = cf.dmabuf;
+  std::printf("fotograma: %dx%d paso %d fd %d modificador 0x%llx%s\n", gf.w, gf.h, gf.stride, gf.fd,
+              static_cast<unsigned long long>(gf.modifier), gf.dmabuf ? "" : " (memoria compartida)");
+
+  GLuint tex = imp.upload(gf, &err);
+  if (!tex) {
+    std::fprintf(stderr, "no se pudo importar: %s\n", err.c_str());
+    cap.stop();
+    glfwDestroyWindow(winGl);
+    glfwTerminate();
+    return 1;
+  }
+  std::printf("textura OpenGL %u importada\n", tex);
+  std::vector<uint8_t> rgba;
+  if (!glImportReadback(tex, gf.w, gf.h, rgba, &err)) {
+    std::fprintf(stderr, "no se pudo leer la textura: %s\n", err.c_str());
+    cap.stop();
+    glfwDestroyWindow(winGl);
+    glfwTerminate();
+    return 1;
+  }
+#ifdef HAVE_PNG
+  if (!glPngSave(out, gf.w, gf.h, rgba.data())) {
+    std::fprintf(stderr, "no se pudo escribir %s\n", out.c_str());
+    cap.stop();
+    glfwDestroyWindow(winGl);
+    glfwTerminate();
+    return 1;
+  }
+  std::printf("guardado %s (%d fotogramas recibidos)\n", out.c_str(), static_cast<int>(cap.frameCount()));
+#else
+  (void)out;
+  std::printf("leídos %zu bytes de la textura (sin libpng no se guarda el PNG)\n", rgba.size());
+#endif
+  cap.stop();
+  glfwDestroyWindow(winGl);
+  glfwTerminate();
+  return 0;
+}
+#endif
+
+static int cmdNotify(int argc, char **argv) {
+#ifndef HAVE_SDBUS
+  (void)argc; (void)argv;
+  std::fprintf(stderr, "compilado sin libsystemd (sd-bus): hace falta el paquete systemd-libs\n");
+  return 1;
+#else
+  int waitSecs = 30;
+  std::string w = flag(argc, argv, "--wait");
+  if (!w.empty()) waitSecs = std::atoi(w.c_str());
+  std::string err;
+  Notifier n;
+  if (!n.open(&err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("portal de avisos: version %u\n", n.version());
+  std::vector<std::pair<std::string, std::string>> botones = {
+      {"sbs", "3D lado a lado"}, {"tb", "3D arriba/abajo"}, {"flat", "Solo lente"}, {"no", "No"}};
+  if (!n.send("odyssey3d-prueba", "Video a pantalla completa detectado",
+              "Elige como quieres verlo en el Odyssey 3D", botones, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("aviso enviado; esperando la pulsacion (%d s, Ctrl+C para salir)\n", waitSecs);
+  fflush(stdout);
+  bool picked = false;
+  n.setOnAction([&](const std::string &id, const std::string &action) {
+    std::printf("accion: id=%s accion=%s\n", id.c_str(), action.c_str());
+    fflush(stdout);
+    picked = true;
+  });
+  for (int i = 0; !picked && i < waitSecs * 4; ++i) {
+    struct pollfd pfd{n.fd(), POLLIN, 0};
+    poll(&pfd, 1, 250);
+    if (pfd.revents & POLLIN) n.process();
+  }
+  n.remove("odyssey3d-prueba");
+  if (!picked) std::printf("no pulso nadie ningun boton\n");
+  return picked ? 0 : 3;
+#endif
+}
+
+static int cmdWindows(int argc, char **argv) {
+#ifndef HAVE_WAYLAND_WM
+  (void)argc; (void)argv;
+  std::fprintf(stderr, "compilado sin soporte de ventanas (hace falta wayland-client y plasma-wayland-protocols)\n");
+  return 1;
+#else
+  bool watch = hasFlag(argc, argv, "--watch");
+  std::string err;
+  WindowMonitor wm;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  wm.settle();
+  std::printf("%-34s  %-20s  %-30s  %-24s  %-11s  %s\n", "uuid", "app_id", "titulo", "estado", "tamano", "pid");
+  for (const auto &w : wm.windows()) {
+    std::string t = w.title;
+    if (t.size() > 28) t = t.substr(0, 27) + "\xe2\x80\xa6";
+    std::printf("%-34s  %-20s  %-30s  %-24s  %4ux%-6u  %u\n", w.uuid.c_str(), w.appId.c_str(), t.c_str(),
+                WindowInfo::stateList(w.states).c_str(), w.w, w.h, w.pid);
+  }
+  WindowInfo cand;
+  if (wm.fullscreenCandidate(cand, {}))
+    std::printf("\ncandidata a pantalla completa: %s (%s) uuid=%s\n", cand.appId.c_str(), cand.title.c_str(),
+                cand.uuid.c_str());
+  else
+    std::printf("\nno hay ninguna ventana a pantalla completa\n");
+  if (!watch) return 0;
+
+  std::printf("\n(vigilando cambios, Ctrl+C para salir)\n");
+  std::string prev;
+  wm.setOnChange([&]() {
+    WindowInfo c;
+    std::string now = wm.fullscreenCandidate(c, {}) ? c.uuid : std::string();
+    if (now == prev) return;
+    prev = now;
+    if (now.empty())
+      std::printf("[%zu ventanas] ya no hay pantalla completa\n", wm.windows().size());
+    else
+      std::printf("[%zu ventanas] pantalla completa: %s | %s | uuid=%s\n", wm.windows().size(), c.appId.c_str(),
+                  c.title.c_str(), c.uuid.c_str());
+    fflush(stdout);
+  });
+  for (;;) wm.waitAndDispatch(1000);
+#endif
 }
 
 static int cmdPanel(int argc, char **argv) {
@@ -546,6 +888,263 @@ static int cmdDoctor(const ViewerOpts &o, const std::string &waylandSock) {
   return problems ? 1 : 0;
 }
 
+/* ---------------- servicio en segundo plano ---------------- */
+
+static volatile sig_atomic_t g_stopServe = 0;
+static void onServeSignal(int) { g_stopServe = 1; }
+
+struct ServeCfg {
+  std::vector<std::string> ignore;
+  int esperaSeg = 40;
+  std::string modo = "ask";   /* ask = preguntar con un aviso; sbs/tb/flat = arrancar sin preguntar */
+};
+
+static void splitList(const std::string &text, std::vector<std::string> &out) {
+  std::string item;
+  for (char c : text) {
+    if (c == ',' || c == ' ' || c == '\t') {
+      if (!item.empty()) out.push_back(strLower(strTrim(item)));
+      item.clear();
+    } else {
+      item += c;
+    }
+  }
+  if (!item.empty()) out.push_back(strLower(strTrim(item)));
+}
+
+/* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=). */
+static void loadServeCfg(ServeCfg &cfg) {
+  const char *home = std::getenv("HOME");
+  if (!home) return;
+  std::string txt;
+  if (!readSmallFile(std::string(home) + "/.config/odyssey3d/serve.conf", txt)) return;
+  std::string line;
+  auto eat = [&](bool last) {
+    std::string l = strTrim(line);
+    line.clear();
+    if (l.empty() || l[0] == '#') return;
+    size_t eq = l.find('=');
+    if (eq == std::string::npos) return;
+    std::string k = strLower(strTrim(l.substr(0, eq))), v = strTrim(l.substr(eq + 1));
+    if (k == "ignore") splitList(v, cfg.ignore);
+    else if (k == "espera") cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
+    else if (k == "modo") cfg.modo = strLower(v);
+    (void)last;
+  };
+  for (char c : txt) {
+    if (c == '\n') eat(false);
+    else line += c;
+  }
+  eat(true);
+}
+
+static std::string selfPath() {
+  char buf[4096];
+  ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (n <= 0) return "odyssey3d";
+  buf[n] = 0;
+  return buf;
+}
+
+static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list) {
+  std::string app = strLower(w.appId), title = strLower(w.title);
+  if (title.find("odyssey 3d") != std::string::npos) return true;
+  for (const std::string &ig : list) {
+    if (ig.empty()) continue;
+    if (app == ig || app.find(ig) != std::string::npos) return true;
+  }
+  return false;
+}
+
+static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo) {
+  pid_t pid = ::fork();
+  if (pid != 0) return pid;
+  std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
+  if (modo == "tb") args.push_back("--tb");
+  if (modo == "flat") args.push_back("--2d");
+  std::vector<char *> av;
+  for (std::string &a : args) av.push_back(const_cast<char *>(a.c_str()));
+  av.push_back(nullptr);
+  ::setenv("GLFW_APPLICATION_ID", "odyssey3d", 1);
+  ::execv(exe.c_str(), av.data());
+  ::_exit(127);
+}
+
+static int cmdServe(int argc, char **argv) {
+#ifndef HAVE_WAYLAND_WM
+  (void)argc; (void)argv;
+  std::fprintf(stderr, "compilado sin soporte de ventanas Wayland (hace falta wayland-client)\n");
+  return 1;
+#else
+  ServeCfg cfg;
+  cfg.ignore = {"odyssey3d", "plasmashell", "plasma", "kscreen", "polkit", "xwayland", "krunner", "dolphin"};
+  loadServeCfg(cfg);
+  bool dry = hasFlag(argc, argv, "--dry");
+  bool unaVez = hasFlag(argc, argv, "--once");
+  if (std::string v = flag(argc, argv, "--espera"); !v.empty()) cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
+  if (std::string v = flag(argc, argv, "--modo"); !v.empty()) cfg.modo = strLower(v);
+  if (std::string v = flag(argc, argv, "--ignore"); !v.empty()) splitList(v, cfg.ignore);
+  if (cfg.modo == "preguntar") cfg.modo = "ask";
+
+  ensureWaylandEnv();
+  std::signal(SIGTERM, onServeSignal);
+  std::signal(SIGINT, onServeSignal);
+  std::signal(SIGPIPE, SIG_IGN);
+
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "[serve] %s\n", err.c_str());
+    return 1;
+  }
+  Notifier nt;
+  bool hayAvisos = nt.open(&err);
+  if (!hayAvisos) std::fprintf(stderr, "[serve] sin portal de avisos: %s\n", err.c_str());
+  if (cfg.modo == "ask" && !hayAvisos) {
+    std::fprintf(stderr, "[serve] para preguntar hacen falta las notificaciones; usa --modo sbs|tb|flat\n");
+    return 1;
+  }
+
+  const std::string exe = selfPath();
+  std::map<std::string, std::string> idUuid;   /* id del aviso -> uuid de la ventana */
+  std::set<std::string> preguntadas;           /* ventanas por las que ya preguntamos o actuamos */
+  std::string avisoId, avisoUuid, accion;      /* aviso pendiente y respuesta del usuario */
+  double avisoT = 0.0;
+  pid_t hijo = -1;
+  std::string hijoUuid;
+
+  nt.setOnAction([&](const std::string &id, const std::string &action) {
+    auto it = idUuid.find(id);
+    if (it == idUuid.end()) return;
+    accion = strLower(action);
+    avisoUuid = it->second;
+    std::printf("[serve] respuesta %s -> %s\n", action.c_str(), it->second.c_str());
+    std::fflush(stdout);
+  });
+
+  std::printf("[serve] vigilando ventanas a pantalla completa (%s) · modo=%s · espera=%d s\n",
+              dry ? "sin ejecutar, --dry" : "ejecutando", cfg.modo.c_str(), cfg.esperaSeg);
+  std::fflush(stdout);
+
+  while (!g_stopServe) {
+    wm.waitAndDispatch(500);
+    if (hayAvisos) {
+      nt.process();
+      nt.flush();
+    }
+    double now = 0.0;
+    {
+      struct timespec ts;
+      clock_gettime(CLOCK_MONOTONIC, &ts);
+      now = (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+    }
+
+    if (hijo > 0) {
+      int st = 0;
+      pid_t r = ::waitpid(hijo, &st, WNOHANG);
+      if (r == hijo) {
+        std::printf("[serve] sesion 3D terminada (%s)\n", hijoUuid.c_str());
+        std::fflush(stdout);
+        hijo = -1;
+        hijoUuid.clear();
+      }
+    }
+
+    /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
+    if (!avisoId.empty() && now - avisoT > (double)cfg.esperaSeg) {
+      std::printf("[serve] aviso sin respuesta, se retira (%s)\n", avisoUuid.c_str());
+      std::fflush(stdout);
+      nt.remove(avisoId);
+      idUuid.erase(avisoId);
+      avisoId.clear();
+      avisoUuid.clear();
+    }
+
+    if (!accion.empty()) {
+      std::string act = accion;
+      accion.clear();
+      if (!avisoId.empty()) {
+        nt.remove(avisoId);
+        idUuid.erase(avisoId);
+        avisoId.clear();
+      }
+      if (act != "no" && act != "cancel" && act != "close" && hijo < 0) {
+        if (dry) {
+          std::printf("[serve] (dry) habria lanzado capture3d --uuid %s modo=%s\n", avisoUuid.c_str(), act.c_str());
+          std::fflush(stdout);
+          if (unaVez) break;
+        } else {
+          hijo = spawnViewer(exe, avisoUuid, act);
+          hijoUuid = avisoUuid;
+          std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
+          std::fflush(stdout);
+          if (hijo > 0 && unaVez) break;
+        }
+      }
+      avisoUuid.clear();
+    }
+
+    /* podar: si la ventana dejó de estar a pantalla completa o se cerró, se olvida */
+    if (!preguntadas.empty()) {
+      std::set<std::string> vivas;
+      for (const WindowInfo &w : wm.windows())
+        if (w.usable()) vivas.insert(w.uuid);
+      for (auto it = preguntadas.begin(); it != preguntadas.end();) {
+        if (vivas.count(*it) == 0) it = preguntadas.erase(it);
+        else ++it;
+      }
+    }
+
+    if (hijo < 0 && avisoId.empty()) {
+      WindowInfo w{};
+      if (wm.fullscreenCandidate(w, {}) && !ignoredApp(w, cfg.ignore) && !preguntadas.count(w.uuid)) {
+        preguntadas.insert(w.uuid);
+        if (cfg.modo == "ask") {
+          std::string id = "odyssey3d-" + w.uuid.substr(0, 8);
+          std::vector<std::pair<std::string, std::string>> botones = {
+              {"sbs", "3D lado a lado"}, {"tb", "3D arriba y abajo"}, {"flat", "2D plano"}};
+          std::string titulo = "¿Poner en 3D?";
+          std::string cuerpo = w.title.empty() ? w.appId : w.title;
+          cuerpo += "  ·  " + std::to_string(w.w) + "x" + std::to_string(w.h);
+          if (nt.send(id, titulo, cuerpo, botones, &err)) {
+            idUuid[id] = w.uuid;
+            avisoId = id;
+            avisoUuid = w.uuid;
+            avisoT = now;
+            std::printf("[serve] avisando por %s | %s (%s)\n", w.appId.c_str(), w.title.c_str(), w.uuid.c_str());
+            std::fflush(stdout);
+          } else {
+            std::fprintf(stderr, "[serve] aviso rechazado: %s\n", err.c_str());
+            std::fflush(stderr);
+          }
+        } else if (dry) {
+          std::printf("[serve] (dry) habria lanzado modo %s por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(),
+                      w.title.c_str());
+          std::fflush(stdout);
+          if (unaVez) break;
+        } else {
+          hijo = spawnViewer(exe, w.uuid, cfg.modo);
+          hijoUuid = w.uuid;
+          std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
+          std::fflush(stdout);
+          if (hijo > 0 && unaVez) break;
+        }
+      }
+    }
+  }
+
+  if (!avisoId.empty()) nt.remove(avisoId);
+  if (hijo > 0) {
+    ::kill(hijo, SIGTERM);
+    int st = 0;
+    ::waitpid(hijo, &st, 0);
+  }
+  std::printf("[serve] detenido\n");
+  std::fflush(stdout);
+  return 0;
+#endif
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     std::fputs(kUsage, stdout);
@@ -569,6 +1168,10 @@ int main(int argc, char **argv) {
     if (sub == "scaler") return cmdScaler(argc - 3, argv + 3);
     if (sub == "ir") return cmdIr(argc - 3, argv + 3);
     if (sub == "panel") return cmdPanel(argc - 3, argv + 3);
+    if (sub == "windows") return cmdWindows(argc - 3, argv + 3);
+    if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
+    if (sub == "capture") return cmdCapture(argc - 3, argv + 3);
+    if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;
   }
@@ -581,6 +1184,27 @@ int main(int argc, char **argv) {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;
     return cmdWeavePng(o);
+  }
+  if (cmd == "--version" || cmd == "-v" || cmd == "version") {
+    std::printf("odyssey3d %s\n", ODYSSEY3D_VERSION);
+    return 0;
+  }
+  if (cmd == "serve") return cmdServe(argc - 1, argv + 1);
+  if (cmd == "capture3d") {
+#ifndef HAVE_CAPTURE
+    (void)argc; (void)argv;
+    std::fprintf(stderr, "compilado sin soporte de captura (hace falta libpipewire-0.3 y plasma-wayland-protocols)\n");
+    return 1;
+#else
+    ViewerOpts o{};
+    if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;
+    std::string uuid;
+    WindowInfo wi{};
+    bool haveWin = false;
+    if (!pickWindow(argc - 2, argv + 2, uuid, wi, haveWin)) return 1;
+    o.captureUuid = uuid;
+    return runViewer(o, SourceKind::Capture);
+#endif
   }
   if (cmd == "test" || cmd == "play" || cmd == "doctor") {
     ViewerOpts o{};

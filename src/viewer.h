@@ -25,11 +25,12 @@ struct ViewerOpts {
   double pitch = 1.0;      /* escala de la rampa de fase */
   std::string corrA, corrB, corrDir;
   std::string file;
+  std::string captureUuid;   /* ventana a capturar (SourceKind::Capture) */
   std::string outPath;     /* salida de `weave` */
   std::string dumpPath;    /* guardar fotogramas PNG (diagnóstico) y salir */        /* para play */
 };
 
-enum class SourceKind { Test, Mpv };
+enum class SourceKind { Test, Mpv, Capture };
 
 int runViewer(const ViewerOpts &opts, SourceKind kind);
 

@@ -1,0 +1,20 @@
+[Unit]
+Description=Odyssey 3D: vigilante de ventanas a pantalla completa
+Documentation=https://github.com/Fulviuus/macdissey-3d
+# Arranca con la sesión gráfica del usuario (KDE Plasma usa graphical-session.target).
+PartOf=graphical-session.target
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+# El servicio sólo mira ventanas y manda avisos: el 3D lo arranca en un proceso
+# aparte (@BINDIR@ capture3d) que ya se enciende la lente, el scaler y el panel.
+ExecStart=@BINDIR@/odyssey3d serve
+Restart=on-failure
+RestartSec=4
+# El binario adivina WAYLAND_DISPLAY escaneando $XDG_RUNTIME_DIR, así que la unidad
+# no necesita exportarlo.
+
+[Install]
+WantedBy=graphical-session.target

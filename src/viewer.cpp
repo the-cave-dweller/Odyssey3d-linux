@@ -3,6 +3,10 @@
 #include "glutil.h"
 #include "lens.h"
 #include "mpvsrc.h"
+#ifdef HAVE_CAPTURE
+#include "capture.h"
+#include "glimport.h"
+#endif
 #include "panel.h"
 #include "scaler.h"
 #include "testsrc.h"
@@ -150,6 +154,8 @@ struct Rig {
 struct Ui {
   WeaveTuning tune{};
   MpvSrc *mpv = nullptr;
+  bool warned = false;
+  bool sizeWarned = false;
   bool quit = false;
 };
 
@@ -385,11 +391,17 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
   TestSrc test;
   MpvSrc mpv;
   bool haveTest = false, haveMpv = false;
+#ifdef HAVE_CAPTURE
+  WindowCapture cap;
+  GpuImporter imp;
+  uint64_t lastFrameCount = 0;
+  bool haveCap = false;
+#endif
   if (kind == SourceKind::Test) {
     haveTest = test.init(&err);
     if (!haveTest) std::fprintf(stderr, "[error] patron de prueba: %s\n", err.c_str());
     test.createFbo(W, H);
-  } else {
+  } else if (kind == SourceKind::Mpv) {
     haveMpv = mpv.init(&err);
     if (!haveMpv) {
       std::fprintf(stderr, "[error] mpv: %s\n", err.c_str());
@@ -403,11 +415,39 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
     ui.mpv = &mpv;
     if (!mpv.load(opts.file, &err)) std::fprintf(stderr, "[error] %s\n", err.c_str());
     std::printf("[mpv] %s\n", opts.file.c_str());
+#ifdef HAVE_CAPTURE
+  } else if (kind == SourceKind::Capture) {
+    if (!imp.init(&err)) {
+      std::fprintf(stderr, "[error] importación DMA-BUF: %s\n", err.c_str());
+      weave.destroy();
+      glfwDestroyWindow(win);
+      rig.shutDown();
+      glfwTerminate();
+      return 1;
+    }
+    if (!cap.start(opts.captureUuid, &err)) {
+      std::fprintf(stderr, "[error] captura: %s\n", err.c_str());
+      weave.destroy();
+      glfwDestroyWindow(win);
+      rig.shutDown();
+      glfwTerminate();
+      return 1;
+    }
+    haveCap = true;
+    /* el fotograma del compositor viene con la fila 0 arriba (convención Wayland), al revés
+       que la textura de mpv */
+    weave.setSrcFlipY(0);
+    std::printf("[captura] pidiendo el flujo de la ventana %s\n", opts.captureUuid.c_str());
+#endif
   }
 
   std::printf("\n  teclas  ESC salir · 3 2D/3D · F invertir profundidad · ←/→ fase · RePag/SavPg paso de lente\n"
               "          ↑/↓ crosstalk · , . pendiente de filtro · 9/0 convergencia · 8 reiniciar ajuste\n");
   if (kind == SourceKind::Mpv) std::printf("          espacio pausa · - = saltar 5 s · [ ] cuadro a cuadro\n\n");
+#ifdef HAVE_CAPTURE
+  if (kind == SourceKind::Capture)
+    std::printf("          ventana capturada: si la cierras o pierdes el foco, ESC para volver al escritorio\n\n");
+#endif
   std::fflush(stdout);
 
   double t0 = glfwGetTime(), lastPoll = 0.0, clock = t0;
@@ -420,6 +460,43 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
     GLuint tex = 0;
     if (kind == SourceKind::Test && haveTest) {
       tex = test.render(now - t0, 0, 0);
+#ifdef HAVE_CAPTURE
+    } else if (kind == SourceKind::Capture && haveCap) {
+      cap.pump();
+      if (cap.frameCount() != lastFrameCount) {
+        lastFrameCount = cap.frameCount();
+        CapturedFrame cf;
+        if (cap.lastFrame(cf)) {
+          GpuFrame gf;
+          gf.fd = cf.fd;
+          gf.w = cf.w;
+          gf.h = cf.h;
+          gf.stride = cf.stride;
+          gf.offset = cf.offset;
+          gf.modifier = cf.modifier;
+          gf.fourcc = cf.fourcc;
+          gf.dmabuf = cf.dmabuf;
+          if (!ui.sizeWarned && (cf.w != fbW || cf.h != fbH)) {
+            ui.sizeWarned = true;
+            std::fprintf(stderr,
+                         "[captura] el fotograma del compositor es %dx%d y el panel esta en %dx%d: la trama "
+                         "necesita pixel a pixel (deja la ventana a pantalla completa en esta salida)\n",
+                         cf.w, cf.h, fbW, fbH);
+          }
+          std::string e2;
+          tex = imp.upload(gf, &e2);
+          if (!tex && !ui.warned) {
+            ui.warned = true;
+            std::fprintf(stderr, "[captura] %s\n", e2.c_str());
+          }
+        }
+      }
+      if (!tex) tex = imp.lastTexture(); /* sin fotograma nuevo: repetir el último, no parpadear */
+      if (now - lastPoll > 1.0) {
+        lastPoll = now;
+        if (!cap.streamCreated()) std::fprintf(stderr, "[captura] %s\n", cap.describe().c_str());
+      }
+#endif
     } else if (kind == SourceKind::Mpv && haveMpv) {
       tex = mpv.render();
       if (now - lastPoll > 0.25) {
@@ -438,12 +515,14 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
       glPixelStorei(GL_PACK_ALIGNMENT, 1);
       glReadPixels(0, 0, pw, ph, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
       saveRgbaFlipped(opts.dumpPath + "-trama.png", pw, ph, buf.data());
-      GLuint srcFbo = (kind == SourceKind::Test) ? test.fboId() : mpv.fboId();
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, srcFbo);
-      glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-      glPixelStorei(GL_PACK_ALIGNMENT, 4);
-      saveRgbaFlipped(opts.dumpPath + "-origen.png", W, H, buf.data());
+      if (kind != SourceKind::Capture) {
+        GLuint srcFbo = (kind == SourceKind::Test) ? test.fboId() : mpv.fboId();
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, srcFbo);
+        glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        saveRgbaFlipped(opts.dumpPath + "-origen.png", W, H, buf.data());
+      }
       ui.quit = true;
     }
     glfwSwapBuffers(win);
@@ -458,6 +537,12 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
 
   if (kind == SourceKind::Test) test.destroy();
   if (kind == SourceKind::Mpv) mpv.destroy();
+#ifdef HAVE_CAPTURE
+  if (haveCap) {
+    cap.stop();
+    imp.destroy();
+  }
+#endif
   weave.destroy();
   glfwDestroyWindow(win);
   rig.shutDown();

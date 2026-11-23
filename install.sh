@@ -35,6 +35,19 @@ sudo cmake --install "$here/build"
 # --- permisos ---------------------------------------------------------------
 sudo udevadm control --reload-rules
 
+# --- servicio en segundo plano (por usuario, sin sudo) ----------------------
+prefix=$(sed -n 's/^CMAKE_INSTALL_PREFIX:INTERNAL=//p' "$here/build/CMakeCache.txt")
+prefix=${prefix:-/usr/local}
+unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+conf_dir=${XDG_CONFIG_HOME:-$HOME/.config}/odyssey3d
+
+mkdir -p "$unit_dir" "$conf_dir"
+sed "s|@BINDIR@|$prefix/bin|g" "$here/systemd/odyssey3d-serve.service" > "$unit_dir/odyssey3d-serve.service"
+[ -f "$conf_dir/serve.conf" ] || cp "$here/config/serve.conf" "$conf_dir/serve.conf"
+systemctl --user daemon-reload
+systemctl --user enable odyssey3d-serve.service
+echo "servicio instalado y activado para la próxima sesión: $unit_dir/odyssey3d-serve.service"
+
 cat <<'EOF'
 
 Instalado. Para que los permisos surtan efecto:
@@ -46,4 +59,11 @@ Instalado. Para que los permisos surtan efecto:
 
 Comprueba con:  odyssey3d doctor
 Reproduce con:  odyssey3d play tu_video_sbs.mkv
+
+Servicio de ventanas (avisa cuando algo se pone a pantalla completa y lo pone en 3D):
+  systemctl --user start odyssey3d-serve      # arrancarlo ahora
+  systemctl --user stop odyssey3d-serve       # pararlo
+  systemctl --user disable odyssey3d-serve    # que no arranque con la sesión
+  journalctl --user -u odyssey3d-serve -f     # ver lo que hace
+  ~/.config/odyssey3d/serve.conf              # ignorar apps, tiempo del aviso, modo
 EOF
