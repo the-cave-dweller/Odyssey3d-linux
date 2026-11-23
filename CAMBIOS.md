@@ -2,6 +2,56 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Señal de cierre y estado del panel (v0.8)
+- **Una sesión cortada de golpe dejaba el monitor en modo 3D.** `kill`/`systemctl stop` mandan SIGTERM y
+  la sesión no tenía manejador: moría a seco, con la lente encendida, el scaler en 3D y el panel en
+  119,88 Hz con escala 1. Ahora `runViewerVk` y `runViewer` capturan SIGTERM/SIGINT y salen por la secuencia
+  normal (`[sesion] llego una senal de cierre: se sale devolviendo el panel, la lente y el scaler`), verificado
+  matando una sesión de mpv con `kill -TERM`.
+- **Ese residuo envenenaba el siguiente arranque.** Como la sesión nueva memoriza el estado que hay al
+  empezar, si la anterior murió sin restaurar guardaba el modo 3D como «estado normal» y al salir devolvía
+  ese, dejando el escritorio a escala 1 (letra diminuta). `src/session.cpp` ahora lo detecta —panel justo en
+  nuestra configuración de 3D e instantánea previa distinta— y usa el estado guardado en lugar del residuo,
+  sin sobrescribir el fichero: `[aviso] el panel seguia en el modo 3D de una sesion anterior cortada: se
+  devuelve el estado guardado (modo 2 3840x2160@164.98, escala 1.5, rotacion none)`.
+- Nota: `odyssey3d play ARCHIVO` (ruta de mpv) sigue dibujando por el camino OpenGL (`runViewer`), mientras
+  que las tarjetas del hub y `capture3d` van por Vulkan. La diferencia importa para el ratón/interfaz pero el
+  entrelazado es el mismo; pasar mpv a Vulkan queda pendiente.
+
+## El vídeo del navegador se congela debajo de la capa (YouTube): qué pasa y qué hace el programa ahora
+- Medido con `odyssey3d ctl flujo --uuid ID`: con **mpv** y con vídeos locales en el navegador (1080p y
+  4K60) el compositor sigue mandando 25-60 fotogramas por segundo aunque la ventana quede **tapada por
+  completo** por nuestra capa a pantalla completa. Con una **página real de YouTube reproduciendo**, el
+  flujo cae a ~0 fotogramas/s en unos 2 s y la imagen queda congelada hasta cerrar la capa.
+- La causa está del lado del navegador: Gecko pinta al ritmo del aviso de sincronismo (`wl_callback`) que
+  le da KWin. Cuando deja de recibirlos —la ventana está tapada y no hay daños— su compositor interno deja
+  de producir fotogramas, y si no hay fotogramas nuevos no hay nada que mostrar. Desde fuera no se arregla:
+  se probaron ventana sin bordes, dejar 1 px libre, dejar una franja libre de 24 px y que el origen estuviera
+  maximizado en vez de a pantalla completa; el flujo se secaba en todos los casos.
+- Arreglos nuestros en esta versión:
+  1. **El reintento del flujo no volvía a conectar.** Al rehacer la captura se quedaba guardado el marcador
+     de «ya enlazado» y el enlace nuevo nunca se creaba (`flujo: unconnected` en el registro), así que los
+     reintentos no reanimaban nada. `closeAll()` ahora limpia ese estado (`src/capture.cpp`) y los reintentos
+     ya no se rinden a los cuatro: siguen mientras dure la sesión y vuelven a tener presupuesto cuando
+     regresan los fotogramas.
+  2. **Dejar de gastar GPU en cuadros repetidos.** Si no llega vídeo nuevo y no se movió el ratón, no se
+     vuelve a presentar la misma imagen: el techo pasa a 30 presentaciones por segundo (antes 120). Se
+     recupera el comportamiento antiguo con `--siempre`. Con un vídeo 4K60 local, el ritmo de presentación
+     se acomoda solo al del vídeo.
+  3. **Aviso con la solución concreta.** Cuando el corte viene de un navegador, el registro lo dice y
+     explica qué tocar:
+     `Firefox o Zen: about:config -> widget.wayland.vsync.keep-firing-at-idle = true`
+     (alternativa más brusca: `widget.wayland.vsync.enabled = false`), `Chrome o Chromium:
+     --disable-gpu-vsync`, y `mpv, VLC y reproductores parecidos no necesitan nada`.
+- Pendiente: al reanimar el flujo, a veces el **primer** fotograma no se puede importar en el driver de
+  NVIDIA (`vkAllocateMemory del DMA-BUF: fallo de inicialización`) y la imagen tarda un poco más en
+  despegar. El registro ya imprime los datos del fotograma (tamaño, paso, fourcc, modificador, descriptor)
+  para poder atacarlo; no es un problema del descriptor del búfer, que ahora se duplica con `F_DUPFD_CLOEXEC`
+  para que no lo cierre PipeWire antes de tiempo.
+- Ventanas: opciones nuevas `--sin-borde` (ventana sin bordes colocada sobre la salida, en vez de pantalla
+  completa) y `--pos X,Y`; y `odyssey3d ctl ventana fullscreen|normal|maximizar|cerrar --uuid ID` para
+  manejar la ventana del vídeo desde fuera.
+
 ## 2D plano deja de tocar el monitor (y la sesión se cierra sola si el vídeo se cierra)
 - «2D plano» era un modo más del visor, así que `serve` lo lanzaba como los demás: cambiaba el modo del
   panel a 3840x2160@120, encendía la lente y ponía el scaler en 3D para mostrar una imagen 2D normal.

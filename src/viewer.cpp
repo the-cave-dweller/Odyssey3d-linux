@@ -16,6 +16,7 @@
 #include <GLFW/glfw3.h>
 
 #include <cmath>
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -92,6 +93,11 @@ static void saveRgbaFlipped(const std::string &path, int w, int h, const uint8_t
   else
     std::fprintf(stderr, "[aviso] no se pudo escribir %s\n", path.c_str());
 }
+
+/* una senal de cierre (systemctl stop, kill) tiene que salir por la puerta de adelante: solo asi se
+   devuelve el panel a su modo y se apagan la lente y el scaler. */
+static volatile std::sig_atomic_t gTermGL = 0;
+static void onTermSignalGL(int) { gTermGL = 1; }
 
 int runViewer(const ViewerOpts &opts, SourceKind kind) {
   std::string sock = ensureWaylandEnv();
@@ -238,7 +244,14 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
 
   double t0 = glfwGetTime(), lastPoll = 0.0, clock = t0;
   int frames = 0;
+  std::signal(SIGTERM, onTermSignalGL);
+  std::signal(SIGINT, onTermSignalGL);
   while (!glfwWindowShouldClose(win) && !ui.quit) {
+    if (gTermGL && !ui.quit) {
+      std::printf("[sesion] llego una senal de cierre: se sale devolviendo el panel, la lente y el scaler\n");
+      std::fflush(stdout);
+      ui.quit = true;
+    }
     glfwPollEvents();
     weave.setTuning(ui.tune);
     weave.setHud(rig.hud());

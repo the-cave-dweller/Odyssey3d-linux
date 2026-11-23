@@ -72,6 +72,12 @@ public:
   /* Candidata a pantalla completa que no sea una ventana nuestra. */
   bool fullscreenCandidate(WindowInfo &out, const std::vector<std::string> &ignoreAppIds) const;
 
+  /* Orden al compositor sobre una ventana: cambiar un estado (Fullscreen, Maximized,
+     KeepAbove…) o cerrarla. Útil para dejar el vídeo a pantalla completa antes de la
+     sesión y para retirar una ventana de prueba sin matar la aplicación. */
+  bool setState(const std::string &uuid, uint32_t flags, bool on, std::string *err = nullptr);
+  bool close(const std::string &uuid, std::string *err = nullptr);
+
   void setOnChange(std::function<void()> fn);
 
   const std::string &lastError() const { return err_; }

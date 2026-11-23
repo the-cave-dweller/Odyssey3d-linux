@@ -11,6 +11,12 @@ struct ViewerOpts {
   double hz = 120.0;       /* frecuencia objetivo para el modo del panel */
   int w = 0, h = 0;        /* 0 = modo nativo del panel */
   bool windowed = false;
+  /* ventana sin bordes y maximizada en vez de pantalla completa: cubre la salida entera
+     sin entrar en el estado "fullscreen" del compositor (así el vídeo de abajo no deja de
+     repintarse). */
+  bool borderless = false;
+  int posX = 0, posY = 0;   /* colocacion de la ventana (con --sin-borde) */
+  bool alwaysRender = false;  /* --siempre: presentar a ritmo de panel aunque no llegue nada nuevo */
   bool noLens = false;
   bool noScaler = false;
   bool noPanel = false;

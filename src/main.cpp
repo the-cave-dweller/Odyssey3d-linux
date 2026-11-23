@@ -70,6 +70,7 @@ static const char *kUsage =
     "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
     "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry]\n"
     "  odyssey3d ctl windows [--watch]\n"
+    "  odyssey3d ctl ventana [fullscreen|normal|maximizar|cerrar] [--uuid ID]  como esta la ventana del video\n"
     "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
@@ -101,6 +102,9 @@ static const char *kUsage =
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
     "  --sin-interfaz    no dibujar la superposicion del hub (solo Vulkan)\n"
+    "  --sin-borde       ventana sin bordes maximada en vez de pantalla completa\n"
+    "  --siempre         representar a ritmo de panel aunque no llegue video nuevo\n"
+    "  --pos X,Y         colocar la ventana en una esquina de la salida capturada\n"
     "  --gl              usar el camino OpenGL de siempre (por defecto todo se dibuja con Vulkan)\n"
     "\n"
     "teclas: ESC salir · 3 2D/3D · F invertir profundidad · flechas fase/paso/crosstalk · , . filtro\n"
@@ -1187,6 +1191,14 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--2d") o.no3d = true;
     else if (a == "--tb" || a == "--top-bottom") o.topBottom = true;
     else if (a == "--sin-interfaz") o.noHud = true;
+    else if (a == "--sin-borde") o.borderless = true;
+    else if (a == "--siempre") o.alwaysRender = true;
+    else if (a == "--pos") {
+      if (!need("pos")) return false;
+      const char *v = argv[++i];
+      const char *c = std::strchr(v, ',');
+      if (c) { o.posX = std::atoi(v); o.posY = std::atoi(c + 1); }
+    }
     else if (a == "--cpu-patron") o.cpuPattern = true;
     else if (a == "--no-corr") o.noCorr = true;
     else if (a == "--solid") o.solid = true;
@@ -1597,6 +1609,53 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
 /* Mide a qué ritmo manda el compositor fotogramas nuevos de una ventana, sin abrir
    ninguna ventana nuestra. Sirve para separar dos cosas distintas: que el flujo del
    compositor se corte, frente a que la imagen se congele dentro de nuestra ventana. */
+/* Orden para el compositor sobre una ventana del escritorio. */
+static int cmdVentana(int argc, char **argv) {
+  const char *act = argc > 0 ? argv[0] : "";
+  std::string uuid = flag(argc, argv, "--uuid");
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  wm.settle();
+  WindowInfo wi;
+  std::string u = uuid;
+  if (u.empty()) {
+    if (!wm.fullscreenCandidate(wi, {})) {
+      std::fprintf(stderr, "no hay ventana a pantalla completa (usa --uuid con `ctl windows`)\n");
+      return 1;
+    }
+    u = wi.uuid;
+  } else if (!wm.find(u, wi)) {
+    std::fprintf(stderr, "no se encontró la ventana %s\n", u.c_str());
+    return 1;
+  }
+  std::printf("ventana: %s | %s | %s uuid=%s\n", wi.appId.c_str(), wi.title.c_str(),
+              WindowInfo::stateList(wi.states).c_str(), u.c_str());
+  bool ok = false;
+  if (!std::strcmp(act, "fullscreen")) ok = wm.setState(u, WindowInfo::Fullscreen, true, &err);
+  else if (!std::strcmp(act, "normal")) ok = wm.setState(u, WindowInfo::Fullscreen, false, &err);
+  else if (!std::strcmp(act, "maximizar")) ok = wm.setState(u, WindowInfo::Maximized, true, &err);
+  else if (!std::strcmp(act, "cerrar")) ok = wm.close(u, &err);
+  else {
+    std::fprintf(stderr, "uso: ctl ventana [fullscreen|normal|maximizar|cerrar] [--uuid ID]\n");
+    return 2;
+  }
+  if (!ok) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  wm.settle(120, 12);
+  WindowInfo desp;
+  if (wm.find(u, desp))
+    std::printf("estado ahora: %s\n", WindowInfo::stateList(desp.states).c_str());
+  else
+    std::printf("la ventana ya no está\n");
+  return 0;
+}
+
 static int cmdFlujo(int argc, char **argv) {
 #ifndef HAVE_CAPTURE
   (void)argc; (void)argv;
@@ -2020,6 +2079,7 @@ int main(int argc, char **argv) {
     if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
 #ifdef HAVE_WAYLAND_WM
     if (sub == "flujo") return cmdFlujo(argc - 3, argv + 3);
+    if (sub == "ventana") return cmdVentana(argc - 3, argv + 3);
     if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);
 #endif
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);

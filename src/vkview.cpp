@@ -22,6 +22,7 @@
 #include <GLFW/glfw3.h>
 
 #include <cmath>
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -38,8 +39,15 @@ struct VkUi {
   float convBase = 0.0f;  /* la convergencia que mueven las teclas; la del deslizador se suma */
   double mx = -1.0, my = -1.0;
   Hud::Hit dragging = Hud::HitNone;
+  bool inputChanged = true;  /* forzar cuadro cuando el raton o el teclado se movieron */
   int fbW = 0, fbH = 0;
 };
+
+/* senal de cierre (systemctl stop, kill, o el propio serve): la sesion tiene que salir por la
+   puerta de adelante para devolver el panel a su modo, apagar la lente y apagar el scaler. Si se
+   moria por SIGTERM a secas, el monitor se quedaba en modo 3D y la lente encendida. */
+static volatile std::sig_atomic_t gTerm = 0;
+static void onTermSignal(int) { gTerm = 1; }
 
 void printTuning(const VkUi &ui, const char *what) {
   std::printf("[%-11s] weave=%d swap=%d fs=%5.2f align=%+.4f pitch=%.5f xtdyn=%+.4f conv=%+.5f prof=%d rel=%d\n",
@@ -111,6 +119,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
   if (!ui) return;
+  ui->inputChanged = true;
   if (key == GLFW_KEY_ESCAPE) {
     ui->quit = true;
     glfwSetWindowShouldClose(win, GLFW_TRUE);
@@ -143,6 +152,7 @@ void onCursorVK(GLFWwindow *win, double x, double y) {
   if (!ui) return;
   ui->mx = x;
   ui->my = y;
+  ui->inputChanged = true;
   ui->hud.setMouse((float)x, (float)y);
   if (ui->dragging != Hud::HitNone) ui->hud.dragTo(ui->dragging, (float)x);
 }
@@ -150,6 +160,7 @@ void onCursorVK(GLFWwindow *win, double x, double y) {
 void onButtonVK(GLFWwindow *win, int button, int action, int) {
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
   if (!ui || button != GLFW_MOUSE_BUTTON_LEFT) return;
+  ui->inputChanged = true;
   if (action == GLFW_RELEASE) {
     ui->dragging = Hud::HitNone;
     return;
@@ -184,6 +195,16 @@ bool loadCorrections(const ViewerOpts &opts, std::vector<uint8_t> &a, int &aw, i
 /* Estado de la ventana capturada tal y como lo ve el compositor: sirve para distinguir
    dos fallos distintos cuando la imagen se congela (la ventana dejó de estar visible,
    frente al flujo de PipeWire que se quedó parado). */
+/* Un navegador (Gecko o Chromium) pinta al ritmo del sincronismo que le da el compositor: si
+   lo tapamos por completo deja de recibirlo y se para. Los reproductores normales no dependen
+   de ese aviso, asi que solo tiene sentido avisar para navegadores. */
+static bool pareceNavegador(const std::string &estado) {
+  static const char *nombres[] = {"firefox", "zen", "chrom", "brave", "opera", "edge", "vivaldi", "thunderbird"};
+  for (const char *n : nombres)
+    if (estado.find(n) != std::string::npos) return true;
+  return false;
+}
+
 static std::string estadoVentana(const std::string &uuid, bool *viva) {
   if (viva) *viva = true;
 #ifdef HAVE_WAYLAND_WM
@@ -227,6 +248,15 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+  if (opts.borderless) {
+    /* KWin 6.8 deja de repintar una ventana a pantalla completa cuando OTRA ventana también
+       a pantalla completa la tapa por completo: con un navegador (YouTube) el flujo de
+       fotogramas se seca a los pocos segundos y la trama queda congelada. Para no provocar
+       eso, aquí la ventana se crea sin bordes y maximizada: ocupa la salida entera sin el
+       estado fullscreen del compositor, y `floating` (KeepAbove) para quedar por encima. */
+    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+    glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
+  }
 
   Rig rig;
   rig.bringUp(opts);
@@ -245,7 +275,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
 
-  GLFWwindow *win = glfwCreateWindow(W, H, "Odyssey 3D", opts.windowed ? nullptr : mon, nullptr);
+  GLFWwindow *win = glfwCreateWindow(W, H, "Odyssey 3D", (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
   if (!win) {
     const char *desc = nullptr;
     int code = glfwGetError(&desc);
@@ -254,7 +284,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     glfwTerminate();
     return 1;
   }
-  if (!opts.windowed) glfwSetWindowMonitor(win, mon, 0, 0, W, H, hz);
+  if (!opts.windowed && !opts.borderless) glfwSetWindowMonitor(win, mon, 0, 0, W, H, hz);
+  if (opts.borderless) {
+    /* maximizada no vale: el panel de Plasma se guarda una franja y la ventana quedaría
+       42 px mas baja, así que la ponemos en el origen de la salida con el tamano del modo. */
+    int mx = 0, my = 0, mw = 0, mh = 0;
+    glfwGetMonitorWorkarea(mon, &mx, &my, &mw, &mh);
+    if (opts.posX || opts.posY) { mx = opts.posX; my = opts.posY; }
+    glfwSetWindowPos(win, mx, my);
+    std::printf("[ventana] sin bordes en (%d,%d), area util de la salida %dx%d\n", mx, my, mw, mh);
+  }
   int fbW = 0, fbH = 0;
   glfwGetFramebufferSize(win, &fbW, &fbH);
   float sx = 1.0f, sy = 1.0f;
@@ -377,6 +416,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   uint64_t lastFrameCount = 0;
   double ultimoNuevo = 0.0;   /* momento del último fotograma nuevo del compositor */
   int avisosCorte = 0;
+  int avisosFlujo = 0;
+  double ultimoPresente = 0.0;
   bool haveCap = false;
   bool sizeWarned = false, importWarned = false;
   if (kind == SourceKind::Capture) {
@@ -408,7 +449,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
   int frames = 0, errStreak = 0, reintentos = 0;
   bool dumpHecho = false;
+  std::signal(SIGTERM, onTermSignal);
+  std::signal(SIGINT, onTermSignal);
   while (!glfwWindowShouldClose(win) && !ui.quit) {
+    if (gTerm && !ui.quit) {
+      std::printf("[sesion] llego una senal de cierre: se sale devolviendo el panel, la lente y el scaler\n");
+      std::fflush(stdout);
+      ui.quit = true;
+    }
     glfwPollEvents();
     double now = glfwGetTime();
     if (opts.segundos > 0 && now - t0 >= (double)opts.segundos) {
@@ -435,6 +483,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (cap.frameCount() != lastFrameCount) {
         lastFrameCount = cap.frameCount();
         ultimoNuevo = now;
+        reintentos = 0;  /* el flujo revive: presupuesto nuevo de reintentos */
         CapturedFrame cf;
         if (cap.lastFrame(cf)) {
           GpuFrame gf;
@@ -455,6 +504,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           }
           if (!wv.sourceFromDma(gf, &err) && !importWarned) {
             importWarned = true;
+            std::fprintf(stderr,
+                         "[captura] no se pudo importar el fotograma: %dx%d paso %d offset %d fourcc %c%c%c%c "
+                         "modificador 0x%llx descriptor %d\n",
+                         gf.w, gf.h, gf.stride, gf.offset,
+                         char(gf.fourcc & 0xff), char((gf.fourcc >> 8) & 0xff), char((gf.fourcc >> 16) & 0xff),
+                         char((gf.fourcc >> 24) & 0xff), (unsigned long long)gf.modifier, gf.fd);
             std::fprintf(stderr, "[captura] %s\n", err.c_str());
           }
           newSource = true;
@@ -464,7 +519,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         lastPoll = now;
         if (!cap.streamCreated()) {
           std::fprintf(stderr, "[captura] %s\n", cap.describe().c_str());
-        } else if ((lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 3) ||
+        } else if ((lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 12) ||
                    (ultimoNuevo > 0.0 && now - ultimoNuevo > 2.0)) {
           /* dos casos: el nodo se creo pero no llega nada (el portal tarda o el cambio de modo
              del panel invalida la sesion), o el flujo se paro a mitad de la sesion. En ambos
@@ -472,11 +527,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           const bool cortado = ultimoNuevo > 0.0;
           if (cortado && avisosCorte < 4) {
             ++avisosCorte;
+            ++avisosFlujo;
             std::printf("[captura] %d s sin fotogramas nuevos del compositor (flujo: %s)\n",
                         (int)(now - ultimoNuevo), cap.stateText().c_str());
             bool viva = true;
             const std::string est = estadoVentana(opts.captureUuid, &viva);
             if (!est.empty()) std::printf("[captura] ventana capturada: %s\n", est.c_str());
+            if (pareceNavegador(est) && avisosFlujo == 1) {
+              std::printf("[captura] el navegador dejo de pintar porque el compositor ya no le manda el sincronismo"
+                          " (la tapamos por completo).\n"
+                          "            Firefox o Zen: about:config -> widget.wayland.vsync.keep-firing-at-idle = true\n"
+                          "            Chrome o Chromium: arrancarlos con --disable-gpu-vsync\n"
+                          "            mpv, VLC y reproductores parecidos no necesitan nada\n");
+            }
             if (!viva) {
               std::printf("[captura] la ventana del video cerro: se cierra la sesion y se devuelve el panel a 2D\n");
               std::fflush(stdout);
@@ -484,10 +547,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             }
             std::fflush(stdout);
           }
-          if (reintentos < 4 && !ui.quit) {
+          if (!ui.quit) {
             ++reintentos;
-            std::printf("[captura] %s, pidiendo el flujo otra vez (intento %d)\n",
-                        cortado ? "el flujo se corto" : "el flujo no arranca", reintentos);
+            /* el navegador puede tardar en volver a pintar: no nos rendimos a los cuatro intentos,
+               pero tampoco imprimimos cada uno */
+            if (reintentos <= 3 || reintentos % 5 == 0)
+              std::printf("[captura] %s, pidiendo el flujo otra vez (intento %d)\n",
+                          cortado ? "el flujo se corto" : "el flujo no arranca", reintentos);
             std::fflush(stdout);
             cap.stop();
             lastFrameCount = 0;
@@ -506,7 +572,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
 #endif
     }
-    (void)newSource;
+    /* Si el compositor no mando fotograma nuevo y aqui no cambio nada, presentar otra vez lo
+       mismo solo consume GPU: con un video 4K60 en el navegador esa GPU extra era justo la que
+       faltaba para que el flujo se atragantara. Sin --siempre presentamos a 30 por segundo
+       como techo cuando el cuadro no cambia (el panel ya muestra lo mismo). */
+    bool algoNuevo = newSource || ui.inputChanged;
+#ifdef HAVE_OPENCV
+    if (rastreoVivo) algoNuevo = true;
+#endif
+    if (!opts.alwaysRender && kind == SourceKind::Capture && !algoNuevo &&
+        now - ultimoPresente < 1.0 / 30.0)
+      continue;
 
     /* la interfaz se rehace en CPU cada cuadro (son pocos triángulos) y se sube su geometría */
     WeaveTuning &t = wv.tuning();
@@ -563,6 +639,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
 #endif
 
+    ultimoPresente = now;
+    ui.inputChanged = false;
     if (!wv.frame(&err)) {
       if (wv.lost()) {
         glfwGetFramebufferSize(win, &fbW, &fbH);

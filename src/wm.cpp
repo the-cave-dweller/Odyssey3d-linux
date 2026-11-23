@@ -69,6 +69,11 @@ struct WindowMonitor::Impl {
       if (e->obj == o) return e;
     return nullptr;
   }
+  Entry *byUuid(const std::string &uuid) {
+    for (Entry *e : entries)
+      if (e->info.uuid == uuid) return e;
+    return nullptr;
+  }
   Entry *byInternalId(uint32_t id) {
     for (Entry *e : entries)
       if (e->info.id == id) return e;
@@ -281,6 +286,36 @@ bool WindowMonitor::fullscreenCandidate(WindowInfo &out, const std::vector<std::
   }
   if (!best) return false;
   out = best->info;
+  return true;
+}
+
+bool WindowMonitor::setState(const std::string &uuid, uint32_t flags, bool on, std::string *err) {
+  if (!d->mgr) {
+    if (err) *err = "el compositor no ofrece el protocolo de ventanas";
+    return false;
+  }
+  Impl::Entry *e = d->byUuid(uuid);
+  if (!e || !e->obj) {
+    if (err) *err = "no se encontró la ventana " + uuid;
+    return false;
+  }
+  org_kde_plasma_window_set_state(e->obj, flags, on ? flags : 0);
+  flush();
+  return true;
+}
+
+bool WindowMonitor::close(const std::string &uuid, std::string *err) {
+  if (!d->mgr) {
+    if (err) *err = "el compositor no ofrece el protocolo de ventanas";
+    return false;
+  }
+  Impl::Entry *e = d->byUuid(uuid);
+  if (!e || !e->obj) {
+    if (err) *err = "no se encontró la ventana " + uuid;
+    return false;
+  }
+  org_kde_plasma_window_close(e->obj);
+  flush();
   return true;
 }
 

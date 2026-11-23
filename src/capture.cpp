@@ -13,6 +13,8 @@
 #include <cmath>
 #include <mutex>
 #include <poll.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -50,6 +52,7 @@ struct WindowCapture::Impl {
   uint64_t fmtModifier = 0;
   uint32_t fmtFourcc = 0;
   int lastFd = -1, lastOffset = 0;
+  int ownFd = -1;  /* copia nuestra del descriptor del fotograma */
   int lastMaxsize = 0;
   uint64_t frameCount = 0;
   bool lastDmabuf = false;
@@ -73,6 +76,7 @@ struct WindowCapture::Impl {
   }
 
   void closeAll() {
+    if (ownFd >= 0) { ::close(ownFd); ownFd = -1; }
     if (loop) pw_thread_loop_lock(loop);
     if (pwStream) {
       pw_stream_destroy(pwStream);
@@ -108,6 +112,16 @@ struct WindowCapture::Impl {
       wl_registry_destroy(registry);
       registry = nullptr;
     }
+    /* Empezar de cero: el contador de enlace y el nodo anterior se quedaban guardados, asi que
+       maybeLink creia que ya habia enlace y el flujo nuevo nunca se conectaba. Era la razon de
+       que la imagen se quedara congelada despues de un corte (reintentos que no reanimaban nada). */
+    linkMade = false;
+    nodeId = 0;
+    ourNodeId = 0;
+    ports.clear();
+    created = false;
+    pwState.clear();
+    note.clear();
     if (dpy) {
       wl_display_disconnect(dpy);
       dpy = nullptr;
@@ -376,10 +390,15 @@ struct WindowCapture::Impl {
         /* DMA-BUF de la GPU: NO se toca con la CPU. Con memoria bloque-lineal (NVIDIA/AMD) el
            mapeo devuelve basura y copiar 30 MB por fotograma congela el proceso. Aquí sólo se
            guardan los metadatos para importarlos en OpenGL con eglCreateImageKHR. */
+        /* El descriptor es de PipeWire: en cuanto devolvemos el búfer el compositor puede
+           cerrarlo, y entonces importarlo falla. Nos quedamos con una copia nuestra. */
+        int dup = fcntl(d.fd, F_DUPFD_CLOEXEC, 0);
         std::lock_guard<std::mutex> g(s->mtx);
+        if (s->ownFd >= 0) ::close(s->ownFd);
+        s->ownFd = dup;
         s->dmabufSeen = true;
         s->lastDmabuf = true;
-        s->lastFd = static_cast<int>(d.fd);
+        s->lastFd = dup >= 0 ? dup : static_cast<int>(d.fd);
         s->lastOffset = static_cast<int>(d.mapoffset);
         s->lastMaxsize = static_cast<int>(d.maxsize);
         s->stride = chunkStride;

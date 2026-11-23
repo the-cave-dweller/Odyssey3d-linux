@@ -295,6 +295,45 @@ kscreen-doctor output.DP-4.rotation.none     # sustituye DP-4 por el nombre de t
 odyssey3d ctl panel status                   # debe decir "rotacion: 1 (none)"
 ```
 
+### Se congela el vídeo del navegador mientras el visor está encima
+
+Síntoma: con un vídeo de YouTube abierto, al elegir un modo 3D la imagen se queda parada hasta cerrar la
+capa. El visor lo avisa:
+
+```
+[captura] 2 s sin fotogramas nuevos del compositor (flujo: streaming)
+[captura] ventana capturada: zen · pantalla completa · 3840x2160
+[captura] el navegador dejo de pintar porque el compositor ya no le manda el sincronismo (la tapamos por completo).
+```
+
+Qué significa: KWin sólo manda el aviso de sincronismo a las ventanas que pintan. Cuando el navegador deja
+de recibirlo —porque la ventana quedó tapada por nuestra capa a pantalla completa— su compositor interno
+deja de producir fotogramas, y sin fotogramas nuevos no hay nada que entrelazar. **No es un problema del
+visor**: con mpv, VLC o reproductores parecidos el flujo no se corta nunca, y con vídeos locales en el
+navegador (1080p y 4K60 probados) tampoco.
+
+Se comprueba en dos segundos, sin abrir la capa:
+
+```sh
+odyssey3d ctl windows                                  # localiza la ventana del vídeo
+odyssey3d ctl flujo --uuid '{...}' --segundos 5        # fotogramas por segundo que manda KWin
+```
+
+Si marca 0 fotogramas/s con el vídeo sonando, el que dejó de pintar es el navegador. Tiene arreglo del lado
+del navegador:
+
+- **Firefox o Zen**: en `about:config`, poner `widget.wayland.vsync.keep-firing-at-idle` en `true`
+  (con eso el navegador sigue pintando aunque esté tapado: con un vídeo local en Zen se midieron 25 f/s
+  estables con la capa encima, cuando sin la preferencia el mismo montaje se secaba a 0-1 f/s). La variante
+  más brusca es `widget.wayland.vsync.enabled = false`, también verificada con vídeo local (30 f/s).
+- **Chrome o Chromium**: arrancarlos con `--disable-gpu-vsync` (sin probar en esta máquina).
+- **mpv, VLC, haruna, toc**: no necesitan tocar nada. Recomendado para ver en 3D:
+  `odyssey3d play archivo.mp4` usa mpv y el flujo se mantiene.
+
+El visor hace lo que puede por su parte: si el flujo se corta lo vuelve a pedir una y otra vez mientras
+dure la sesión, no vuelve a gastar GPU presentando el mismo cuadro (`--siempre` recupera el ritmo de panel
+de 120 presentaciones por segundo), y si cerraste la ventana del vídeo se sale solo y devuelve el panel a 2D.
+
 ## Verificación sin hardware
 
 `tools/verifica_weave.py` comprueba pixel a pixel el entrelazado del C++ contra el oráculo

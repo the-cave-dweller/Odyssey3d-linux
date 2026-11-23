@@ -35,19 +35,37 @@ void Rig::bringUp(const ViewerOpts &o) {
           /* Aviso si una sesión anterior se quedó sin restaurar (no tocamos nada por nuestra
              cuenta: puede que el usuario haya cambiado la pantalla después). */
           PanelState stale{};
-          if (Panel::loadSnapshot(stale) && stale.name == name &&
-              (stale.modeIndex != st.modeIndex || stale.scale != st.scale || stale.rotation != st.rotation))
-            std::fprintf(stderr,
-                         "[aviso] hay un estado del panel sin restaurar de otra sesion (modo %d %s, escala %g, "
-                         "rotacion %s). Si quieres recuperarlo: odyssey3d ctl panel restore\n",
-                         stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
+          const bool hayStale = Panel::loadSnapshot(stale) && stale.name == name &&
+                                (stale.modeIndex != st.modeIndex || stale.scale != st.scale ||
+                                 stale.rotation != st.rotation);
+          /* Si además el panel está justo en nuestra configuracion de 3D, lo que vemos no es el
+             estado del usuario sino el residuo de una sesion que murio a mitad: el estado de verdad
+             es el de la instantanea, y el fichero no se debe sobrescribir con el residuo. */
+          const bool residual = hayStale && st.modeIndex == idx && st.scale == 1.0 && st.rotation == RotNone;
+          const std::string nombreModo = Panel::modeName(st, idx);  /* el nombre se pierde si sustituimos st */
+          if (hayStale) {
+            if (residual)
+              std::fprintf(stderr,
+                           "[aviso] el panel seguia en el modo 3D de una sesion anterior cortada: se devuelve el "
+                           "estado guardado (modo %d %s, escala %g, rotacion %s)\n",
+                           stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
+            else
+              std::fprintf(stderr,
+                           "[aviso] hay un estado del panel sin restaurar de otra sesion (modo %d %s, escala %g, "
+                           "rotacion %s). Si quieres recuperarlo: odyssey3d ctl panel restore\n",
+                           stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
+          }
           std::string snapPath;
-          if (!Panel::saveSnapshot(st, &snapPath, &err)) std::fprintf(stderr, "[aviso] %s\n", err.c_str());
+          if (residual) {
+            st = stale;  /* el estado real del usuario es el guardado, no el que se ve ahora */
+          } else if (!Panel::saveSnapshot(st, &snapPath, &err)) {
+            std::fprintf(stderr, "[aviso] %s\n", err.c_str());
+          }
           if (Panel::apply(name, idx, 1.0, RotNone, true, &err, false)) {
             saved = st;
             panelApplied = true;
             std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR apagado\n", name.c_str(), idx,
-                        Panel::modeName(st, idx).c_str());
+                        nombreModo.c_str());
             std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
                         saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
             usleep(400000); /* que KWin asiente antes de crear la ventana */
