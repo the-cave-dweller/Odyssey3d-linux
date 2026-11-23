@@ -2,6 +2,25 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## 2D plano deja de tocar el monitor (y la sesión se cierra sola si el vídeo se cierra)
+- «2D plano» era un modo más del visor, así que `serve` lo lanzaba como los demás: cambiaba el modo del
+  panel a 3840x2160@120, encendía la lente y ponía el scaler en 3D para mostrar una imagen 2D normal.
+  Ahora `2D plano` es **no hacer nada**: si había una sesión 3D en curso se termina (lente a 2D, scaler
+  apagado, panel devuelto a su modo) y el vídeo sigue como estaba. Con mpv y `serve --dry` el registro
+  dice `[serve] 2D plano: sin lente, scaler ni cambio de modo (mpv)` y no se lanza ningún proceso.
+- Si el compositor deja de mandar fotogramas de la ventana capturada, el visor ya no se queda callado
+  mostrando el último cuadro: a los 2 s avisa `[captura] N s sin fotogramas nuevos del compositor
+  (flujo: streaming/paused/…)` y dice en qué estado ve KWin la ventana (active, fullscreen, tamaño),
+  porque eso separa dos fallos muy distintos: el navegador dejó de pintar, o se cortó el flujo PipeWire.
+  Después reintenta el flujo hasta 4 veces.
+- Si la ventana del vídeo **desaparece** (la cerraron, mpv se acabó), la sesión se cierra sola y
+  devuelve el panel a 2D: `[captura] la ventana del video cerro: se cierra la sesion y se devuelve el
+  panel a 2D`. Antes se quedaba la pantalla congelada hasta pulsar ESC.
+- Herramienta nueva para medir esto: `odyssey3d ctl flujo --uuid ID [--segundos N]` pide el flujo de una
+  ventana y muestra cuántos fotogramas manda el compositor por segundo, sin abrir ninguna ventana
+  encima. Con mpv y con un vídeo local en el navegador da 25 fotogramas/s estables incluso con la
+  ventana tapada por completo, así que la oclusión no corta el flujo de captura de ventana en KWin 6.8.
+
 ## tarjeta superpuesta encima del vídeo a pantalla completa
 - Antes, al poner un vídeo a pantalla completa, `serve` mandaba una notificación por el portal D-Bus:
   con «No molestar» activado se archiva y KWin la dibuja **debajo** del vídeo, así que no servía de nada.

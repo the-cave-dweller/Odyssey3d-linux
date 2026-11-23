@@ -8,6 +8,7 @@
 
 #ifdef HAVE_CAPTURE
 #include "capture.h"
+#include "wm.h"
 #endif
 #include "glutil.h"
 #ifdef HAVE_OPENCV
@@ -178,6 +179,30 @@ bool loadCorrections(const ViewerOpts &opts, std::vector<uint8_t> &a, int &aw, i
 }
 
 }  // namespace
+
+#ifdef HAVE_CAPTURE
+/* Estado de la ventana capturada tal y como lo ve el compositor: sirve para distinguir
+   dos fallos distintos cuando la imagen se congela (la ventana dejó de estar visible,
+   frente al flujo de PipeWire que se quedó parado). */
+static std::string estadoVentana(const std::string &uuid, bool *viva) {
+  if (viva) *viva = true;
+#ifdef HAVE_WAYLAND_WM
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) return "sin acceso al compositor: " + err;
+  wm.settle();
+  WindowInfo w;
+  if (!wm.find(uuid, w)) {
+    if (viva) *viva = false;
+    return "la ventana ya no existe";
+  }
+  return w.appId + " · " + WindowInfo::stateList(w.states) + " · " + std::to_string(w.w) + "x" + std::to_string(w.h);
+#else
+  (void)uuid;
+  return {};
+#endif
+}
+#endif
 
 int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::string sock = ensureWaylandEnv();
@@ -350,6 +375,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_CAPTURE
   WindowCapture cap;
   uint64_t lastFrameCount = 0;
+  double ultimoNuevo = 0.0;   /* momento del último fotograma nuevo del compositor */
+  int avisosCorte = 0;
   bool haveCap = false;
   bool sizeWarned = false, importWarned = false;
   if (kind == SourceKind::Capture) {
@@ -407,6 +434,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       cap.pump();
       if (cap.frameCount() != lastFrameCount) {
         lastFrameCount = cap.frameCount();
+        ultimoNuevo = now;
         CapturedFrame cf;
         if (cap.lastFrame(cf)) {
           GpuFrame gf;
@@ -436,14 +464,37 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         lastPoll = now;
         if (!cap.streamCreated()) {
           std::fprintf(stderr, "[captura] %s\n", cap.describe().c_str());
-        } else if (lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 3) {
-          /* el nodo se creo pero no llega nada: cambia el modo del panel y KWin invalida la
-             sesion, o el portal tarda. Tira del flujo y pidelo otra vez. */
-          ++reintentos;
-          std::printf("[captura] el flujo no arranca, pidiendolo otra vez (intento %d)\n", reintentos);
-          cap.stop();
-          std::string e2;
-          if (!cap.start(opts.captureUuid, &e2)) std::fprintf(stderr, "[captura] reintentar: %s\n", e2.c_str());
+        } else if ((lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 3) ||
+                   (ultimoNuevo > 0.0 && now - ultimoNuevo > 2.0)) {
+          /* dos casos: el nodo se creo pero no llega nada (el portal tarda o el cambio de modo
+             del panel invalida la sesion), o el flujo se paro a mitad de la sesion. En ambos
+             hay que pedir el flujo otra vez, y decir por dónde vino el corte. */
+          const bool cortado = ultimoNuevo > 0.0;
+          if (cortado && avisosCorte < 4) {
+            ++avisosCorte;
+            std::printf("[captura] %d s sin fotogramas nuevos del compositor (flujo: %s)\n",
+                        (int)(now - ultimoNuevo), cap.stateText().c_str());
+            bool viva = true;
+            const std::string est = estadoVentana(opts.captureUuid, &viva);
+            if (!est.empty()) std::printf("[captura] ventana capturada: %s\n", est.c_str());
+            if (!viva) {
+              std::printf("[captura] la ventana del video cerro: se cierra la sesion y se devuelve el panel a 2D\n");
+              std::fflush(stdout);
+              ui.quit = true;
+            }
+            std::fflush(stdout);
+          }
+          if (reintentos < 4 && !ui.quit) {
+            ++reintentos;
+            std::printf("[captura] %s, pidiendo el flujo otra vez (intento %d)\n",
+                        cortado ? "el flujo se corto" : "el flujo no arranca", reintentos);
+            std::fflush(stdout);
+            cap.stop();
+            lastFrameCount = 0;
+            ultimoNuevo = 0.0;
+            std::string e2;
+            if (!cap.start(opts.captureUuid, &e2)) std::fprintf(stderr, "[captura] reintentar: %s\n", e2.c_str());
+          }
         }
       }
       if (now - ultimoAviso > 5.0 && lastFrameCount > 0) {

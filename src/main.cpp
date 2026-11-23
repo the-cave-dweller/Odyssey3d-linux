@@ -75,6 +75,7 @@ static const char *kUsage =
     "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
       "                                        muestra y guarda un fotograma leido en Vulkan\n"
     "  odyssey3d ctl notify [--wait N]\n"
+    "  odyssey3d ctl flujo [--uuid ID] [--segundos N]  medir si el compositor manda fotogramas nuevos\n"
     "  odyssey3d ctl overlay [--segundos 12] [--dump F.png] [--titulo T] [--cuerpo T]\n"
     "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
     "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
@@ -1593,6 +1594,68 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
 /* Deja la tarjeta del hub encima de cualquier ventana, incluidas las de pantalla
    completa, y la deja visible un rato. Con --dump guarda el lienzo tal cual se pintó,
    así se puede revisar el dibujo sin mirar la pantalla. */
+/* Mide a qué ritmo manda el compositor fotogramas nuevos de una ventana, sin abrir
+   ninguna ventana nuestra. Sirve para separar dos cosas distintas: que el flujo del
+   compositor se corte, frente a que la imagen se congele dentro de nuestra ventana. */
+static int cmdFlujo(int argc, char **argv) {
+#ifndef HAVE_CAPTURE
+  (void)argc; (void)argv;
+  std::fprintf(stderr, "compilado sin soporte de captura (hace falta libpipewire-0.3 y plasma-wayland-protocols)\n");
+  return 1;
+#else
+  int secs = 12;
+  if (std::string v = flag(argc, argv, "--segundos"); !v.empty()) secs = std::max(2, std::atoi(v.c_str()));
+  std::string uuid;
+  WindowInfo win;
+  bool haveWin = false;
+  if (!pickWindow(argc, argv, uuid, win, haveWin)) return 1;
+
+  std::signal(SIGTERM, onServeSignal);
+  std::signal(SIGINT, onServeSignal);
+
+  std::string err;
+  WindowCapture cap;
+  std::string cls = flag(argc, argv, "--clase");
+  if (!cls.empty()) cap.setStreamClass(cls);
+  if (!cap.start(uuid, &err)) {
+    std::fprintf(stderr, "[flujo] %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("[flujo] midiendo %s | %s\n", win.appId.c_str(), win.title.c_str());
+  std::fflush(stdout);
+
+  auto reloj = [] {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+  };
+  const double inicio = reloj();
+  double ultimo = inicio;
+  uint64_t previo = 0;
+  while (!g_stopServe && reloj() - inicio < (double)secs) {
+    struct pollfd pfd{cap.fd(), POLLIN, 0};
+    ::poll(&pfd, 1, 100);
+    cap.pump();
+    double ahora = reloj();
+    if (ahora - ultimo >= 1.0) {
+      const uint64_t n = cap.frameCount();
+      std::printf("[flujo] %5.1f s  acumulado %6llu  ultimo segundo %4llu  flujo %s\n", ahora - inicio,
+                  (unsigned long long)n, (unsigned long long)(n - previo), cap.stateText().c_str());
+      if (!cap.streamCreated()) std::printf("[flujo] still: %s\n", cap.describe().c_str());
+      std::fflush(stdout);
+      previo = n;
+      ultimo = ahora;
+    }
+  }
+  const uint64_t total = cap.frameCount();
+  const double dur = reloj() - inicio;
+  std::printf("[flujo] %llu fotogramas en %.1f s = %.1f fotogramas por segundo\n", (unsigned long long)total, dur,
+              dur > 0 ? (double)total / dur : 0.0);
+  cap.stop();
+  return total > 0 ? 0 : 1;
+#endif
+}
+
 static int cmdOverlay(int argc, char **argv) {
   int segundos = 12;
   if (std::string v = flag(argc, argv, "--segundos"); !v.empty()) segundos = std::max(1, std::atoi(v.c_str()));
@@ -1806,7 +1869,17 @@ static int cmdServe(int argc, char **argv) {
         idUuid.erase(avisoId);
         avisoId.clear();
       }
-      if (act != "no" && act != "cancel" && act != "close" && hijo < 0) {
+      if (act == "flat") {
+        /* 2D plano NO toca el panel, la lente ni el scaler: si había una sesión 3D abierta,
+           se cierra para devolver el monitor a 2D; si no, no se hace nada. */
+        if (hijo > 0) {
+          std::printf("[serve] 2D plano: cerrando la sesion 3D en curso (%s)\n", hijoUuid.c_str());
+          ::kill(hijo, SIGTERM);
+        } else {
+          std::printf("[serve] 2D plano: se deja el video normal, sin lente ni scaler ni cambio de modo\n");
+        }
+        std::fflush(stdout);
+      } else if (act != "no" && act != "cancel" && act != "close" && hijo < 0) {
         if (dry) {
           std::printf("[serve] (dry) habria lanzado capture3d --uuid %s modo=%s\n", avisoUuid.c_str(), act.c_str());
           std::fflush(stdout);
@@ -1839,7 +1912,10 @@ static int cmdServe(int argc, char **argv) {
         preguntadas.insert(w.uuid);
         const std::string app = strLower(w.appId);
         auto fija = cfg.porApp.find(app);
-        if (fija != cfg.porApp.end()) {
+        if (fija != cfg.porApp.end() && fija->second == "flat") {
+          std::printf("[serve] %s esta marcada como 2D plano: no se hace nada\n", app.c_str());
+          std::fflush(stdout);
+        } else if (fija != cfg.porApp.end()) {
           if (dry) {
             std::printf("[serve] (dry) %s ya está ajustada a %s, no se pregunta\n", app.c_str(), fija->second.c_str());
             std::fflush(stdout);
@@ -1879,6 +1955,10 @@ static int cmdServe(int argc, char **argv) {
             std::fprintf(stderr, "[serve] aviso rechazado: %s\n", err.c_str());
             std::fflush(stderr);
           }
+        } else if (cfg.modo == "flat") {
+          std::printf("[serve] 2D plano: sin lente, scaler ni cambio de modo (%s)\n", w.appId.c_str());
+          std::fflush(stdout);
+          if (unaVez) break;
         } else if (dry) {
           std::printf("[serve] (dry) habria lanzado modo %s por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(),
                       w.title.c_str());
@@ -1939,6 +2019,7 @@ int main(int argc, char **argv) {
     if (sub == "windows") return cmdWindows(argc - 3, argv + 3);
     if (sub == "notify") return cmdNotify(argc - 3, argv + 3);
 #ifdef HAVE_WAYLAND_WM
+    if (sub == "flujo") return cmdFlujo(argc - 3, argv + 3);
     if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);
 #endif
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);

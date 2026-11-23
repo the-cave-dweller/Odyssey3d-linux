@@ -46,6 +46,9 @@ public:
   uint64_t frameCount() const;  /* cuántos fotogramas han llegado */
   bool dmabufOnly() const;      /* el flujo viene en dmabuf (aún no sabemos usarlo) */
 
+  /* Estado de nuestro lado del flujo de PipeWire (error, paused, streaming...). */
+  std::string stateText() const;
+
   /* Último fotograma en memoria, como bytes BGRA (o lo que dé el compositor). */
   bool copyFrame(std::vector<uint8_t> &out, int &w, int &h, int &stride);
   /* Metadatos del último fotograma (para importarlo en OpenGL si viene en dmabuf). */

@@ -92,6 +92,7 @@ odyssey3d serve                        # vigilar ventanas a pantalla completa (e
 odyssey3d ctl overlay                    # enseña la tarjeta de pregunta en la esquina
 odyssey3d ctl windows                    # lista las ventanas y detecta la pantalla completa
 odyssey3d capture3d --uuid <id>        # trama en 3D la ventana que captura KWin
+odyssey3d ctl flujo --uuid <id>        # medir si el compositor manda fotogramas de esa ventana
 ```
 
 Al arrancar, `test` y `play` hacen todo solos: ponen el panel en `3840x2160@120`, escala 1 y
@@ -198,7 +199,9 @@ ni siquiera aparecen). Si el compositor no expone ese protocolo se vuelve al avi
 botón lanza
 `odyssey3d capture3d --uuid …`, que pone lente + scaler + modo del panel y trama en 3D el
 fotograma que captura el propio compositor (**DMA-BUF** de KWin → imagen Vulkan, sin copia por
-CPU).
+CPU). El botón **2D plano no lanza nada**: deja el vídeo tal cual (sin lente, sin scaler y sin cambiar
+el modo del panel) y, si había una sesión 3D abierta, la cierra devolviendo el panel a su modo normal.
+Cuando la ventana del vídeo se cierra, la sesión 3D también se cierra sola.
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
 `espera` (segundos que queda la tarjeta) y `modo` (`ask`, `sbs`, `tb`, `flat`). Si marcada la casilla
@@ -213,6 +216,18 @@ tarjeta:
 3. en `journalctl` debe aparecer `[serve] tarjeta puesta por <app_id> | <título>` y luego
    `[serve] tarjeta -> <modo>`; para probar la tarjeta sin ningún vídeo:
    `odyssey3d ctl overlay --segundos 8` (acepta `--dump CARDEN.png` para volcarla a un archivo).
+
+Si durante una sesión **la imagen se queda congelada**, el visor lo dice en el registro y eso permite
+saber de quién es la culpa:
+
+* `[captura] N s sin fotogramas nuevos del compositor (flujo: streaming)` + la ventana en buen estado
+  → el navegador/reproductor dejó de pintar (suele pasar con vídeos en línea: vuelva a darle play);
+* `(flujo: paused …)` o `el compositor cerró el flujo` → se cortó la captura; el visor reintenta el
+  flujo solo hasta cuatro veces;
+* `la ventana del video cerro` → la sesión se cierra y el panel vuelve a 2D.
+
+Para mirar el flujo sin abrir nada encima: `odyssey3d ctl flujo --uuid <id> --segundos 10` imprime
+cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25).
 
 > KWin 6.8 sólo expone el portal propio de KDE (`zkde_screencast_unstable_v1`, versión 6). Es lo
 > que usa el port; no hay Wlr-Fragment-Capture ni ext-image-copy-capture en este compositor.

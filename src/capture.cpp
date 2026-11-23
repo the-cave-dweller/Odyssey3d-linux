@@ -496,6 +496,13 @@ bool WindowCapture::lastFrame(CapturedFrame &out) const {
   return true;
 }
 
+std::string WindowCapture::stateText() const {
+  std::lock_guard<std::mutex> g(d->mtx);
+  std::string s = d->pwState.empty() ? "sin estado" : d->pwState;
+  if (!d->note.empty()) s += " · " + d->note;
+  return s;
+}
+
 std::string WindowCapture::describe() const {
   std::lock_guard<std::mutex> g(d->mtx);
   std::string s = "nodo PipeWire: " + std::to_string(d->nodeId);
