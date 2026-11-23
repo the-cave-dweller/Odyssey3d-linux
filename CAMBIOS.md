@@ -2,6 +2,36 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La interfaz deja de verse gigante y `Tab` devuelve el ratón al navegador (v0.10)
+- **La interfaz se medía con la regla equivocada.** La escala de la capa salía del alto *físico* del panel
+  partido por 1080, o sea 2, y con el escritorio al 150 % salía todo un 50 % más grande de lo que tocaba.
+  Medido sobre la captura del usuario (3840×2160): la tarjeta del hub medía **1040×432 px**, exactamente los
+  520×216 puntos que dibuja el código multiplicados por 2. Ahora `Hud::begin()` recibe también el alto *lógico*
+  y la escala sale de la relación físico/lógico (recortada a 1..2). Con el DP-4 a 2160 físicos y el escritorio al
+  150 % (1440 lógicos) la escala pasa a **1,5** y la tarjeta a **780×324 px**, verificado midiéndolo en una
+  captura propia. El hub saca el alto lógico de su propia escala fraccional Wayland (`wp_fractional_scale`) y el
+  visor del tamaño de la ventana de GLFW frente al lienzo, y lo dice al arrancar:
+  `[ventana] lienzo 3840x2160, ventana logica 2560x1440: la interfaz se dibuja a escala 1.50`.
+- **`Tab` entrega la pantalla.** El visor es una ventana a pantalla completa (es la única forma de quedar por
+  encima del vídeo a pantalla completa del navegador: KWin 6.8 no sabe excluir ventanas de la captura y GLFW no
+  expone la superficie Wayland para recortar la zona de entrada), así que se queda el ratón y el teclado. Con
+  `Tab` apagamos el 3D del panel y nos minimizamos, y el ratón y el teclado vuelven a lo de detrás; al
+  devolverle el foco se vuelve a poner todo. Verificado con el hardware real, midiendo el panel entre medias:
+  | momento | panel (DP-4) | trazas |
+  |---|---|---|
+  | sesión en marcha | modo 3 (`3840x2160@119.88`) | `[scaler] /dev/sg1: modo 3D activado` |
+  | después de `Tab` | **modo 2 (`3840x2160@164.98`, escala 1,5)** | `[scaler] modo 3D apagado`, `[lente] devuelta a 2D`, `[pantalla] entregada…` |
+  | al devolver el foco | modo 3 otra vez | `[pantalla] recuperada: lente, scaler y modo 3D otra vez puestos` |
+  Volver a la ventana es cosa del escritorio: **`Meta+Alt+Tab`** (el cambio de ventanas que sí lista las
+  minimizadas; el `Alt+Tab` de salto se salta las minimizadas y por eso no funciona) o un clic en la barra de
+  tareas. `ESC` sigue siendo salir de la sesión. El aviso está también en la pastilla (`Tab entrega la
+  pantalla`) y en la ayuda de consola, y mientras estamos minimizados no se traza ningún cuadro.
+- Quitada una pista falsa: **`Ctrl+Shift+2` sólo esconde la pastilla**, no libera el ratón (eso ahora lo hace
+  `Tab`). El texto que lo decía está corregido en la ayuda y en el aviso del navegador.
+- **La tarjeta de «¿qué formato tiene el vídeo?» ya no se repite.** La elección hecha en el hub se pasa al visor
+  con `--sbs` / `--tb` / `--2d`, y con el formato ya decidido el visor no vuelve a pintarla encima del vídeo
+  (antes sí: en la captura del usuario se veían a la vez la tarjeta y la pastilla durante la sesión).
+
 ## El navegador vuelve a pintar y se puede pausar sin quitar la capa (v0.9)
 - **La preferencia que arregla el congelado de YouTube es `gfx.vsync.compositor.unobserve-count = 0`**, no la
   que decíamos antes (`widget.wayland.vsync.keep-firing-at-idle` no existe en este Zen; estaba mal escrita).

@@ -42,6 +42,14 @@ struct VkUi {
   Hud::Hit dragging = Hud::HitNone;
   bool inputChanged = true;  /* forzar cuadro cuando el raton o el teclado se movieron */
   int fbW = 0, fbH = 0;
+  int logH = 0;            /* alto logico de la ventana (el que ve el escritorio), para la interfaz */
+  /* Entregar la pantalla: con Tab nos minimizamos y apagamos el 3D del panel, y el navegador
+     vuelve a estar accesible con el raton. Al recuperar el foco (Meta+Alt+Tab o la barra de tareas)
+     volvemos a poner el 3D. entregada=verdadero mientras estamos aparte. */
+  bool entregar = false, entregada = false, recuperar = false;
+  GLFWwindow *win = nullptr;
+  Rig *rig = nullptr;
+  const ViewerOpts *opts = nullptr;
   /* El visor se queda el teclado y el raton de la pantalla (por eso el navegador deja de
      responder): para poder pausar el video sin quitar la capa hablamos con el reproductor
      MPRIS del navegador. mediaPausaManual evita reanudar un video que el usuario pauso a proposito. */
@@ -127,6 +135,15 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
   }
 }
 
+/* El compositor nos avisa cuando esta ventana vuelve a tener el foco. Si nos fuimos con Tab,
+   aqui es donde hay que volver a encender la lente, el scaler y el modo 3D del panel. */
+void onFocusVK(GLFWwindow *win, int enfocado) {
+  VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
+  if (!ui) return;
+  ui->inputChanged = true;
+  if (enfocado && ui->entregada) ui->recuperar = true;
+}
+
 void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
@@ -135,6 +152,14 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (key == GLFW_KEY_ESCAPE) {
     ui->quit = true;
     glfwSetWindowShouldClose(win, GLFW_TRUE);
+    return;
+  }
+  /* Tab: entregar la pantalla. Somos una ventana a pantalla completa por encima de todo, asi
+     que el unico modo de usar el raton sobre el navegador es irnos nosotros: nos minimizamos y
+     apagamos el 3D del panel. Al volver a mirar esta ventana (Meta+Alt+Tab o la barra de tareas) el
+     bucle vuelve a poner el 3D. ESC sigue siendo la salida definitiva. */
+  if (key == GLFW_KEY_TAB) {
+    if (!ui->entregada && !ui->entregar) ui->entregar = true;
     return;
   }
   /* atajos del hub oficial: Ctrl+Shift+1 3D · 2 superposición · 3/4 profundidad · 5/6 relieve */
@@ -157,7 +182,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (key == GLFW_KEY_P || key == GLFW_KEY_SPACE) {
     if (!ui->media || !ui->media->playerFound()) {
       std::printf("[video] no hay ningun reproductor MPRIS en sesion: el navegador tendra que"
-                  " pausarse a mano (Ctrl+Shift+2 quita la capa y deja usar el raton)\n");
+                  " pausarse a mano, o pulsar Tab para quedarse con el raton y el navegador)\n");
       return;
     }
     std::string antes, despues, e;
@@ -343,17 +368,35 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   VkUi ui;
   ui.fbW = fbW;
   ui.fbH = fbH;
+  /* El tamano de la interfaz se mide en los puntos logicos del escritorio, no en los pixeles del
+     panel: con 3840x2160 y el escritorio al 150% el alto logico son 1440, y tomando 2160 la
+     pastilla y la tarjeta salian la mitad mas grandes de lo normal. */
+  {
+    int lw = 0, lh = 0;
+    glfwGetWindowSize(win, &lw, &lh);
+    if (lh <= 0) lh = (int)std::lround((float)fbH / std::max(0.25f, sx));
+    ui.logH = lh;
+    std::printf("[ventana] lienzo %dx%d, ventana logica %dx%d: la interfaz se dibuja a escala %.2f\n", fbW, fbH, lw,
+                lh, lh > 0 ? (double)fbH / (double)lh : 1.0);
+  }
+  ui.win = win;
+  ui.rig = &rig;
+  ui.opts = &opts;
   ui.tune.weave = !opts.no3d;
   ui.tune.topBottom = opts.topBottom;
   ui.tune.align = (float)opts.align;
   ui.tune.pitch = (float)opts.pitch;
   ui.hud.state().weaveOn = ui.tune.weave;
-  ui.hud.state().ask = (kind == SourceKind::Capture) && !opts.noHud;
+  /* La tarjeta de "que formato tiene el video" solo sirve si nadie lo eligio antes: si el hub
+     o la linea de ordenes ya lo dijeron (--sbs, --tb, --2d), no la volvemos a pintar encima
+     del video. */
+  ui.hud.state().ask = (kind == SourceKind::Capture) && !opts.noHud && !opts.fmtGiven;
   ui.hud.state().overlayOn = !opts.noHud;
   glfwSetWindowUserPointer(win, &ui);
   glfwSetKeyCallback(win, onKeyVK);
   glfwSetCursorPosCallback(win, onCursorVK);
   glfwSetMouseButtonCallback(win, onButtonVK);
+  glfwSetWindowFocusCallback(win, onFocusVK);
   /* cursor visible, como en el hub oficial */
   GLFWcursor *arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
   if (arrow) glfwSetCursor(win, arrow);
@@ -497,7 +540,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("\n  teclas  ESC salir · 3 2D/3D · F invertir profundidad · ←/→ fase · RePag/SavPg paso de lente\n"
               "          ↑/↓ crosstalk · , . pendiente de filtro · 9/0 convergencia · 8 reiniciar ajuste\n");
   std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n");
-  std::printf("          P o espacio  pausa o reanuda el video · Ctrl+Shift+2 quita la capa para usar el raton\n");
+  std::printf("          P o espacio  pausa o reanuda el video · Tab entrega la pantalla al navegador (nos\n");
+  std::printf("          minimizamos y el panel vuelve a 2D; Meta+Alt+Tab o un clic en la barra de tareas la\n          "
+              "devuelve y el 3D se reanuda solo\n");
   std::printf("          teclas sueltas  3 sin tramado (2D) · F invierte los ojos · flechas fase, paso y crosstalk\n\n");
   std::fflush(stdout);
 
@@ -513,6 +558,39 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.quit = true;
     }
     glfwPollEvents();
+    /* Entregar y recuperar la pantalla (Tab). Somos una ventana a pantalla completa por encima
+       del navegador, asi que la unica forma de que el raton llegue al video es irnos nosotros:
+       apagamos el 3D del panel y nos minimizamos. Mientras estamos aparte no tiene sentido
+       seguir trazando cuadros, y al volver a recibir el foco se enciende todo otra vez. */
+    if (ui.entregar) {
+      ui.entregar = false;
+      ui.entregada = true;
+      rig.shutDown();
+      glfwIconifyWindow(win);
+      std::printf("[pantalla] entregada: el panel vuelve a su modo normal y esta ventana se minimiza."
+                  "  Vuelve a ella con Meta+Alt+Tab (el cambio de ventanas que tambien muestra las minimizadas)"
+                  " o con un clic en la barra de tareas, y el 3D se pone solo\n");
+      std::fflush(stdout);
+      continue;
+    }
+    if (ui.recuperar) {
+      ui.recuperar = false;
+      if (!ui.entregada) continue;
+      ui.entregada = false;
+      rig.bringUp(opts);
+      glfwGetFramebufferSize(win, &fbW, &fbH);
+      ui.fbW = fbW;
+      ui.fbH = fbH;
+      if (!wv.resize(fbW, fbH))
+        std::fprintf(stderr, "[vulkan] al recuperar la pantalla el intercambio no se rehizo\n");
+      std::printf("[pantalla] recuperada: lente, scaler y modo 3D otra vez puestos\n");
+      std::fflush(stdout);
+      continue;
+    }
+    if (ui.entregada) {
+      glfwWaitEventsTimeout(0.12); /* esperando que alguien nos devuelva el foco */
+      continue;
+    }
     double now = glfwGetTime();
     if (opts.segundos > 0 && now - t0 >= (double)opts.segundos) {
       std::printf("[sesion] %d segundos cumplidos, saliendo con la secuencia normal\n", opts.segundos);
@@ -681,7 +759,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.extraHasta = 0.0;
     }
     ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo));
-    ui.hud.begin(fbW, fbH);
+    ui.hud.begin(fbW, fbH, (float)ui.logH);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
 

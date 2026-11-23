@@ -1190,8 +1190,9 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--no-panel") o.noPanel = true;
     else if (a == "--no-lens") o.noLens = true;
     else if (a == "--no-scaler") o.noScaler = true;
-    else if (a == "--2d") o.no3d = true;
-    else if (a == "--tb" || a == "--top-bottom") o.topBottom = true;
+    else if (a == "--2d") { o.no3d = true; o.fmtGiven = true; }
+    else if (a == "--tb" || a == "--top-bottom") { o.topBottom = true; o.fmtGiven = true; }
+    else if (a == "--sbs" || a == "--side-by-side") o.fmtGiven = true;
     else if (a == "--sin-interfaz") o.noHud = true;
     else if (a == "--sin-borde") o.borderless = true;
     else if (a == "--siempre") o.alwaysRender = true;
@@ -1594,6 +1595,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
+  if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
   std::vector<char *> av;

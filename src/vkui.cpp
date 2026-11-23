@@ -246,13 +246,18 @@ void Hud::toggleOverlay() { st_.overlayOn = !st_.overlayOn; }
 void Hud::nudgeDepth(int d) { st_.depth = std::max(0, std::min(100, st_.depth + d)); }
 void Hud::nudgePopout(int d) { st_.popout = std::max(-50, std::min(50, st_.popout + d)); }
 
-void Hud::begin(int w, int h) {
+void Hud::begin(int w, int h, float altoLogico) {
   v_.clear();
   W_ = w;
   H_ = h;
-  /* la pastilla se Calcula en un lienzo virtual de ~1080 px de alto y luego se escala,
-     asi en el panel a 3840x2160 conserva el tamaño relativo de la aplicacion oficial */
-  sc_ = std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
+  /* La interfaz se mide en puntos logicos del escritorio y luego se escala al pixel real del
+     panel. Antes el escalon salia del alto fisico (2160 -> x2), y con el escritorio al 150% la
+     tarjeta y la pastilla salian la mitad mas grandes de lo que se ve en cualquier ventana.
+     Con el alto logico a la vista el escalon es simplemente la relacion de pixeles: 1,5 aqui.
+     Si nadie lo pasa, se conserva el criterio viejo de un lienzo de ~1080 px de alto. */
+  const float relacion = altoLogico > 0.0f ? (float)h / altoLogico : 0.0f;
+  sc_ = relacion > 0.25f ? std::max(1.0f, std::min(2.0f, relacion))
+                         : std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
   const int vw = (int)std::lround((float)w / sc_), vh = (int)std::lround((float)h / sc_);
   if (!st_.overlayOn && !st_.ask) return;
 
@@ -284,6 +289,9 @@ void Hud::begin(int w, int h) {
          ink[2], 1.0f);
     text("Ctrl+Shift+1", btn3D_.x, btn3D_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
     text("Ctrl+Shift+2", btnOv_.x, btnOv_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+    /* el aviso de Tab va en la pastilla: es la tecla que deja el raton y el teclado libres para
+       lo que hay detras (nos minimizamos y el panel vuelve a 2D) */
+    text("Tab  entrega la pantalla", btnOv_.x + 76.0f, btnOv_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
 
     auto slider = [&](Rect *track, Rect *knob, const char *label, const char *keys, float frac, const char *value) {
       float tx = track->x, ty = track->y;

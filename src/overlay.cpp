@@ -234,13 +234,18 @@ struct Overlay::Impl {
 
   /* ---------- dibujo de la tarjeta ---------- */
 
+  /* Alto del escritorio en puntos logicos. El monitor es 3840x2160 fisicos pero con la escala
+     del escritorio al 150% el escritorio mide 1440 de alto: la tarjeta se mide ahi, si no sale
+     un 50% mas grande que cualquier ventana normal. */
+  float altoLogico() const { return (float)altoE / (escala > 0.25 ? escala : 1.0); }
+
   void pintar() {
     if (bufAncho <= 0 || bufAlto <= 0) return;
     if (supAncho <= 0) supAncho = bufAncho;
     if (supAlto <= 0) supAlto = bufAlto;
     liberaBloques(false);
     /* la disposición es determinista: misma ventana, misma tarjeta, mismos píxeles */
-    hud.begin(anchoE, altoE);
+    hud.begin(anchoE, altoE, altoLogico());
     std::vector<HudVertex> vv = hud.vertices();
 
     const size_t npx = (size_t)bufAncho * (size_t)bufAlto;
@@ -691,7 +696,7 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
   s.hud.state().ask = true;
   s.hud.state().overlayOn = false;
   s.hud.setAskText(s.titulo, s.cuerpo);
-  s.hud.begin(s.anchoE, s.altoE);
+  s.hud.begin(s.anchoE, s.altoE, s.altoLogico());
 
   float ax = 0, ay = 0, aw = 0, ah = 0;
   if (!s.hud.askBounds(&ax, &ay, &aw, &ah)) return;

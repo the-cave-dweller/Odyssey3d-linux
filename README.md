@@ -124,6 +124,8 @@ mismo fotograma:
 | tecla | efecto |
 |-------|--------|
 | `ESC` | salir (restaura panel, apaga lente y scaler) |
+| `Tab` | **entregar la pantalla**: apaga el 3D del panel y minimiza esta ventana, así que el ratón y el teclado vuelven a lo de detrás. Devolverle el foco (`Meta+Alt+Tab`, que sí lista las minimizadas, o un clic en la barra de tareas) vuelve a poner lente, scaler y modo 3D |
+| `P` | pausar / reanudar el vídeo del navegador (por MPRIS, sin quitar la capa) |
 | `3` | pase 2D (sin tramar) / 3D |
 | `F` | invertir profundidad (si se ve pseudoscópico: lo de dentro fuera) |
 | `←` `→` | fase de la trama (±0.002 ciclos) |
@@ -133,7 +135,7 @@ mismo fotograma:
 | `9` `0` | convergencia horizontal (∓0.0005) |
 | `8` | reiniciar el ajuste a los valores nominales |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
-| `Ctrl+Shift+2` | ocultar / mostrar la capa de la interfaz |
+| `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`) |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
 | `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |
 | `espacio`, `-`, `=`, `[`, `]` | pausa, ±5 s, cuadro a cuadro (en `play`) |

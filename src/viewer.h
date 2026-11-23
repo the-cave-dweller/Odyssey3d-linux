@@ -24,6 +24,7 @@ struct ViewerOpts {
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */
+  bool fmtGiven = false;   /* el formato ya lo eligio el hub: no hace falta volver a preguntar */
   bool noHud = false;
   bool cpuPattern = false;   /* patron de prueba generado en la CPU (para comparar GL y Vulkan) */
   double eyeX = 0.0;       /* cm */

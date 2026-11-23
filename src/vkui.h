@@ -60,7 +60,10 @@ public:
   }
 
   /* ---- cuadro de la superposición y pruebas de golpe de ratón ---- */
-  void begin(int w, int h);            /* limpia y calcula la disposición */
+  /* altoLogico: alto de la pantalla en puntos logicos (los que ve el escritorio). Con un panel
+     a 3840x2160 y el escritorio al 150% son 1440: la interfaz se mide ahi y no en los 2160
+     fisicos; si no, la tarjeta y la pastilla salen un 50% mas grandes de lo razonable. */
+  void begin(int w, int h, float altoLogico = 0.0f);  /* limpia y calcula la disposición */
   const std::vector<HudVertex> &vertices() const { return v_; }
   int vertexCount() const { return (int)v_.size(); }
   Hit hit(float mx, float my) const;
