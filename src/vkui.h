@@ -80,6 +80,8 @@ public:
   void dragTo(Hit which, float mx);    /* arrastre sobre un control deslizante */
   void toggle3D();
   void toggleOverlay();
+  /* la pastilla a la vista sin más (PB, o el raton en el rincon de arriba a la derecha) */
+  void showOverlay() { st_.overlayOn = true; }
   void nudgeDepth(int delta);
   void nudgePopout(int delta);
   /* el raton llega en pixeles reales de la ventana y se pasa al espacio virtual */
@@ -106,6 +108,9 @@ public:
     return true;
   }
   bool pillBounds(float *x, float *y, float *w, float *h) const;
+  /* La punta derecha de la caja que ocuparia la pastilla, aun estando ocultada. Es el rincon que
+     el visor deja pinchable para que el raton pueda devolver la pastilla sin usar el teclado. */
+  bool huecoDeLaPastilla(float *x, float *y, float *w, float *h) const;
 
 private:
   struct Glyph {

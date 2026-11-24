@@ -475,6 +475,22 @@ bool Hud::pillBounds(float *x, float *y, float *w, float *h) const {
   return true;
 }
 
+bool Hud::huecoDeLaPastilla(float *x, float *y, float *w, float *h) const {
+  /* La punta derecha de donde esta la pastilla, o de donde estaba si esta ocultada. Con la
+     pastilla oculta por Ctrl+Shift+2 la region de entrada del visor se quedaba vacia: sin region
+     no llega ni un movimiento del puntero y no habia forma de hacer volver la pastilla sin
+     teclado. Dejamos este rinconcito pinchable y el visor lo vigila: en cuanto entra el puntero,
+     la pastilla reaparece sola. */
+  if (pillPanel_.w <= 0.0f) return false;
+  const float ancho = 170.0f * sc_;
+  const float der = (pillPanel_.x + pillPanel_.w) * sc_;
+  if (x) *x = der - ancho;
+  if (y) *y = pillPanel_.y * sc_;
+  if (w) *w = ancho;
+  if (h) *h = pillPanel_.h * sc_;
+  return true;
+}
+
 Hud::Hit Hud::hit(float mxa, float mya) const {
   const float mx = mxa / sc_, my = mya / sc_;
   if (st_.ask) {

@@ -164,6 +164,7 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 |-------|--------|
 | `ESC` | salir (restaura panel, apaga lente y scaler) |
 | `Tab` | **entregar la pantalla**: apaga el 3D del panel y minimiza esta ventana, así que el ratón y el teclado vuelven a lo de detrás. Devolverle el foco (`Meta+Alt+Tab`, que sí lista las minimizadas, o un clic en la barra de tareas) vuelve a poner lente, scaler y modo 3D |
+| `PB` (Pausa/Break) | **la pastilla siempre a la vista** (desde v0.23): si estaba ocultada vuelve, y si el gestor de ventanas nos minimizó la ventana, se devuelve. Si el foco lo tiene el vídeo la tecla no llega al visor: ata `odyssey3d ctl aparece` a un atajo global (abajo, en «El ratón atraviesa el visor») |
 | `P` | pausar / reanudar el vídeo del navegador (por MPRIS, sin quitar la capa) |
 | `3` | pase 2D (sin tramar) / 3D |
 | `F` | invertir profundidad (si se ve pseudoscópico: lo de dentro fuera) |
@@ -176,7 +177,7 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `9` `0` | convergencia horizontal (∓0.0005) |
 | `8` | reiniciar el ajuste a los valores nominales |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
-| `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`) |
+| `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
 | `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |
 | `Ctrl+Shift+7` `8` | achican / agrandan la pastilla (0,5× … 3×, útil al pasar del escritorio al modo 3D) |
@@ -243,6 +244,29 @@ Dos detalles:
 Con `--sin-pasar-raton` la ventana vuelve a quedarse todos los clics, que era el comportamiento hasta v0.21.
 Sobre X11 no hay regiones de entrada: el visor se queda los clics y lo avisa
 (`[raton] el compositor no dio wl_compositor: el visor seguira tragando los clics`).
+
+### La pastilla vuelve siempre (tecla `PB`, desde v0.23)
+
+* **`PB`** (la tecla Pausa/Break): la pastilla a la vista aunque estuviera ocultada, ventana devuelta si el
+  gestor de ventanas la minimizó, y el foco pedido para el visor.
+* **Un rincón que siempre se pica.** Con la pastilla ocultada la región de entrada quedaba vacía, así que el
+  puntero no tenía forma de llamarla de vuelta. Ahora queda la punta derecha de su sitio de siempre
+  (170 × 84 px de ventana) y en cuanto el puntero entra ahí la pastilla reaparece sola
+  (`[pastilla] el puntero llego al rincon de arriba a la derecha: la pastilla vuelve`).
+* **El servicio vigila la ventana.** Si hay una sesión abierta y su ventana aparece minimizada sin que `Tab`
+  la haya entregado, el servicio le ordena al compositor que la devuelva
+  (`[ventana] el gestor minimizo el visor: lo devolvemos`). El visor anuncia sus minimizaciones voluntarias
+  escribiendo `~/.local/state/odyssey3d/entregada` con su número de proceso —mientras ese proceso viva, el
+  servicio deja la ventana escondida todo el tiempo que quieras—. Esto es lo que corta el caso de «la imagen se
+  esfumó y el monitor se quedó en malla 3D»: la trama vuelve, o se sale con `ESC` y queda todo restaurado.
+
+Si el foco lo tiene el vídeo, `PB` no le llega al visor (el teclado se lo queda la ventana activa). Para que la
+tecla funcione desde cualquier ventana, ata un atajo global: **Ajustes del sistema → Atajos de teclado → Añadir
+nueva… → acción personalizada**, con nombre «traer la pastilla», comando
+`/usr/local/bin/odyssey3d ctl aparece`, y como disparador pulsar `Pausa`. Este Protocolo de KWin no trae orden
+de activar ventanas, así que la ventana vuelve a la vista pero sin el foco; un clic en la pastilla devuelve el
+mando al visor. Por consola se prueba con `odyssey3d ctl aparece`, y se puede jugar con el estado de cualquier
+ventana en `ctl ventana [minimizar|aparecer] --uuid …`.
 
 ## Servicio que arranca con la sesión
 

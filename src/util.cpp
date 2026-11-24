@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
@@ -72,6 +73,20 @@ bool readSmallFile(const std::string &path, std::string &out) {
 std::string rutaConfigOdyssey(const char *nombre) {
   const char *home = std::getenv("HOME");
   return std::string(home ? home : "/home") + "/.config/odyssey3d/" + nombre;
+}
+
+std::string rutaEstadoOdyssey(const char *nombre) {
+  const char *xdg = std::getenv("XDG_STATE_HOME");
+  std::string dir;
+  if (xdg && *xdg)
+    dir = std::string(xdg) + "/odyssey3d";
+  else {
+    const char *home = std::getenv("HOME");
+    dir = std::string(home ? home : "/home") + "/.local/state/odyssey3d";
+  }
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(dir), ec);
+  return dir + "/" + nombre;
 }
 
 std::string rutaRedNuestra() {

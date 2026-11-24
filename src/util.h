@@ -19,6 +19,9 @@ bool readSmallFile(const std::string &path, std::string &out);
    1 = la red de Samsung (mde_*.onnx), 2 = la nuestra (depth_anything_v2_small.onnx).
    leerRedPreferida() devuelve 0 si todavia no se eligio ninguna. */
 std::string rutaConfigOdyssey(const char *nombre);
+/* Ruta dentro de ~/.local/state/odyssey3d: lo que esta pasando ahora mismo (la instantanea del
+   panel, la senal de que entregamos la pantalla a proposito), no una preferencia. */
+std::string rutaEstadoOdyssey(const char *nombre);
 int leerRedPreferida();
 void grabarRedPreferida(int red);
 /* Ruta por convencion de la red nuestra (la que baja tools/descargar-modelo.sh). */

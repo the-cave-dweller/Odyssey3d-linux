@@ -71,7 +71,8 @@ static const char *kUsage =
     "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
     "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry]\n"
     "  odyssey3d ctl windows [--watch]\n"
-    "  odyssey3d ctl ventana [fullscreen|normal|maximizar|cerrar] [--uuid ID]  como esta la ventana del video\n"
+    "  odyssey3d ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|cerrar] [--uuid ID]  como esta la ventana del video\n"
+    "  odyssey3d ctl aparece   la ventana del visor otra vez a la vista (para atarla a la tecla PB)\n"
     "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
@@ -1468,6 +1469,14 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.toggleOverlay();
   std::printf("  boton capa: superposicion %s -> %s\n", o0 ? "visible" : "oculta",
               hud.state().overlayOn ? "visible" : "oculta");
+  /* con la capa ocultada tiene que quedar un rincon pinchable en su sitio de siempre, si no, el que
+     la oculto desde el video ya no tiene forma de traerla */
+  float hx = 0.0f, hy = 0.0f, hw = 0.0f, hh = 0.0f;
+  const bool rincon = hud.huecoDeLaPastilla(&hx, &hy, &hw, &hh);
+  std::printf("  rincon para traer la pastilla de vuelta: %.0f,%.0f %.0fx%.0f  %s\n", (double)hx, (double)hy,
+              (double)hw, (double)hh, (rincon && hw >= 40.0f && hh >= 20.0f) ? "vale" : "NO VALE");
+  hud.showOverlay();
+  std::printf("  la pastilla vuelve con la tecla PB: %s\n", hud.state().overlayOn ? "si" : "no");
   return 0;
 }
 
@@ -1736,9 +1745,13 @@ static int cmdVentana(int argc, char **argv) {
   if (!std::strcmp(act, "fullscreen")) ok = wm.setState(u, WindowInfo::Fullscreen, true, &err);
   else if (!std::strcmp(act, "normal")) ok = wm.setState(u, WindowInfo::Fullscreen, false, &err);
   else if (!std::strcmp(act, "maximizar")) ok = wm.setState(u, WindowInfo::Maximized, true, &err);
+  /* aparecer: quitar la minimizada. Es lo que hace `ctl aparece` sobre la ventana del visor, y
+     sirve para atar la tecla PB a un atajo global del escritorio. */
+  else if (!std::strcmp(act, "aparecer")) ok = wm.setState(u, WindowInfo::Minimized, false, &err);
+  else if (!std::strcmp(act, "minimizar")) ok = wm.setState(u, WindowInfo::Minimized, true, &err);
   else if (!std::strcmp(act, "cerrar")) ok = wm.close(u, &err);
   else {
-    std::fprintf(stderr, "uso: ctl ventana [fullscreen|normal|maximizar|cerrar] [--uuid ID]\n");
+    std::fprintf(stderr, "uso: ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|cerrar] [--uuid ID]\n");
     return 2;
   }
   if (!ok) {
@@ -1751,6 +1764,49 @@ static int cmdVentana(int argc, char **argv) {
     std::printf("estado ahora: %s\n", WindowInfo::stateList(desp.states).c_str());
   else
     std::printf("la ventana ya no está\n");
+  return 0;
+}
+
+/* ctl aparece: la ventana del visor otra vez a la vista, tenga el foco quien lo tenga. Es la
+   respuesta a la tecla PB cuando el que manda es el video: ninguna tecla nuestra le llega al
+   visor, pero el hub si puede ordenarle al compositor que devuelva la ventana. Se puede atar a un
+   atajo global del escritorio (Ajustes del sistema -> Atajos de teclado -> accion nueva) con el
+   comando `odyssey3d ctl aparece`. */
+static int cmdAparece(int, char **) {
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "[aparece] %s\n", err.c_str());
+    return 1;
+  }
+  wm.settle();
+  WindowInfo nuestra{};
+  bool encontrada = false;
+  for (const WindowInfo &w : wm.windows()) {
+    if (w.appId != "odyssey3d" || w.title != "Odyssey 3D") continue;  /* el visor, no la tarjeta */
+    nuestra = w;
+    encontrada = true;
+  }
+  if (!encontrada) {
+    std::fprintf(stderr, "[aparece] no hay ninguna sesion del visor abierta\n");
+    return 1;
+  }
+  if (!nuestra.minimized()) {
+    std::printf("[aparece] la ventana del visor ya estaba a la vista (%s)\n",
+                WindowInfo::stateList(nuestra.states).c_str());
+    return 0;
+  }
+  if (!wm.setState(nuestra.uuid, WindowInfo::Minimized, false, &err)) {
+    std::fprintf(stderr, "[aparece] %s\n", err.c_str());
+    return 1;
+  }
+  wm.settle(120, 12);
+  WindowInfo desp;
+  if (wm.find(nuestra.uuid, desp) && desp.minimized()) {
+    std::fprintf(stderr, "[aparece] el compositor no quiso devolver la ventana: prueba con la barra de tareas\n");
+    return 1;
+  }
+  std::printf("[aparece] la ventana del visor vuelve a la vista\n");
   return 0;
 }
 
@@ -2012,6 +2068,8 @@ static int cmdServe(int argc, char **argv) {
   double tarjetaT = 0.0;
   pid_t hijo = -1;
   std::string hijoUuid;
+  double intentoAparecer = 0.0;   /* cuando intentamos por ultima vez devolver la ventana minimizada */
+  bool avisoAparecerHecho = false;
 
   nt.setOnAction([&](const std::string &id, const std::string &action) {
     auto it = idUuid.find(id);
@@ -2094,6 +2152,40 @@ static int cmdServe(int argc, char **argv) {
         std::fflush(stdout);
         hijo = -1;
         hijoUuid.clear();
+      }
+    }
+
+    /* Si el gestor de ventanas minimiza la ventana del visor (Meta+F9, un clic en la barra de
+       tareas, un gesto del touchpad) la trama desaparece, pero el monitor se queda en modo 3D y ya
+       nadie puede mandar sobre la pastilla: la devolvemos nosotros. La unica minimizacion que
+       dejamos en paz es la nuestra, la de Tab, que el visor avisa escribiendo
+       ~/.local/state/odyssey3d/entregada con su numero de proceso. */
+    if (hijo > 0) {
+      for (const WindowInfo &w : wm.windows()) {
+        if (w.appId != "odyssey3d" || w.title != "Odyssey 3D") continue;   /* el visor, no la tarjeta */
+        if (!w.minimized()) { avisoAparecerHecho = false; break; }
+        std::string marca;
+        bool nuestra = readSmallFile(rutaEstadoOdyssey("entregada"), marca);
+        if (nuestra) {
+          /* el aviso solo vale mientras el proceso que lo escribio siga vivo: un portazo a mitad
+             no puede dejar al hub con la ventana escondida para siempre */
+          const long pid = std::atol(marca.c_str());
+          nuestra = pid > 0 && ::kill((pid_t)pid, 0) == 0;
+        }
+        if (nuestra) break;                     /* entregamos la pantalla a proposito */
+        if (now - intentoAparecer < 2.0) break; /* sin avisar cada dos por tres */
+        intentoAparecer = now;
+        std::string e3;
+        const bool pudo = wm.setState(w.uuid, WindowInfo::Minimized, false, &e3);
+        if (!avisoAparecerHecho) {
+          avisoAparecerHecho = true;
+          std::printf("[ventana] %s\n", pudo
+              ? "el gestor de ventanas minimizo el visor: lo devolvemos. Para estar aparte usa Tab"
+                " (y ESC para salir del todo)"
+              : ("el visor esta minimizado y el compositor no lo devolvio: " + e3).c_str());
+          std::fflush(stdout);
+        }
+        break;
       }
     }
 
@@ -2322,6 +2414,7 @@ int main(int argc, char **argv) {
     if (sub == "video") return cmdVideo(argc - 3, argv + 3);
     if (sub == "flujo") return cmdFlujo(argc - 3, argv + 3);
     if (sub == "ventana") return cmdVentana(argc - 3, argv + 3);
+    if (sub == "aparece") return cmdAparece(argc - 3, argv + 3);
     if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);
 #endif
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);

@@ -40,10 +40,13 @@ struct wl_region;
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <unistd.h>
 
 static void vkGlfwError(int code, const char *desc) { std::fprintf(stderr, "[glfw %d] %s\n", code, desc); }
 
@@ -64,6 +67,11 @@ struct RegionEntrada {
                                        tambien tiene una firma vacia y hay que mandarla igual. */
   bool avisoImpreso = false;               /* la explicacion del teclado solo se dice una vez */
   bool activo = false;
+  /* El rincon que dejamos pinchable cuando la pastilla esta ocultada, en pixeles de la ventana.
+     Sin ninguna caja en la region no llega ni un movimiento del puntero y la pastilla ya no
+     vuelve sola: con este hueco el puntero puede entrarlo y la pastilla reaparece. */
+  float hogar[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  bool hayHogar = false;
 };
 
 struct VkUi {
@@ -198,6 +206,18 @@ void onFocusVK(GLFWwindow *win, int enfocado) {
   if (enfocado && ui->entregada) ui->recuperar = true;
 }
 
+/* Le avisamos al hub de que la minimizacion es nuestra (Tab), para que no nos devuelva la ventana.
+   El hub mira ademas que este proceso siga vivo, asi que un portazo a mitad no deja el aviso
+   eternamente. Mientras no exista ese archivo, una ventana del visor minimizada es un accidente. */
+void escribirEntregada() {
+  std::ofstream os(rutaEstadoOdyssey("entregada"), std::ios::trunc);
+  if (os) os << (long)::getpid() << "\n";
+}
+void borrarEntregada() {
+  std::error_code ec;
+  std::filesystem::remove(rutaEstadoOdyssey("entregada"), ec);
+}
+
 void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
@@ -214,6 +234,21 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      bucle vuelve a poner el 3D. ESC sigue siendo la salida definitiva. */
   if (key == GLFW_KEY_TAB) {
     if (!ui->entregada && !ui->entregar) ui->entregar = true;
+    return;
+  }
+  /* PB (Pausa / Alto): la pastilla siempre a la vista. Si esta ocultada vuelve, y si el gestor de
+     ventanas nos minimizo nos devolvemos nosotros. Cuando el foco lo tiene el video esta tecla no
+     nos llega a nosotros: ahi la responde el hub con `ctl aparece`, que se puede atar a la misma
+     tecla como atajo global del escritorio. */
+  if (key == GLFW_KEY_PAUSE) {
+    const bool estabaCiega = !ui->hud.overlayVisible();
+    ui->hud.showOverlay();
+    if (glfwGetWindowAttrib(win, GLFW_ICONIFIED)) glfwRestoreWindow(win);
+    glfwFocusWindow(win);
+    ui->inputChanged = true;
+    std::printf("[tecla] PB: %s\n", estabaCiega ? "la pastilla vuelve a la vista"
+                                                : "la pastilla ya estaba a la vista, ventana al frente");
+    std::fflush(stdout);
     return;
   }
   /* atajos del hub oficial: Ctrl+Shift+1 3D · 2 superposición · 3/4 profundidad · 5/6 relieve
@@ -396,6 +431,20 @@ void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dej
     cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
     n++;
   }
+  re->hayHogar = false;
+  /* Con la pastilla ocultada (Ctrl+Shift+2) no quedaba ninguna caja en la region: sin region no
+     llega ni un movimiento del puntero, y el que la oculto desde el video (que tiene el foco) ya
+     no tenia forma de traerla. Dejamos pinchada la punta derecha de su sitio de siempre: el puntero
+     que entra ahi la devuelve, y el clic ademas le devuelve el teclado al visor. */
+  if (!pleno && n == 0 && ui->hud.huecoDeLaPastilla(&px, &py, &pw, &ph)) {
+    re->hogar[0] = px;
+    re->hogar[1] = py;
+    re->hogar[2] = pw;
+    re->hogar[3] = ph;
+    re->hayHogar = true;
+    cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
+    n++;
+  }
   std::string firma;
   char pedazo[48];
   if (pleno) firma = "la ventana entera";
@@ -418,8 +467,9 @@ void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dej
   std::printf("[raton] %s · region de entrada:%s\n",
               pleno ? (dejarPasar ? "arrastrando: el raton se queda en el visor"
                                   : "el visor se queda todos los clics (--sin-pasar-raton)")
-                    : (n ? "el raton atraviesa el visor fuera de la pastilla"
-                         : "la pastilla esta oculta: el raton pasa entero"),
+                    : (re->hayHogar ? "pastilla oculta: solo se pica su rincon de arriba a la derecha"
+                                    : (n ? "el raton atraviesa el visor fuera de la pastilla"
+                                         : "sin pastilla ni aviso: el raton pasa entero")),
               firma.empty() ? " ninguna" : (" " + firma).c_str());
   if (!re->avisoImpreso) {
     re->avisoImpreso = true;
@@ -1122,6 +1172,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     if (ui.entregar) {
       ui.entregar = false;
       ui.entregada = true;
+      escribirEntregada();
       rig.shutDown();
       glfwIconifyWindow(win);
       std::printf("[pantalla] entregada: el panel vuelve a su modo normal y esta ventana se minimiza."
@@ -1134,6 +1185,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.recuperar = false;
       if (!ui.entregada) continue;
       ui.entregada = false;
+      borrarEntregada();
       rig.bringUp(opts);
       glfwGetFramebufferSize(win, &fbW, &fbH);
       ui.fbW = fbW;
@@ -1444,6 +1496,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.extraHasta = 0.0;
     }
     ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo, ui.convInfo));
+    /* La pastilla ocultada vuelve sola en cuanto el puntero entra en el rincon que dejamos
+       pinchable. Hace falta porque el que la oculto suele estar manejando el video: el foco lo
+       tiene el navegador y ninguna tecla nuestra le llega, asi que el raton es la unica puerta. */
+    if (ui.region.hayHogar && !ui.hud.overlayVisible() && ui.mx >= 0.0 &&
+        ui.mx >= ui.region.hogar[0] && ui.mx <= ui.region.hogar[0] + ui.region.hogar[2] &&
+        ui.my >= ui.region.hogar[1] && ui.my <= ui.region.hogar[1] + ui.region.hogar[3]) {
+      ui.hud.showOverlay();
+      std::printf("[pastilla] el puntero llego al rincon de arriba a la derecha: la pastilla vuelve"
+                  "  (Ctrl+Shift+2 la oculta otra vez)\n");
+      std::fflush(stdout);
+    }
     ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
     /* la pastilla cambio de sitio o se oculto: la caja que deja pasar el raton se actualiza aqui */
     aplicarRegionEntrada(win, &ui.region, &ui, !opts.noPassthrough);
@@ -1551,6 +1614,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   dev.destroy();
   if (arrow) glfwDestroyCursor(arrow);
   glfwDestroyWindow(win);
+  borrarEntregada();   /* si nos fuimos minimizados, el aviso ya no vale para nada */
   rig.shutDown();
   glfwTerminate();
   return 0;

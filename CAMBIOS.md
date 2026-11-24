@@ -2,6 +2,40 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La pastilla vuelve siempre: tecla PB y ventana minimizada devuelta (v0.23)
+- Lo pedido: «el overlay al esfumarse ya no vuelve con los keys», «la tele se quedó en el modo de malla 3D»
+  y «¿hay forma de que se pueda mostrar de vuelta siempre el overlay con la tecla PB?».
+- **La causa** (vista con `ctl windows`): la ventana del visor salía como `minimizada, pantalla completa` y en
+  el registro del servicio no había ni un `[pantalla] entregada`, así que no la habíamos minimizado nosotros:
+  lo hizo el gestor de ventanas (Meta+F9, un clic en la barra de tareas, un gesto). Con la ventana minimizada la
+  trama desaparece —«se esfumó»—, no llega ninguna tecla porque el foco lo tiene otra ventana, y el proceso
+  sigue vivo con el panel en modo 3D: de ahí «la tele se quedó en malla 3D». El visor no se entera de la
+  minimización (GLFW no la ve en Wayland), así que la vigilancia tiene que hacerla el hub.
+- **Tecla `PB` (Pausa/Break)** en el visor (`src/vkview.cpp`): muestra la pastilla aunque estuviera ocultada,
+  se devuelve si estaba minimizada y pide el foco. `glfwKey` ya conocía la tecla (`GLFW_KEY_PAUSE = 284`).
+- **El rincón que siempre se pica** (`Hud::huecoDeLaPastilla` en `src/vkui.cpp` y `aplicarRegionEntrada`): con
+  la pastilla ocultada la región de entrada quedaba **vacía**, y sin región no llega ni un movimiento del
+  puntero, o sea que nada podía traer la pastilla de vuelta. Ahora, si no hay ninguna caja, se deja marcada la
+  punta derecha de su sitio de siempre (170 × 84 px de ventana) y el bucle del visor, en cuanto el puntero cae
+  ahí, muestra la pastilla (`[pastilla] el puntero llego al rincon de arriba a la derecha: la pastilla vuelve`).
+- **El hub devuelve la ventana** (`cmdServe` en `src/main.cpp`): si hay sesión y su ventana aparece minimizada
+  sin que fuera cosa nuestra, se le ordena al compositor `set_state(Minimized, 0)` y se avisa una sola vez
+  (`[ventana] el gestor minimizo el visor: lo devolvemos. Para estar aparte usa Tab`), con 2 s de enfriamiento.
+  Para distinguir el `Tab` voluntario de una minimización ajena, el visor escribe
+  `~/.local/state/odyssey3d/entregada` con su pid al entregar y lo borra al recuperar y al salir; el hub sólo lo
+  cree si ese pid sigue vivo (`kill(pid, 0)`). La nueva ruta sale de `rutaEstadoOdyssey` en `src/util.cpp`.
+- **`ctl aparece`** y `ctl ventana [minimizar|aparecer]`: el primero busca la ventana del visor por su
+  `app_id`/título, sin saber el uuid, y la devuelve a la vista. Es el comando que se puede atar a un atajo
+  global del escritorio, que es la única forma de responder a `PB` cuando el foco lo tiene el vídeo (no hay
+  acceso al teclado crudo: el usuario no está en el grupo `input`).
+- **Comprobado**: `ctl hud` añade `rincon para traer la pastilla de vuelta: 1726,24 170x84  vale` y
+  `la pastilla vuelve con la tecla PB: si`; sobre una sesión real, `ctl ventana minimizar` dejó la ventana en
+  `minimizada` y `ctl aparece` la devolvió —KWin sí obedece `set_state(Minimized, 0)`—, con lo que el guarda del
+  hub tiene por dónde. La salida por señal del visor cerrado dejó el panel como estaba
+  (`[panel] restaurado: modo 19 3840x2160@164.98, escala 1.5`, lente a 2D, scaler apagado).
+- **Límite**: este Protocolo de KWin no trae `request_activate`, así que la ventana devuelta no queda activa;
+  hay que picar la pastilla para devolverle el teclado al visor.
+
 ## El raton atraviesa el visor: se puede pausar el video sin quitar el 3D (v0.22)
 - Lo pedido: «no puedo controlar lo que está en la pantalla, el overlay no me debería quitar control del
   resto del contenido mostrado». Con el visor a pantalla completa no se podía dar a pausa, ni mover la barra
