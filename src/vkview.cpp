@@ -84,7 +84,7 @@ struct VkUi {
   Hud::Hit dragging = Hud::HitNone;
   /* La pose del ojo que usa la trama, de un cuadro al siguiente. La trae la camara
      cuando el rastreo esta puesto y entrega una pose fresca; si no, es la nominal de
-     siempre. Encima se suma siempre el angulo del deslizador de la pastilla. */
+     siempre (el angulo a mano de la pastilla se quito en v0.34). */
   EyePose ojoBase{};
   bool ojoBasePuesto = false;
   int anguloImpreso = 0;     /* el ultimo angulo del que dimos cuenta en el journal */
@@ -175,11 +175,8 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       ui.hud.toggleTrack();
       std::printf("[pastilla] rastreo %s: %s\n", ui.hud.rastreoPuesto() ? "puesto" : "apartado",
                   ui.hud.rastreoPuesto() ? "la trama sigue lo que mide la camara"
-                                         : "la trama se queda con la pose a mano (deslizador del angulo)");
+                                         : "la trama se queda en la pose de fabrica");
       std::fflush(stdout);
-      break;
-    case Hud::HitAngle:
-      ui.dragging = hit;   /* el arrastre lo sigue onKeyMotion con dragTo */
       break;
     case Hud::HitAskSbs:
       st.ask = false;
@@ -358,25 +355,10 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     ui->redPedida = key == GLFW_KEY_1 ? 1 : 2;
     return;
   }
-  /* El angulo de la linea de vision: el deslizador largo de la pastilla y estas teclas.
-     Mover el punto de mira unos grados hacia un lado hace en el relieve lo mismo que
-     moverse uno de lado a lado delante del monitor, pero sin moverse: cuando no hay
-     camara, o la camara no ve, es la unica manera de quedarse en el punto donde el
-     enfoque queda limpio. Con Shift el paso es mas corto, para afinar. */
-  if (key == GLFW_KEY_LEFT_BRACKET || key == GLFW_KEY_RIGHT_BRACKET || key == GLFW_KEY_BACKSLASH) {
-    const int paso = (mods & GLFW_MOD_SHIFT) ? 2 : 10;   /* decimas de grado */
-    if (key == GLFW_KEY_BACKSLASH) ui->hud.centerAngle();
-    else ui->hud.nudgeAngle(key == GLFW_KEY_RIGHT_BRACKET ? paso : -paso);
-    std::printf("[angulo] %+d,%d grados %s\n", ui->hud.angulo() / 10, std::abs(ui->hud.angulo()) % 10,
-                key == GLFW_KEY_BACKSLASH ? "(centrado)"
-                                          : ((mods & GLFW_MOD_SHIFT) ? "paso fino" : "paso normal"));
-    std::fflush(stdout);
-    return;
-  }
   if (key == GLFW_KEY_T) {
     ui->hud.toggleTrack();
     std::printf("[rastreo] %s con la tecla T: %s\n", ui->hud.rastreoPuesto() ? "puesto" : "apartado",
-                ui->hud.rastreoPuesto() ? "manda la camara" : "manda la pose a mano");
+                ui->hud.rastreoPuesto() ? "manda la camara" : "manda la pose de fabrica");
     std::fflush(stdout);
     return;
   }
@@ -576,9 +558,6 @@ void onButtonVK(GLFWwindow *win, int button, int action, int) {
   if (!ui || button != GLFW_MOUSE_BUTTON_LEFT) return;
   ui->inputChanged = true;
   if (action == GLFW_RELEASE) {
-    if (ui->dragging == Hud::HitAngle)
-      std::printf("[angulo] %+d,%d grados (se quedo asi al soltar el deslizador)\n", ui->hud.angulo() / 10,
-                  std::abs(ui->hud.angulo()) % 10);
     ui->dragging = Hud::HitNone;
     return;
   }
@@ -912,8 +891,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      }
    } hiloRed;
   /* Las dos redes del boton 1 / 2: la que mande el servicio (--modelo) y la otra (--alterno). Lo
-     que no venga por bandera se rellena por convencion si el archivo esta en su carpeta, y si el
-     usuario ya eligio una vez (el boton la guarda) esa manda al arrancar. */
+     que no venga por bandera se rellena por convencion si el archivo esta en su carpeta. */
   auto anotarRed = [&](const std::string &r) {
     if (!r.empty())
       ui.rutaRed[slotRed(r)] = r;
@@ -922,11 +900,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   anotarRed(opts.altModel);
   if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra()))
     ui.rutaRed[2] = rutaRedNuestra();
-  /* "opts" es de solo lectura, asi que la red con la que arrancamos vive aqui: la preferencia
-     guardada manda sobre lo que venga por bandera, y si no vino ninguna se usa la nuestra. */
+  /* "opts" es de solo lectura, asi que la red con la que arrancamos vive aqui. Al arrancar se usa
+     SIEMPRE la de Samsung (boton 1), que es la que calzo su programa y la que da el relieve que el
+     panel espera; si no esta, la nuestra. Lo que se elige con 1 / 2 se recuerda en el archivo pero ya
+     no manda al arrancar. */
   std::string modeloActivo = opts.modelPath;
-  if (const int pref = leerRedPreferida(); pref && !ui.rutaRed[pref].empty())
-    modeloActivo = ui.rutaRed[pref];
+  if (!ui.rutaRed[1].empty())
+    modeloActivo = ui.rutaRed[1];
   else if (modeloActivo.empty())
     modeloActivo = ui.rutaRed[2];
   ui.hud.state().red = modeloActivo.empty() ? 2 : slotRed(modeloActivo);
@@ -1777,7 +1757,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   "  (Ctrl+Shift+2 la oculta otra vez)\n");
       std::fflush(stdout);
     }
-    /* la fila del rastreo y del angulo solo existe en el visor: el hub no rastrea */
+    /* la fila del rastreo solo existe en el visor: el hub no rastrea */
     ui.hud.state().controlOjo = true;
 #ifdef HAVE_OPENCV
     ui.hud.state().rastreoVivo = rastreoVivo;
@@ -1792,10 +1772,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 
     /* ---- la pose del ojo que ve la trama --------------------------------------
        La base es la nominal del arranque; con el rastreo puesto (boton de la
-       pastilla o tecla T) la camara la va moviendo. Encima se suma siempre el
-       angulo del deslizador: girar la linea de vision unos grados respecto al
-       centro del panel es lo mismo que moverse uno de lado, pero sin moverse, y
-       asi se puede afinar el relieve a mano cuando la camara no ayuda. */
+       pastilla o tecla T) la camara la va moviendo, y si se aparta vuelve la
+       nominal. Nada mas: el angulo que se podia girar a mano con el deslizador se
+       quito en v0.34 porque hacia duplicado con lo que mide la camara. */
     if (!ui.ojoBasePuesto) {
       ui.ojoBasePuesto = true;
       ui.ojoBase = EyePose{opts.eyeX, opts.eyeY, opts.eyeZ};
@@ -1822,7 +1801,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         e.z = z + opts.trackOffsetZ;
         ui.ojoBase = e;
       } else if (!ui.hud.rastreoPuesto()) {
-        /* el boton apartado: vuelta a la pose de siempre, con el angulo a mano */
+        /* el boton apartado: vuelta a la pose de siempre */
         ui.ojoBase = EyePose{opts.eyeX, opts.eyeY, opts.eyeZ};
       }
       if (now - ultimoRastreo >= 1.0) {
@@ -1839,10 +1818,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
 #endif
     {
-      EyePose puesto = ui.ojoBase;
-      const double decimas = (double)ui.hud.angulo();
-      if (decimas != 0.0)
-        puesto.x += std::tan(decimas * 0.1 * 3.14159265358979323846 / 180.0) * puesto.z;
+      const EyePose puesto = ui.ojoBase;
       if (std::fabs(puesto.x - wv.eye().x) > 1e-4 || std::fabs(puesto.y - wv.eye().y) > 1e-4 ||
           std::fabs(puesto.z - wv.eye().z) > 1e-4)
         wv.setEye(puesto);

@@ -2,6 +2,22 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Fuera el deslizador de ángulo a mano, y al arrancar siempre la red de Samsung (v0.34)
+- Lo pedido: «quita el slider manual, manten el viejo comportamiento pero no toques lo de las camaras,
+  eso está bien, inicia por defecto todo siempre en el modelo de samsung».
+- **Desaparece el deslizador de ángulo** (−15°..+15°) de la pastilla, las teclas `[` `]` `\` y el giro
+  que se sumaba a la pose del ojo (`src/vkui.h`, `src/vkui.cpp`, `src/vkview.cpp`): sin rastreo la trama
+  vuelve a la pose nominal de fábrica, que es el comportamiento de antes de la v0.31. En el sitio del
+  deslizador el botón escribe qué está mandando (la cámara o la pose de fábrica).
+- **No se toca nada de las cámaras**: sigue el botón `T` de rastreo puesto/apartado, la elección de
+  cámara, la vía mono por tamaño de cara y los deslizadores de profundidad y salida.
+- **Arranque siempre con la red de Samsung** (botón 1) si el archivo está: `src/main.cpp` ya no pregunta
+  la preferencia guardada y `src/vkview.cpp` elige `rutaRed[1]` por delante de lo que viniera por
+  bandera. `~/.config/odyssey3d/red-elegida` se sigue escribiendo al cambiar con 1 / 2, pero al arrancar
+  no manda. Con la red de Samsung y la gráfica llena entra la guarda de la v0.33 y se prueba la nuestra.
+- Comprobado con `ctl hud` (prueba de la interfaz sin ventana): el mapa de golpes ya no tiene deslizador
+  de ángulo, el botón del rastreo sigue en su caja de 180x30 y las etiquetas de la pastilla caben.
+
 ## Al cambiar de red de profundidad el visor se colgaba y moría (v0.33)
 - Lo pedido: «nuevo tema, ahora al presionar el cambio de modelo el programa se crashea».
 - **No era una regresión de la v0.32**: `coredumpctl list` marca el mismo `SIGABRT` (señal 6, sin

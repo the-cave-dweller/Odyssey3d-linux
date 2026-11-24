@@ -182,8 +182,7 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `,` `.` | pendiente del filtro de traza (±0.5) |
 | `9` `0` | convergencia horizontal (∓0.0005) |
 | `8` | reiniciar el ajuste a los valores nominales |
-| `[` `]` | **girar el punto de vista** ±1,0° (con `Shift` ±0,2°); `\` lo devuelve al centro (en la ventana 3D; en `play` siguen siendo cuadro a cuadro) |
-| `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama se queda en el ángulo del deslizador |
+| `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
 | `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
@@ -223,15 +222,11 @@ de flecha visible y controlables con el ratón:
   * **Ocultar capa / Mostrar capa** (`Ctrl+Shift+2`),
   * **3D Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — desplaza la separación de las dos vistas;
   * **3D Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
-  * **Rastreo puesto / apartado** (`T`) y, a su lado, un **deslizador largo de ángulo** de −15° a +15°
-    (desde v0.31): aparta el rastreo y deja el relieve enfocado en un ángulo fijo, que es lo que hace
-    falta cuando no hay cámara o cuando te quedas quieto y no quieres estar girando la cabeza para que
-    se vea bien. El pomo se arrastra con el ratón; con `[` `]` se mueve de a 1,0° (con `Shift`, de a
-    0,2°) y con `\` vuelve a 0. El botón dice en cada momento lo que está pasando: **Rastreo puesto
-    (T)**, **Rastreo a mano (T)** (apartado: manda el deslizador) o **Sin cámara (T)**.
-    Con el rastreo puesto el deslizador no estorba: se suma a lo que mide la cámara, así que sirve de
-    desplazamiento fijo si la cámara te ve un poco corrido. Apartarlo equivale a quedarse quieto mirando
-    ese ángulo: la trama deja de moverse y el relieve se queda enfocado ahí.
+  * **Rastreo puesto / apartado** (`T`). El botón dice en cada momento lo que está pasando:
+    **Rastreo puesto (T)**, **Rastreo a mano (T)** (apartado: manda la posición de fábrica) o
+    **Sin cámara (T)**, y al lado aparece escrito qué está mandando. Hubo un deslizador de ángulo de
+    −15° a +15° (v0.31) para enfocar el relieve sin moverse; se quitó en v0.34: hacía duplicado con lo
+    que mide la cámara y lo que se quería era el comportamiento de siempre.
   * un punto de estado: verde = lente y scaler activos, naranja = uno de los dos, rojo = ninguno.
 * aviso abajo a la derecha, casi negro, con tres teselas (**Lado a lado**, **Arriba y abajo**,
   **2D plano**) y la casilla «no volver a preguntar», que es lo que manda el servicio cuando
@@ -257,7 +252,7 @@ ejemplo) y mide la cabeza por el tamaño de la cara en el cuadro:
 
 Es aproximado: si alguien mide la mitad de la cara, la distancia sale el doble de lejos, y de ahí el
 error en `x`. Aun así sigue sirviendo para mover el relieve con la cabeza, y si te quedas quieto puedes
-apartarlo con el botón `T` y dejar el ángulo puesto con el deslizador. Se puede forzar el comportamiento
+apartarlo con el botón `T` y quedarse en la posición de fábrica. Se puede forzar el comportamiento
 con `--track-mono si|no|auto` (`auto` = mirar qué cámara es: si el nombre dice «stereo»/«3D» o el modo
 es 2× alto, se intenta la vía calibrada; si no, la de la cara).
 
@@ -300,8 +295,7 @@ liso, 0 % en los tres, así que la textura conserva su relieve.
 Se prueba en marcha con la tecla `R`: el visor imprime
 `[rotulos] apoyados en la pantalla: 10,0% del mapa 518 x 518` y al soltarlos
 `[rotulos] sueltos: cada rotulo con la profundidad que le dio la red`. Si al ver una película el texto
-se ve hundido o el relieve de una zona con mucha letra se corta, suéltalos con `R` y ajusta el ángulo
-con el deslizador de la pastilla.
+se ve hundido o el relieve de una zona con mucha letra se corta, suéltalos con `R`.
 
 Para ajustar los umbrales sin sentarse delante del panel (con una foto del `--volcado`, o cualquiera):
 
@@ -437,7 +431,8 @@ y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150); para 
 redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
 `mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
 se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
-y la elección queda en `~/.config/odyssey3d/red-elegida` para la próxima vez.
+y la elección queda en `~/.config/odyssey3d/red-elegida`, aunque **al arrancar se vuelve siempre a la
+de Samsung** (desde v0.34): el archivo recuerda tu último cambio, pero el arranque empieza por la 1.
 
 **El botón 1 con la gráfica justa** (arreglado en v0.33): la red de Samsung **solo** arranca en la
 gráfica. Pedirla por CPU no llega a crear la sesión —medido el 24-nov con `mde_large.onnx`: más de

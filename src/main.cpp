@@ -1700,7 +1700,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   }
   const int W = o.w > 0 ? o.w : 1920, H = o.h > 0 ? o.h : 1080;
   hud.state().ask = true;
-  hud.state().controlOjo = true;   /* el visor ensena la fila del rastreo y del angulo */
+  hud.state().controlOjo = true;   /* el visor ensena la fila del rastreo */
   hud.state().rastreoVivo = true;
   hud.setInfo("prueba de la interfaz");
   hud.begin(W, H);
@@ -1709,38 +1709,23 @@ static int cmdHudSelfTest(int argc, char **argv) {
   static const char *nom[] = {"nada",              "boton 3D",   "boton capa",   "deslizador profundidad",
                               "deslizador salida", "boton red",  "tesela SxS",   "tesela arriba/abajo",
                               "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso",
-                              "boton rastreo", "deslizador angulo"};
+                              "boton rastreo"};
   int cuenta[14] = {0}, px0[14] = {0}, py0[14] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
-      if (h < 0 || h > 13) continue;
+      if (h < 0 || h > 12) continue;
       if (!cuenta[h]) {
         px0[h] = x;
         py0[h] = y;
       }
       cuenta[h]++;
     }
-  for (int h = 1; h <= 13; h++)
+  for (int h = 1; h <= 12; h++)
     std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
 
-  /* El deslizador del angulo: el recorrido completo tiene que caber en la caja y
-     los dos extremos tienen que dar -15 y +15 grados. Si la caja se quedo corta
-     (una ventana chiquita) se avisa en vez de dibujar el pomo fuera de la pastilla. */
+  /* El boton del rastreo: que este dibujado y donde cae (las pruebas lo pulsan sin raton). */
   {
-    float ax = 0.0f, aw = 0.0f;
-    if (!hud.angleBounds(&ax, &aw)) {
-      std::printf("  deslizador de angulo: NO esta dibujado (la pastilla no pidio la fila)\n");
-    } else {
-      hud.centerAngle();
-      hud.dragTo(Hud::HitAngle, ax + aw - 1.0f);
-      const int der = hud.angulo();
-      hud.dragTo(Hud::HitAngle, ax + 1.0f);
-      const int izq = hud.angulo();
-      std::printf("  deslizador de angulo %.0f px de ancho · extrema derecha %+.1f grados · extrema izquierda %+.1f"
-                  "  %s\n", (double)aw, (double)der * 0.1, (double)izq * 0.1,
-                  (der >= 149 && izq <= -149) ? "recorrido completo" : "RECORRIDO CORTO");
-    }
     float tx = 0.0f, ty = 0.0f, tw = 0.0f, th = 0.0f;
     if (hud.trackBounds(&tx, &ty, &tw, &th))
       std::printf("  boton de rastreo %.0fx%.0f en (%.0f,%.0f)\n", (double)tw, (double)th, (double)tx, (double)ty);
@@ -1760,8 +1745,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
                                {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
                                {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
                               {"Rastreo puesto (T)", 14.0f, 160.0f},   {"Rastreo a mano (T)", 14.0f, 160.0f},
-                              {"Sin camara (T)", 14.0f, 160.0f},       {"Angulo de vision", 12.0f, 150.0f},
-                              {"[ ]  girar   \\  centrar", 11.0f, 150.0f},  {"+15,0 grados", 12.0f, 90.0f},
+                              {"Sin camara (T)", 14.0f, 160.0f},
                               {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
@@ -2647,8 +2631,9 @@ static int cmdServe(int argc, char **argv) {
   }
   const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
   const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
-  int redElegida = leerRedPreferida();
-  if (!redElegida) redElegida = ruta1.empty() ? 2 : 1;   /* sin preferencia: la de Samsung si esta */
+  /* Al arrancar, siempre la red de Samsung (boton 1): es la que calzo su programa. Lo que se elige
+     con 1 / 2 en el visor se sigue guardando en red-elegida, pero al arrancar no manda. */
+  int redElegida = ruta1.empty() ? 2 : 1;
   if (redElegida == 1 && ruta1.empty()) redElegida = 2;
   if (redElegida == 2 && ruta2.empty()) redElegida = 1;
   const std::string redActiva = redElegida == 1 ? ruta1 : ruta2;
