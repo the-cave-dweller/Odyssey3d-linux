@@ -10,10 +10,21 @@
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <limits.h>
 
 static void say(std::string *err, const std::string &text) {
   if (err) *err = text;
+}
+
+static std::string leyerPequeno(const std::string &ruta) {
+  char texto[128] = {};
+  FILE *f = std::fopen(ruta.c_str(), "rb");
+  if (!f) return std::string();
+  if (std::fgets(texto, sizeof texto, f)) texto[std::strcspn(texto, "\r\n")] = 0;
+  std::fclose(f);
+  return texto;
 }
 
 uint32_t Camera::fourccCode(const std::string &fourcc) {
@@ -26,6 +37,55 @@ static std::string fourccName(uint32_t code) {
   char name[5] = {(char)(code & 0xff), (char)((code >> 8) & 0xff), (char)((code >> 16) & 0xff),
                   (char)((code >> 24) & 0xff), 0};
   return name;
+}
+
+bool Camera::usbSysfs(const std::string &device, std::string *dir) {
+  const std::string nodo = device.substr(device.rfind('/') + 1);
+  const std::string enlace = "/sys/class/video4linux/" + nodo + "/device";
+  char ruta[PATH_MAX] = {};
+  if (!::realpath(enlace.c_str(), ruta)) return false;
+  /* el enlace lleva a la interfaz (5-1.4.2.3:1.0); el padre es el dispositivo USB */
+  std::string p(ruta);
+  if (p.find(':') == std::string::npos) return false;
+  const size_t i = p.rfind('/');
+  if (i == std::string::npos) return false;
+  p = p.substr(0, i);
+  if (!std::strstr(p.c_str(), "/usb")) return false;
+  if (dir) *dir = p;
+  return true;
+}
+
+bool Camera::keepAwake(const std::string &device, std::string *nota) {
+  std::string dir;
+  if (!usbSysfs(device, &dir)) {
+    if (nota) *nota = "no se encontro el dispositivo USB detras de " + device;
+    return false;
+  }
+  const std::string archivo = leyerPequeno(dir + "/power/control");
+  if (archivo == "on") {
+    if (nota) *nota = "autosuspension ya apagada en " + dir.substr(dir.rfind('/') + 1);
+    return true;
+  }
+  FILE *f = std::fopen((dir + "/power/control").c_str(), "w");
+  if (!f) {
+    if (nota) *nota = "no se pudo apagar la autosuspension (" + std::string(std::strerror(errno)) +
+                      "): hace falta la regla udev o root";
+    return false;
+  }
+  const bool escrito = std::fputs("on", f) >= 0;
+  std::fclose(f);
+  if (nota)
+    *nota = escrito ? "autosuspension apagada en " + dir.substr(dir.rfind('/') + 1)
+                    : "no se pudo escribir power/control";
+  return escrito;
+}
+
+std::string Camera::powerState(const std::string &device) {
+  std::string dir;
+  if (!usbSysfs(device, &dir)) return "sin dispositivo USB detras";
+  const std::string control = leyerPequeno(dir + "/power/control");
+  const std::string estado = leyerPequeno(dir + "/power/runtime_status");
+  return "control=" + (control.empty() ? "?" : control) + " estado=" + (estado.empty() ? "?" : estado);
 }
 
 bool Camera::open(const std::string &device, std::string *err) {
@@ -50,6 +110,8 @@ bool Camera::open(const std::string &device, std::string *err) {
   fd_ = fd;
   path_ = device;
   err_.clear();
+  note_.clear();
+  keepAwake(device, &note_);
   return true;
 }
 
@@ -101,9 +163,13 @@ bool Camera::setFormat(int width, int height, const std::string &fourcc, int fps
   fmt.fmt.pix.pixelformat = fourccCode(fourcc);
   fmt.fmt.pix.field = V4L2_FIELD_NONE;
   if (ioctl(fd_, VIDIOC_S_FMT, &fmt) < 0) {
-    char buf[256];
+    const int e = errno;
+    char buf[420];
     std::snprintf(buf, sizeof buf, "VIDIOC_S_FMT %dx%d %s: %s", width, height, fourcc.c_str(),
-                  std::strerror(errno));
+                  std::strerror(e));
+    if (e == EIO)
+      std::strcat(buf, " (la interfaz de flujo no contesta a los controles UVC; la camara se queda "
+                       "colgada y solo se levanta apagando y encendiendo el monitor)");
     say(err, buf);
     err_ = buf;
     return false;

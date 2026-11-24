@@ -325,6 +325,9 @@ static int cmdCamera(int argc, char **argv) {
     return 1;
   }
   std::printf("camara: %s\n", dev.c_str());
+  std::string nota;
+  Camera::keepAwake(dev, &nota);
+  std::printf("  energia %s  (%s)\n", Camera::powerState(dev).c_str(), nota.c_str());
   for (const auto &m : Camera::modes(dev))
     std::printf("  modo   %s %dx%d @ %d fps\n", m.fourcc.c_str(), m.width, m.height, m.fps);
   if (hasFlag(argc, argv, "--solo-modos")) return 0;
@@ -468,6 +471,8 @@ static int cmdTrack(int argc, char **argv) {
     std::fprintf(stderr, "%s\n", err.c_str());
     return 1;
   }
+  std::printf("energia      %s\n", Camera::powerState(dev).c_str());
+  if (!cam.lastNote().empty()) std::printf("             %s\n", cam.lastNote().c_str());
   struct Intento {
     int w, h, fps;
     const char *fourcc;
@@ -1526,10 +1531,15 @@ static int cmdDoctor(const ViewerOpts &o, const std::string &waylandSock) {
   std::vector<std::string> cams = IrCam::findDevices();
   if (cams.empty()) {
     std::printf("  ! no aparece la camara 04e8:20d7 (3D Stereo WebCam)\n");
+    std::printf("    si antes estaba: su USB se quedo colgado (dmesg: \"device descriptor read/64,\n");
+    std::printf("    error -110\") y vuelve solo apagando y encendiendo el monitor\n");
     problems++;
   } else {
     for (const std::string &c : cams)
       std::printf("  %s  (accesible: %s)\n", c.c_str(), access(c.c_str(), R_OK | W_OK) == 0 ? "si" : "NO");
+    std::string nota;
+    Camera::keepAwake(cams.front(), &nota);
+    std::printf("  energia    : %s  (%s)\n", Camera::powerState(cams.front()).c_str(), nota.c_str());
   }
 
   std::printf("== panel ==\n");

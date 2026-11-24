@@ -383,12 +383,27 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   `journalctl --user -u odyssey3d-serve`). El reproductor interno (`play`, basado en libmpv) sigue
   siendo la ruta más directa; mpv por ahora se dibuja con OpenGL aunque su fotograma se trama en
   Vulkan.
-* El **seguimiento de mirada no está activo** todavía. La trama se calcula para la posición de
-  ojo nominal (los valores de fábrica del G90XF), igual que el modo "static" del port X11, así
-  que el punto dulce es la posición de trabajo normal y se degrada al moverse mucho. Mover la
+* El **seguimiento de mirada no está activo en las sesiones**: el hub no pasa `--track`, así que la
+  trama se calcula para la posición de ojo nominal (los valores de fábrica del G90XF), igual que el
+  modo "static" del port X11, y por eso el punto dulce es la posición de trabajo normal. Mover la
   cabeza en horizontal da un cambio de fase que puedes seguir con `←`/`→`.
-  Está implementado el control de la cámara IR (encendido/apagado del illuminador, `ctl ir`) y
-  las intrínsecas/extrínsecas están en `calib/`; el rastreador es la fase siguiente.
+  El rastreo sí está implementado (`--track`, `ctl track`: cámara IR + YuNet + triangulación con la
+  calibración de fábrica que lee `SR+CALCAM`), pero necesita que la cámara entregue fotogramas:
+  * si `ctl camera` falla con `VIDIOC_S_FMT ... Input/output error`, en `dmesg` verás
+    `Failed to set UVC probe control : -110`: la interfaz de flujo de la cámara dejó de contestar a
+    los controles UVC. Suele empezar por una suspensión USB (el kernel la suspenda a los 2 s y el
+    resume no llega detras de los hubs del cable del monitor), por eso la regla
+    `udev/70-odyssey-3d.rules` pone `power/control=on` en la cámara y en la lente. `odyssey3d doctor`
+    y `ctl camera` dicen el estado (`control=... estado=...`).
+  * una vez la cámara ya no enumera (`device descriptor read/64, error -110`) no hay reset por
+    software que la levante: hay que **apagar y encender el monitor** (o desenchufar su USB-B).
+    Al encender se pierde la autenticación de la lente, que el programa vuelve a hacer solo.
+* En Windows el lazo lo cierra el software de Samsung con otra cadencia: las cámaras IR a 60-90 fps
+  y su rastreador publicando poses a hasta 240 Hz, con el entrechado **adelantado 15,6 ms** para
+  compensar los 20,7 ms de retardo de la cámara (`configs/leiasr/tracker-ft_user.ini` en el análisis
+  de esa instalación). Aquí el rastreo va a unas decenas de Hz con mediana de 3 + media móvil
+  (`--track-suavizado`, por defecto 0,35) y sin adelantar nada, así que el ajuste se nota más tarde.
+  Cuando la cámara vuelva a funcionar se mide la cadencia real (`cameraFps`, `latencyMs`) y se ajusta.
 * El panel debe quedar a **escala 1 y rotación normal** durante el 3D (la trama necesita pixel a
   pixel); el programa lo cambia y lo devuelve. Si tu escritorio usa escala 1.5, al salir
   volverá a 1.5.

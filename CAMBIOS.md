@@ -2,6 +2,41 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La camara IR no entregaba fotogramas: autosuspension USB y un puerto colgado (v0.29)
+- Lo pedido: «el modelo se adapta con las camaras del monitor a mis ojos, pero percibo que hay un delay en el
+  ajuste, en windows se ajusta mas rapido, es porque tal vez el mapeo ocular sea menos frecuente?». Lo primero
+  era saber si aqui se esta mapeando algo, y **no se esta mapeando nada**: el hub nunca pasa `--track` al visor
+  (la linea de comandos del hijo arma `capture3d --uuid … --output … --sbs` y los argumentos del conversor, y
+  ahi no aparece `--track`) y en 48 h de `journalctl --user -u odyssey3d-serve` no hay una sola linea `[rastreo]`.
+  El retardo que se nota no es el de un filtro: es que la trama se calcula para la posicion de ojo nominal.
+- **Los numeros de Windows, leidos del USB** (`AnalisisOdyssey/configs/leiasr/tracker-ft_user.ini`): el rastreador
+  de Samsung (`EyeTracker=BLINKEYE`, `cameraName=MEDIAFOUNDATION`) publica poses con `maxPosFrequency=240`,
+  declara `cameraLatency_s = 0,0207` y **adelanta el entrechado** con `predictionTime_s = 0,0156`; las camaras IR
+  van a 60-90 fps. Cadencia alta + prediccion: por eso alla el ajuste llega antes.
+- **El bloqueo real: la camara no entrega nada.** `ctl track` → `lectura: sin fotogramas (fin de espera)`;
+  `ctl camera` → `ajuste de formato: VIDIOC_S_FMT 1280x480 MJPG: Input/output error`. En `dmesg`, ya antes de
+  tocar nada y repetido cada vez que se intenta el flujo:
+  `uvcvideo 5-1.4.2.3:1.1: Failed to set UVC probe control : -110 (exp. 26).` — o sea, el endpoint de control de
+  la **interfaz de flujo** deja de contestar (los de la interfaz de video, como `power_line_frequency`, si
+  contestaban) y eso es el `EIO` que ve el usuario.
+- **La causa, medida:** la camara estaba suspendida — `power/runtime_status = suspended` con
+  `power/autosuspend_delay_ms = 2000` — y cuelga de cuatro hubs Genesys (`05e3:0608`/`0610`) en un unico puerto de
+  480 M compartido con impresora, audio, tablero de la lente y el lector del scaler. Subir `uvcvideo.timeout` de
+  100 a 1500 ms no cambia nada: no es que tarde, es que el resume no llega y la interfaz se queda colgada.
+- **Hecho:** `udev/70-odyssey-3d.rules` escribe `power/control="on"` en la camara (`04e8:20d7`) y en el tablero de
+  la lente (`354b:0116`) al conectar; con el dispositivo siempre despierto los hubs de en medio tampoco pueden
+  suspenderse. `Camera::open()` lo intenta tambien desde el programa (`Camera::keepAwake`, sin root deja la nota),
+  y `doctor`, `ctl camera` y `ctl track` imprimen `energia control=… estado=…` para no vuelva a ser invisible.
+  Si `VIDIOC_S_FMT` falla con `EIO`, el mensaje ya dice que la interfaz de flujo no contesta.
+- **Lo que no se arregla por software:** despues de `USBDEVFS_RESET` sobre `/dev/bus/usb/005/020` la camara dejo de
+  enumerar (`device descriptor read/64, error -110` en bucle), asi que hay que **apagar y encender el monitor**.
+  Comprobado despues del reset: la lente sigue en `/dev/ttyACM0` con `auth: si` y el scaler en `/dev/sg1`, o sea
+  el reset no barre la cadena; al encender el monitor se pierde la autenticacion de la lente y el programa la
+  vuelve a hacer solo.
+- **Pendiente, con la camara despierta:** pasar `--track` a las sesiones del hub, medir la cadencia y el retardo
+  reales (`cameraFps`, `latencyMs`) y bajar el filtrado (`--track-suavizado`, hoy mediana de 3 + media movil con
+  0,35) para que el ajuste se note inmediato como en Windows.
+
 ## Un click en el vídeo tapaba la trama: el hub lo deja por debajo del visor (v0.28)
 - Lo pedido: «al dar click en otro punto del video (en el timeline) el overlay pierde foco y se va al
   fondo, se empieza a ver mal cuando eso pasa».
