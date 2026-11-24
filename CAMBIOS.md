@@ -2,6 +2,32 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El video volvia a su reproductor dentro de la pagina (v0.37)
+- Lo que se veia: al aceptar la tarjeta encima de un video del navegador, el conversor arrancaba con el
+  video **ya fuera de pantalla completa** (volvia al reproductor chico dentro de la pestana) y la trama
+  corrida sobre la pagina entera. Y despues no se podia picar donde el video parecia estar.
+- La causa era un arreglo nuestro. En `main.cpp` habia un reacomodo: si la ventana del video media menos
+  que la salida (nuestro propio cambio de modo, 165 a 120 Hz y escala 1,5 a 1, la deja chica un instante)
+  le **quitabamos** la pantalla completa y la volvia a poner para que KWin la estirara de nuevo. En un
+  navegador ese va-y-ven hace que el navegador salga del video a pantalla completa, y como el estado de
+  KWin queda puesto otra vez el vigilante no se entera: la sesion sigue y sigue sobre la pagina. El aviso
+  viejo del journal lo describia: «(2560x1440 en una salida de 3840x2160, pantalla completa si): lo
+  reacomodamos (1/8)», y salia justo antes de que se viera el video dentro de la pestana.
+- Medido: probar con una consola a pantalla completa que ponerle «debajo» (lo que hacemos con el video
+  para que un clic en la barra de tiempos no tape la trama) **no** le quita la pantalla completa, asi que
+  esa parte estaba limpia. Y en el journal de la sesion real el flujo del navegador ya estaba en
+  3840x2160 siete segundos despues del cambio de modo: KWin manda el tamano nuevo solo, hace falta
+  pelearse con la ventana.
+- Como quedo: al video solo se le devuelve la pantalla completa **si perdio el estado** (un pedido cada
+  0,6 s, tres intentos en vez de ocho) y **nunca** se la quitamos. Si esta a pantalla completa pero
+  todavia chico, se avisa una sola vez y no se toca nada: mientras la ventana vuelve a llenar la salida
+  la trama se estira, que se ve algo menos nitido pero no roto y no rompe el video. Cada cambio de la
+  ventana del video queda apuntado en el journal con su reloj («video: activa, pantalla completa 0,0
+  2560x1440 -> ... (sesion de 4 s)»), para saber quien lo provoco la proxima vez.
+- Un aviso que mentia: en la sesion del conversor el visor decia `[formato] lado a lado` siempre, porque
+  se imprimia sin mirar. Ahora el conversor dice que la red decide cuanto desplaza cada ojo, y el aviso
+  de «se vera doble y movido» solo aparece con 3D lado a lado o arriba y abajo de verdad. La pastilla
+  tampoco lleva escrito «lado a lado» en una sesion de conversion.
 ## Relleno de huecos en el canto del objeto (v0.36)
 - Frente elegido: que el canto de los objetos no se rompa ni babee. En el programa de Samsung eso lo
   hacen `warp.least_hole`, `warp.hole_edge` e `inpaint.push/pull/padtopot`; aqui son `src/hoyos.cpp`

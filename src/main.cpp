@@ -2604,6 +2604,8 @@ static int cmdServe(int argc, char **argv) {
   bool avisoPilaHecho = false;    /* el aviso de "no quiso ponerlo encima" va una sola vez */
   double debajoDesde = 0.0;       /* ultimo momento en que le pusimos KeepBelow al video */
   bool debajoAvisado = false;     /* el aviso de "el video pasa por debajo" va una sola vez */
+  std::string firmaVideo;         /* estados y tamano del video la ultima vez que lo miramos, para dar
+                                     cuenta de cualquier cambio con su reloj */
   double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
   int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
 
@@ -2725,6 +2727,7 @@ static int cmdServe(int argc, char **argv) {
         avisoPilaHecho = false;
         debajoDesde = 0.0;
         debajoAvisado = false;
+        firmaVideo.clear();
         /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
            que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
            al instante, entramos en un bucle de lanzar/cerrar que deja el monitor parpadeando. */
@@ -2914,27 +2917,55 @@ static int cmdServe(int argc, char **argv) {
         if (!wm.find(hijoUuid, video) || !video.mapped) motivo = "la ventana del video ya no esta";
         else if (video.minimized()) motivo = "la ventana del video esta minimizada";
         else {
+          const std::string firma = WindowInfo::stateList(video.states) + " " +
+                                    std::to_string((int)video.x) + "," + std::to_string((int)video.y) +
+                                    " " + std::to_string((int)video.w) + "x" + std::to_string((int)video.h);
+          if (!firmaVideo.empty() && firma != firmaVideo) {
+            /* cada cambio de la ventana del video queda apuntado con su reloj: asi se ve quien lo
+               provoco (nuestro cambio de modo, el compositor, o el propio reproductor) */
+            std::printf("[ventana] video: %s -> %s  (sesion de %.0f s)%s\n", firmaVideo.c_str(),
+                        firma.c_str(), hijoDesde > 0.0 ? now - hijoDesde : 0.0,
+                        asentada ? "" : ", sesion joven");
+            std::fflush(stdout);
+          }
+          firmaVideo = firma;
           const bool sinEstado = !video.fullscreen();
-          /* "chica" es el caso que mas se ve: KWin deja el estado de pantalla completa puesto pero la
-             ventana conserva el tamano que tenia la salida en 2D. Medido en la sesion real: el flujo
-             llegaba a 2560x1440 con el panel en 3840x2160 y el visor lo avisaba ("la trama necesita
-             pixel a pixel"), o sea el video ocupaba una parte del lienzo y la pantalla se veia mal. */
+          /* "chica" = la ventana conserva el tamano que tenia la salida en 2D. Es el caso que mas se ve
+             tras nuestro cambio de modo: el flujo llegaba a 2560x1440 con el panel en 3840x2160. */
           const bool chica = salidaVista && ((int)video.w < sw || (int)video.h < sh);
-          if (!asentada && (sinEstado || chica) && reafirmadas < 8 && now - reacomodoDesde >= 0.6) {
+          /* NO le quitamos la pantalla completa al video para agrandarlo. Antes, si el video tenia el
+             estado puesto pero todavia media lo que media la salida en 2D, la quitabamos y la volvia-
+             mos a poner para que KWin la estirara otra vez. Medido el 03:38 con el navegador: ese
+             va-y-ven hace que el navegador SALGA del video a pantalla completa, o sea la pagina vuelve
+             al reproductor chico dentro de la pestana y la trama se ve sobre la pagina entera. El aviso
+             viejo lo confirma: "(2560x1440 en una salida de 3840x2160, pantalla completa si): lo
+             reacomodamos (1/8)" justo antes de que se viera asi.
+             Con el estado puesto no hay que tocar nada: KWin ya la tiene a pantalla completa y, tras
+             nuestro cambio de modo, el tamano nuevo llega solo (medido: el flujo del navegador paso de
+             2560x1440 a 3840x2160 a los siete segundos de la sesion). Mientras tanto la trama se
+             estira: se ve algo menos nitido, pero no roto y no rompe el video. */
+          if (!asentada && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
             reacomodoDesde = now;
             ++reafirmadas;
             std::string e4;
-            /* Si conserva el estado pero esta chica, volver a poner Fullscreen no hace nada: hay que
-               quitarla y volverla a poner para que KWin la coloque otra vez sobre toda la salida. */
-            if (chica && !sinEstado) wm.setState(hijoUuid, WindowInfo::Fullscreen, false, &e4);
             const bool pudo = wm.setState(hijoUuid, WindowInfo::Fullscreen, true, &e4);
-            if (reafirmadas == 1 || reafirmadas == 8 || !pudo)
-              std::printf("[ventana] el cambio de modo dejó al video sin cubrir el lienzo "
-                          "(%ux%u en una salida de %dx%d, pantalla completa %s): lo reacomodamos (%d/8)%s\n",
-                          (unsigned)video.w, (unsigned)video.h, sw, sh, sinEstado ? "no" : "si",
-                          reafirmadas, pudo ? "" : (" " + e4).c_str());
+            if (reafirmadas == 1 || reafirmadas == 3 || !pudo)
+              std::printf("[ventana] el cambio de modo dejo al video sin pantalla completa (%ux%u en una"
+                          " salida de %dx%d): se la devolvemos (%d/3)%s. Si el video volvio a su"
+                          " reproductor dentro de la pagina, volvé a ponerlo a pantalla completa.\n",
+                          (unsigned)video.w, (unsigned)video.h, sw, sh, reafirmadas,
+                          pudo ? "" : ("  El compositor dijo: " + e4).c_str());
             std::fflush(stdout);
             fueraVideoDesde = 0.0;   /* esto lo provocamos nosotros, no es una salida del video */
+          } else if (!asentada && chica && now - hijoDesde >= 2.5 && !avisoChicoHecho) {
+            avisoChicoHecho = true;  /* avisar una vez: la ventana no se toca */
+            std::printf("[ventana] el video todavia esta a %ux%u en una salida de %dx%d despues del cambio"
+                        " de modo: la trama se estira un poco mientras la ventana vuelve a llenar la"
+                        " salida. No le tocamos la pantalla completa, porque eso saca al video de su"
+                        " propio modo a pantalla completa.%s\n",
+                        (unsigned)video.w, (unsigned)video.h, sw, sh,
+                        " Ctrl+Shift+1 sale del 3D si lo queres ver.");
+            std::fflush(stdout);
           } else if (asentada && sinEstado) {
             motivo = "la ventana del video salio de pantalla completa";
             /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y

@@ -1054,11 +1054,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     std::printf("[captura] pidiendo el flujo de la ventana %s\n", opts.captureUuid.c_str());
     /* el formato lo eligio el usuario en la tarjeta; si se equivoco, la imagen se ve doble
        y desplazada, que es la queja tipica: decir como se deshace sin cerrar la sesion */
-    std::printf("[formato] %s. Si el video no tiene dos imagenes asi, se vera doble y movido:"
-                " tecla 3 para 2D plano o Ctrl+Shift+1 para apagar el 3D\n",
-                opts.topBottom ? "arriba y abajo (una imagen sobre otra)" : "lado a lado (una imagen al lado de otra)");
-    std::fflush(stdout);
-    ui.fmtInfo = std::string(" · ") + (opts.topBottom ? "arriba y abajo" : "lado a lado");
+    /* El aviso del formato solo tiene sentido cuando la imagen trae dos vistas. Con el conversor
+       ponia "lado a lado" igual, y hacia pensar que la sesion estaba en el formato equivocado. */
+    if (opts.conver) {
+      std::printf("[formato] video normal a 3D: la red de profundidad decide cuanto desplaza cada ojo."
+                  " Tecla 3 para el 2D plano y 1 / 2 para cambiar de red\n");
+      std::fflush(stdout);
+    } else if (opts.topBottom || (opts.fmtGiven && !opts.no3d)) {
+      std::printf("[formato] %s. Si el video no tiene dos imagenes asi, se vera doble y movido:"
+                  " tecla 3 para 2D plano o Ctrl+Shift+1 para apagar el 3D\n",
+                  opts.topBottom ? "arriba y abajo (una imagen sobre otra)"
+                                 : "lado a lado (una imagen al lado de otra)");
+      std::fflush(stdout);
+      ui.fmtInfo = std::string(" · ") + (opts.topBottom ? "arriba y abajo" : "lado a lado");
+    }
     std::string merr;
     if (media.open(&merr))
       std::printf("[video] mando el video por MPRIS (%s): P lo pausa y lo reanuda\n", media.playerName().c_str());
