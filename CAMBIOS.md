@@ -2,6 +2,21 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El visor dejaba de irse al monitor normal: causa encontrada (v0.19)
+- Síntoma que daba la prueba de v0.18: la imagen se veía como una imagen 2D normal con los bordes
+  difuminados o punteados. No era la red ni el relieve: con dos monitores conectados el visor elegía
+  **el monitor viejo (DP-7, 1600x1200)**. En un panel sin la lámina lenticular la trama de columnas se
+  ve directamente como una rejilla de puntos, y ahí no hay 3D que valga.
+- El fallo estaba en `Panel::pickMode`: si un monitor no tenía modo 3840x2160 devolvía **el modo en
+  curso** en vez de "no lo encuentro", así que `resolveOutput` se creía que el primer monitor de la
+  lista era el Odyssey. Ahora devuelve -1 cuando no hay modo nativo, y la elección de la salida solo
+  admite monitores con 3840x2160 (con preferencia por el que se anuncia como Odyssey / SyncMaster / G90).
+- Si ningún monitor tiene ese modo, lo dice en vez de quedarse callado con uno equivocado.
+- El vigilante pasa su `pantalla =` al visor (`--output DP-4`): panel, ventana y tarjeta van a la misma
+  pantalla sin adivinar.
+- Comprobado con el flujo real: panel DP-4 en modo 20 3840x2160@119,88 con escala 1 y rotación normal,
+  lienzo 3840x2160 a píxel a píxel (sin el aviso de escala) y el mapa hecho en 12 ms con la red oficial.
+
 ## La tarjeta ya no se estira ni se va a otra pantalla, y se puede usar la red de Samsung (v0.18)
 - La tarjeta del aviso seguía cayendo al otro monitor (un Sun Electronics X7149A). Además de lo de v0.17
   habia dos fallos mas:

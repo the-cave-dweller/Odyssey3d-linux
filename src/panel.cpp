@@ -2,6 +2,7 @@
 #include "util.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -135,7 +136,7 @@ bool Panel::query(const std::string &out, PanelState &st, std::string *err) {
 }
 
 int Panel::pickMode(const PanelState &st, double preferHz) {
-  int best = st.modeIndex;
+  int best = -1;            /* -1 = este monitor no tiene el modo nativo del Odyssey */
   double bestDiff = 1e9;
   for (const auto &m : st.modes) {
     double hz = hzOf(m.second);
@@ -268,13 +269,26 @@ bool Panel::clearSnapshot(std::string *path) {
 
 std::string Panel::resolveOutput(const std::string &want) {
   if (!want.empty()) return want;
+  /* Solo vale un monitor con el modo nativo del Odyssey (3840x2160): antes se devolvia el
+     primero de la lista aunque no lo tuviera, y con dos monitores conectados el visor acababa
+     en el monitor normal, donde la trama de puntos se ve como una imagen borrosa. */
+  std::string porNombre, porModo;
   for (const std::string &o : outputs()) {
     PanelState st{};
     if (!query(o, st)) continue;
-    if (pickMode(st, 1e9) >= 0) return o;
+    if (pickMode(st, 1e9) < 0) continue;
+    std::string pista = o;
+    for (char &c : pista) c = (char)std::tolower((unsigned char)c);
+    const bool esOdyssey = pista.find("odyssey") != std::string::npos ||
+                           pista.find("syncmaster") != std::string::npos ||
+                           pista.find("g90") != std::string::npos;
+    if (esOdyssey && porNombre.empty()) porNombre = o;
+    if (porModo.empty()) porModo = o;
   }
-  std::vector<std::string> all = outputs();
-  return all.empty() ? std::string{} : all.front();
+  if (!porNombre.empty() || !porModo.empty()) return porNombre.empty() ? porModo : porNombre;
+  std::fprintf(stderr, "[aviso] ningun monitor conectado tiene modo 3840x2160: el 3D necesita el "
+                       "panel del Odyssey, conectaolo o apaga el otro monitor\n");
+  return std::string{};
 }
 
 std::string Panel::modeName(const PanelState &st, int modeIndex) {

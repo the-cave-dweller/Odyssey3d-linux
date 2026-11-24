@@ -1635,10 +1635,12 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
 }
 
 static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo, int red = 0,
-                        int cada = 3, const std::string &modelo = std::string()) {
+                        int cada = 3, const std::string &modelo = std::string(),
+                        const std::string &pantalla = std::string()) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
+  if (!pantalla.empty()) { args.push_back("--output"); args.push_back(pantalla); }
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
@@ -2097,7 +2099,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, cfg.modelo);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, cfg.modelo, cfg.pantalla);
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
@@ -2133,7 +2135,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, cfg.modelo);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, cfg.modelo, cfg.pantalla);
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
             std::fflush(stdout);
@@ -2181,7 +2183,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, cfg.modelo);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, cfg.modelo, cfg.pantalla);
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
           std::fflush(stdout);
