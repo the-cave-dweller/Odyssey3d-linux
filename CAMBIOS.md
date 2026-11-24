@@ -2,6 +2,27 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## RONDA C: el paso Y la inclinación escritos ya coinciden con los de Windows (medido sobre el cuadro)
+- Sesión de medición disparada sin tocar el teclado (`auto = mpv:conv` en `serve.conf` + un clip
+  propio de 3840x2160 y 60 fps, barrido lento sobre un fondo liso), volcado del cuadro escrito en
+  `/tmp/rondaC-trama.png` y `tools/paso_rejilla.py` encima:
+  - canal rojo: kx **+0,4503** · ky **−0,1606** · periodo horizontal 2,2208 px = **0,34511 mm**
+  - canal verde: kx **+0,4502** · ky **−0,1606** · 2,2210 px = **0,34514 mm**
+  - objetivo (foto de Windows): 0,4501 · −0,1607 · 0,34530 mm
+- Con `rampa_x = −0,0040` y `rampa_y = +0,0016` el batido horizontal queda a **833 mm** (rojo) y
+  **1048 mm** (verde) y el vertical ya ni aparece: las franjas diagonales de la ronda B eran el
+  desajuste de inclinación (faltaban 0,0020 ciclos por píxel → bandas cada 78 mm).
+- Secuencia de los tres pasos escritos, medidos sobre el cuadro real: **0,34836 mm** (ronda A, rampa 0)
+  → **0,34537 mm** (ronda B, `rampa_x −0,0040`) → **0,34511 mm** (ronda C, igual + `rampa_y +0,0016`).
+- La sesión dejó el panel como estaba (`[panel] restaurado: modo 2 3840x2160@164.98, escala 1.5`) y el
+  rastreo ya leyó **4261 fotogramas a 48,8 fps** dentro de la sesión (antes: 0).
+- Lo que falló en esa sesión fue la **cara**: `sin cara` en los 4261 cuadros. La foto de lo que ven las
+  dos vistas (`/tmp/ir-rondaC.png`, sacada con ffmpeg sobre `/dev/video0`) explica por qué: la cabeza
+  entra **recortada por el borde izquierdo** de las dos vistas; la cara está fuera del campo de las
+  cámaras IR, que miran rectas al frente. No es un fallo de software ni de umbral (YuNet a 448x320,
+  umbral 0,6, sin recorte de búsqueda): hace falta sentarse centrado bajo la cámara del monitor.
+  Se comprueba sin montar ninguna sesión con `odyssey3d ctl track`.
+
 ## La cámara IR: por qué no llegaba un solo cuadro, y qué hacemos ahora si se cuelga (v0.44)
 - Síntoma de las últimas sesiones: `[rastreo] … 0/0 cuadros (0.0 fps) … calibracion: sin SR+CALCAM.bin en .`
   o sea la cámara se abría pero **nadie leía los fotogramas** y el rastreo usaba la pose de fábrica.
