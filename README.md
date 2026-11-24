@@ -231,9 +231,12 @@ franja vertical **fina y fija** y una **disparidad que da saltos** se parecen mu
   o el propio panel.
 
 Para medirlo desde fuera, `volcado = /tmp/chk` en `serve.conf` deja la sesión en marcha y guarda
-`/tmp/chk-trama-vulkan.png` (la trama entera tal y como sale al panel), `/tmp/chk-profundidad.pgm`
-(el mapa de profundidad) y `/tmp/chk-chico.ppm` (lo que vio la red). Con esos tres archivos se ve
-de dónde sale cada raya sin tener que adivinar.
+`/tmp/chk-trama-vulkan.png` (la trama entera tal y como sale al panel),
+`/tmp/chk-trama-sin-releve.png` (la misma trama con el conversor apagado, para comparar),
+`/tmp/chk-profundidad.pgm` (el mapa de profundidad) y `/tmp/chk-chico.ppm` (lo que vio la red).
+Y `python3 tools/mide_franjas.py /tmp/chk` lo mide y lo traduce: el periodo de cada franja en
+píxeles con su amplitud, si esa franja está en la trama con relieve y no en la plana (sale del
+mapa) o en las dos (sale de la trama), y de cuántos píxeles son las mesetas del mapa.
 
 
 ## Cuál es el indicador de la esquina

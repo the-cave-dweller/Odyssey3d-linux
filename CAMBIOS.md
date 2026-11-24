@@ -38,6 +38,15 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   * `volcado = /tmp/chk` en serve.conf deja la sesion en marcha y guarda `chk-trama-vulkan.png`,
     `chk-profundidad.pgm`, `chk-chico.ppm` y `chk-trama-con-mapa.png`. Para eso hay opcion nueva
     `--volcado-seguir`: sin ella el volcado cerraba el visor a los cuatro fotogramas.
+  * el volcado guarda ademas `chk-trama-sin-releve.png`, la misma trama con el conversor apagado,
+    sacada en el mismo instante (metodos nuevos `converterOn/Gain/Ref` en `VkWeave`). Sin esa
+    segunda imagen no hay forma de separar una raya que pone la trama de una que pone el mapa: en
+    el panel las dos se ven igual.
+  * `tools/mide_franjas.py /tmp/chk` lo traduce a numeros: el periodo de cada franja en pixeles y
+    su amplitud, si aparece solo con releve (sale del mapa) o en las dos tramas (sale de la trama),
+    el porteador de la trama (2,24 px leidos, que es el espejo de 0,55394 ciclos por pixel) y de
+    cuantas celdas son las mesetas del mapa de profundidad. Probado con unos volcados falsos
+    (banda de 120 px solo en la trama con releve, mesetas de 16 celdas): el veredicto sale bien.
   * README: seccion nueva «Si quedan franjas verticales finas por toda la pantalla», con la prueba
     que separa los dos origenes en un minuto (bajar `3D Salida` a 0 con `Ctrl+Shift+5` si la raya
     sigue al video; mover `SavPg`/`RePag` si esta fija al panel).

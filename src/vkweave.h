@@ -58,6 +58,10 @@ public:
   bool setDepthMap(const uint8_t *g, int w, int h, std::string *err);
   bool hasDepthMap() const { return depthUsable_; }
   void setConverter(float gain, float ref, bool on) { convGain_ = gain, convRef_ = ref, convOn_ = on; }
+  /* para el volcado: poder apagar el releve un momento y volverlo a dejar como estaba */
+  bool converterOn() const { return convOn_; }
+  float converterGain() const { return convGain_; }
+  float converterRef() const { return convRef_; }
 
   /* un cuadro completo: adquirir, dibujar trama + interfaz, presentar */
   bool frame(std::string *err);
