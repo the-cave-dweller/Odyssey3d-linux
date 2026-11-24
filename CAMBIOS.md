@@ -2,6 +2,20 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La tarjeta para elegir la conversion ya no se retira sola (v0.16)
+- Estaba pasando que la tarjeta aparecia y a los 4 o 6 segundos se iba sola, y volvia: una oscilacion
+  que no dejaba tiempo de pulsar nada. La causa: al comprobar si la tarjeta seguia teniendo sentido se
+  volvía a preguntar por "la mejor ventana a pantalla completa" en vez de mirar la ventana concreta. En
+  cuanto la tarjeta aparecia, el navegador perdía el foco un instante y la "mejor ventana" pasaba a ser
+  otra, asi que el vigilante consideraba que la original ya no estaba a pantalla completa, retiraba la
+  tarjeta y la volvia a poner en el siguiente recorrido. En el registro se veian seis ciclos en 20 segundos.
+- Ahora se comprueba esa ventana por su identificador (`find` + `usable()`), sin importar que haya otra
+  ventana por delante o sin foco. La tarjeta se aguanta los 40 segundos de rigor y solo se va si ESA
+  ventana sale de pantalla completa, y el registro dice con que estado se fue ("activa, maximizada"),
+  que es la prueba de que el retiro es legitimo.
+- Probado poniendo y quitando la pantalla completa de la ventana del navegador desde fuera: tarjeta
+  puesta a los 2 s, aguantada 15 s sin un solo retiro, retirada al devolver la ventana a su tamano.
+
 ## El mapa ya no llega quebrado al panel: muestreo cubico, temblor y topes por ojo (v0.15)
 - **El mapa de profundidad se interpola cubico.** El mapa llega de 518 x 518 y la pantalla es de 3840,
   o sea un punto del mapa cubre casi 8 pixeles. Con el filtro lineal el desplazamiento era continuo por

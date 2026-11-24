@@ -1978,9 +1978,17 @@ static int cmdServe(int argc, char **argv) {
     /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
     /* lo mismo con la tarjeta: si nadie pulsa, se retira */
     if (!tarjetaUuid.empty()) {
+      /* La tarjeta se retira solo si ESA ventana en concreto dejó de estar a pantalla
+         completa. Antes se volvía a preguntar por "la mejor candidata": en cuanto la
+         tarjeta aparecía el navegador dejaba de ser la ventana activa un instante, la
+         candidatura cambiaba de ventana, la tarjeta se retiraba sola a los pocos
+         segundos y volvía a salir (una oscilación que no dejaba tiempo de pulsar). */
       WindowInfo actual{};
-      if (!(wm.fullscreenCandidate(actual, {}) && actual.uuid == tarjetaUuid)) {
-        std::printf("[serve] %s ya no está a pantalla completa, se quita la tarjeta\n", tarjetaUuid.c_str());
+      bool sigue = wm.find(tarjetaUuid, actual) && actual.usable();
+      if (!sigue) {
+        std::printf("[serve] %s ya no está a pantalla completa (%s), se quita la tarjeta\n",
+                    tarjetaUuid.c_str(),
+                    actual.uuid.empty() ? "desapareció" : WindowInfo::stateList(actual.states).c_str());
         std::fflush(stdout);
         ov.hideAsk();
         preguntadas.erase(tarjetaUuid);   /* si vuelve a pantalla completa, se vuelve a ofrecer */
