@@ -24,6 +24,14 @@ struct WeaveTuning {
   float conv = 0.0f;           /* convergencia: desplazamiento horizontal de una vista */
   float align = 0.0f;          /* desfase de fase global (ciclos) para alinear con la lente física */
   float pitch = 1.0f;          /* escala de la rampa de fase (pitch efectivo de la lente) */
+  /* Rampa extra de fase, en ciclos por pixel de panel, que SUMA a la de la configuracion
+     (`rampa_x` / `rampa_y` en serve.conf). Mueve solo el paso de la rejilla escrita, sin tocar
+     los desfases entre canales: si el paso escrito no coincide con el de la lente del panel, las
+     dos tramas baten y salen franjas gruesas por toda la imagen. `pitch` no sirve para eso porque
+     escala la rampa de la lente entera y afloja la inclinacion (medido, v0.42).
+     Teclas: `[` y `]` en x, `;` y `'` en y; `8` las pone a cero. */
+  float rampaDX = 0.0f;
+  float rampaDY = 0.0f;
   bool weave = true;
   bool topBottom = false;      /* video arriba/abajo en lugar de lado a lado */
   bool swapLR = false;         /* profundidad invertida -> alternar */

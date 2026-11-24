@@ -2,6 +2,45 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El paso escrito en una sesión de verdad: 0,3484 mm → 0,3454 mm (medido sobre el cuadro, v0.43)
+- Medido sobre el **cuadro que escribió el visor en una sesión real** (volcado Vulkan del panel,
+  `tools/paso_rejilla.py`), no sobre el cuadro de laboratorio:
+  - **Ronda A** (`rampa_x = 0`): kx **+0,4461** · ky −0,1591 · 2,2417 px = **0,34836 mm** ·
+    fuerza/piso 383. Contra el blanco de Windows (0,4501) el batido cae a **249 px = 38,8 mm**.
+  - **Ronda B** (`rampa_x = −0,0040`): kx **+0,4500** · ky −0,1587 · 2,2225 px = **0,34537 mm**.
+    El batido horizontal se va a más de un metro, o sea: desaparece.
+- El cuadro de laboratorio con `rampa_x = 0` sale kx 0,4473 y el de sesión real 0,4461. La diferencia
+  (**−0,0012**) **no viene del relieve**: con el relieve apagado el cuadro sale idéntico. Viene de los
+  **mapas de corrección** de esta unidad, que curvan la fase y estiran el paso. Por eso la llave se
+  ajustó con dos fotos de la pantalla y no con la cuenta del laboratorio: en esta unidad el valor que
+  clava el paso es **−0,0040**, no −0,00283. Respuesta otra vez 1:1 (−0,0040 mueve +0,0039).
+- **Queda el desajuste de inclinación**: nuestro ky escrito en sesión es **−0,1587** y el de la foto de
+  Windows es **−0,1607**. Ese Δ de 0,0020 da un batido de **500 px de panel = 78 mm**, franjas casi
+  horizontales (2,9 grados de vuelta) repartidas por todo el panel, que es lo que el usuario describe
+  como «muchas franjas ligeramente inclinadas a lo largo del panel». Regla medida en el laboratorio con
+  el cuadro sólido: **ky nuevo = ky viejo − rampa_y** (con +0,0020 → −0,1618, con −0,0020 → −0,1578),
+  respuesta 1:1 y sin tocar kx. Para pasar de −0,1587 a −0,1607 hace falta **`rampa_y = +0,0016`**.
+  Caveat: el ky de Windows sale de una foto con escala 1,159 (±1 % → ±0,0016), así que el valor bueno
+  lo cierra la pantalla, no la cuenta.
+- **Teclas nuevas para afinar el paso a ojo, sin reiniciar nada**: `[` y `]` mueven `rampa_x` y `;` y `'`
+  mueven `rampa_y`, **0,0004 ciclos por pixel de panel** cada pulsación, **sumando** a lo que diga
+  `serve.conf`. `8` las pone a cero (vuelven a la config). Cada pulsación imprime en el registro la
+  línea `[rampa_x +0,0004 ...]` con el valor actual, y el `ODYSSEY_UBO` imprime la rampa final, así que
+  el cuadro volcado queda etiquetado solo. Están en `WeaveTuning::rampaDX/rampaDY` y se suman a la
+  rampa del entorno antes del tope ±0,05, en las dos copias de la trama (Vulkan y GL).
+
+## La red de Samsung no reconoce objetos ni personas (medido sobre el fichero, v0.43)
+- `mde_large.onnx` (49,5 MB; también está `mde_large_fp32.onnx`, 98,9 MB) es un **transformador de visión
+  con cabezal DPT**: `patch_embed.proj.Conv` + `pos_embed` + `encoder.blocks.N` con `LayerNormalization` y
+  atenciones fusionadas (`com.microsoft Attention`, `attn_fused_N_qkv_w/_b/_ctx`), y detrás
+  `model/model/decoder/` con `refinenet4.resConfUnit2.conv2`, `Resize` y `Reshape`/`Slice`. Eso es
+  un estimador **denso de profundidad por parches** (DPT: fusiona cuatro niveles del transformador),
+  **una sola salida**, igual de familia que nuestra `depth_anything_v2_small.onnx`.
+- Buscado en el fichero (`strings`) cualquier rama de `seg|cls|class|person|semantic|mask|label`:
+  **no hay nada**. No hay máscaras, ni clases, ni etiquetas, ni una capa «frontal» aparte del fondo.
+  La idea de «identifica personas y las pone en el plano de delante» no está en el modelo: lo que hace
+  es escupir un mapa de profundidad completo cada cuadro, y el tramado decide el desplazamiento.
+
 ## La rejilla que escribiamos estaba un 0,6 % desviada del paso real de la lente (medido, v0.42)
 - Herramienta nueva `tools/paso_rejilla.py`: FFT con ventana de Hann de 512 sobre cuatro recortes
   del **cuadro escrito** (no de una foto), pico afinado por centroide. Da el paso en pixeles de

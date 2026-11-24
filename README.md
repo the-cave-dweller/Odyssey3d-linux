@@ -178,10 +178,12 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `R` | **pegar / soltar los rótulos y subtítulos** del plano de la pantalla (con el conversor puesto; abajo) |
 | `←` `→` | fase de la trama (±0.002 ciclos) |
 | `RePag` `SavPg` | paso de lente (±0.0002); se usa si el paso real difiere del nominal |
+| `[` `]` | **rampa_x** de la rejilla escrita (±0.0004 ciclos por pixel), encima de `rampa_x` de `serve.conf`. Es la llave fina del batido horizontal: si el paso que escribimos no es el de la lente, salen franjas verticales gruesas por toda la imagen (v0.43) |
+| `;` `'` | **rampa_y**, lo mismo en vertical: inclina la rejilla escrita y quita las franjas casi horizontales (v0.43) |
 | `↑` `↓` | crosstalk dinámico (±0.002) |
 | `,` `.` | pendiente del filtro de traza (±0.5) |
 | `9` `0` | convergencia horizontal (∓0.0005) |
-| `8` | reiniciar el ajuste a los valores nominales |
+| `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
 | `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre |

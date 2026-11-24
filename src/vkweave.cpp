@@ -767,12 +767,18 @@ void VkWeave::fillUbo(uint8_t *dst) {
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v > -0.05f && v < 0.05f) ? v : 0.0f;
   }();
-  t6[1] = rampaX;
-  t6[2] = rampaY;
+  /* Las teclas `[` `]` (x) y `;` `'` (y) suman rampaDX/rampaDY encima de lo que dice la
+     configuracion, para poder afinar el paso mirando la pantalla sin reiniciar nada. El total
+     sigue topado a +/-0,05. */
+  const auto topaRampa = [](float v) { return (v > -0.05f && v < 0.05f) ? v : (v >= 0.05f ? 0.05f : -0.05f); };
+  const float rrX = topaRampa(rampaX + tune_.rampaDX);
+  const float rrY = topaRampa(rampaY + tune_.rampaDY);
+  t6[1] = rrX;
+  t6[2] = rrY;
   t6[3] = 0.0f;
   if (std::getenv("ODYSSEY_UBO")) {
     std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · rampa %.5f %.5f · v4 TL %.2f %.2f %.2f\n",
-                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], rampaX, rampaY, v4[0], v4[1], v4[2]);
+                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], rrX, rrY, v4[0], v4[1], v4[2]);
   }
 }
 

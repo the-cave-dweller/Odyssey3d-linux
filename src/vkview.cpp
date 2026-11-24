@@ -123,9 +123,11 @@ static volatile std::sig_atomic_t gTerm = 0;
 static void onTermSignal(int) { gTerm = 1; }
 
 void printTuning(const VkUi &ui, const char *what) {
-  std::printf("[%-11s] weave=%d swap=%d fs=%5.2f align=%+.4f pitch=%.5f xtdyn=%+.4f conv=%+.5f prof=%d rel=%d\n",
+  std::printf("[%-11s] weave=%d swap=%d fs=%5.2f align=%+.4f pitch=%.5f xtdyn=%+.4f conv=%+.5f"
+              " rampa %+.5f %+.5f prof=%d rel=%d\n",
               what, (int)ui.tune.weave, (int)ui.tune.swapLR, ui.tune.filterSlope, ui.tune.align, ui.tune.pitch,
-              ui.tune.xtalkDyn, ui.tune.conv, ui.hud.state().depth, ui.hud.state().popout);
+              ui.tune.xtalkDyn, ui.tune.conv, ui.tune.rampaDX, ui.tune.rampaDY,
+              ui.hud.state().depth, ui.hud.state().popout);
   std::fflush(stdout);
 }
 

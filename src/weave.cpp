@@ -232,15 +232,16 @@ void Weave::draw(GLuint srcTex) {
   {
     static const float rx = [] { const char *e = std::getenv("ODYSSEY3D_RAMPA_X"); return e ? (float)std::atof(e) : 0.0f; }();
     static const float ry = [] { const char *e = std::getenv("ODYSSEY3D_RAMPA_Y"); return e ? (float)std::atof(e) : 0.0f; }();
-    if (uRampaX_ >= 0) glUniform1f(uRampaX_, rx);
-    if (uRampaY_ >= 0) glUniform1f(uRampaY_, ry);
+    const float dx = rx + tune_.rampaDX, dy = ry + tune_.rampaDY;
+    if (uRampaX_ >= 0) glUniform1f(uRampaX_, dx);
+    if (uRampaY_ >= 0) glUniform1f(uRampaY_, dy);
     if (std::getenv("ODYSSEY_UBO")) {
       GLint cur = 0, loc = -99; GLfloat back = -99.f;
       glGetIntegerv(GL_CURRENT_PROGRAM, &cur);
       loc = glGetUniformLocation(prog_, "uRampaX");
       glGetUniformfv(prog_, uRampaX_, &back);
       std::fprintf(stderr, "[ubo-gl] rx=%.6f locales %d %d prog=%u current=%d relink=%d readback=%.6f err=%d\n",
-                   rx, (int)uRampaX_, (int)uRampaY_, (unsigned)prog_, (int)cur, (int)loc, back, (int)glGetError());
+                   dx, (int)uRampaX_, (int)uRampaY_, (unsigned)prog_, (int)cur, (int)loc, back, (int)glGetError());
     }
   }
   glUniform1i(uWeave_, tune_.weave ? 1 : 0);

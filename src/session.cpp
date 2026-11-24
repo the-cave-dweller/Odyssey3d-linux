@@ -175,6 +175,7 @@ int refreshOf(GLFWmonitor *mon, double wantHz) {
 
 bool tuningKey(WeaveTuning &t, int key, const char **tag) {
   *tag = nullptr;
+  static char etiqueta[48];   /* para las etiquetas con numero (las rampas) */
   switch (key) {
     case GLFW_KEY_3:
       t.weave = !t.weave;
@@ -224,11 +225,37 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
       t.conv += 0.0005f;
       *tag = "conv +";
       break;
+    /* Paso de la rejilla escrita. Si no coincide con el paso real de la lente del panel, la
+       nuestra y la de la lente baten y salen franjas gruesas cruzando toda la imagen; estas dos
+       parejas de teclas mueven la rampa de fase limpia (la misma para los tres canales) encima de
+      `rampa_x`/`rampa_y` de la configuracion, asi que se puede afinar a ojo mirando el panel. */
+    case GLFW_KEY_LEFT_BRACKET:
+      t.rampaDX -= 0.0004f;
+      std::snprintf(etiqueta, sizeof etiqueta, "rampa_x %+.5f sobre la config", t.rampaDX);
+      *tag = etiqueta;
+      break;
+    case GLFW_KEY_RIGHT_BRACKET:
+      t.rampaDX += 0.0004f;
+      std::snprintf(etiqueta, sizeof etiqueta, "rampa_x %+.5f sobre la config", t.rampaDX);
+      *tag = etiqueta;
+      break;
+    case GLFW_KEY_SEMICOLON:
+      t.rampaDY -= 0.0004f;
+      std::snprintf(etiqueta, sizeof etiqueta, "rampa_y %+.5f sobre la config", t.rampaDY);
+      *tag = etiqueta;
+      break;
+    case GLFW_KEY_APOSTROPHE:
+      t.rampaDY += 0.0004f;
+      std::snprintf(etiqueta, sizeof etiqueta, "rampa_y %+.5f sobre la config", t.rampaDY);
+      *tag = etiqueta;
+      break;
     case GLFW_KEY_8:
       t.conv = 0.0f;
       t.align = 0.0f;
       t.pitch = 1.0f;
       t.xtalkDyn = 0.0f;
+      t.rampaDX = 0.0f;
+      t.rampaDY = 0.0f;
       *tag = "reiniciar";
       break;
     default:
