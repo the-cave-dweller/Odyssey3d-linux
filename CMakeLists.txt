@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 project(odyssey3d C CXX)
 file(READ "${CMAKE_SOURCE_DIR}/VERSION" ODYSSEY3D_VERSION_STRING)
 string(STRIP "${ODYSSEY3D_VERSION_STRING}" ODYSSEY3D_VERSION_STRING)
+# Si cambia el archivo VERSION, hay que volver a configurar: si no, el binario sigue llevando la
+# version vieja (lo vimos: con VERSION en 0.26 el instalado decia 0.25).
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS VERSION)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

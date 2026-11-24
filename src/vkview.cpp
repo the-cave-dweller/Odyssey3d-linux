@@ -1407,6 +1407,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         lastPoll = now;
         if (!cap.streamCreated()) {
           std::fprintf(stderr, "[captura] %s\n", cap.describe().c_str());
+          /* sin flujo y sin ventana del video no hay nada que esperar: nos vamos nosotros, que es
+             como se devuelve el panel a 2D y se apaga la lente. Sin esto la sesion se quedaba viva
+             mostrando el ultimo cuadro, con la pastilla detras de la ventana activa. */
+          bool viva = true;
+          estadoVentana(opts.captureUuid, &viva);
+          if (!viva) {
+            std::printf("[captura] la ventana del video cerro sin dejar flujo: se cierra la sesion"
+                        " y se devuelve el panel a 2D\n");
+            std::fflush(stdout);
+            ui.quit = true;
+          }
         } else if ((lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 12) ||
                    (ultimoNuevo > 0.0 && now - ultimoNuevo > 2.0)) {
           /* dos casos: el nodo se creo pero no llega nada (el portal tarda o el cambio de modo

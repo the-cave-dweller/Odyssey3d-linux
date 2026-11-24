@@ -2095,6 +2095,38 @@ static void borrarMarcaVentana() {
   std::filesystem::remove(rutaEstadoOdyssey("ventana"), ec);
 }
 
+/* Devolver el panel a 2D si queda una instantanea sin consumir. La instantanea la crea el visor al
+   poner el monitor en modo 3D y la borra al restaurar, asi que si aun existe es que una sesion se fue
+   de golpe: el visor revento, lo matamos, o el servicio se paro antes de tiempo. Sin esto el monitor
+   se queda en modo 3D, con la lente encendida y el scaler en 3D hasta que alguien cierre a mano. */
+static void devolverPanelHuerfano(const char *motivo) {
+  PanelState snap{};
+  std::string snapPath, e;
+  if (!Panel::loadSnapshot(snap, &snapPath, &e)) return;
+  std::printf("[serve] %s: quedaba el panel guardado en modo 3D (modo %d %s, escala %g): lo devolvemos\n",
+              motivo, snap.modeIndex, snap.modeRes.c_str(), snap.scale);
+  std::fflush(stdout);
+  const std::string lp = Lens::findPort();
+  Lens lens;
+  if (!lp.empty() && lens.open(lp)) {
+    if (!lens.authenticated()) lens.authenticate();
+    if (lens.off()) std::printf("[lente] devuelta a 2D\n");
+  }
+  const std::string sd = Scaler::findDevice();
+  Scaler sc;
+  if (!sd.empty() && sc.open(sd)) {
+    if (sc.set3d(false)) std::printf("[scaler] modo 3D apagado\n");
+  }
+  if (Panel::restore(snap, &e)) {
+    Panel::clearSnapshot();
+    std::printf("[panel] restaurado\n");
+  } else {
+    std::fprintf(stderr, "[aviso] no se pudo restaurar el panel: %s\n", e.c_str());
+  }
+  std::fflush(stdout);
+  std::fflush(stderr);
+}
+
 static int cmdServe(int argc, char **argv) {
 #ifndef HAVE_WAYLAND_WM
   (void)argc; (void)argv;
@@ -2126,6 +2158,16 @@ static int cmdServe(int argc, char **argv) {
   if (!wm.open(&err)) {
     std::fprintf(stderr, "[serve] %s\n", err.c_str());
     return 1;
+  }
+  /* Arrancar con el monitor en modo 3D y sin ningun visor vivo significa que la sesion anterior se
+     fue de golpe (reinicio del servicio, visor matado). Devolvemos el panel antes de empezar a mirar
+     ventanas, si no el escritorio queda en 3D sin nadie que lo apague. */
+  {
+    wm.settle(120, 12);
+    bool visorVivo = false;
+    for (const WindowInfo &w : wm.windows())
+      if (w.mapped && w.appId == "odyssey3d") visorVivo = true;
+    if (!visorVivo) devolverPanelHuerfano("el monitor seguia en modo 3D de una sesion anterior");
   }
   /* La tarjeta propia va por encima del video a pantalla completa; el portal de
      avisos de KDE queda debajo, así que sólo lo usamos de respaldo. */
@@ -2175,7 +2217,11 @@ static int cmdServe(int argc, char **argv) {
   bool avisoAparecerHecho = false;
   double intentoEncima = 0.0;     /* cuando reforzamos el "encima de todo" del visor */
   bool avisoEncimaHecho = false;
-  double intentoVideo = 0.0;      /* cuando devolvimos el video a su sitio por ultima vez */
+  double fueraVideoDesde = 0.0;   /* cuando el video empezo a estar fuera de su sitio */
+  bool cerrandoSesion = false;    /* ya avisamos al visor que se vaya; estamos esperando que muera */
+  double hijoDesde = 0.0;         /* cuando arranco la sesion en curso */
+  double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
+  int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
 
   nt.setOnAction([&](const std::string &id, const std::string &action) {
     auto it = idUuid.find(id);
@@ -2258,6 +2304,26 @@ static int cmdServe(int argc, char **argv) {
         std::fflush(stdout);
         hijo = -1;
         hijoUuid.clear();
+        fueraVideoDesde = 0.0;
+        cerrandoSesion = false;
+        /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
+           que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
+           al instante, entramos en un bucle de lanzar/cerrar que deja el monitor parpadeando. */
+        if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
+        else muertesSeguidas = 0;
+        enfriadoHasta = now + 8.0;
+        if (muertesSeguidas >= 2) {
+          muertesSeguidas = 0;
+          enfriadoHasta = now + 60.0;
+          std::printf("[serve] la sesion se cerro apenas empezo: esperamos un minuto antes de volver"
+                      " a ofrecer 3D\n");
+          std::fflush(stdout);
+        }
+        hijoDesde = 0.0;
+        /* Red de seguridad: el visor, al irse por su pie, restaura el panel y borra la instantanea.
+           Si la instantanea sigue ahi es que el visor se fue de golpe (SIGKILL, cuelgue) y el monitor
+           se quedo en modo 3D con la lente encendida. */
+        devolverPanelHuerfano("la sesion 3D se termino");
       }
     }
 
@@ -2328,32 +2394,52 @@ static int cmdServe(int argc, char **argv) {
           }
         }
       }
-      /* El otro lado de la trama es el video: si el navegador pierde la pantalla completa o KWin lo
-         recoloca en otra salida, el fotograma deja de medir lo mismo que el lienzo y el 3D sale con
-         trozos sueltos. Lo devolvemos a su sitio y avisamos. */
+      /* El otro lado de la trama es el video. Aqui antes peleabamos: si el navegador perdia la
+         pantalla completa la volviamos a poner. Estaba mal: irse del video (ESC, cambiar de pestana,
+         minimizar, cerrar la ventana) es la forma normal de terminar una sesion, y el resultado era
+         quedarse con el monitor en modo 3D y la pastilla detras de la ventana activa, cerrando a mano.
+         Ahora la salida del video es el boton de apagar: mandamos SIGTERM al visor para que se vaya
+         por la puerta de adelante (devuelve el panel a 2D, apaga lente y scaler).
+         Hay que separar dos cosas que se parecen. Cuando el panel cambia de modo, KWin le quita el
+         estado de pantalla completa a la ventana del video unos 5 segundos (medido con
+         `odyssey3d ctl windows` ventana por segundo: la ventana se corre a 640,360 y luego vuelve a
+         0,0). Eso NO es que el usuario se haya ido del video, y si cerramos al instante entramos en un
+         ciclo de lanzar y cerrar que deja el monitor parpadeando. Lo que las separa es cuanto duran:
+         el cambalache del cambio de modo se acomoda solo, la salida real del video se queda. */
       if (!hijoUuid.empty()) {
         WindowInfo video{};
-        if (wm.find(hijoUuid, video) && video.mapped && !video.minimized()) {
-          bool fuera = !video.fullscreen();
-          if (!fuera && !panelSalida.empty()) {
-            for (const WindowMonitor::Salida &s : wm.outputs()) {
-              if (s.name != panelSalida || s.w <= 0 || s.h <= 0) continue;
-              const int cx = video.x + (int)video.w / 2, cy = video.y + (int)video.h / 2;
-              fuera = (cx < s.x || cx >= s.x + s.w || cy < s.y || cy >= s.y + s.h);
-              break;
-            }
-          }
-          if (fuera && now - intentoVideo >= 5.0) {
-            intentoVideo = now;
-            std::string e3;
-            wm.setState(hijoUuid, WindowInfo::Fullscreen, true, &e3);
-            if (!panelSalida.empty()) wm.sendToOutput(hijoUuid, panelSalida, &e3);
-            std::printf("[ventana] el video (%s) esta en %d,%d %ux%u con %s: lo devolvemos a pantalla"
-                        " completa en %s\n", hijoUuid.c_str(), video.x, video.y, video.w, video.h,
-                        WindowInfo::stateList(video.states).c_str(),
-                        panelSalida.empty() ? "la salida del panel" : panelSalida.c_str());
+        const char *motivo = nullptr;
+        double paciencia = 1.5;   /* lo que tiene que durar la senal antes de cerrar */
+        const bool asentada = hijoDesde > 0.0 && now - hijoDesde >= 5.0;
+        int sx = 0, sy = 0, sw = 0, sh = 0;
+        bool salidaVista = false;
+        for (const WindowMonitor::Salida &s : wm.outputs()) {
+          if (s.name != panelSalida || s.w <= 0 || s.h <= 0) continue;
+          sx = s.x; sy = s.y; sw = s.w; sh = s.h; salidaVista = true;
+          break;
+        }
+        if (!wm.find(hijoUuid, video) || !video.mapped) motivo = "la ventana del video ya no esta";
+        else if (video.minimized()) motivo = "la ventana del video esta minimizada";
+        else if (asentada && !video.fullscreen()) {
+          motivo = "la ventana del video salio de pantalla completa";
+          paciencia = 8.0;   /* por encima de los ~5 s que tarda KWin en acomodar el cambio de modo */
+        } else if (asentada && salidaVista) {
+          const int cx = video.x + (int)video.w / 2, cy = video.y + (int)video.h / 2;
+          if (cx < sx || cx >= sx + sw || cy < sy || cy >= sy + sh)
+            motivo = "la ventana del video se fue de la salida del panel";
+          paciencia = 3.0;
+        }
+        if (motivo) {
+          if (fueraVideoDesde <= 0.0) fueraVideoDesde = now;
+          if (!cerrandoSesion && now - fueraVideoDesde >= paciencia && hijo > 0) {
+            cerrandoSesion = true;
+            std::printf("[ventana] %s (%s): cerramos la sesion 3D y devolvemos el panel a 2D\n",
+                        motivo, hijoUuid.c_str());
             std::fflush(stdout);
+            ::kill(hijo, SIGTERM);
           }
+        } else {
+          fueraVideoDesde = 0.0;
         }
       }
     } else {
@@ -2445,6 +2531,7 @@ static int cmdServe(int argc, char **argv) {
           if (unaVez) break;
         } else {
           hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
+          hijoDesde = now;
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
@@ -2467,7 +2554,8 @@ static int cmdServe(int argc, char **argv) {
 
     if (hijo < 0 && avisoId.empty()) {
       WindowInfo w{};
-      if (wm.fullscreenCandidate(w, {}) && !ignoredApp(w, cfg.ignore) && !preguntadas.count(w.uuid)) {
+      if (wm.fullscreenCandidate(w, {}) && !ignoredApp(w, cfg.ignore) && !preguntadas.count(w.uuid) &&
+          now >= enfriadoHasta) {
         preguntadas.insert(w.uuid);
         const std::string app = strLower(w.appId);
         auto fija = cfg.porApp.find(app);
@@ -2481,6 +2569,7 @@ static int cmdServe(int argc, char **argv) {
             if (unaVez) break;
           } else {
             hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
+            hijoDesde = now;
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
             std::fflush(stdout);
@@ -2529,6 +2618,7 @@ static int cmdServe(int argc, char **argv) {
           if (unaVez) break;
         } else {
           hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
+          hijoDesde = now;
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
           std::fflush(stdout);
@@ -2545,6 +2635,9 @@ static int cmdServe(int argc, char **argv) {
     int st = 0;
     ::waitpid(hijo, &st, 0);
   }
+  /* Al parar el servicio el visor se va con nosotros y restaura el panel el solo; si no llego a
+     hacerlo (lo mato systemd, o revento antes), el monitor quedaba en modo 3D hasta el reinicio. */
+  devolverPanelHuerfano("el servicio se detuvo");
   std::printf("[serve] detenido\n");
   std::fflush(stdout);
   return 0;

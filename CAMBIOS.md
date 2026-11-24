@@ -2,6 +2,41 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Al irse del vídeo se apaga la sesión, no se queda el monitor en 3D (v0.26)
+- Lo pedido: «now that works but letting the video leaves the 3d screen active and the overlay behind the
+  active window, I need to close it manually». Al salir del vídeo (ESC, cambiar de pestaña, minimizar o
+  cerrar la ventana) el monitor se quedaba en modo 3D y la pastilla caía detrás de la ventana activa: había
+  que cerrarla a mano.
+- **Estábamos peleando por el sitio equivocado.** El vigía del hub, si la ventana del vídeo perdía la
+  pantalla completa, **se la volvía a poner**. Eso peleaba contra la intención del usuario: irse del vídeo es
+  la forma normal de terminar una sesión. Ahora la salida del vídeo es el botón de apagar: el hub manda
+  `SIGTERM` al visor, que se va por la puerta de adelante (`rig.shutDown()`) y devuelve panel, lente y scaler.
+- **Medido antes de tocar nada.** Muestreo de la ventana del vídeo con `ctl windows` una vez por segundo
+  durante el arranque de una sesión: a `t=1` está `activa, maximizada, pantalla completa` en `0,0`; de `t=2`
+  a `t=6` aparece **sin** `pantalla completa` y corrida a `640,360`; de `t=7` en adelante vuelve a `0,0` con
+  el estado puesto. O sea que **cuando el panel cambia de modo KWin le quita la pantalla completa al vídeo
+  unos cinco segundos**. La primera versión cerraba la sesión al notar eso y entraba en un ciclo de lanzar y
+  cerrar (`[ventana] la ventana del video salio de pantalla completa` + `[serve] lanzando 3D` cada ~6 s, con
+  el panel parpadeando entre el modo 19 y el 20). Lo que separa el transitorio de una salida real es cuánto
+  dura: gracia de 5 s desde que arranca la sesión y paciencia de 8 s para ese motivo; si la ventana se cerró
+  o se minimizó, 1,5 s.
+- **Tres redes por si el visor se muere.** `devolverPanelHuerfano()` lee la copia del panel que quedó
+  guardada y la restaura: al arrancar el hub (si no hay visor vivo), al recolectar el hijo muerto y al
+  detener el servicio. Además, si una sesión muere apenas empieza el hub espera 8 s antes de volver a
+  ofrecer 3D, y tras dos muertes seguidas tempranas espera un minuto (`[serve] la sesion se cerro apenas
+  empezo: esperamos un minuto antes de volver a ofrecer 3D`).
+- **El visor también se va solo si no hay nada que esperar.** Si el flujo de captura no llegó a crearse y la
+  ventana del vídeo ya no existe, el visor se sale él: `[captura] la ventana del video cerro sin dejar flujo:
+  se cierra la sesion y se devuelve el panel a 2D`. Esa comprobación pregunta al compositor sólo en la rama
+  de fallo, nunca en el bucle sano, porque abrir la conexión y acomodarse cuesta.
+- **Medido con la copia instalada (23-nov, YouTube en DP-4).** Con el vídeo a pantalla completa la sesión
+  aguantó 45 s seguidos, sin avisos de salida y con el visor presente en todas las muestras. Al irse del
+  vídeo (`ctl ventana normal`) salieron en orden `[ventana] la ventana del video salio de pantalla completa`,
+  `[sesion] llego una senal de cierre`, `[scaler] modo 3D apagado`, `[lente] devuelta a 2D`,
+  `[panel] restaurado: modo 19 3840x2160@164.98, escala 1.5, rotacion none` — unos ocho segundos, con el
+  panel en 19 y la lente `off` al final. Matando al visor con `SIGKILL` (sin puerta de adelante) funcionó la
+  red: `[serve] la sesion 3D se termino: quedaba el panel guardado en modo 3D (modo 19 …)` + `[panel] restaurado`.
+
 ## El flujo de captura sobrevive al rearme (v0.25)
 - Lo pedido: «en un momento noté que volvia el hub pero ya sin el video». La pastilla volvía por encima del vídeo,
   pero la trama seguía mostrando el último cuadro de antes del minimizado.
