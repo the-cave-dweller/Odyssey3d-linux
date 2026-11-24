@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <stdexcept>
 #include <dlfcn.h>
 #include <unordered_map>
@@ -191,7 +192,30 @@ static std::vector<long> vramLibreMiB() {
   return libres;
 }
 
+/* Cuanta memoria de sistema queda disponible (MemAvailable de /proc/meminfo). Con la CPU por
+   delante la red se queda con unos cientos de megabytes; si la maestra esta casi llena la
+   creacion de la sesion revienta dentro de ONNX Runtime y no se puede capturar con try/catch. */
+static long ramDisponibleMiB() {
+  std::ifstream in("/proc/meminfo");
+  std::string k;
+  long mib = -1;
+  while (in >> k) {
+    if (k == "MemAvailable:") {
+      in >> mib;
+      break;
+    }
+    std::getline(in, k);
+  }
+  return mib;
+}
+
 bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
+  if (quemada_) {
+    if (err)
+      *err = "ONNX Runtime ya fallo al abrir una sesion en este proceso: no se vuelve a intentar "
+             "(abortaria por dentro y el visor se iria arriba)";
+    return false;
+  }
   const std::string path = model.empty() ? defaultModelPath() : model;
   gpu_ = gpu < 0 ? 0 : gpu;
   if (const char *lim = std::getenv("ODYSSEY3D_LIMPIEZA"))   /* 0 deja el mapa en crudo: para comparar */
@@ -213,6 +237,11 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
      de CUDA + modelo + activaciones), buscar la que mas memoria libre tenga. Y si en ninguna cabe,
      ir directos a la CPU antes de que la creacion de la sesion reviente. */
   const long kNecesitoMiB = 1100;
+  /* Colchon: nvidia-smi dice "libre", pero entre que miramos y abre la sesion el navegador pide un
+     poco mas y la sesion CUDA reclama su contexto antes que la red. Sin colchon el "si cabe" resulta
+     mentira: medido el 23-nov, con 1,2 GB anunciados como libres la creacion de la sesion abortó
+     dentro de ONNX Runtime y el visor se fue arriba dejando el monitor en modo 3D sin video. */
+  const long kColchonMiB = 450;
   bool sinGpu = false;
   {
     const std::vector<long> libres = vramLibreMiB();
@@ -222,15 +251,16 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
       long mejorMiB = mia;
       for (size_t i = 0; i < libres.size(); i++)
         if (libres[i] > mejorMiB) { mejorMiB = libres[i]; mejor = (int)i; }
-      if (mia >= 0 && mia < kNecesitoMiB) {
-        if (mejor != gpu_ && mejorMiB >= kNecesitoMiB) {
+      if (mia >= 0 && mia < kNecesitoMiB + kColchonMiB) {
+        if (mejor != gpu_ && mejorMiB >= kNecesitoMiB + kColchonMiB) {
           std::printf("[conversor] la grafica %d tiene solo %ld MB libres: la red se va a la grafica %d "
                       "(%ld MB libres)\n", gpu_, mia, mejor, mejorMiB);
           std::fflush(stdout);
           gpu_ = mejor;
         } else {
-          std::printf("[conversor] no hay %ld MB libres en ninguna grafica: la red se hara con la CPU, "
-                      "mas despacio\n", kNecesitoMiB);
+          std::printf("[conversor] no hay %ld MB libres en ninguna grafica (con el colchon hacen "
+                      "falta %ld): la red se hara con la CPU, mas despacio\n", kNecesitoMiB,
+                      kNecesitoMiB + kColchonMiB);
           std::fflush(stdout);
           sinGpu = true;
         }
@@ -243,26 +273,44 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   /* Poco margen: con el navegador y el compositor por delante la tarjeta suele estar casi llena.
      Con el arenal de memoria apagada el pico baja bastante (el modelo pequeno no necesita 1 GB
      reservados de golpe), y aun asi se le deja un techo por si acaso. */
-  try {
-    if (sinGpu) throw std::runtime_error("sin sitio en la grafica");
-    std::unordered_map<std::string, std::string> co;
-    co["device_id"] = std::to_string(gpu_);
-    co["gpu_mem_limit"] = "550000000";
-    co["enable_mem_arena"] = "0";
-    co["cudnn_conv_algo_search"] = "heuristic";
-    im->so.AppendExecutionProvider("CUDA", co);
-    dev_ = "NVIDIA";
-  } catch (const std::exception &e) {
+  if (sinGpu) {
+    /* Ya decidimos que en la grafica no hay sitio: no hay que intentar CUDA por la puerta vieja,
+       que era lo que pasaba (el aviso decia "se hara con la CPU" y despues se abria CUDA igual, y
+       ahi abortaba ONNX Runtime). */
+    dev_ = "CPU";
+  } else {
     try {
-      OrtCUDAProviderOptions o{};
-      o.device_id = gpu_;
-      o.gpu_mem_limit = 550ull << 20;
-      o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
-      im->so.AppendExecutionProvider_CUDA(o);
+      std::unordered_map<std::string, std::string> co;
+      co["device_id"] = std::to_string(gpu_);
+      co["gpu_mem_limit"] = "550000000";
+      co["enable_mem_arena"] = "0";
+      co["cudnn_conv_algo_search"] = "heuristic";
+      im->so.AppendExecutionProvider("CUDA", co);
       dev_ = "NVIDIA";
-    } catch (const std::exception &e2) {
-      std::printf("[conversor] la tarjeta no se pudo usar (%s): se hara con la CPU, mas despacio\n", e2.what());
-      dev_ = "CPU";
+    } catch (const std::exception &e) {
+      try {
+        OrtCUDAProviderOptions o{};
+        o.device_id = gpu_;
+        o.gpu_mem_limit = 550ull << 20;
+        o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
+        im->so.AppendExecutionProvider_CUDA(o);
+        dev_ = "NVIDIA";
+      } catch (const std::exception &e2) {
+        std::printf("[conversor] la tarjeta no se pudo usar (%s): se hara con la CPU, mas despacio\n", e2.what());
+        dev_ = "CPU";
+      }
+    }
+  }
+  if (dev_ == "CPU") {
+    const long mib = ramDisponibleMiB();
+    if (mib >= 0 && mib < 1500) {
+      std::printf("[conversor] la memoria de sistema esta justa (%ld MB disponibles): el conversor se "
+                  "queda apagado; cerrar el navegador o el juego libera sitio\n", mib);
+      std::fflush(stdout);
+      if (err) *err = "no hay memoria de sistema libre para abrir la red por CPU";
+      quemada_ = true;
+      delete im;
+      return false;
     }
   }
   auto abrir = [](OrtImpl *q, const std::string &ruta, int sz) {
@@ -281,28 +329,23 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     abrir(im, path, sz_);
   } catch (const std::exception &e) {
     fallo = resumenOrt(e.what());
-    if (dev_ == "CPU") {   /* ya no queda donde intentar */
-      if (err) *err = "el modelo no abrio: " + fallo;
-      delete im;
-      return false;
-    }
-    /* La tarjeta dijo que no: ultima oportunidad, la CPU. Va lento (cientos de ms por cuadro), pero
-       el relieve sale y se puede usar con --cada alto. */
-    std::printf("[conversor] la grafica no dio para abrir el modelo (%s): se intentara con la CPU\n",
-                fallo.c_str());
-    std::fflush(stdout);
+    const std::string donde = dev_;
+    dev_ = "nada";
     delete im;
-    im = new OrtImpl();
-    im->so.SetIntraOpNumThreads(6);
-    im->so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-    dev_ = "CPU";
-    try {
-      abrir(im, path, sz_);
-    } catch (const std::exception &e2) {
-      if (err) *err = "el modelo no abrio: " + resumenOrt(e2.what());
-      delete im;
-      return false;
-    }
+    /* Aqui se corta el intento: no se abre otra sesion en este proceso. Medido el 23-nov con las dos
+       tarjetas casi llenas: al fallar la sesion CUDA el reintento abortaba dentro de
+       libonnxruntime (la pila entera dentro de la libreria), el visor moria sin tiempo de devolver
+       el panel y el monitor se quedaba con la rejilla 3D sobre el escritorio. Sin reintento el
+       video se ve normal, sin relieve, y el panel se devuelve bien. */
+    if (donde == "NVIDIA") quemada_ = true;   /* con CUDA tocado, otra sesion en este proceso revienta */
+    if (err)
+      *err = (donde == "CPU")
+                 ? "el modelo no abrio en la CPU: " + fallo
+                 : ("el modelo no abrio en la grafica " + std::to_string(gpu_) + " (" + fallo +
+                    "). No se reintenta: despues de un intento CUDA fallido ONNX Runtime aborta por "
+                    "dentro y el visor se quedaba sin tiempo de devolver el panel. El video se ve sin "
+                    "relieve; suelta memoria de la grafica y en la siguiente sesion vuelve a convertir");
+    return false;
   }
   impl_ = im;
   ready_ = true;

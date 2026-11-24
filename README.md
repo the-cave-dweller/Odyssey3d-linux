@@ -341,7 +341,10 @@ golpe (o se detiene el servicio), el servicio recupera el panel con la copia que
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
 `espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué
-GPU corre la red del conversor) y `cada` (cada cuántos fotogramas se calcula la profundidad). Las dos
+GPU corre la red del conversor), `cada` (cada cuántos fotogramas se calcula la profundidad),
+`rastreo` (`si` para que la cámara IR del monitor siga tus ojos y la trama se recalcule; `no` para la
+posición nominal de fábrica) y `suavizado` (`0,35`: cuánto se amortigua ese seguimiento; más pequeño
+responde antes y se mueve más). Las dos
 redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
 `mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
 se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
@@ -452,6 +455,42 @@ Si se te ha quedado vertical y no quieres andar por los ajustes de KDE:
 kscreen-doctor output.DP-4.rotation.none     # sustituye DP-4 por el nombre de tu salida
 odyssey3d ctl panel status                   # debe decir "rotacion: 1 (none)"
 ```
+
+### Se ve sólo la rejilla del panel, sin el vídeo
+
+Síntoma: entras en 3D y no aparece el vídeo, sólo la trama del panel; o al salir se ven unos
+segundos horribles antes de que se cierre.
+
+Causa, medida el 23-nov en el journal de `odyssey3d-serve`:
+
+    [vulkan] intercambio 3840x2160 · 3 imágenes
+    [conversor] no hay 1100 MB libres en ninguna grafica: la red se hara con la CPU, mas despacio
+    [conversor] la grafica no dio para abrir el modelo (.../cuda_call.cc:154 ...): se intentara con la CPU
+
+y justo después `SIGABRT` con un volcado de 298 MB. El aviso decía «se hará con la CPU» pero CUDA se
+abría igual por la ruta antigua; fallada la sesión, el *reintento* abortaba dentro de
+`libonnxruntime.so` (pila entera dentro de la librería). El visor moría antes de dibujar el primer
+cuadro, con el panel ya en modo 3D (`[lente] estado: 3D`, `[scaler] /dev/sg1: modo 3D activado`), así
+que en la pantalla sólo quedaba la rejilla. Y el hub no se enteraba hasta 22 s después: systemd-coredump
+estaba recogiendo el volcado de 300 MB y por eso tardaba tanto en volver el `waitpid` que dispara la
+devolución del panel.
+
+Qué se cambió en v0.30:
+
+* con poca VRAM libre ya no se toca CUDA (antes el aviso de «va por CPU» era mentira: se abría CUDA
+  por la puerta antigua y ahí reventaba);
+* el umbral de «sí cabe» lleva un colchón de 450 MB: 1,1 GB anunciados como libres no alcanzaban;
+* tras un intento CUDA fallido **no se abre otra sesión en el mismo proceso** (es lo que abortaba):
+  el conversor queda apagado, el vídeo se ve sin relieve y el panel se devuelve bien. La tecla `C` no
+  lo vuelve a levantar en esa misma sesión; con la tarjeta más libre, la siguiente sesión ya convierte;
+* `LimitCORE=0` en la unidad del servicio: sin volcado de memoria el hub se entera de la muerte del
+  visor al instante y devuelve el panel, en vez de dejar la rejilla 22 segundos;
+* cuando el vídeo deja de cubrir el lienzo, el hub escribe enseguida la marca de «oculto» y el visor
+  deja de trazar (antes la trama se quedaba 2,5 s rayada sobre el escritorio) y la espera de cierre
+  baja de 2,5 s a 1,2 s.
+
+Para comprobarlo: `journalctl --user -u odyssey3d-serve | grep conversor` y `nvidia-smi`. Con las dos
+tarjetas por debajo de ~1,6 GB libres el conversor se queda apagado a propósito.
 
 ### Se congela el vídeo del navegador mientras el visor está encima
 

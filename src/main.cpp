@@ -1588,6 +1588,8 @@ struct ServeCfg {
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
+  bool rastreo = false;       /* pasar --track al visor: la camara IR del monitor sigue los ojos */
+  float suavizado = 0.0f;     /* 0 = el valor de fabrica del visor (0,35); menor = responde antes */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -1627,7 +1629,7 @@ static std::string expansionRuta(std::string r) {
 }
 
 /* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=,
-   modelo= la red del boton 1, nuestra= la del boton 2). */
+   modelo= la red del boton 1, nuestra= la del boton 2, rastreo= si/no, suavizado= 0,35). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
   if (!home) return;
@@ -1649,6 +1651,13 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "pantalla") cfg.pantalla = v;
     else if (k == "modelo") cfg.modelo = expansionRuta(v);
     else if (k == "nuestra") cfg.nuestra = expansionRuta(v);
+    else if (k == "rastreo") cfg.rastreo = (v == "si" || v == "on" || v == "1" || v == "track");
+    else if (k == "suavizado") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      cfg.suavizado = (float)std::atof(numero.c_str());
+    }
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
       std::vector<std::string> pares;
@@ -1690,7 +1699,8 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
 static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo, int red = 0,
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
-                        const std::string &alterno = std::string()) {
+                        const std::string &alterno = std::string(), bool rastreo = false,
+                        float suavizado = 0.0f) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
@@ -1698,6 +1708,17 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
+  if (rastreo) {
+    /* la camara IR del monitor sigue los ojos y la trama se recalcula; sin esto la
+       trama vive para la posicion de ojo nominal de fabrica */
+    args.push_back("--track");
+    if (suavizado > 0.0f) {
+      char valor[32];
+      std::snprintf(valor, sizeof valor, "%.3f", suavizado);
+      args.push_back("--track-suavizado");
+      args.push_back(valor);
+    }
+  }
   if (modo == "conv") {
     /* video normal: la red de profundidad decide cuanto desplazar cada ojo */
     args.push_back("--conver");
@@ -2276,6 +2297,15 @@ static int cmdServe(int argc, char **argv) {
               ruta1.empty() ? "no hay" : ruta1.c_str(), ruta2.empty() ? "no hay" : ruta2.c_str());
   std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
               redElegida, redElegida == 1 ? "Samsung" : "nuestra");
+  {
+    const std::string aviso = (cfg.rastreo && IrCam::findDevices().empty())
+                                  ? " · ojo: no aparece la camara 04e8:20d7 (3D Stereo WebCam)"
+                                  : "";
+    std::printf("[serve]   rastreo %s%s\n",
+                cfg.rastreo ? "activo (la camara IR sigue los ojos)"
+                            : "apagado (trama para la posicion de ojo nominal de fabrica)",
+                aviso.c_str());
+  }
   std::printf("[serve] vigilando ventanas a pantalla completa (%s) · modo=%s · espera=%d s\n",
               dry ? "sin ejecutar, --dry" : "ejecutando", cfg.modo.c_str(), cfg.esperaSeg);
   std::fflush(stdout);
@@ -2418,7 +2448,12 @@ static int cmdServe(int argc, char **argv) {
             }
           }
         } else {
-          escribirMarcaVentana("visible", now);
+          /* Y en el otro sentido: si el video ya no esta donde debe, la trama deja de tener sentido
+             encima de lo que sea que se vea ahora. El hub tarda unos 2,5 s en decidir el cierre (para
+             no cerrar por un parpadeo), y en ese hueco se veian franjas sobre el escritorio: con la
+             marca de oculto el visor deja de trazar al instante y, si el video vuelve, volvemos a
+             poner "visible" y sigue como si nada. */
+          escribirMarcaVentana(fueraVideoDesde > 0.0 ? "oculta" : "visible", now);
           avisoAparecerHecho = false;
           /* por si el compositor perdio el "encima" o el "pantalla completa" al recolocar la ventana */
           if (!visor.minimized() && now - intentoEncima >= 5.0 &&
@@ -2553,7 +2588,9 @@ static int cmdServe(int argc, char **argv) {
             fueraVideoDesde = 0.0;   /* esto lo provocamos nosotros, no es una salida del video */
           } else if (asentada && sinEstado) {
             motivo = "la ventana del video salio de pantalla completa";
-            paciencia = 2.5;
+            /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y
+               mientras la sesion sigue abierta el panel esta en modo 3D sobre un escritorio 2D. */
+            paciencia = 1.2;
           } else if (asentada && chica && !avisoChicoHecho) {
             avisoChicoHecho = true;   /* ya no insistimos: avisamos una vez y dejamos mirar */
             std::printf("[ventana] el video sigue a %ux%u en una salida de %dx%d: la trama no va a ser"
@@ -2564,7 +2601,7 @@ static int cmdServe(int argc, char **argv) {
             const int cx = video.x + (int)video.w / 2, cy = video.y + (int)video.h / 2;
             if (cx < sx || cx >= sx + sw || cy < sy || cy >= sy + sh)
               motivo = "la ventana del video se fue de la salida del panel";
-            paciencia = 2.5;
+            paciencia = 1.2;
           }
         }
         if (motivo) {
@@ -2668,7 +2705,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado);
           hijoDesde = now;
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
@@ -2706,7 +2743,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado);
             hijoDesde = now;
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
@@ -2755,7 +2792,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado);
           hijoDesde = now;
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());

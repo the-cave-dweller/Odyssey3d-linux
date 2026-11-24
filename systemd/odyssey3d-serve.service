@@ -13,6 +13,11 @@ Type=simple
 ExecStart=@BINDIR@/odyssey3d serve
 Restart=on-failure
 RestartSec=4
+# Sin volcado de memoria. El visor es hijo de este servicio: cuando reventaba, systemd-coredump
+# se ponía a recoger un core de 300 MB y recién después waitpid le avisaba al hub de que el hijo
+# había muerto. Medido el 23-nov: 22 segundos con el monitor en modo 3D y nadie dibujando nada.
+# La pila del fallo la imprime igual el manejador del visor, así que no perdemos el diagnóstico.
+LimitCORE=0
 # El binario adivina WAYLAND_DISPLAY escaneando $XDG_RUNTIME_DIR, así que la unidad
 # no necesita exportarlo.
 

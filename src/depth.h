@@ -66,6 +66,7 @@ private:
   int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */
   bool limpieza_ = true;                /* filtro guiado + dilatar activados */
+  bool quemada_ = false;                /* ONNX Runtime ya reviento aqui: no intentar otra sesion */
 };
 
 #endif

@@ -2,6 +2,44 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## «Se inicio la pura rejilla 3D» y al salir se veia horrible: el conversor abortaba y el panel se quedaba en 3D (v0.30)
+- Lo pedido: «en las ultimas ejecuciones se inicio la pura rejilla 3d sin mostrar el video en 3d, checa el
+  motivo, tambien note que en unas pocas el video se mostraba bien en 3d pero al salir el overlay se veia
+  horrible por unos segundos antes de cerrarse».
+- **El motivo de la rejilla, del journal (`journalctl --user -u odyssey3d-serve`):** en la corrida de las
+  00:58:36, despues de `[vulkan] intercambio 3840x2160 · 3 imagenes` salen
+  `[conversor] no hay 1100 MB libres en ninguna grafica: la red se hara con la CPU, mas despacio` y
+  `[conversor] la grafica no dio para abrir el modelo (.../providers/cuda/cuda_call.cc:154 ... CudaCall ...):
+  se intentara con la CPU`, y a continuacion **SIGABRT** con `COREFILE present ... 298.7M`. La pila del hilo
+  que revienta esta entera dentro de `libonnxruntime.so.1`, llamada desde el reintento (`_ZZN8DepthNet4initE...
+  ...cold`): o sea, no muere en el intento de la grafica, muere en el **reintento**.
+- **Dos bugs que se suman.** (1) El aviso decia "se hara con la CPU" pero no era cierto: con `sinGpu` se lanzaba
+  una excepcion que caia en el `catch` y ahi se abria CUDA por la puerta vieja
+  (`AppendExecutionProvider_CUDA`), asi que el intento de CPU nunca existio. (2) En el manejo del fallo estaba
+  `dev_ = "nada"; if (dev_ == "CPU") return false;`, prueba que ya no puede ser cierta jamas: siempre se caia en
+  el reintento, que es el que aborta dentro de la libreria.
+- **Consecuencia visible:** el visor murio antes de dibujar el primer cuadro con el panel ya en modo 3D
+  (`[panel] DP-4: modo 20 3840x2160@119.88`, `[lente] estado: 3D`, `[scaler] /dev/sg1: modo 3D activado`), y por
+  eso se vio solo la rejilla. El hub no lo note hasta las **00:59:00**, 22 s despues, porque systemd-coredump
+  estaba recogiendo el volcado de 298 MB antes de que `waitpid` avisara de la muerte del hijo; recien ahi
+  `devolverPanelHuerfano` devolvio el panel.
+- **Hecho en `src/depth.cpp`:** con `sinGpu` no se toca CUDA (se va directo a CPU); el "si cabe" de la grafica
+  lleva un colchon de 450 MB (1,1 GB libres anunciados no alcanzaban: la sesion CUDA pide su contexto antes que
+  la red); antes de abrir por CPU se mira `MemAvailable` de `/proc/meminfo` (con menos de 1,5 GB se queda apagado
+  y lo dice); y **despues de un intento CUDA fallido no se abre otra sesion en el mismo proceso** (`quemada_`):
+  el visor sigue, el video se ve sin relieve y el panel se devuelve bien.
+- **Hecho en `systemd/odyssey3d-serve.service`:** `LimitCORE=0`. El visor es hijo del servicio, asi que el
+  volcado de 300 MB retrasaba el `waitpid` 22 s y dejaba el monitor en 3D sin nadie dibujando. La pila del fallo
+  la imprime igual el manejador del visor, no se pierde diagnostico.
+- **Lo del "horrible al salir":** al salir el video de pantalla completa el hub aguanta 2,5 s antes de cerrar (para
+  no cerrar por un parpadeo) y en ese hueco la trama seguia trazada sobre el escritorio. Ahora, en cuanto el video
+  deja de cubrir el lienzo, el hub escribe `oculta` en `~/.local/state/odyssey3d/ventana` y el visor deja de trazar
+  al instante (si el video vuelve, se escribe `visible` y sigue); la espera de cierre baja de 2,5 s a 1,2 s porque
+  el panel en modo 3D sobre un escritorio 2D ya no tiene nada encima que lo tapen.
+- **Ademas:** el hub ya puede pasar el rastreo al visor, que era lo pendiente de v0.29: `rastreo = si` y
+  `suavizado = 0,35` en `~/.config/odyssey3d/serve.conf` (argumentos `--track` y `--track-suavizado`), y al arrancar
+  avisa si no aparece la camara `04e8:20d7`.
+
 ## La camara IR no entregaba fotogramas: autosuspension USB y un puerto colgado (v0.29)
 - Lo pedido: «el modelo se adapta con las camaras del monitor a mis ojos, pero percibo que hay un delay en el
   ajuste, en windows se ajusta mas rapido, es porque tal vez el mapeo ocular sea menos frecuente?». Lo primero
