@@ -1247,9 +1247,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::printf("[ventana] el compositor nos quito de en medio: dejamos de trazar hasta volver\n");
           std::fflush(stdout);
         }
-        if (!panelApagado && now - desdeApartado > 1.5) {
+        /* Mientras la marca este fresca el hub esta vivo y nos va a devolver la ventana en un par
+           de segundos: si aqui apagamos el panel, el monitor hace 3D->2D->3D en cada minimizado.
+           El panel solo se libera cuando la marca ya es vieja (hub muerto) y aun seguimos
+           minimizados, que es el caso en que nadie nos va a devolver. */
+        if (!panelApagado && !elHubDiceOculto && now - desdeApartado > 2.0) {
           panelApagado = true;
-          rig.shutDown(); /* sin ventana propia no hay nada que tramar: el panel, a 2D */
+          rig.shutDown(); /* sin hub y sin ventana propia: el panel, a 2D */
         }
         glfwWaitEventsTimeout(0.15);
         continue;

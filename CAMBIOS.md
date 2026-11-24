@@ -22,7 +22,9 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   (`[ventana] el video (…) esta en x,y WxH …: lo devolvemos a pantalla completa en DP-4`), como mucho cada 5 s.
 - **El visor deja de trazar mientras esté oculto** (`src/vkview.cpp`): el hub escribe
   `~/.local/state/odyssey3d/ventana` con `oculta`/`visible` y su reloj monotónico; con `oculta` el bucle no dibuja,
-  espera con `glfwWaitEventsTimeout` y si dura más de 1,5 s devuelve el panel a 2D (`rig.shutDown()`). Al volver:
+  espera con `glfwWaitEventsTimeout`. El panel solo se devuelve a 2D (`rig.shutDown()`) si la marca ya es vieja
+  —hub muerto— y seguimos ocultos 2 s: con el hub vivo la ventana vuelve sola y apagar el panel hacía parpadear
+  el monitor 3D→2D→3D en cada minimizado (así salió en la prueba del 23-nov). Al volver:
   `glfwRestoreWindow` + `glfwSetWindowMonitor` en nuestra salida, `wv.resize()` y rearme de la captura
   (`cap.stop()` + `cap.start()`), que es lo que estaba detrás de los cortes de flujo. Si el compositor nos deja con
   un lienzo que no mide lo del modo, se vuelve a pedir la pantalla completa (aviso único, cada 3 s).
@@ -31,6 +33,19 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
 - **Mandos para no adivinar**: `ctl salidas` (nombre, posición y tamaño lógicos: `DP-4 0,0 2560x1440`),
   `ctl apilamiento` (el orden de arriba y abajo) y `ctl ventana sobre|debajo|libre|salida NOMBRE`. `ctl aparece`
   ahora, además de quitar la minimizada, pone `KeepAbove`, `Fullscreen` y manda la ventana a la salida del panel.
+- **Medido en la máquina (23-nov, hub 0.24 lanzando una sesión real sobre YouTube con `modo = sbs`)**: con el
+  visor en pantalla completa, `ctl apilamiento` lo dio en el puesto 9 de 9 —por encima del vídeo, puesto 8— y
+  `ctl windows` en su geometría `0,0 3840x2160` sobre DP-4. Minimizado el visor a la fuerza, el hub escribió
+  `oculta 11180.6`, lo devolvió solo y la marca pasó a `visible 11184.6` (4 s), con `[ventana] de vuelta: lienzo
+  3840x2160 en DP-4, intercambio y captura rehechos` y de nuevo arriba del vídeo. Quitándole la pantalla completa
+  al vídeo a propósito, el guardia lo devolvió: `[ventana] el video (…) esta en 640,360 2560x1440 con activa,
+  maximizada: lo devolvemos a pantalla completa en DP-4`.
+- **Lo que queda abierto y no es de este arreglo**: tras varios minimizados seguidos, el conteo de fotogramas de la
+  captura se quedó clavado (`864 fotogramas` repetido) con `[captura] el flujo se corto, pidiendo el flujo otra vez
+  (intento 1)` en bucle y `[captura] el navegador dejo de pintar porque el compositor ya no le manda el
+  sincronismo (la tapamos por completo)`. KWin deja de repintar una ventana a pantalla completa tapada por otra, así
+  que el vídeo se congela y el reintento no lo arregla: es el asunto que motivaba la ruta `--sin-borde`, y hay que
+  pelearlo aparte.
 
 ## La pastilla vuelve siempre: tecla PB y ventana minimizada devuelta (v0.23)
 - Lo pedido: «el overlay al esfumarse ya no vuelve con los keys», «la tele se quedó en el modo de malla 3D»

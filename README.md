@@ -285,8 +285,9 @@ trozos sueltos. Son dos cosas distintas, y cada una tiene su arreglo.
   presentando cuadros contra un intercambio sin superficie; al volver, la ventana estaba achicada y en otra
   salida (en el registro: 3840×2160 → 2560×1440 → 2015×869) y la trama dejaba de ser pixel a pixel. El servicio
   escribe `~/.local/state/odyssey3d/ventana` con `oculta`/`visible` y su reloj; con `oculta` el visor **deja de
-  trazar** (y si dura más de 1,5 s devuelve el panel a 2D), y al volver pide la pantalla completa en su salida,
-  rehace el intercambio y rearma la captura.
+  trazar**, y al volver pide la pantalla completa en su salida,
+  rehace el intercambio y rearma la captura. El panel solo se devuelve a 2D si el servicio dejó de escribir la
+  marca (hub caído); mientras el servicio respire, la ventana vuelve sola y el monitor no parpadea 3D→2D→3D.
 * **La salida también se pide.** `ctl aparece` y el servicio mandan la ventana del visor a la salida del panel
   (`send_to_output`, con los nombres y las posiciones lógicas que da `zxdg_output_v1`) y vigilan la ventana del
   vídeo: si pierde la pantalla completa o sale del rectángulo de esa salida, la devuelven
