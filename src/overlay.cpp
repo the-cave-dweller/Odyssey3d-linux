@@ -274,6 +274,9 @@ struct Overlay::Impl {
     if (caja[2] > 0 && caja[3] > 0) wl_region_add(r, caja[0], caja[1], caja[2], caja[3]);
     wl_surface_set_input_region(surf, r);  /* caja vacia = aqui no se pica nada: pasa todo */
     wl_region_destroy(r);
+    std::printf("[capa] region de entrada: %s\n",
+                (caja[2] > 0 && caja[3] > 0) ? "solo la tarjeta" : "ninguna (el aviso no esta puesto)");
+    std::fflush(stdout);
     regionCuadrada[0] = caja[0]; regionCuadrada[1] = caja[1];
     regionCuadrada[2] = caja[2]; regionCuadrada[3] = caja[3];
   }
