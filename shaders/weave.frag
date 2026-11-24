@@ -26,6 +26,7 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun4;     /* conversor 2D/3D: x activo · y cuanto se desplaza cada ojo · z plano de referencia · w copia pura */
     vec4 tun5;     /* conversor fino: x temblor del desplazamiento en pixeles · y/z topes por ojo en pixeles (0 = sin tope) */
     vec4 tun6;     /* medición: x temblor de la propia fase de la trama, en ciclos (0 = apagado) */
+    vec4 tun7;     /* capas: x escala de lo de DETRAS del plano de apoyo · y escala de lo de DELANTE (0 o 1 = sin cambio) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -156,8 +157,17 @@ void main()
         const float CantoSuave = P.tun5.w > 0.0 ? P.tun5.w : 0.004;
         float cantoI = clamp(CantoSuave / max(pendienteI, 0.00001), 0.10, 1.0);
         float cantoD = clamp(CantoSuave / max(pendienteD, 0.00001), 0.10, 1.0);
-        float sI = (mp.x - P.tun4.z) * P.tun4.y * cantoI;
-        float sD = (mp.z - P.tun4.z) * P.tun4.y * cantoD;
+        /* Capas por profundidad: lo de detras del plano de apoyo y lo de delante se pueden
+           estirar por separado (tun7.x y tun7.y; 0 en el hueco = sin escalar, que es como venia).
+           El lado se mira sobre el mapa ya muestreado hacia cada ojo, asi que un objeto que cruza
+           el plano se estira distinto en cada ojo: es el mismo criterio de las bandas near/far del
+           conversor de Windows (near_diff_scale / far_diff_scale), no una clasificacion de objetos.
+           En el plano mismo el desplazamiento es 0 por los dos lados, asi que el cambio es continuo:
+           lo unico que se rompe es la pendiente, que es justo lo que se quiere controlar. */
+        const float gFondo = P.tun7.x > 0.0 ? P.tun7.x : 1.0;
+        const float gFrente = P.tun7.y > 0.0 ? P.tun7.y : 1.0;
+        float sI = (mp.x - P.tun4.z) * P.tun4.y * cantoI * (mp.x < P.tun4.z ? gFondo : gFrente);
+        float sD = (mp.z - P.tun4.z) * P.tun4.y * cantoD * (mp.z < P.tun4.z ? gFondo : gFrente);
         /* El programa de Samsung mueve el desplazamiento de a saltos y en las zonas llanas (pared,
            cielo) se ven bandas: por eso le suma un temblor de 0,25 a 0,4 px al mapa. Aqui se suma
            igual, pero solo donde el mapa esta llano (canto = 1), que es justo donde la banda se ve

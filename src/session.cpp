@@ -249,6 +249,25 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
       std::snprintf(etiqueta, sizeof etiqueta, "rampa_y %+.5f sobre la config", t.rampaDY);
       *tag = etiqueta;
       break;
+    /* Capas por profundidad. Una sola llave (el relieve) obliga a elegir entre un fondo atrasado
+       y unos primeros planos fuertes; aqui se separan los dos lados del plano de apoyo, que es
+       como lo trae el conversor de Windows. `j`/`k` mueven lo de DETRAS de la pantalla y `u`/`i`
+       lo de DELANTE. Tope 0,2..2,0: fuera de ahi el relieve se sale del presupuesto de la lente y
+       lo unico que se consigue es dolor de ojos. El tope oficial por ojo se impone despues, en el
+       shader, asi que un fondo en 2,0 no pasa de 9,98 puntos hacia dentro. */
+    case GLFW_KEY_J:
+    case GLFW_KEY_K:
+    case GLFW_KEY_U:
+    case GLFW_KEY_I: {
+      const auto topeGan = [](float v) { return v < 0.2f ? 0.2f : (v > 2.0f ? 2.0f : v); };
+      if (key == GLFW_KEY_J) t.ganFondo = topeGan(t.ganFondo - 0.05f);
+      if (key == GLFW_KEY_K) t.ganFondo = topeGan(t.ganFondo + 0.05f);
+      if (key == GLFW_KEY_U) t.ganFrente = topeGan(t.ganFrente - 0.05f);
+      if (key == GLFW_KEY_I) t.ganFrente = topeGan(t.ganFrente + 0.05f);
+      std::snprintf(etiqueta, sizeof etiqueta, "fondo %.2f · frente %.2f", t.ganFondo, t.ganFrente);
+      *tag = etiqueta;
+      break;
+    }
     case GLFW_KEY_8:
       t.conv = 0.0f;
       t.align = 0.0f;

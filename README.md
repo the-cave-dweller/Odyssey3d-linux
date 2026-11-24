@@ -183,6 +183,8 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `↑` `↓` | crosstalk dinámico (±0.002) |
 | `,` `.` | pendiente del filtro de traza (±0.5) |
 | `9` `0` | convergencia horizontal (∓0.0005) |
+| `j` `k` | **capa fondo** (0,20–2,00, de 0,05 en 0,05): cuánto más se va hacia atrás lo que está **detrás** del plano de apoyo, sin tocar los primeros planos (v0.45) |
+| `u` `i` | **capa frente**: lo mismo con lo que sale **delante** de la pantalla. Los dos en 1,00 es exactamente como se comportaba antes |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
@@ -518,6 +520,19 @@ baten a 353 px de panel, o sea **55 mm**: esas son las franjas verticales gruesa
 los desfases entre los canales rojo, verde y azul, así que desplaza el color y afloja la inclinación;
 por eso `paso` se queda en 1. `tools/paso_rejilla.py` mide el paso escrito y propone el valor de la
 rampa, y el servicio imprime al arrancar los números de trama que cargó.
+
+Las dos últimas (v0.45) son `fondo` y `frente`: **cuánto se estira el relieve a cada lado del plano
+de apoyo**. `fondo = 1,4` atrasa el fondo un 40 % más sin mover los primeros planos; `frente = 1,3`
+acerca lo que ya está fuera de la pantalla. Los dos en `1` (o sin escribir la línea) es el
+comportamiento anterior, píxel por píxel. Es la llave para «mandar algo al frente o al fondo» que
+antes no existía: el relieve solo tenía una escala para toda la imagen. En el conversor de Windows
+esto viene por dentro, en las bandas de su configuración descifrada (`near_diff_scale −0,5`,
+`far_diff_scale 1,0`, `far_diff_popup −1,0` en `scene_dspr`, y los signos `dspr_scale(−)` /
+`dspr_scale(+)` en `camera`); aquí lo exponemos suelto porque en el Hub de Windows no aparece. El
+escalado se aplica **antes** de los topes por ojo de Samsung (+12,67 puntos hacia afuera y 9,98 hacia
+adentro sobre 3840), así que por mucho que se suba no nos salimos del presupuesto que su programa
+considera sano. En marcha se ajustan con `j`/`k` y `u`/`i`; por escrito se dejan para comparar una
+tarde entera sin tocar teclas.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

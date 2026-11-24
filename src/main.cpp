@@ -1925,6 +1925,11 @@ struct ServeCfg {
   double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
   double rampaX = 999.0;    /* rampa de fase en x, ciclos por pixel de panel; 999 = sin ajustar */
   double rampaY = 999.0;    /* lo mismo en y (hacia abajo en la pantalla) */
+  /* Capas por profundidad: `fondo` cuanto se estira lo que queda detras del plano de apoyo y
+     `frente` lo que sale delante. -1 = sin ajustar (1,0 en los dos, como siempre). Mueven lo
+     mismo que las teclas j/k y u/i, pero dejado por escrito para comparar mananas enteras. */
+  double ganFondo = -1.0;
+  double ganFrente = -1.0;
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2021,7 +2026,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
-             k == "rampa_x" || k == "rampa_y") {
+             k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2035,6 +2040,8 @@ static void loadServeCfg(ServeCfg &cfg) {
       else if (k == "canto") cfg.canto = d;
       else if (k == "rampa_x") cfg.rampaX = (d > -0.05 && d < 0.05) ? d : 999.0;
       else if (k == "rampa_y") cfg.rampaY = (d > -0.05 && d < 0.05) ? d : 999.0;
+      else if (k == "fondo") cfg.ganFondo = (d >= 0.2 && d <= 2.0) ? d : -1.0;
+      else if (k == "frente") cfg.ganFrente = (d >= 0.2 && d <= 2.0) ? d : -1.0;
       else cfg.faseTemblor = d;
     }
     else if (k == "auto") {
@@ -2196,6 +2203,19 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       std::snprintf(valor, sizeof valor, "%.6f", pila->rampaY);
       ::setenv("ODYSSEY3D_RAMPA_Y", valor, 1);
       std::fprintf(stderr, "[serve] rampa_y = %s ciclos por pixel de panel\n", valor);
+    }
+    /* `fondo` / `frente`: cuanto se estira el relieve a cada lado del plano de apoyo (1 = como
+       siempre). Con `fondo = 1,4` el fondo se va mas atras sin tocar los primeros planos; es la
+       pareja que en el programa de Windows viene por dentro, en las bandas de su config. */
+    if (pila->ganFondo >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.3f", pila->ganFondo);
+      ::setenv("ODYSSEY3D_GAN_FONDO", valor, 1);
+      std::fprintf(stderr, "[serve] capa fondo = %s (1 = sin cambiar)\n", valor);
+    }
+    if (pila->ganFrente >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.3f", pila->ganFrente);
+      ::setenv("ODYSSEY3D_GAN_FRENTE", valor, 1);
+      std::fprintf(stderr, "[serve] capa frente = %s (1 = sin cambiar)\n", valor);
     }
   }
   ::execv(exe.c_str(), av.data());

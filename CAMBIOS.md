@@ -2,6 +2,37 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Dos mandos separados: hundir el fondo sin tocar los primeros planos (v0.45)
+- Falta que él señaló: para «mandar unos elementos al frente y otros al fondo» el conversor solo
+  tenía **una** escala de relieve para toda la imagen. Ahora el desplazamiento se estira **por
+  separado a cada lado del plano de apoyo**: `fondo` (lo que queda detrás de la pantalla) y
+  `frente` (lo que ya sale delante). En `weave.frag` es el hueco nuevo `tun7.x`/`tun7.y`, aplicado
+  **antes** de los topes oficiales por ojo, así que por mucho que se suba no nos salimos del
+  presupuesto de Samsung (+12,67 puntos afuera · 9,98 dentro sobre 3840).
+- De dónde sale la idea: la configuración descifrada del conversor de Windows
+  (`/run/media/rodolfo/.../AnalisisOdyssey/conv-config.json`) ya lo hace, y lo hace por **bandas de
+  profundidad**, no por clases de objeto: `scene_dspr` trae `near_diff_scale −0,5` ·
+  `mid_diff_scale 0,0` · `far_diff_scale 1,0` · `far_diff_popup −1,0`, y el bloque `camera` los dos
+  signos `dspr_scale(−) = −1` / `dspr_scale(+) = 1`. En el Hub son dos mandos sueltos
+  (`3D Depth` 0–100 y `3D Popout` −50…+50; en su equipo 1,7 y 1,0, según
+  `configs/hub-usuario/OverlaySettings.json`) y ahí `Depth` mueve el plano de parallaje cero, que
+  es lo que ya hace nuestra «3D Profundidad».
+- Números de la fórmula (aritmética del shader, no hizo falta montar sesión): con «3D Salida» = 50
+  la escala es **22,66 puntos por unidad de mapa**, así que un mapa que barre todo el 0–1 ya da
+  −11,3 / +11,3 puntos en sus extremos y **toca los topes** (9,98 dentro, 12,67 fuera) con las
+  llaves en 1. Consecuencia práctica escrita en `serve.conf`: lo útil de `fondo`/`frente` está entre
+  **0,5 y 1,2**; pasar de ahí solo pega más puntos al tope y deja escalones en el fondo. Y para
+  sacar algo hacia afuera primero se baja «3D Profundidad» (mover el plano de apoyo) y después se
+  sube `frente`.
+- Teclas `j` `k` (fondo) y `u` `i` (frente), de 0,05 en 0,05, con los dos números impresos en cada
+  golpe; por escrito `fondo = ` y `frente = ` en `serve.conf` (dejados comentados, con la explicación).
+- Bloque de parámetros de la trama: de 304 a **320 bytes**. Comprobado sobre el SPIR-V ya compilado,
+  no de memoria: el último miembro del bloque está en el desplazamiento **304**, o sea 320 de tamaño,
+  que es lo que asigna y sube `vkweave.cpp`.
+- Sin tocar lo conseguido: con las dos llaves en 1 (o sin escribir la línea) el cuadro es idéntico
+  píxel a píxel; red, trama, rampas y relleno de huecos no se mexieron. Instalado 0.45 y servicio
+  reiniciado con `rampa_x −0,0040` / `rampa_y +0,0016` intactos y la red de Samsung por delante.
+
 ## RONDA C: el paso Y la inclinación escritos ya coinciden con los de Windows (medido sobre el cuadro)
 - Sesión de medición disparada sin tocar el teclado (`auto = mpv:conv` en `serve.conf` + un clip
   propio de 3840x2160 y 60 fps, barrido lento sobre un fondo liso), volcado del cuadro escrito en

@@ -32,6 +32,17 @@ struct WeaveTuning {
      Teclas: `[` y `]` en x, `;` y `'` en y; `8` las pone a cero. */
   float rampaDX = 0.0f;
   float rampaDY = 0.0f;
+  /* Capas por profundidad: cuanto se estira el relieve a CADA LADO del plano de apoyo.
+     `ganFondo` manda sobre lo que queda detras de la pantalla (lo empuja hacia dentro) y
+     `ganFrente` sobre lo que sale fuera de ella. Los dos en 1 es el comportamiento de siempre;
+     subiendo `ganFondo` se atrasa el fondo sin tocar los primeros planos, que es lo que hace
+     el conversor de Windows con las bandas de `scene_dspr` (near_diff_scale -0,5 ·
+     far_diff_scale 1,0) y con los signos de `dspr_scale(-)` / `dspr_scale(+)`.
+     El tope oficial por ojo (+12,67 puntos hacia fuera y 9,98 hacia dentro sobre 3840) se
+     aplica DESPUES de este escalado, asi que por mucho que se suba no se sale del presupuesto
+     de Samsung. Teclas: `j`/`k` el fondo, `u`/`i` el frente, de 0,05 en 0,05. */
+  float ganFondo = 1.0f;
+  float ganFrente = 1.0f;
   bool weave = true;
   bool topBottom = false;      /* video arriba/abajo en lugar de lado a lado */
   bool swapLR = false;         /* profundidad invertida -> alternar */

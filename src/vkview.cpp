@@ -816,6 +816,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   bool textoAncla = opts.textoPanel != 0;
   if (const char *e = std::getenv("ODYSSEY3D_TEXTO"))
     textoAncla = !(e[0] == '0' || e[0] == 'n' || e[0] == 'N');
+  /* Capas por profundidad: `fondo` y `frente` de serve.conf llegan como entorno y son el punto de
+     arranque de las teclas `j`/`k` (lo de atras) y `u`/`i` (lo de delante), para que el primer
+     golpe de tecla continue desde lo ajustado y no desde 1,0. */
+  const auto ganArranque = [](const char *nombre, float &destino) {
+    const char *e = std::getenv(nombre);
+    if (!e) return;
+    const float v = (float)std::atof(e);
+    if (v >= 0.2f && v <= 2.0f) {
+      destino = v;
+      std::printf("[conversor] capa %s = %.2f\n", strstr(nombre, "FONDO") ? "fondo" : "frente", (double)v);
+    }
+  };
+  ganArranque("ODYSSEY3D_GAN_FONDO", ui.tune.ganFondo);
+  ganArranque("ODYSSEY3D_GAN_FRENTE", ui.tune.ganFrente);
   int convSalto = 0;
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
@@ -1604,6 +1618,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     t.xtalkDyn = ui.tune.xtalkDyn;
     t.contrast = ui.tune.contrast;
     t.corrAScale = ui.tune.corrAScale;
+    /* capas: cuanto se estira el relieve a cada lado del plano de apoyo (teclas j/k y u/i) */
+    t.ganFondo = ui.tune.ganFondo;
+    t.ganFrente = ui.tune.ganFrente;
     const Hud::State &st = ui.hud.state();
     t.conv = ui.convBase + (float)st.popout / 50.0f * 0.004f;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);
