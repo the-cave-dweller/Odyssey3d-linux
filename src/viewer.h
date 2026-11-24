@@ -59,6 +59,10 @@ struct ViewerOpts {
   double trackCampo = 65.0;  /* campo horizontal de la webcam, en grados */
   double trackCara = 150.0;  /* ancho de cara de oreja a oreja, en milimetros */
 
+  /* rotulos y subtitulos: 1 los apoya en el plano de la pantalla (asi no se deslizan con la
+     cabeza), 0 los deja con la profundidad que les da la red, -1 = apoyados (lo de fabrica) */
+  int textoPanel = -1;
+
   std::string corrA, corrB, corrDir;
   std::string file;
   std::string captureUuid;   /* ventana a capturar (SourceKind::Capture) */

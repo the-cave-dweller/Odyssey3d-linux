@@ -2,6 +2,40 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Rótulos y subtítulos apoyados en el plano de la pantalla (v0.32)
+- Lo pedido: «no me hace sentido que veo los subtitulos y cualquier otro texto moviendose de lado a
+  lado a pesar de tener el rastreo, el rastreo es como el de windows?, en windows se queda quieto el
+  texto, cualquier texto».
+- **Diagnóstico.** No era el rastreo. Contenido plano = las dos vistas iguales = la trama no depende
+  del ojo, así que una zona plana no se mueve nunca (es la prueba algebraica de `shaders/weave.frag`
+  ~183–198: con `L == R` la salida no cambia ni con la fase ni con el crosstalk, que son los unicos
+  terminos dependientes del ojo). Si el texto se desliza es porque tiene disparidad: la red de
+  profundidad toma el borde de las letras por relieve y lo saca un par de milimetros del panel. Con
+  relieve de 2 cm y 15 cm de cabeza el barrido esperado son ~30 puntos del panel (5 mm), que es justo
+  lo que se ve. En Windows el texto esta en el plano del cristal, por eso ahi no se despega.
+- **Lo que hace ahora (`anclarTexto()` en `src/depth.cpp`).** Despues de la red y sobre la MISMA foto
+  que genero el mapa, busca las zonas de rotulo y lleva el valor del mapa al plano de apoyo
+  (`red->focusPlane()`), donde el desplazamiento izquierda/derecha vale 0 y las dos vistas salen
+  iguales: el rotulo queda soldado a la pantalla y el resto del relieve no se toca. Rejilla de 8x8
+  puntos; por celda mide contraste, parte de bordes, parte sin bordes, finura del detalle y area de
+  trazo, y decide con las **medias de la vecindad** (3x3 celdas): las letras estan rodeadas de fondo
+  despejado y una tela o un matorral no dejan ni un hueco. En la franja de abajo y la de arriba se
+  bajan los umbrales. Despues dilata una celda y difumina, para que el apoyo entre despacio.
+- **Medido fuera del panel** (fotos sinteticas de `../pruebas-texto/`, sin tocar el relieve real):
+  subtitulo blanco sobre fondo liso 10,0 % de la rejilla (las dos lineas enteras, filas 79–92 % del
+  alto); cintillo blanco sobre banda roja 2,9 %; detalle fino, detalle grueso y fondo liso 0,0 %, 0,2 %
+  y 0,0 % (la textura conserva su relieve). Con `--mapa` se comprueba la cuenta: la banda pasa de 230 a
+  115 = el plano 0,45, y el resto queda intacto.
+- **Mando:** tecla `R` en el visor (alterna y reinicia la red para que el siguiente mapa salga distinto),
+  `--texto-panel si|no`, `texto = si|no|auto` en `serve.conf` y `ODYSSEY3D_TEXTO=0` para comparar sin
+  recompilar. Avisa el visor: `[rotulos] apoyados en la pantalla: 10,0% del mapa 518 x 518`.
+- **Herramienta de ajuste:** `odyssey3d texto-detect foto.ppm [--plano 0,45] [--celda 8] [--mapa m.pgm]`
+  imprime la rejilla de lo que considera rotulo, fila por fila, y con `--mapa` escribe
+  `mapa-apoyado.pgm` con las estadisticas del cambio. Umbrales a la venta por variable:
+  `ODYSSEY3D_TEXTO_CONTRASTE`, `ODYSSEY3D_TEXTO_FINO`. Con `--volcado` cae tambien `-rotulos.pgm`.
+- **Coste:** unos 15 ms en el hilo de la red (que ya iba a ~7 ms con la red en la GPU); no anade nada
+  por fotograma en la GPU.
+
 ## Rastreo con cualquier webcam y deslizador de ángulo en la pastilla (v0.31)
 - Lo pedido: «la camara esta en 3d stereo webcam /dev/video0 segun discord, no puedes usarla? … quiero
   que añadas un fallback que use cualquier otra camara conectada para tracking, y ultima cosa, en el

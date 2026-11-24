@@ -110,6 +110,7 @@ struct VkUi {
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
   /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nuestra
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
+  bool textoToggle = false;  /* la tecla R: rotulos apoyados en la pantalla o no */
   int redPedida = 0;
   std::string rutaRed[3];    /* [1] y [2]: ruta .onnx de cada red; vacia = esa red no esta disponible */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
@@ -323,6 +324,12 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      del ciclo son lado a lado, arriba y abajo, y 2D plano (el video tal cual). */
   if (key == GLFW_KEY_C) {
     ui->convToggle = true;   /* el bucle del visor enciende o apaga el conversor */
+    return;
+  }
+  /* R: los rotulos y subtitulos se apoyan (o no) en el plano de la pantalla. Es para comparar en
+     el panel sin recompilar: con el apoyo puesto el texto queda quieto al mover la cabeza. */
+  if (key == GLFW_KEY_R) {
+    ui->textoToggle = true;
     return;
   }
   if (key == GLFW_KEY_M) {
@@ -823,6 +830,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   DepthNet red;
   std::vector<uint8_t> chico, mapa;
   bool convActivo = opts.conver;
+  /* rotulos y subtitulos apoyados en el plano de la pantalla (ODYSSEY3D_TEXTO=0 para apagarlo) */
+  bool textoAncla = opts.textoPanel != 0;
+  if (const char *e = std::getenv("ODYSSEY3D_TEXTO"))
+    textoAncla = !(e[0] == '0' || e[0] == 'n' || e[0] == 'N');
   int convSalto = 0;
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
@@ -837,6 +848,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      std::thread hilo;
      std::mutex candado;
      std::vector<uint8_t> mapa;   /* mapa terminado y esperando subirse */
+     std::vector<uint8_t> mascara; /* rejilla de rotulos detectados, para poder verla */
+     int mw = 0, mh = 0;
+     float textoFrac = 0.0f;      /* parte del mapa que se apoy6 en la pantalla */
      std::string error;
      float ms = 0.0f;
      bool terminado = false;
@@ -851,16 +865,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          hilo.join();
        ocupado = false;
      }
-     void arrancar(DepthNet *red, const uint8_t *chico, int sz) {
+     void arrancar(DepthNet *red, const uint8_t *chico, int sz, bool apoyar) {
        if (hilo.joinable())
          hilo.join();
        std::vector<uint8_t> copia(chico, chico + (size_t)sz * (size_t)sz * 4);
        ocupado = true, terminado = false, error.clear();
-       hilo = std::thread([this, red, copia = std::move(copia), sz]() {
+       hilo = std::thread([this, red, copia = std::move(copia), sz, apoyar]() {
          std::vector<uint8_t> m;
          std::string e;
          const bool ok = red->estimate(copia.data(), sz, sz, m, &e);
+         float frac = 0.0f;
+         std::vector<uint8_t> mk;
+         int gw = 0, gh = 0;
+         if (ok && apoyar)
+           /* los subtitulos y cualquier texto: van al plano de la pantalla para que no se deslicen
+              con la cabeza. Se hace aqui, con la misma foto que gener6 este mapa. */
+           frac = anclarTexto(copia.data(), sz, sz, m, red->focusPlane(), 8, &mk, &gw, &gh);
          std::lock_guard<std::mutex> g(candado);
+         mascara = std::move(mk), mw = gw, mh = gh, textoFrac = frac;
          mapa = ok ? std::move(m) : std::vector<uint8_t>{};
          error = ok ? std::string() : e;
          ms = red->lastMs();
@@ -868,7 +890,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        });
      }
      /* 0 = sigue trabajando, 1 = mapa listo (en `fuera`), -1 = fallo (en `errFuera`) */
-     int recoger(std::vector<uint8_t> &fuera, float &msFuera, std::string &errFuera) {
+     int recoger(std::vector<uint8_t> &fuera, float &msFuera, std::string &errFuera,
+                 std::vector<uint8_t> *masc = nullptr, int *mw = nullptr, int *mh = nullptr,
+                 float *frac = nullptr) {
        if (!ocupado)
          return 0;
        std::lock_guard<std::mutex> g(candado);
@@ -881,6 +905,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          return -1;
        }
        fuera.swap(mapa);
+       if (masc)
+         masc->swap(mascara);
+       if (mw) *mw = this->mw, *mh = this->mh, *frac = textoFrac;
        return fuera.empty() ? -1 : 1;
      }
    } hiloRed;
@@ -1136,6 +1163,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     glfwPollEvents();
 #ifdef HAVE_ORT
     /* la tecla C: encender o apagar el conversor de video normal a 3D */
+    if (ui.textoToggle) {
+      ui.textoToggle = false;
+      textoAncla = !textoAncla;
+      red.reset();   /* el mapa viejo ya traia el apoyo dentro: no lo mezcles con el nuevo */
+      std::printf("[rotulos] %s\n", textoAncla ? "apoyados en el plano de la pantalla (R los suelta)"
+                                               : "soltados: llevan la profundidad que le da la red (R los apoya)");
+      std::fflush(stdout);
+    }
     if (ui.convToggle || ui.convWant) {
       const bool pidiendo = ui.convWant;
       ui.convToggle = false, ui.convWant = false;
@@ -1571,7 +1606,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         ultimaEstim = now;
         std::string cerr;
         if (wv.readSmall(chico, &cerr)) {
-          hiloRed.arrancar(&red, chico.data(), wv.converterSize());
+          hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla);
         } else if (++convFallos == 1 || convFallos % 100 == 0) {
           std::fprintf(stderr, "[conversor] no se pudo leer el cuadro pequeno (%d): %s\n", (int)convFallos,
                        cerr.c_str());
@@ -1579,7 +1614,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       float msHecho = 0.0f;
       std::string cerr, errHecho;
-      const int estado = hiloRed.recoger(mapa, msHecho, errHecho);
+      std::vector<uint8_t> mascara;
+      int masW = 0, masH = 0;
+      float fracTexto = 0.0f;
+      const int estado = hiloRed.recoger(mapa, msHecho, errHecho, &mascara, &masW, &masH, &fracTexto);
       if (estado == 1) {
         convMs = msHecho;
         if (wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr)) {
@@ -1623,6 +1661,31 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", tp.c_str());
               } else
                 std::fprintf(stderr, "[volcado] trama con mapa: %s\n", cerr.c_str());
+            }
+          }
+          /* cuanto del mapa se apoyo: si el numero sube de la cuenta esta comiendo textura, y con
+             --volcado guardamos la rejilla para ver exactamente que consider6 texto */
+          static float fracAnterior = -1.0f;
+          if (textoAncla && (convHechas == 0 || std::fabs(fracTexto - fracAnterior) > 0.03f)) {
+            fracAnterior = fracTexto;
+            std::printf("[rotulos] apoyados en la pantalla: %.1f%% del mapa %d x %d\n", fracTexto * 100.0f,
+                        masW, masH);
+            if (!opts.dumpPath.empty() && masW > 0 && masH > 0) {
+              const std::string mp2 = opts.dumpPath + "-rotulos.pgm";
+              FILE *mf = std::fopen(mp2.c_str(), "wb");
+              if (mf) {
+                const int es = 8;
+                std::fprintf(mf, "P5\n%d %d\n255\n", masW * es, masH * es);
+                std::vector<uint8_t> fila((size_t)masW * es);
+                for (int yy = 0; yy < masH; yy++) {
+                  for (int xx = 0; xx < masW; xx++)
+                    for (int k = 0; k < es; k++)
+                      fila[(size_t)xx * es + k] = mascara[(size_t)yy * masW + xx];
+                  std::fwrite(fila.data(), 1, fila.size(), mf);
+                }
+                std::fclose(mf);
+                std::printf("[volcado] %s (lo que el visor considera texto)\n", mp2.c_str());
+              }
             }
           }
           if (red.lastCut())

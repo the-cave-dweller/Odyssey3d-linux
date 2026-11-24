@@ -151,6 +151,8 @@ odyssey3d capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
   ```
 * `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
   conviene 2; si la GPU va justa, 4 o 5.
+* `--texto-panel si|no` pega o suelta los rótulos del plano de la pantalla (por defecto pegados;
+  en marcha es la tecla `R`, y `ODYSSEY3D_TEXTO=0` lo apaga para comparar sin recompilar).
 * `--red N` pone la red en la GPU `N` (`0` por defecto). El programa mira cuánta memoria libre tiene
   cada tarjeta: si en la pedida no caben ~1,1 GB la manda a la que más tenga y lo avisa. Si en ninguna
   cabe, la red **se va a la CPU** (tarda 150 ms en vez de 9) y entonces la profundidad se recalcula
@@ -173,6 +175,7 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `F` | invertir profundidad (si se ve pseudoscópico: lo de dentro fuera) |
 | `M` | cambiar el formato del vídeo: lado a lado → arriba y abajo → 2D plano → vídeo normal (2D a 3D) |
 | `C` | encender / apagar el conversor de **vídeo normal a 3D** (lo mismo que la cuarta tarjeta) |
+| `R` | **pegar / soltar los rótulos y subtítulos** del plano de la pantalla (con el conversor puesto; abajo) |
 | `←` `→` | fase de la trama (±0.002 ciclos) |
 | `RePag` `SavPg` | paso de lente (±0.0002); se usa si el paso real difiere del nominal |
 | `↑` `↓` | crosstalk dinámico (±0.002) |
@@ -266,6 +269,50 @@ odyssey3d ctl track --dev /dev/video0 --segundos 8  # en vivo: cara si · panel 
 ```
 
 Si en cambio quieres la vía calibrada con la cámara del monitor, `--track-mono no` (exige `calib/`).
+
+### Los subtítulos no se deslizan: rótulos apoyados en la pantalla (desde v0.32)
+
+El síntoma: con el rastreo puesto, los subtítulos y cualquier texto se van de lado a lado al mover la
+cabeza, y en Windows en cambio quedan quietos. No es un fallo del rastreo. Una zona **plana** de la
+trama no se mueve nunca, porque las dos vistas salen idénticas y la trama no depende del ojo (es la
+prueba que está escrita en `shaders/weave.frag`: con disparidad cero la salida no cambia ni con la fase
+ni con el crosstalk). Lo que se desliza es lo que el conversor sacó hacia fuera, y una red de
+profundidad toma el borde de una letra por relieve de verdad, así que el texto acaba flotando un par de
+milímetros delante del panel. Una vez que flota, la ventana de la trama lo lleva de un lado a otro: con
+15 cm de cabeza y 2 cm de relieve el recorrido son ~30 puntos del panel, unos 5 mm. El visor de Windows
+y el Odyssey 3D Hub ponen el texto en el plano del panel, y por eso ahí no se despega.
+
+Lo que hace el visor ahora: cada vez que la red saca el mapa, `anclarTexto()` (`src/depth.cpp`) mira la
+**misma foto** que lo generó, busca las zonas que son rótulo y lleva su valor al plano de apoyo del
+propio mapa. Ahí el desplazamiento izquierda/derecha vale cero, las dos vistas salen iguales y el rótulo
+queda soldado al cristal; el resto del relieve sigue donde lo puso la red.
+
+Cómo reconoce un rótulo sin leerlo: rejilla de 8×8 puntos (≈65×65), y por celda mide el contraste, la
+parte de píxeles con borde, la parte sin borde, la finura del detalle (un trazo de letra deja un
+laplaciano fino y antialiasing) y la parte de área de trazo; y sobre todo las **medias de la vecindad**,
+que es donde se ve si el detalle está suelto sobre fondo despejado (letras) o si lo llena todo (una tela,
+un matorral, una grava): midiendo celda por celda las dos cosas son idénticas. En la franja de abajo
+(subtítulos) y en la de arriba (cintillos y relojes) se bajan los umbrales. En las fotos de prueba
+(`../pruebas-texto/`): subtítulo blanco sobre fondo liso 10 % de la rejilla, las dos líneas enteras;
+cintillo blanco sobre banda roja 2,9 %; matorral de detalle fino, matorral de detalle grueso y fondo
+liso, 0 % en los tres, así que la textura conserva su relieve.
+
+Se prueba en marcha con la tecla `R`: el visor imprime
+`[rotulos] apoyados en la pantalla: 10,0% del mapa 518 x 518` y al soltarlos
+`[rotulos] sueltos: cada rotulo con la profundidad que le dio la red`. Si al ver una película el texto
+se ve hundido o el relieve de una zona con mucha letra se corta, suéltalos con `R` y ajusta el ángulo
+con el deslizador de la pastilla.
+
+Para ajustar los umbrales sin sentarse delante del panel (con una foto del `--volcado`, o cualquiera):
+
+```
+odyssey3d texto-detect foto.ppm                                  # que cree que es texto, en ASCII
+odyssey3d texto-detect foto.ppm --mapa mapa.pgm --plano 0.45     # y como queda el mapa
+ODYSSEY3D_TEXTO_CONTRASTE=45 ODYSSEY3D_TEXTO_FINO=0.20 odyssey3d texto-detect foto.ppm
+```
+
+Con `--mapa` escribe `mapa-apoyado.pgm` y dice cuántos puntos movió y cuánto; sin él sólo imprime la
+rejilla, fila por fila. El apoyo cuesta unos 15 ms en el hilo de la red, así que no corta el vídeo.
 
 ### El ratón atraviesa el visor (desde v0.22)
 
@@ -385,7 +432,8 @@ GPU corre la red del conversor), `cada` (cada cuántos fotogramas se calcula la 
 posición nominal de fábrica) y `suavizado` (`0,35`: cuánto se amortigua ese seguimiento; más pequeño
 responde antes y se mueve más). Para la cámara: `camara` (`/dev/video0`, vacío = elegir la mejor),
 `mono` (`auto`, `si`, `no`; abajo), `campo` (campo horizontal de la webcam en grados, por defecto 65)
-y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150). Las dos
+y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150); para el conversor también
+`texto` (`no` deja los rótulos con la profundidad que les dé la red en vez de apoyarlos en la pantalla). Las dos
 redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
 `mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
 se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,

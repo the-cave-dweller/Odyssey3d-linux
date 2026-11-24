@@ -26,6 +26,7 @@
 #include "vkui.h"
 #include "util.h"
 #include "viewer.h"
+#include "depth.h"
 #include "weave.h"
 
 #include <GLFW/glfw3.h>
@@ -63,6 +64,7 @@ static const char *kUsage =
     "  odyssey3d doctor              diagnostico: lente, scaler, camara IR, panel, permisos\n"
     "  odyssey3d weave               escribe un PNG con la trama calculada (sin tocar el panel)\n"
     "  odyssey3d attrs               atributos de trama calculados (para validar el modelo)\n"
+    "  odyssey3d texto-detect PPM    que considera texto el apoyo de los rotulos (foto del --volcado)\n"
     "  odyssey3d ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odyssey3d ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odyssey3d ctl ir     [on|off] [--dev /dev/video2]\n"
@@ -109,6 +111,7 @@ static const char *kUsage =
     "  --track-score 0.6            umbral de cara · --track-suavizado 0.35 · --track-fixed\n"
     "  --track-mono si|no|auto      cualquier webcam, midiendo el tamano de la cara (sin calibrar)\n"
     "  --track-campo 65  --track-cara 150   campo horizontal (grados) y ancho de cara (mm) de esa via\n"
+    "  --texto-panel si|no          apoyar rotulos y subtitulos en el plano de la pantalla\n"
     "  --align CICLOS    desfase de fase inicial   --pitch F  escala de la rampa de fase\n"
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
@@ -1369,6 +1372,14 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     }
     else if (a == "--track-campo") { if (!need("track-campo")) return false; o.trackCampo = atof(argv[++i]); }
     else if (a == "--track-cara") { if (!need("track-cara")) return false; o.trackCara = atof(argv[++i]); }
+    else if (a == "--texto-panel") {
+      if (!need("texto-panel")) return false;
+      const std::string v = argv[++i];
+      if (v == "si" || v == "1") o.textoPanel = 1;
+      else if (v == "no" || v == "0") o.textoPanel = 0;
+      else if (v == "auto") o.textoPanel = -1;
+      else { std::fprintf(stderr, "--texto-panel quiere si, no o auto\n"); return false; }
+    }
     else if (a == "--align") { if (!need("align")) return false; o.align = atof(argv[++i]); }
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
@@ -1397,6 +1408,171 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
 }
 
 /* ---------------- atributos de la trama (para validar el modelo) ---------------- */
+
+/* ---------------- texto-detect: ajustar el apoyo de los rotulos sin sentarse delante -----------
+   El visor detecta las zonas que son texto para apoyarlas en el plano de la pantalla (asi los
+   subtitulos no se deslizan al mover la cabeza). Para ver que esta detectando, se le pasa la foto
+   pequena que el mismo visor vuelca con --volcado (-chico.ppm) y, si se quiere ver el efecto, el
+   mapa del mismo cuadro (-profundidad.pgm). Escribe la rejilla de deteccion y el mapa apoyado. */
+static bool leerPpm(const std::string &ruta, int &w, int &h, std::vector<uint8_t> &rgb, std::string *err) {
+  FILE *f = std::fopen(ruta.c_str(), "rb");
+  if (!f) {
+    if (err) *err = "no se pudo abrir " + ruta;
+    return false;
+  }
+  int maxv = 0;
+  if (std::fscanf(f, "P6 %d %d %d", &w, &h, &maxv) != 3 || w <= 0 || h <= 0 || maxv != 255) {
+    std::fclose(f);
+    if (err) *err = "no es un PPM binario (P6) de 8 bits: " + ruta;
+    return false;
+  }
+  std::fgetc(f);   /* el unico espacio que va despues del maximo */
+  rgb.assign((size_t)w * (size_t)h * 3, 0);
+  const size_t leido = std::fread(rgb.data(), 1, rgb.size(), f);
+  std::fclose(f);
+  if (leido != rgb.size()) {
+    if (err) *err = "el PPM esta truncado: " + ruta;
+    return false;
+  }
+  return true;
+}
+
+static bool leerPgm(const std::string &ruta, int &w, int &h, std::vector<uint8_t> &g, std::string *err) {
+  FILE *f = std::fopen(ruta.c_str(), "rb");
+  if (!f) {
+    if (err) *err = "no se pudo abrir " + ruta;
+    return false;
+  }
+  int maxv = 0;
+  if (std::fscanf(f, "P5 %d %d %d", &w, &h, &maxv) != 3 || w <= 0 || h <= 0 || maxv != 255) {
+    std::fclose(f);
+    if (err) *err = "no es un PGM binario (P5) de 8 bits: " + ruta;
+    return false;
+  }
+  std::fgetc(f);
+  g.assign((size_t)w * (size_t)h, 0);
+  const size_t leido = std::fread(g.data(), 1, g.size(), f);
+  std::fclose(f);
+  if (leido != g.size()) {
+    if (err) *err = "el PGM esta truncado: " + ruta;
+    return false;
+  }
+  return true;
+}
+
+static void escribirPgm(const std::string &ruta, int w, int h, const std::vector<uint8_t> &g) {
+  FILE *f = std::fopen(ruta.c_str(), "wb");
+  if (!f) {
+    std::fprintf(stderr, "no se pudo escribir %s\n", ruta.c_str());
+    return;
+  }
+  std::fprintf(f, "P5\n%d %d\n255\n", w, h);
+  std::fwrite(g.data(), 1, g.size(), f);
+  std::fclose(f);
+  std::printf("escrito %s\n", ruta.c_str());
+}
+
+static int cmdTexto(int argc, char **argv) {
+  std::string foto, mapa, salida;
+  float plano = 0.45f;
+  int celda = 8;
+  /* el dispatch pasa los argumentos sin hueco de programa, asi que se recorren desde 0 */
+  for (int i = 0; i < argc; i++) {
+    const std::string a = argv[i];
+    if (a == "--plano" && i + 1 < argc) plano = (float)std::atof(argv[++i]);
+    else if (a == "--celda" && i + 1 < argc) celda = std::atoi(argv[++i]);
+    else if (a == "--mapa" && i + 1 < argc) mapa = argv[++i];
+    else if (a == "--out" && i + 1 < argc) salida = argv[++i];
+    else if (!a.empty() && a[0] != '-') foto = a;
+    else {
+      std::fprintf(stderr, "no entiendo %s\n", a.c_str());
+      return 2;
+    }
+  }
+  if (foto.empty()) {
+    std::fprintf(stderr, "uso: odyssey3d texto-detect FOTO.ppm [--plano 0,45] [--celda 8] "
+                         "[--mapa MAPA.pgm] [--out ROTULOS.pgm]\n");
+    return 2;
+  }
+  int w = 0, h = 0;
+  std::string err;
+  std::vector<uint8_t> rgba;
+  std::vector<uint8_t> rgb;
+  if (leerPpm(foto, w, h, rgb, &err)) {
+    rgba.resize((size_t)w * (size_t)h * 4);
+    for (size_t p = 0, q = 0; p < rgb.size(); p += 3, q += 4) {
+      rgba[q] = rgb[p];
+      rgba[q + 1] = rgb[p + 1];
+      rgba[q + 2] = rgb[p + 2];
+      rgba[q + 3] = 255;
+    }
+  } else {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    std::fprintf(stderr, "(texto-detect lee PPM binario; si viene de otro formato: convert foto.png foto.ppm)\n");
+    return 1;
+  }
+  std::vector<uint8_t> m((size_t)w * (size_t)h, (uint8_t)(plano * 255.0f + 0.5f));
+  std::vector<uint8_t> antes;
+  if (!mapa.empty()) {
+    int dw = 0, dh = 0;
+    if (!leerPgm(mapa, dw, dh, m, &err) || dw != w || dh != h) {
+      std::fprintf(stderr, "--mapa quiere un PGM (P5) del mismo tamano que la foto (%d x %d): %s\n", w, h,
+                   err.c_str());
+      return 1;
+    }
+    antes = m;
+  }
+  std::vector<uint8_t> rejilla;
+  int cw = 0, ch = 0;
+  const float frac = anclarTexto(rgba.data(), w, h, m, plano, celda, &rejilla, &cw, &ch);
+  std::printf("foto %d x %d · plano de apoyo %.2f · celda %d · rejilla %d x %d\n", w, h, plano, celda, cw, ch);
+  std::printf("apoyados en la pantalla: %.1f%% de la rejilla\n", frac * 100.0f);
+  for (int y = 0; y < ch; y++) {
+    int n = 0;
+    for (int x = 0; x < cw; x++)
+      if (rejilla[(size_t)y * cw + x] >= 128)
+        n++;
+    if (!n)
+      continue;
+    std::printf("  fila %2d (%4.1f%% del alto) %3d celdas ", y, 100.0f * (y + 0.5f) / (float)ch, n);
+    for (int x = 0; x < cw; x++)
+      std::putchar(rejilla[(size_t)y * cw + x] >= 128 ? '#' : '.');
+    std::putchar('\n');
+  }
+  if (!antes.empty()) {
+    int maximo = 0, sumados = 0;
+    long diferencia = 0;
+    for (size_t i = 0; i < m.size(); i++) {
+      const int d = std::abs((int)m[i] - (int)antes[i]);
+      if (d > maximo) maximo = d;
+      if (d > 6) {
+        sumados++;
+        diferencia += d;
+      }
+    }
+    std::printf("mapa tocado en %.1f%% de los puntos · el mas movido %d de 255 · media de los movidos %d\n",
+                100.0 * (double)sumados / (double)m.size(), maximo,
+                sumados ? (int)((double)diferencia / (double)sumados) : 0);
+    escribirPgm((mapa.size() > 4 ? mapa.substr(0, mapa.size() - 4) : mapa) + "-apoyado.pgm", w, h, m);
+  }
+  if (salida.empty() && rejilla.size()) {
+    /* la rejilla ampliada x8, para verla en un visor de imagenes encima de la foto */
+    const int es = 8;
+    std::vector<uint8_t> g((size_t)cw * es * ch * es, 0);
+    for (int y = 0; y < ch * es; y++)
+      for (int x = 0; x < cw * es; x++)
+        g[(size_t)y * cw * es + x] = rejilla[(size_t)(y / es) * cw + x / es];
+    escribirPgm(foto + "-rotulos.pgm", cw * es, ch * es, g);
+  } else if (!salida.empty() && rejilla.size()) {
+    const int es = 8;
+    std::vector<uint8_t> g((size_t)cw * es * ch * es, 0);
+    for (int y = 0; y < ch * es; y++)
+      for (int x = 0; x < cw * es; x++)
+        g[(size_t)y * cw * es + x] = rejilla[(size_t)(y / es) * cw + x / es];
+    escribirPgm(salida, cw * es, ch * es, g);
+  }
+  return 0;
+}
 
 static int cmdAttrs(const ViewerOpts &o) {
   Weave w; /* fill() no necesita contexto GL */
@@ -1731,6 +1907,7 @@ struct ServeCfg {
   std::string mono = "auto";  /* si = webcam normal por la cara; no = la camara del monitor; auto = mirar cual es */
   double campo = 65.0;        /* campo horizontal de la webcam, en grados */
   double cara = 150.0;        /* ancho de cara de oreja a oreja, en milimetros */
+  std::string texto = "auto";  /* rotulos apoyados en la pantalla: si / no / auto (auto = si) */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -1797,6 +1974,10 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "mono") {
       const std::string m = strLower(v);
       cfg.mono = (m == "si" || m == "no" || m == "auto") ? m : "auto";
+    }
+    else if (k == "texto") {
+      const std::string t = strLower(v);
+      cfg.texto = (t == "si" || t == "no" || t == "auto") ? t : "auto";
     }
     else if (k == "campo") {
       std::string numero = v;
@@ -1906,6 +2087,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (!alterno.empty()) {   /* la otra red, para el boton 1 / 2 del visor */
       args.push_back("--alterno");
       args.push_back(alterno);
+    }
+    if (pila && !pila->texto.empty() && pila->texto != "auto") {
+      /* texto = no en serve.conf deja los rotulos con la profundidad que les da la red; sirve para
+         comparar en el panel el deslizamiento de los subtitulos */
+      args.push_back("--texto-panel");
+      args.push_back(pila->texto);
     }
   }
   std::vector<char *> av;
@@ -3054,6 +3241,8 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;
   }
+  if (cmd == "texto-detect")
+    return cmdTexto(argc - 2, argv + 2);
   if (cmd == "attrs") {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;

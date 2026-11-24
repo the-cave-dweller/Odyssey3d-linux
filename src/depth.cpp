@@ -584,3 +584,206 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   return false;
 #endif
 }
+
+/* ---------------- rotulos y subtitulos: apoyar el texto en la pantalla ----------------
+   Hace falta porque la red de profundidad no sabe que un subtitulo es un dibujo pegado a la
+   pantalla: ve un parche de texto de mucho contraste y le da la profundidad del fondo (o lo saca
+   hacia fuera), y ahi aparece el deslizamiento. La palanca es geometria pura: un punto con
+   desplazamiento de 12 px por ojo queda a ~2 cm del panel y barre ~30 px en la pantalla cuando la
+   cabeza se mueve 15 cm. Poniendo esas zonas en el plano de apoyo el desplazamiento sale cero, el
+   texto se queda donde esta y ademas se ve mejor, porque deja de estar desparejado entre los ojos.
+
+   Los umbrales van en unidades del mapa (518 x 518), no de la pantalla: a esa escala una linea de
+   subtitulo mide de 6 a 14 puntos y el trazo 2 o 3. ODYSSEY3D_TEXTO_CONTRASTE y
+   ODYSSEY3D_TEXTO_FINO sirven para comparar en el panel sin recompilar. */
+float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
+                  int celdaPx, std::vector<uint8_t> *mascara, int *cwOut, int *chOut) {
+  if (!rgba || w < 32 || h < 32 || mapa.size() != (size_t)w * (size_t)h)
+    return 0.0f;
+  static const float kContraste = [] {
+    const char *e = std::getenv("ODYSSEY3D_TEXTO_CONTRASTE");
+    return e ? (float)std::atof(e) : 55.0f;
+  }();
+  static const float kFino = [] {
+    const char *e = std::getenv("ODYSSEY3D_TEXTO_FINO");
+    return e ? (float)std::atof(e) : 0.26f;
+  }();
+  const float kDensidad = 0.13f;      // parte de la celda que son bordes
+  const float kDensidadMax = 0.65f;   // ...pero sin llenar la celda: eso es textura, no letras
+  const float kLlano = 0.25f;         // y alrededor tiene que quedar fondo liso (lo que no tiene
+                                      // una tela ni un matorral: ahi no hay un solo hueco despejado)
+  const float kTrazoMin = 0.10f;      // el trazo tiene que ser fino...
+  const float kTrazoMax = 0.70f;      // ...y dejar sitio al fondo
+  const int celda = celdaPx < 4 ? 4 : (celdaPx > 16 ? 16 : celdaPx);
+  const int cw = (w + celda - 1) / celda, ch = (h + celda - 1) / celda;
+  if (cwOut) *cwOut = cw;
+  if (chOut) *chOut = ch;
+
+  /* gradiente y segundo orden de toda la foto: el texto es lo unico que tiene bordes fuertes y a la
+     vez alternancia rapida en las dos direcciones */
+  std::vector<float> lum((size_t)w * h), gx((size_t)w * h), gy((size_t)w * h), lp((size_t)w * h);
+  for (int y = 0; y < h; y++) {
+    const uint8_t *p = rgba + ((size_t)y * w) * 4;
+    for (int x = 0; x < w; x++)
+      lum[(size_t)y * w + x] = 0.299f * p[x * 4] + 0.587f * p[x * 4 + 1] + 0.114f * p[x * 4 + 2];
+  }
+  for (int y = 0; y < h; y++) {
+    const int yu = y > 0 ? y - 1 : 0, yd = y + 1 < h ? y + 1 : h - 1;
+    for (int x = 0; x < w; x++) {
+      const int xl = x > 0 ? x - 1 : 0, xr = x + 1 < w ? x + 1 : w - 1;
+      const size_t i = (size_t)y * w + x;
+      const float c = lum[i], d = lum[(size_t)y * w + xr], e = lum[(size_t)y * w + xl];
+      const float u = lum[(size_t)yu * w + x], b = lum[(size_t)yd * w + x];
+      gx[i] = d - e;
+      gy[i] = b - u;
+      lp[i] = std::fabs(4.0f * c - d - e - u - b);
+    }
+  }
+
+  /* Medidas de cada celda. Todavia no se decide nada: la decision mira tambien la vecindad, que es
+     donde se ve si el detalle esta suelto sobre fondo liso (un rotulo) o si llena todo (una tela,
+     un matorral, una grava). */
+  const size_t celdas = (size_t)cw * ch;
+  std::vector<float> cont(celdas, 0.0f), dens(celdas, 0.0f), llan(celdas, 0.0f), fina(celdas, 0.0f),
+      traz(celdas, 0.0f);
+  for (int cy = 0; cy < ch; cy++) {
+    const int y0 = cy * celda, y1 = std::min(h, y0 + celda);
+    for (int cx = 0; cx < cw; cx++) {
+      const int x0 = cx * celda, x1 = std::min(w, x0 + celda);
+      float sG = 0.0f, sL = 0.0f, mn = 1e9f, mx = -1e9f;
+      int n = 0;
+      for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++) {
+          const size_t i = (size_t)y * w + x;
+          sG += std::fabs(gx[i]) + std::fabs(gy[i]);
+          sL += lp[i];
+          const float c = lum[i];
+          if (c < mn) mn = c;
+          if (c > mx) mx = c;
+          n++;
+        }
+      if (n < 4)
+        continue;
+      const float contraste = mx - mn;
+      /* Los umbrales de borde van referidos al contraste de la celda, pero con un piso y un techo:
+         una celda lisa tiene que contar como lisa, y si no el vecino despejado de un rotulo no suma
+         y el detector no lo reconoce. */
+      const float umbral = std::max(24.0f, 0.32f * contraste);
+      const float flojo = std::min(14.0f, std::max(2.0f, 0.12f * contraste));
+      int densos = 0, claros = 0, llanos = 0;
+      for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++) {
+          const size_t i = (size_t)y * w + x;
+          const float g = std::fabs(gx[i]) + std::fabs(gy[i]);
+          if (g > umbral)
+            densos++;
+          if (g < flojo)
+            llanos++;
+          if (lum[i] > 0.5f * (mn + mx))
+            claros++;
+        }
+      const size_t q = (size_t)cy * cw + cx;
+      cont[q] = contraste;
+      dens[q] = (float)densos / (float)n;
+      llan[q] = (float)llanos / (float)n;
+      fina[q] = (sL / (float)n) / std::max(24.0f, contraste);
+      traz[q] = (float)claros / (float)n;
+    }
+  }
+
+  /* Media de la vecindad (3 x 3 celdas, unos 24 puntos del mapa). Un subitulo deja alrededor partes
+     despejadas y un fondo texturado no: ahi es donde se separan, midiendo celda por celda no se
+     pueden separar porque las dos tienen el mismo contraste y los mismos bordes. */
+  std::vector<float> vDens(celdas, 0.0f), vLlan(celdas, 0.0f), vFina(celdas, 0.0f),
+      vTraz(celdas, 0.0f);
+  for (size_t q = 0; q < celdas; q++) {
+    const int cy = (int)(q / cw), cx = (int)(q % cw);
+    float sD = 0.0f, sL2 = 0.0f, sF = 0.0f, sT = 0.0f;
+    int n = 0;
+    for (int dy = -1; dy <= 1; dy++)
+      for (int dx = -1; dx <= 1; dx++) {
+        const int yy = cy + dy, xx = cx + dx;
+        if (yy < 0 || yy >= ch || xx < 0 || xx >= cw)
+          continue;
+        const size_t r = (size_t)yy * cw + xx;
+        sD += dens[r], sL2 += llan[r], sF += fina[r], sT += traz[r];
+        n++;
+      }
+    vDens[q] = sD / (float)n, vLlan[q] = sL2 / (float)n, vFina[q] = sF / (float)n,
+    vTraz[q] = sT / (float)n;
+  }
+
+  /* Y ahora si, la decision. En la banda de abajo (subtitulos) y en la de arriba (cintillos y
+     relojes) se bajan los umbrales, que es donde vive casi todo el texto de un video. */
+  std::vector<float> peso(celdas, 0.0f);
+  for (size_t q = 0; q < celdas; q++) {
+    const int cy = (int)(q / cw);
+    const float centro = (cy + 0.5f) / (float)ch;
+    const float banda = (centro > 0.76f || centro < 0.12f) ? 0.80f : 1.0f;
+    if (cont[q] < kContraste * banda)
+      continue;
+    if (dens[q] < kDensidad * banda || dens[q] > kDensidadMax)
+      continue;
+    /* la finura del detalle se mira celda por celda (es la sena del trazo), y lo que se mide en la
+       vecindad es si alrededor hay fondo despejado: en una banda de color solido la media de la
+       vecindad de la finura cae y el rotulo se perderia */
+    if (vLlan[q] < kLlano || fina[q] < kFino * banda || vTraz[q] < kTrazoMin || vTraz[q] > kTrazoMax)
+      continue;
+    peso[q] = 1.0f;
+  }
+
+  /* dilatar una celda (un glifo suele cacer de una celda a otra) y despues difuminar, para que el
+     apoyo entre despacio y no deje un canto duro en el relieve */
+  std::vector<float> dil((size_t)cw * ch, 0.0f);
+  for (int cy = 0; cy < ch; cy++)
+    for (int cx = 0; cx < cw; cx++) {
+      float m = 0.0f;
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+          const int yy = cy + dy, xx = cx + dx;
+          if (yy < 0 || yy >= ch || xx < 0 || xx >= cw)
+            continue;
+          m = std::max(m, peso[(size_t)yy * cw + xx]);
+        }
+      dil[(size_t)cy * cw + cx] = m;
+    }
+  std::vector<float> suave((size_t)cw * ch, 0.0f);
+  for (int cy = 0; cy < ch; cy++)
+    for (int cx = 0; cx < cw; cx++) {
+      float s = 0.0f;
+      int n = 0;
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+          const int yy = cy + dy, xx = cx + dx;
+          if (yy < 0 || yy >= ch || xx < 0 || xx >= cw)
+            continue;
+          s += dil[(size_t)yy * cw + xx];
+          n++;
+        }
+      suave[(size_t)cy * cw + cx] = s / (float)n;
+    }
+
+  /* y el mapa, hacia el plano de apoyo con el peso de la mascara */
+  const float destino = plano * 255.0f;
+  float tocadas = 0.0f;
+  for (int y = 0; y < h; y++) {
+    const int cy = y / celda;
+    for (int x = 0; x < w; x++) {
+      const float p = suave[(size_t)cy * cw + x / celda];
+      if (p <= 0.002f)
+        continue;
+      const size_t i = (size_t)y * w + x;
+      const float v = (float)mapa[i];
+      mapa[i] = (uint8_t)(v + (destino - v) * p + 0.5f);
+    }
+  }
+  for (float p : suave)
+    if (p >= 0.5f)
+      tocadas += 1.0f;
+  if (mascara) {
+    mascara->assign((size_t)cw * ch, 0);
+    for (size_t i = 0; i < suave.size(); i++)
+      (*mascara)[i] = (uint8_t)(suave[i] * 255.0f + 0.5f);
+  }
+  return tocadas / (float)((size_t)cw * ch);
+}

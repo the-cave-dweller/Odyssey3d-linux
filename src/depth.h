@@ -8,6 +8,28 @@
 #include <string>
 #include <vector>
 
+/* --- rotulos y subtitulos apoyados en el plano de la pantalla --------------------
+   Un rotulo al que el conversor le da profundidad se desliza de lado a lado cuando mueves la
+   cabeza: es la palanca de la disparidad (un punto a 2 cm del panel barre unos 30 px en la
+   pantalla con la cabeza movida 15 cm). Los subtitulos tienen que estar en el plano de la
+   pantalla, que es lo que hace el programa de Samsung con esa banda. Esta funcion busca en la
+   foto las zonas que son texto y, en esas zonas del mapa de profundidad, pone el valor del plano
+   de apoyo: sin desplazamiento, el texto queda soldado a la pantalla y no se mueve.
+
+   La deteccion trabaja a la escala del mapa (518 x 518), en celdas de `celdaPx` puntos, y pide
+   las cuatro senales que solo el texto reune a la vez: mucho contraste dentro de la celda, los
+   bordes ocupando una parte amplia de la celda (los trazos finos alternan claro y oscuro muchas
+   veces), detalle FINO (el segundo orden es una fraccion grande del contraste; una pared de
+   ladrillo tiene contraste y densidad, pero el detalle es grueso), y el trazo ocupando una parte
+   pequena de la celda porque lo demas es fondo. En la banda de abajo y en la de arriba se bajan
+   un poco los umbrales, que es donde viven los subtitulos y los Cintillo.
+
+   `mapa` se modifica en el sitio (w x h, un byte por punto, el mismo tamano que la foto).
+   Devuelve la fraccion de celdas tocadas (0..1). Si se pasa `mascara` se rellena la rejilla de
+   deteccion, con el peso aplicado en cada celda (0..255), y `cw`/`ch` devuelven su tamano. */
+float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
+                  int celdaPx, std::vector<uint8_t> *mascara, int *cw, int *ch);
+
 class DepthNet {
 public:
   ~DepthNet();
@@ -32,6 +54,11 @@ public:
      Sirve para que el relieve no parpadee cuadro a cuadro. */
   void setSmoothing(float a) { smooth_ = a < 0.0f ? 0.0f : (a > 0.95f ? 0.95f : a); }
   float smoothing() const { return smooth_; }
+
+  /* Olvidar el mapa anterior y la escala seguida. Hace falta cuando cambia algo que entra dentro
+     del mapa (por ejemplo al quitar el apoyo de los rotulos), para que el cuadro nuevo no salga
+     mezclado con el mapa viejo. */
+  void reset() { prev_.clear(); haveScale_ = false; }
 
   /* plano de enfoque: donde deberia apoyarse el plano de la pantalla (0 = fondo, 1 = lo mas cerca).
      Sale del histograma del mapa ya limpio, ponderando el centro del cuadro y los cantos, para que
