@@ -16,7 +16,7 @@ std::string toHexUpper(const std::vector<uint8_t> &v);
 bool readSmallFile(const std::string &path, std::string &out);
 
 /* Preferencia de la red del conversor 2D a 3D, guardada en ~/.config/odyssey3d/red-elegida:
-   1 = la red de Samsung (mde_*.onnx), 2 = la nuestra (depth_anything_v2_small.onnx).
+   1 = la red de Samsung (mde_*.onnx), 2 = la nativa (depth_anything_v2_small.onnx).
    leerRedPreferida() devuelve 0 si todavia no se eligio ninguna. */
 std::string rutaConfigOdyssey(const char *nombre);
 /* Ruta dentro de ~/.local/state/odyssey3d: lo que esta pasando ahora mismo (la instantanea del
@@ -24,7 +24,7 @@ std::string rutaConfigOdyssey(const char *nombre);
 std::string rutaEstadoOdyssey(const char *nombre);
 int leerRedPreferida();
 void grabarRedPreferida(int red);
-/* Ruta por convencion de la red nuestra (la que baja tools/descargar-modelo.sh). */
+/* Ruta por convencion de la red nativa (la que baja tools/descargar-modelo.sh). */
 /* A que boton (1 o 2) pertenece un .onnx por como se llama: las redes que trajo el programa de
    Samsung son mde_... o Disp_...; la nuestra se llama depth_anything_v2_small.onnx. */
 int slotRed(const std::string &ruta);

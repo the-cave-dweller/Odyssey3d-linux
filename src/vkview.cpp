@@ -108,7 +108,7 @@ struct VkUi {
   std::string extraInfo;     /* " · video en pausa" y cosas asi, detras de la frase de estado */
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
-  /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nuestra
+  /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nativa
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
   bool textoToggle = false;  /* la tecla R: rotulos apoyados en la pantalla o no */
   int redPedida = 0;
@@ -151,7 +151,7 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
 }
 
 /* slotRed() vive en util.h: es la misma regla para el hub y para el visor. */
-const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nuestra"; }
+const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativa"; }
 
 void applyHit(VkUi &ui, Hud::Hit hit) {
   Hud::State &st = ui.hud.state();
@@ -1210,7 +1210,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       std::fflush(stdout);
     }
-    /* el boton 1 / 2 de la pastilla: pasar de la red de Samsung a la nuestra sin cerrar el visor.
+    /* el boton 1 / 2 de la pastilla: pasar de la red de Samsung a la nativa sin cerrar el visor.
        Se atiende aqui, en el hilo del visor y con el hilo de la estimacion parado: mover la sesion
        de ONNX mientras ese hilo trabaja reventaria el cuadro en curso. La red nueva se abre antes
        de soltar la vieja? No: DepthNet::cambiar suelta la vieja primero para devolver la memoria a
@@ -1248,7 +1248,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::printf("[conversor] cambiada a la red %d (%s) en %s · mapa %d x %d\n", quiero,
                       nombreRed(quiero), red.device().c_str(), red.size(), red.size());
           std::fflush(stdout);
-          ui.extraInfo = std::string("red ") + (quiero == 1 ? "1 (Samsung) · " : "2 (nuestra) · ") + red.device();
+          ui.extraInfo = std::string("red ") + (quiero == 1 ? "1 (Samsung) · " : "2 (nativa) · ") + red.device();
           ui.extraHasta = glfwGetTime() + 6.0;
         } else {
           std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());

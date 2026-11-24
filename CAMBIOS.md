@@ -2,6 +2,24 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El boton 1 no devolvia a la red de Samsung (v0.39)
+- Reportado: dentro del visor el cambio de red salia de la de Samsung a la otra, pero no de vuelta, y
+  la otra red estaba nombrada de un modo confuso.
+- Medido con tools/prueba_idayvuelta.cpp (ida y vuelta de las dos redes, sin tomar el panel): la red de
+  Samsung ocupa 678 MB de memoria de grafica (la grafica 0 paso de 1667 a 989 MB libres) y la otra unos
+  260 a 400. Al soltar una sesion no devuelve toda: se quedan unos 300 MB del contexto de CUDA y de
+  cuDNN que el proceso ya pago. El umbral viejo era el mismo para las dos y pedía 1550 MB libres, de
+  modo que al pedir la Samsung con 1171 MB libres (03:55:45) o con 1522 MB (03:56:59) la respuesta era
+  no abrirla: se iba a la CPU, y la red de Samsung por CPU ni se intenta (se cuelga mas de 4 minutos y
+  aborta). El boton volvia a la red anterior, y esa tambien se reabria por CPU: 179 ms por mapa en lugar
+  de 16. Es el "179,6 ms con CPU" que se lee en el registro de las 03:56.
+- Como quedo: el piso de memoria depende de la red (Samsung 700 MB mas 300 de colchon, nativa 480 mas
+  300) y el colchon se mueve con ODYSSEY3D_COLCHON en MB, sin recompilar. Comprobado con la misma
+  prueba: Samsung 11,3 ms, nativa 15,6 ms, Samsung otra vez 11,3 ms, las tres veces por la tarjeta.
+- La red que no es la de Samsung se llama NATIVA en todos lados: el boton dice "Red 2 · nativa", el
+  aviso del visor dice "red 2 (nativa) · NVIDIA" y el arranque del servicio tambien lo dice. El archivo
+  sigue siendo depth_anything_v2_small.onnx; renombrarlo a nativa.onnx no cambiaria nada del manejo.
+
 ## El click en la barra del video y la cara de 140 mm (v0.38)
 - El otro fallo de sesion reportado: durante el 3D no habia forma de picar la barra de tiempos de abajo.
   La causa esta en nuestro propio truco de apilamiento. Para que un click en el video no suba el

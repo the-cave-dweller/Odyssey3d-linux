@@ -321,14 +321,14 @@ void Hud::begin(int w, int h, float altoLogico) {
        ahi tiene 270 px para la frase y no se monta sobre el boton de la red */
     text("Tab  entrega la pantalla", x0 + 534.0f, y0 + 70.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
 
-    /* boton de la red de profundidad: 1 = la de Samsung, 2 = la nuestra. Al pulsarlo se pasa de
+    /* boton de la red de profundidad: 1 = la de Samsung, 2 = la nativa. Al pulsarlo se pasa de
        una a otra sin cerrar el visor (abrir la otra sesion cuesta un segundo o dos). */
     btnRed_ = {x0 + 352.0f, y0 + 26.0f, 160.0f, 34.0f};
     bool hovR = btnRed_.inside(mx_, my_);
     float rbg = hovR ? 0.30f : 0.22f;
     mask9(btnRed_, 1, 8.0f, rbg, rbg + 0.02f, rbg + 0.05f, 0.95f);
     const char *rtxt = !st_.redViva ? "Red sin conversor"
-                                    : (st_.red == 1 ? "Red 1 · Samsung" : "Red 2 · nuestra");
+                                    : (st_.red == 1 ? "Red 1 · Samsung" : "Red 2 · nativa");
     text(rtxt, btnRed_.x + 12.0f, btnRed_.y + 8.0f, 14.0f, ink[0], ink[1], ink[2], st_.redViva ? 1.0f : 0.55f);
     text(st_.redViva ? "1 / 2  cambia de red" : "teclas 1 / 2", btnRed_.x, btnRed_.y + 44.0f, 11.0f, dim[0], dim[1],
          dim[2], dim[3]);

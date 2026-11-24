@@ -1739,7 +1739,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   };
   static const Medida med[] = {{"Apagar 3D", 15.0f, 126.0f},        {"Encender 3D", 15.0f, 126.0f},
                                {"Ocultar capa", 15.0f, 136.0f},     {"Mostrar capa", 15.0f, 136.0f},
-                               {"Red 1 · Samsung", 14.0f, 136.0f},   {"Red 2 · nuestra", 14.0f, 136.0f},
+                               {"Red 1 · Samsung", 14.0f, 136.0f},   {"Red 2 · nativa", 14.0f, 136.0f},
                                {"Red sin conversor", 14.0f, 136.0f},      {"1 / 2  cambia de red", 11.0f, 160.0f},
                                {"teclas 1 / 2", 11.0f, 160.0f},           {"Tab  entrega la pantalla", 11.0f, 272.0f},
                                {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
@@ -1881,7 +1881,7 @@ struct ServeCfg {
   int esperaSeg = 40;
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
   std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
-  std::string nuestra;            /* la otra red (.onnx), la del boton 2 del visor */
+  std::string nuestra;            /* la otra red (.onnx), la nativa, la del boton 2 del visor */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
@@ -1933,7 +1933,7 @@ static std::string expansionRuta(std::string r) {
 }
 
 /* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=,
-   modelo= la red del boton 1, nuestra= la del boton 2, rastreo= si/no, suavizado= 0,35). */
+   modelo= la red del boton 1, nuestra= la nativa del boton 2, rastreo= si/no, suavizado= 0,35). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
   if (!home) return;
@@ -2659,8 +2659,8 @@ static int cmdServe(int argc, char **argv) {
   });
 
   /* Las dos redes del boton 1 / 2 del visor, cada una en su boton segun el nombre del archivo:
-     1 = las que trajo el programa de Samsung (mde_*, Disp_*), 2 = la nuestra (Depth Anything).
-     Si en modelo= se puso la nuestra se reconoce y se mueve sola al boton 2. La eleccion que hizo
+     1 = las que trajo el programa de Samsung (mde_*, Disp_*), 2 = la nativa (Depth Anything).
+     Si en modelo= se puso la nativa se reconoce y se mueve sola al boton 2. La eleccion que hizo
      el usuario la guarda el visor en ~/.config/odyssey3d/red-elegida y aca se lee para arrancar con esa. */
   auto disponible = [](const std::string &r) { return !r.empty() && fileExists(r); };
   std::string rSamsung = cfg.modelo, rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
@@ -2683,7 +2683,7 @@ static int cmdServe(int argc, char **argv) {
   std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
               ruta1.empty() ? "no hay" : ruta1.c_str(), ruta2.empty() ? "no hay" : ruta2.c_str());
   std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
-              redElegida, redElegida == 1 ? "Samsung" : "nuestra");
+              redElegida, redElegida == 1 ? "Samsung" : "nativa");
   {
     std::string aviso;
     if (cfg.rastreo && IrCam::findDevices().empty()) {
