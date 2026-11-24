@@ -1680,6 +1680,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                               tp.c_str(), fbW, fbH);
                 else
                   std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", tp.c_str());
+                /* y la MISMA trama, del mismo cuadro, con el releve apagado del todo. Sin esa
+                   segunda imagen no hay forma de separar una franja que pone la trama de una que
+                   pone el mapa: en el panel las dos se ven iguales. Se apaga y se vuelve a dejar
+                   como estaba, sin tocar el panel (es un cuadro fuera de pantalla). */
+                const float gan = wv.converterGain(), ref = wv.converterRef();
+                wv.setConverter(gan, ref, false);
+                std::vector<uint8_t> plano;
+                if (wv.grab(plano, &cerr)) {
+                  const std::string pp = opts.dumpPath + "-trama-sin-releve.png";
+                  if (glPngSave(pp, fbW, fbH, plano.data()))
+                    std::printf("[volcado] %s (%dx%d el mismo cuadro sin releve, para comparar)\n",
+                                pp.c_str(), fbW, fbH);
+                  else
+                    std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", pp.c_str());
+                } else
+                  std::fprintf(stderr, "[volcado] trama sin releve: %s\n", cerr.c_str());
+                wv.setConverter(gan, ref, true);
               } else
                 std::fprintf(stderr, "[volcado] trama con mapa: %s\n", cerr.c_str());
             }
@@ -1881,24 +1898,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", a.c_str());
         if (kind == SourceKind::Test && !testPx.empty())
           glPngSave(opts.dumpPath + "-origen.png", fbW, fbH, testPx.data());
-        /* Con el conversor puesto, la trama ya lleva el relieve aplicado, y entonces no se puede
-           separar una raya que pone la trama de una que pone el mapa de profundidad. Asi que en el
-           mismo momento guardamos TAMBIEN la misma trama con el releve apagado: si una franja
-           aparece aqui y no alla, sale del mapa; si esta en las dos, sale de la trama. */
-        if (wv.converterOn()) {
-          const float gan = wv.converterGain(), ref = wv.converterRef();
-          wv.setConverter(gan, ref, false);
-          std::vector<uint8_t> plano;
-          if (wv.grab(plano, &err)) {
-            const std::string pp = opts.dumpPath + "-trama-sin-releve.png";
-            if (glPngSave(pp, fbW, fbH, plano.data()))
-              std::printf("[volcado] %s (%dx%d, la misma trama con el releve apagado)\n", pp.c_str(), fbW, fbH);
-            else
-              std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", pp.c_str());
-          } else
-            std::fprintf(stderr, "[volcado] trama sin releve: %s\n", err.c_str());
-          wv.setConverter(gan, ref, true);
-        }
 #ifdef HAVE_CAPTURE
         if (kind == SourceKind::Capture)
           std::printf("[captura] fotogramas recibidos del compositor: %llu · %s\n",

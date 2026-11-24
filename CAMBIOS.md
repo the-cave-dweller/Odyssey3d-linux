@@ -2,6 +2,45 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Las franjas son armonicas aliasadas de la propia trama (v0.41)
+- Reportado despues de la v0.40: las franjas **no desaparecen** bajando `3D Salida` a 0, y los bordes
+  de los objetos se ven rotos, con grietas y raspon.
+- Medido con `volcado = /tmp/chk` y `tools/mide_franjas.py` sobre el cuadro tramado de verdad. La
+  porteadora de la trama leida del PNG sale en 0,4461 ciclos/px (2,24 px, el espejo del `kx` de
+  fabrica 0,55394), y encima hay tres picos que antes no se habian mirado: **4,3 px con realce x4,4,
+  8,2 px con x4,3 y 10,9 px con x2,9**, de 0,4 a 1,7 niveles de gris. Con el paso de pixel del panel
+  (0,1554 mm) son **0,67 · 1,27 · 1,67 mm**: las franjas que se ven.
+- De donde salen: se reprodujeron con la formula sola del shader (`fase = fract(...)`, peso
+  triangular con pendiente 10) muestreada a pixel de panel, y los picos caen en **4,34 · 8,17 · 10,73
+  · 4,97 · 3,24 px**, o sea la 5a, 7a, 9a y 11a armonica de `kx` plegadas por el muestreo. No es el
+  paso de la lente torcido ni el mapa: es que el paso de una vista a la otra es casi un escalon. Con
+  pendiente 10 esas armonicas suman el 134 % de la fundamental; con pendiente 3, el 26 %.
+- Por eso no se van con `3D Salida = 0`: `gananciaRelieve(0)` no es 0, es 0,00104, que son **4,0 px
+  de separacion entre ojos** (dos periodos y medio de lente). Mientras las dos vistas no sean
+  identicas la trama tiene de que hacer las rayas.
+- Los bordes rotos salen del mapa: 230 niveles, meseta mediana de 30 px de panel, y **salto mediano
+  entre mesetas de 255 niveles** (el corte de plano + dilate lo dejan casi binario). Con el tope de
+  Samsung de 22,65 px de recorrido, un nivel del mapa son 0,089 px = 0,049 ciclos de trama, asi que
+  el borde salta de golpe de una meseta a otra; y `cantoI` recorta hasta el 90 % del relieve en los
+  cantos filosos.
+- Añadido para poder probar esto sin recompilar, las cuatro van en `serve.conf` y se pasan por
+  entorno al visor: `relieve` (0 = plano del todo, para el A/B), `temblor` (apaga el temblor del
+  desplazamiento), `canto` (mas ancho = bordes sin mordeduras) y `fase_temblor` (temblor de la fase
+  de la trama en ciclos; el temblor de fabrica mueve el desplazamiento del contenido, no la fase, por
+  eso no rompía las franjas).
+- Añadido `tun6` al bloque de la trama (`shaders/weave.frag`, UBO de 288 a 304 bytes,
+  `ODYSSEY3D_FASE_TEMBLOR`): la fase de cada punto tiembla un numero fijo de ciclos con el mismo
+  ruido para los tres canales, para no ensuciar el color. Medido sobre la formula: con 0,1 ciclo la
+  armonica de 4,34 px baja de 0,087 a 0,012 y la de 8,17 de 0,069 a 0,020, y la fundamental pierde
+  solo un 7 %. Es lo que hace el filtro de Samsung, por eso en Windows no se notan.
+- `tools/mide_franjas.py`: nuevas `--con` / `--sin` para comparar los dos PNG del mismo cuadro, y
+  funcion nueva de porteadora local (bajar la rayita al cero, amplitud mediana, golpes de fase por
+  mil pixeles y separacion).
+- Arreglado: `-trama-sin-releve.png` no salia. El bloque estaba en el vuelco del cuadro 4, que en
+  ese momento va por la rama de lado a lado y `converterOn()` era falso. Ahora la pareja
+  `-trama-con-mapa.png` / `-trama-sin-releve.png` se guarda en el cuadro 8, forzado el conversor
+  fuera y dentro con `setConverter(gan, ref, false/true)`, asi que son el MISMO cuadro.
+
 ## Franjas verticales y los mapas de correccion de ESTA unidad (v0.40)
 - Reportado: con el 3D puesto quedan unas franjas verticales claras y oscuras por toda la pantalla,
   separadas entre si un milimetro o tres; con el mismo video en Windows no se perciben.

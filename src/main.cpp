@@ -1916,6 +1916,13 @@ struct ServeCfg {
   double filtro = -1.0;     /* pendiente del filtro (coma y punto); -1 = la de fabrica, que es 10 */
   std::string calib;        /* carpeta con los mapas de correccion de ESTE panel */
   std::string volcado;      /* si se pone, el visor guarda -trama / -profundidad / -origen ahi */
+  /* Tres numeros para medir sin recompilar (el visor los lee de variables de entorno). Sirven para
+     separar las causas de una franja: `relieve = 0` deja la imagen PLANA del todo, que no se
+     consigue con Ctrl+Shift+5 porque en 0 de "3D Salida" quedan 4 px de separacion entre ojos. */
+  double relieve = -1.0;    /* escala de la ganancia del releve; 0 = sin releve ninguno */
+  double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
+  double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
+  double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2010,7 +2017,8 @@ static void loadServeCfg(ServeCfg &cfg) {
     }
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
-    else if (k == "fase" || k == "paso" || k == "filtro") {
+    else if (k == "fase" || k == "paso" || k == "filtro" ||
+             k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2018,7 +2026,11 @@ static void loadServeCfg(ServeCfg &cfg) {
       const double d = std::atof(numero.c_str());
       if (k == "fase") cfg.fase = d;
       else if (k == "paso") cfg.paso = (d > 0.5 && d < 2.0) ? d : 1.0;
-      else cfg.filtro = d;
+      else if (k == "filtro") cfg.filtro = d;
+      else if (k == "relieve") cfg.relieve = d;
+      else if (k == "temblor") cfg.temblor = d;
+      else if (k == "canto") cfg.canto = d;
+      else cfg.faseTemblor = d;
     }
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
@@ -2147,6 +2159,27 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   for (std::string &a : args) av.push_back(const_cast<char *>(a.c_str()));
   av.push_back(nullptr);
   ::setenv("GLFW_APPLICATION_ID", "odyssey3d", 1);
+  if (pila) {
+    /* los numeros de medicion van por entorno porque el visor ya los lee asi; no hace falta
+        recompilar ni lanzar el visor a mano para probar un A/B en el panel */
+    char valor[32];
+    if (pila->relieve >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->relieve);
+      ::setenv("ODYSSEY3D_RELIEVE", valor, 1);
+    }
+    if (pila->temblor >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->temblor);
+      ::setenv("ODYSSEY3D_DITHER", valor, 1);
+    }
+    if (pila->canto > 0.0) {
+      std::snprintf(valor, sizeof valor, "%.5f", pila->canto);
+      ::setenv("ODYSSEY3D_CANTO", valor, 1);
+    }
+    if (pila->faseTemblor >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->faseTemblor);
+      ::setenv("ODYSSEY3D_FASE_TEMBLOR", valor, 1);
+    }
+  }
   ::execv(exe.c_str(), av.data());
   ::_exit(127);
 }

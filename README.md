@@ -211,32 +211,54 @@ Cada cambio imprime una línea con los valores actuales; puedes arrancar desde e
 ### Si quedan franjas verticales finas por toda la pantalla
 
 Con la trama ya alineada pueden quedar unas líneas verticales claras y oscuras, muy juntas
-(uno a tres milímetros). Hay dos orígenes posibles y se distinguen en un minuto, porque una
-franja vertical **fina y fija** y una **disparidad que da saltos** se parecen mucho a simple vista:
+(uno a tres milímetros). Hay tres orígenes y se distinguen midiendo, no a simple vista:
 
-* **Raya con el vídeo, se va con la cabeza y desaparece al bajar `Ctrl+Shift+5` (3D Salida) a 0** →
-  no es la trama: son las **curvas de nivel del mapa de profundidad**. El mapa llega de la red a
-  518×518 (7,4 px de panel por celda), se limpia y se dilata, y sale en 8 bits: donde el fondo
-  retrocede poco a poco, esos saltitos se ven como líneas verticales. Es lo que el programa de
-  Samsung tapa con su *dither* de profundidad (`depth.dither`, 0,25 px). Con el relieve a 0 las
-  dos vistas son idénticas y las líneas no pueden existir, así que esa es la prueba decisiva.
-* **Está con el relieve puesto, no se mueve con el vídeo y se corre con `RePag`/`SavPg`** → es la
-  trama desajustada con el paso real de la lente de esta unidad. El batido sale a
-  `T = 1/(0,554·δ)` píxeles, donde `δ` es el error relativo del paso: una raya cada 100 px
-  (0,42 mm) pide `δ ≈ 1,8 %`, o sea `paso = 0,982` o `1,018`. Empieza con dos o tres pulsaciones
-  de `SavPg` (cada una mueve el paso un 0,02 %) y mira si las rayas se separan y desaparecen.
-  Ojo: si al mover la cabeza las rayas **se deslizan**, casi seguro es lo primero, no esto.
-* Antes de nada, `3` (2D plano): si en 2D también se ven, no es nada de esto; sería escalado
-  (mira `[aviso] la ventana es WxH … la trama necesita pixel a pixel` en la salida del visor)
-  o el propio panel.
+**1. Las armónicas de la propia trama (lo medido en esta unidad: esto es lo que se ve).**
+El cambio de una vista a la otra con la pendiente de filtro de fábrica (10) es casi un escalón,
+y un escalón muestreado en la rejilla del panel se pliega: sus armónicas 5ª, 7ª, 9ª y 11ª caen a
+**4,34 · 8,17 · 10,73 px de panel**, que con el paso de píxel de este panel (0,1554 mm) son
+**0,67 · 1,27 · 1,67 mm**: franjas finísimas por toda la pantalla. Medido sobre el volcado de la
+trama (`tools/mide_franjas.py`), los picos salen en **4,3 · 8,2 · 10,9 px** con un realce de
+×4,4 · ×4,3 · ×2,9 y 0,4–1,7 niveles de gris: justo lo que se ve y nada que ver con el paso de
+la lente mal ajustado. La prueba en marcha: con `RePag`/`SavPg` el periodo **no** se mueve un
+0,02 %, se mueve quince veces más (a `paso = 1,005` la raya de 4,34 px pasa a ~5 px). Y con `,`
+(bajar la pendiente del filtro) baja mucho, porque las armónicas pasan del 134 % de la fundamental
+a ~27 % con pendiente 3.
+
+**2. Que no se vayan con `Ctrl+Shift+5` no significa que no sea el relieve.** Con `3D Salida` en
+0 la ganancia no es 0: `gananciaRelieve(0) = 0,00104`, o sea **4,0 px de separación entre ojos**
+(dos periodos y medio de la lente). Mientras las dos vistas no sean idénticas del todo, la trama
+tiene de qué hacer las rayas. Para un A/B limpio usa `relieve = 0` en `serve.conf` (deja la
+imagen plana de verdad).
+
+* **3. Las curvas de nivel del mapa de profundidad.** El mapa llega a 518×518 (7,4 px de panel por
+  celda), y tras el filtro guiado, el dilate y el corte de plano queda por mesetas: medido, meseta
+  mediana de **30 px de panel** con saltos de hasta **255 niveles**, que con el tope de Samsung son
+  los 22,65 px de recorrido de un salto a otro. En los cantos el desplazamiento barre la trama de
+  golpe y el borde sale mordido (los "cracks" y "rasguños" de los bordes); en las zonas de pendiente
+  suave las curvas de nivel se ven como líneas verticales. El programa de Samsung lo tapa con su
+  *dither* de profundidad (`depth.dither`, 0,25 px: aquí `temblor`, que ya venía puesto).
+
+En Windows no se notan porque su mezcla entre las dos vistas es más suave y además temblaba la
+propia fase del patrón. Aquí se puede probar los dos: `,`/`.` para la pendiente y
+`fase_temblor = 0,1` en `serve.conf` para el temblor de la fase (medido sobre la fórmula del
+shader: con ±0,1 de ciclo las armónicas de 4,34 y 8,17 px bajan unas cinco veces y la fundamental,
+que es la que hace el 3D, pierde solo un 7 %).
+
+Antes de nada, `3` (2D plano): si en 2D también se ven, no es nada de esto; sería escalado
+(mira `[aviso] la ventana es WxH … la trama necesita pixel a pixel` en la salida del visor)
+o el propio panel.
 
 Para medirlo desde fuera, `volcado = /tmp/chk` en `serve.conf` deja la sesión en marcha y guarda
 `/tmp/chk-trama-vulkan.png` (la trama entera tal y como sale al panel),
-`/tmp/chk-trama-sin-releve.png` (la misma trama con el conversor apagado, para comparar),
+`/tmp/chk-trama-con-mapa.png` y `/tmp/chk-trama-sin-releve.png` (el **mismo cuadro** con el releve
+puesto y apagado, para comparar sin el lío de que el vídeo haya cambiado entre medias),
 `/tmp/chk-profundidad.pgm` (el mapa de profundidad) y `/tmp/chk-chico.ppm` (lo que vio la red).
 Y `python3 tools/mide_franjas.py /tmp/chk` lo mide y lo traduce: el periodo de cada franja en
-píxeles con su amplitud, si esa franja está en la trama con relieve y no en la plana (sale del
-mapa) o en las dos (sale de la trama), y de cuántos píxeles son las mesetas del mapa.
+píxeles con su amplitud, cuántos golpes de fase por mil píxeles tiene la rayita de la trama y con
+qué separación, si esa franja está en la trama con relieve y no en la plana (sale del mapa) o en
+las dos (sale de la trama), y de cuántos píxeles son las mesetas del mapa.
+
 
 
 ## Cuál es el indicador de la esquina
@@ -471,8 +493,18 @@ teclas pero queda guardado para todas las sesiones: `fase` (ciclos, teclas `←`
 (multiplicador del paso de lente, teclas `RePag` `SavPg`; `1,004` es un +0,4 %), `filtro`
 (pendiente del filtro, teclas `,` `.`; sin esta clave se usa la de fábrica, 10) y `calib` (carpeta
 con los `3DStackCorrection_A/B.png` de **este** panel). Además `volcado = /tmp/chk` hace que cada
-sesión guarde `/tmp/chk-trama-vulkan.png`, `/tmp/chk-profundidad.pgm` y `/tmp/chk-chico.ppm` sin
-cerrarse, que es como se miden las franjas de arriba.
+sesión guarde `/tmp/chk-trama-vulkan.png`, `/tmp/chk-trama-con-mapa.png`,
+`/tmp/chk-trama-sin-releve.png`, `/tmp/chk-profundidad.pgm` y `/tmp/chk-chico.ppm` sin cerrarse,
+que es como se miden las franjas de arriba.
+
+Y cuatro para medir sin recompilar (desde v0.41), porque ninguna teclas las alcanza: `relieve`
+(escala del relieve; `0` deja la imagen **plana del todo**, cosa que `3D Salida = 0` no hace porque
+allí quedan 4 px de separación entre ojos), `temblor` (pixeles del temblor del desplazamiento,
+0,25 de fábrica; `0` lo apaga para ver las rayitas sin disimulo), `canto` (ancho del puente del
+canto, 0,004 de fábrica; subirlo deja los bordes sin mordeduras pero les quita relieve) y
+`fase_temblor` (temblor de la propia fase de la trama, en ciclos; `0,1` baja unas cinco veces las
+armónicas de 4,3 y 8,2 px y casi no toca el 3D). Estas cuatro se aplican al reiniciar el servicio,
+no en caliente.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

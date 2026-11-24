@@ -25,6 +25,7 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun3;     /* x estado del indicador · y disposición (0 lado a lado, 1 arriba/abajo) · z invertir Y · w profundidad */
     vec4 tun4;     /* conversor 2D/3D: x activo · y cuanto se desplaza cada ojo · z plano de referencia · w copia pura */
     vec4 tun5;     /* conversor fino: x temblor del desplazamiento en pixeles · y/z topes por ojo en pixeles (0 = sin tope) */
+    vec4 tun6;     /* medición: x temblor de la propia fase de la trama, en ciclos (0 = apagado) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -205,8 +206,18 @@ void main()
     vec3 Rp = R + xt * dRL;
 
     vec3 outc;
+    /* Temblor de la propia fase (ODYSSEY3D_FASE_TEMBLOR, en ciclos; 0 = como antes).
+       Con la pendiente de filtro de fabrica (10) el paso entre las dos vistas es casi un
+       escalon, y sus armonicas caen por aliasing a 4,34 · 8,17 · 10,73 px de panel, o sea
+       0,75 · 1,4 · 1,9 mm: unas franjas verticales finisimas por toda la pantalla, que se
+       ven aunque no haya releve ninguno. Moviendo la fase de cada punto +-0,1 de ciclo esas
+       armonicas bajan unas cinco veces y la fundamental (la que hace el 3D) casi no se toca.
+       El numero es el mismo para los tres canales, para que el temblor no ensucie el color. */
+    float jr = 0.0;
+    if (P.tun6.x != 0.0)
+        jr = (fract(sin(dot(floor(px), vec2(39.3467, 11.1355))) * 24634.6345) - 0.5) * P.tun6.x;
     for (int c = 0; c < 3; c++) {
-        float phase = fract(base + v4[c] * P.tun2.y + P.tun2.x - 0.25);
+        float phase = fract(base + v4[c] * P.tun2.y + P.tun2.x - 0.25 + jr);
         float t = 2.0 * phase - 1.0;
         float w = clamp(-abs(t) * P.res.z + P.res.z * 0.5 + 0.5, 0.0, 1.0);
         outc[c] = mix(Rp[c], Lp[c], w);

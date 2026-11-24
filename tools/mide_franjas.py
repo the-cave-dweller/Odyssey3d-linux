@@ -112,6 +112,48 @@ def energia_local(y, s1=6.0, s2=40.0, tile=96):
     return bp.std(), rec
 
 
+def porteadora_local(y, salto_fila=8, venta=9, umbral_rad=1.2):
+    """Dónde la raya de la trama cambia de fase de golpe, fila por fila.
+
+    La trama es una rayita de unos 1,8 px de periodo. Si el paso no cuadra con la lente,
+    o si el mapa de profundidad mueve el desplazamiento de un ojo, esa rayita cambia de
+    fase de golpe y el golpe se ve como una franja vertical (o como un borde roto). Aqui
+    se baja la rayita al cero con un porteador complejo y se cuentan los golpes.
+    """
+    h, w = y.shape
+    f, mag, per, val = espectro_x(y, win_lo=1.6, win_hi=2.8)
+    if not val.any():
+        return None
+    i = int(np.argmax(np.where(val, mag, -1)))
+    f0 = float(f[i])
+    mue = y[::salto_fila]
+    bp = mue - difusa(mue, 1.0, 2.6)             # deja solo la rayita fina de la trama
+    x = np.arange(w, dtype=np.float64)
+    z = bp * np.exp(-2j * np.pi * f0 * x)
+    k = np.ones(venta) / venta
+    zr = np.stack([np.convolve(fila, k, mode="same") for fila in z])
+    amp = np.abs(zr)
+    gap = 8
+    bruto = np.angle(zr[:, gap:] * np.conj(zr[:, :-gap]))   # vuelta de fase en 8 px
+    fuertes = np.abs(bruto) > umbral_rad
+    por_mil = 1000.0 * fuertes.mean(axis=1)
+    sep = []
+    for r in range(0, fuertes.shape[0], max(1, fuertes.shape[0] // 24)):
+        pos = np.flatnonzero(fuertes[r])
+        if pos.size > 4:
+            sep.extend(np.diff(pos).tolist())
+    desfave = float(np.median(bruto)) / (2.0 * np.pi * gap)  # ciclos/px de mas o de menos
+    return {
+        "f0": f0,
+        "periodo_px": 1.0 / f0 if f0 > 0 else float("nan"),
+        "amp_mediana": float(np.median(amp)),
+        "golpes_por_mil_px": float(np.mean(por_mil)),
+        "separacion_mediana_px": float(np.median(sep)) if sep else float("nan"),
+        "desfase_ciclos_px": desfave,
+        "periodo_local_px": 1.0 / (f0 + desfave) if f0 + desfave > 0 else float("nan"),
+    }
+
+
 def mapa_niveles(g):
     """Del mapa de profundidad: cuántos niveles hay y de qué ancho son las mesetas."""
     h, w = g.shape
@@ -141,11 +183,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("base", help="prefijo de los volcados, por ejemplo /tmp/chk")
     ap.add_argument("--ancho", type=float, default=PX_PANEL, help="ancho del panel en píxeles")
+    ap.add_argument("--con", help="ruta de la trama CON releve (por defecto -trama-con-mapa.png)")
+    ap.add_argument("--sin", help="ruta de la trama SIN releve (por defecto -trama-sin-releve.png)")
     a = ap.parse_args()
 
     nombres = {
-        "con releve": [a.base + "-trama-vulkan.png", a.base + "-trama-con-mapa.png"],
-        "sin releve": [a.base + "-trama-sin-releve.png"],
+        "con releve": [a.con] if a.con else [a.base + "-trama-con-mapa.png", a.base + "-trama-vulkan.png"],
+        "sin releve": [a.sin] if a.sin else [a.base + "-trama-sin-releve.png"],
     }
     datos = {}
     for etiqueta, posib in nombres.items():
@@ -182,6 +226,27 @@ def main():
             i = int(np.argmax(np.where(val, mag, -1)))
             print("\nporteador de la trama en %s: periodo %.2f px (%.4f ciclos/px), amplitud %.2f niveles"
                   % (etiqueta, per[i], f[i], mag[i]))
+
+    print("\n=== la rayita de la trama, fila por fila ===")
+    medidas = {}
+    for etiqueta, (p, y) in datos.items():
+        m = porteadora_local(y)
+        if not m:
+            print("  %s: sin porteador claro" % etiqueta)
+            continue
+        medidas[etiqueta] = m
+        print("  %-11s periodo %.2f px · amplitud %.1f niveles · golpes de fase %.0f por mil px"
+              % (etiqueta, m["periodo_px"], m["amp_mediana"], m["golpes_por_mil_px"]))
+        print("  %-11s separacion entre golpes %.0f px · periodo local %.2f px (%+.4f de desvio)"
+              % ("", m["separacion_mediana_px"], m["periodo_local_px"], m["desfase_ciclos_px"]))
+    if len(medidas) == 2 and "con releve" in medidas and "sin releve" in medidas:
+        c, s = medidas["con releve"], medidas["sin releve"]
+        razon = c["golpes_por_mil_px"] / max(s["golpes_por_mil_px"], 0.5)
+        print("\n  golpes de fase con releve / sin releve: x%.2f  ->  %s"
+              % (razon,
+                 "los pone el MAPA (sus curvas de nivel cortan la trama)" if razon > 1.6 else
+                 "estan en las dos: los pone la TRAMA (paso o filtro mal ajustados)" if razon < 1.25 else
+                 "poco claro: hace falta la trama sin releve del mismo cuadro"))
 
     pgm = a.base + "-profundidad.pgm"
     if os.path.exists(pgm):

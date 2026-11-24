@@ -21,11 +21,11 @@ constexpr size_t kMaxHudVerts = 65536;
 /* std140: vec2 v2c[4] en 0, vec2 v3c[4] en 64, vec3 v4c[4] en 128 (paso 16, no 12),
    vec4 res en 192, tun1 en 208, tun2 en 224, tun3 en 240. */
 /* Bloque std140 de weave.frag: cada arreglo de vec2 o vec3 ocupa 64 bytes (la alineacion de un
-   arreglo se redondea a 16) y despues vienen seis vec4: el quinto es el del conversor 2D/3D y el
-   sexto los ajustes finos del mismo (temblor y topes por ojo). */
-constexpr size_t kUboBytes = 288;
+   arreglo se redondea a 16) y despues vienen siete vec4: el quinto es el del conversor 2D/3D, el
+   sexto los ajustes finos del mismo (temblor y topes por ojo) y el septimo la medicion de la trama. */
+constexpr size_t kUboBytes = 304;
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
-                 kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272;
+                 kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288;
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -734,6 +734,18 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t5[1] = conTope ? 12.67f : 0.0f;
   t5[2] = conTope ? 9.98f : 0.0f;
   t5[3] = cantoS;
+  /* ODYSSEY3D_FASE_TEMBLOR  temblor de la propia fase de la trama, en ciclos de la lente.
+     Por defecto 0 (como venia). Con 0,1 la franja de 4,3 px de la trama baja unas cinco veces
+     (medido en tools/mide_franjas.py sobre la propia formula del shader) y el 3D casi no se
+     mueve, porque la fundamental pierde solo un 7%. Sirve para ver si las franjas finas que
+     quedan con el releve apagado salen del corte brusco del filtro. */
+  float *t6 = (float *)(dst + kOffTun6);
+  static const float faseTemblor = [] {
+    const char *e = std::getenv("ODYSSEY3D_FASE_TEMBLOR");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return v > 0.0f && v < 1.0f ? v : 0.0f;
+  }();
+  t6[0] = faseTemblor;
   if (std::getenv("ODYSSEY_UBO")) {
     std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · v4 TL %.2f %.2f %.2f\n",
                  res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], v4[0], v4[1], v4[2]);
