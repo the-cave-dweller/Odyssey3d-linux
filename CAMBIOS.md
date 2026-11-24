@@ -2,6 +2,28 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Al cambiar de red de profundidad el visor se colgaba y moría (v0.33)
+- Lo pedido: «nuevo tema, ahora al presionar el cambio de modelo el programa se crashea».
+- **No era una regresión de la v0.32**: `coredumpctl list` marca el mismo `SIGABRT` (señal 6, sin
+  volcado por el `LimitCORE=0`) con la 0.31 a las 01:54 y con la 0.32 a las 02:18, en los dos casos
+  ~40 s después de `[conversor] no hay 1100 MB libres en ninguna grafica ... la red se hara con la CPU`.
+- **Causa medida.** El botón **1** (la red de Samsung, `mde_large.onnx`) pedía abrir la sesión con la
+  gráfica llena, así que `init()` se iba a la CPU. Ahí ONNX Runtime **no termina de crear la sesión**:
+  reproducido fuera del visor con `ODYSSEY3D_GPU=-1`, `mde_large.onnx` lleva 4 minutos de reloj
+  quemando CPU (proceso en estado R, 11 hilos, 1,4 GB) sin imprimir la sesión; en el visor eso acaba
+  en abort y se lleva el cuadro y el panel por delante. La nuestra (`depth_anything_v2_small.onnx`) por
+  CPU sí funciona: 1,0 s en abrir y 189,6 ms por mapa.
+- **Lo que hace ahora (`src/depth.cpp`).** `esRedDeSamsung()` reconoce `mde_*`/`disp_*`. En `init()`, si
+  el destino es la CPU y la red es la de Samsung, **no se intenta**: avisa con el número de MB que hacen
+  falta (1550, con el colchón de 450) y cómo soltarlos. `cambiar()` avisa antes de soltar la sesión en
+  curso si la gráfica está justa, y si el intento falla **vuelve la red anterior** (que estaba vivo y
+  sigue vivo, medido con `tools/prueba_cambio.cpp`: salida con `viva=1` en menos de un segundo, antes
+  se colgaba). En `vkview.cpp`, al arrancar, si la red pedida por el servicio no abre se prueba la
+  nuestra: mejor un conversor más lento que ninguno.
+- **También:** la tecla `R` ya no limpia la red mientras el hilo de estimación está dentro de ella
+  (espera a que termine el mapa en el aire), y `ODYSSEY3D_GPU=-1` / `=N` fuerza CPU o una tarjeta para
+  poder probar estos caminos sin recompilar.
+
 ## Rótulos y subtítulos apoyados en el plano de la pantalla (v0.32)
 - Lo pedido: «no me hace sentido que veo los subtitulos y cualquier otro texto moviendose de lado a
   lado a pesar de tener el rastreo, el rastreo es como el de windows?, en windows se queda quieto el

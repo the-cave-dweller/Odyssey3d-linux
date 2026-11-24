@@ -3,6 +3,7 @@
    init() avisa y el conversor simplemente no esta disponible. */
 #include "depth.h"
 
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -25,6 +26,25 @@ namespace {
 /* Ruta normal del modelo, la que usa el instalador y el aviso por consola. La misma convencion
    usa el boton 1 / 2 de la pastilla para saber donde esta "la nuestra". */
 std::string defaultModelPath() { return rutaRedNuestra(); }
+
+/* Cuanta memoria libre hace falta para abrir una red en la grafica, y cuanto de colchon se deja
+   entre lo que anuncia nvidia-smi y lo que de verdad queda cuando la sesion reclama su contexto.
+   Valen para elegir donde correr y tambien para NO cambiar de red cuando no cabe. */
+const long kNecesitoMiB = 1100;
+const long kColchonMiB = 450;
+
+/* La red de Samsung es la que se llama mde_* o disp_* (la de Depth Anything se llama otra cosa).
+   Solo abre en la grafica: intentarla por CPU se cuelga, medido el 24-nov con mde_large.onnx mas de
+   4 minutos quemando CPU sin llegar a crear la sesion, y en el visor acababa en abort (el nucleo del
+   proceso se fue arriba con el panel en modo 3D y sin video). La nuestra si va por CPU: 1 s en abrir
+   y 190 ms por mapa. */
+bool esRedDeSamsung(const std::string &ruta) {
+  const size_t p2 = ruta.find_last_of('/');
+  std::string b = p2 == std::string::npos ? ruta : ruta.substr(p2 + 1);
+  for (char &c : b)
+    c = (char)std::tolower((unsigned char)c);
+  return b.rfind("mde_", 0) == 0 || b.rfind("disp_", 0) == 0;
+}
 
 /* Muestreo bilineal sobre la imagen de origen (RGBA, primera fila arriba). */
 void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) {
@@ -236,16 +256,19 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   /* Elegir donde corre la red: si en la tarjeta pedida no caben los ~1,1 GB que necesita (contexto
      de CUDA + modelo + activaciones), buscar la que mas memoria libre tenga. Y si en ninguna cabe,
      ir directos a la CPU antes de que la creacion de la sesion reviente. */
-  const long kNecesitoMiB = 1100;
-  /* Colchon: nvidia-smi dice "libre", pero entre que miramos y abre la sesion el navegador pide un
+  /* Los umbrales de memoria (kNecesitoMiB, kColchonMiB) estan arriba, junto a esRedDeSamsung.
+     Colchon: nvidia-smi dice "libre", pero entre que miramos y abre la sesion el navegador pide un
      poco mas y la sesion CUDA reclama su contexto antes que la red. Sin colchon el "si cabe" resulta
      mentira: medido el 23-nov, con 1,2 GB anunciados como libres la creacion de la sesion abortó
      dentro de ONNX Runtime y el visor se fue arriba dejando el monitor en modo 3D sin video. */
-  const long kColchonMiB = 450;
   bool sinGpu = false;
+  if (const char *g = std::getenv("ODYSSEY3D_GPU"))   /* -1 fuerza la CPU: para probar ese camino */
+    gpu_ = std::atoi(g);
+  if (gpu_ < 0)
+    sinGpu = true;
   {
     const std::vector<long> libres = vramLibreMiB();
-    if (!libres.empty()) {
+    if (!sinGpu && !libres.empty()) {
       long mia = gpu_ < (int)libres.size() ? libres[(size_t)gpu_] : -1;
       int mejor = gpu_;
       long mejorMiB = mia;
@@ -266,6 +289,19 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
         }
       }
     }
+  }
+  /* La red de Samsung no va por CPU ni por asomo: se cuelga creando la sesion (medido el 24-nov con
+     mde_large.onnx: mas de 4 minutos quemando CPU sin acabarla) y acaba en abort, y el visor se iba
+     arriba dejando el panel en modo 3D sin video. No se intenta: se dice lo que hace falta. */
+  if (sinGpu && esRedDeSamsung(path)) {
+    if (err)
+      *err = std::string("la red de Samsung no puede abrirse por CPU: se cuelga creando la sesion ") +
+             "(medido: mas de 4 minutos sin acabarla) y acaba abortando, asi que no se intenta. "
+             "Hacen falta " +
+             std::to_string(kNecesitoMiB + kColchonMiB) +
+             " MB libres en una grafica; suéltalos cerrando lo que ocupe la grafica, o usa la otra red "
+             "con el boton 2 (esa si va por CPU, a unos 190 ms por mapa).";
+    return false;
   }
   OrtImpl *im = new OrtImpl();
   im->so.SetIntraOpNumThreads(4);
@@ -375,6 +411,18 @@ bool DepthNet::cambiar(const std::string &model, std::string *err) {
   const int gpu = gpu_;
   const float sm = smooth_;
   const bool lim = limpieza_;
+  /* Aviso aparte para la red de Samsung: si ahora mismo no cabe en ninguna grafica, soltar la sesion
+     en curso no siempre le deja sitio (el contexto de CUDA no se devuelve del todo), y el intento por
+     CPU es lo que hunde el visor. Se intenta igual, porque a lo mejor si cabe, pero se avisa. */
+  if (esRedDeSamsung(nueva)) {
+    const std::vector<long> libres = vramLibreMiB();
+    long mejor = -1;
+    for (long m : libres)
+      if (m > mejor) mejor = m;
+    if (mejor >= 0 && mejor < kNecesitoMiB + kColchonMiB)
+      std::printf("[conversor] la grafica esta justa (%ld MB libres en la mejor, hacen falta %ld): si "
+                  "no cabe, la red de Samsung NO se abrira por CPU\n", mejor, kNecesitoMiB + kColchonMiB);
+  }
   /* Se suelta la sesion vieja ANTES de abrir la nueva: es lo que devuelve la memoria de la
      grafica, y sin eso la segunda red no cabe y se va a la CPU. */
   cierra();

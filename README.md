@@ -437,7 +437,18 @@ y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150); para 
 redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
 `mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
 se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
-y la elección queda en `~/.config/odyssey3d/red-elegida` para la próxima vez. Si se
+y la elección queda en `~/.config/odyssey3d/red-elegida` para la próxima vez.
+
+**El botón 1 con la gráfica justa** (arreglado en v0.33): la red de Samsung **solo** arranca en la
+gráfica. Pedirla por CPU no llega a crear la sesión —medido el 24-nov con `mde_large.onnx`: más de
+**4 minutos** quemando CPU sin acabar, y en el visor acababa en `SIGABRT`—, así que pulsar `1` con la
+VRAM llena mataba el visor y dejaba el panel en 3D sin vídeo. Ahora, si en ninguna tarjeta hay
+1550 MB libres (1100 MB que pide la red + 450 de colchón), la red de Samsung se rechaza con un aviso
+claro y **sigue funcionando la red anterior**; al arrancar, si la red pedida no abre se prueba la
+nuestra, que sí va por CPU (1 s en abrir y 190 ms por mapa). Para experimentar: `ODYSSEY3D_GPU=-1`
+fuerza la CPU y `ODYSSEY3D_GPU=1` obliga a la segunda tarjeta.
+
+Si se
 marca la casilla de la tarjeta y se pulsa un botón, se guarda una línea `auto = app:modo` en ese
 archivo y desde entonces esa aplicación pasa directa sin preguntar (puedes editar o borrar esa línea a
 mano). `conv` es el vídeo normal pasado a 3D: con `auto = zen:conv` el navegador entra directo en

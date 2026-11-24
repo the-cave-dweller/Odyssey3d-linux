@@ -943,6 +943,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         return true;
       }
     }
+    /* Y si la red que pide el servicio simplemente no arranca (la de Samsung solo va en la grafica:
+       por CPU se cuelga y aborta), probamos la nuestra, que si va por CPU. Mejor un conversor mas
+       lento que ningún conversor, y asi el visor no se queda a dos dimensiones por un capricho. */
+    if (!ui.rutaRed[2].empty() && ui.rutaRed[2] != modeloActivo && fileExists(ui.rutaRed[2])) {
+      std::fprintf(stderr, "[conversor] %s\n[conversor] se prueba con la nuestra (%s)\n", e->c_str(),
+                   ui.rutaRed[2].c_str());
+      std::fflush(stderr);
+      if (red.init(ui.rutaRed[2], e, gpu)) {
+        modeloActivo = ui.rutaRed[2];
+        ui.hud.state().red = 2;
+        return true;
+      }
+    }
     return false;
   };
   if (convActivo) {
@@ -1164,12 +1177,18 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_ORT
     /* la tecla C: encender o apagar el conversor de video normal a 3D */
     if (ui.textoToggle) {
-      ui.textoToggle = false;
-      textoAncla = !textoAncla;
-      red.reset();   /* el mapa viejo ya traia el apoyo dentro: no lo mezcles con el nuevo */
-      std::printf("[rotulos] %s\n", textoAncla ? "apoyados en el plano de la pantalla (R los suelta)"
-                                               : "soltados: llevan la profundidad que le da la red (R los apoya)");
-      std::fflush(stdout);
+      if (hiloRed.ocupado) {
+        /* el hilo de la estimacion esta dentro de la red: limpiarla a la mitad rompe el mapa en
+           curso. Se atiende en la vuelta siguiente del bucle, cuando ya termino. */
+      } else {
+        ui.textoToggle = false;
+        textoAncla = !textoAncla;
+        hiloRed.esperar();
+        red.reset();   /* el mapa viejo ya traia el apoyo dentro: no lo mezcles con el nuevo */
+        std::printf("[rotulos] %s\n", textoAncla ? "apoyados en el plano de la pantalla (R los suelta)"
+                                                 : "soltados: llevan la profundidad que le da la red (R los apoya)");
+        std::fflush(stdout);
+      }
     }
     if (ui.convToggle || ui.convWant) {
       const bool pidiendo = ui.convWant;
