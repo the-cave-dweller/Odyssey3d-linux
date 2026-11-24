@@ -24,6 +24,17 @@
 #include "vkweave.h"
 
 #include <GLFW/glfw3.h>
+#ifdef HAVE_WAYLAND_WM
+/* la ventana del visor la pone GLFW, pero la region de entrada la pide el compositor: para eso
+   necesitamos el wl_surface que GLFW creo por detras */
+#define GLFW_EXPOSE_NATIVE_WAYLAND 1
+#include <GLFW/glfw3native.h>
+#include <wayland-client.h>
+#else
+struct wl_compositor;
+struct wl_surface;
+struct wl_region;
+#endif
 
 #include <cmath>
 #include <csignal>
@@ -38,9 +49,27 @@ static void vkGlfwError(int code, const char *desc) { std::fprintf(stderr, "[glf
 
 namespace {
 
+/* ---- que el raton no se quede en el visor ---------------------------------------------
+   La ventana del visor tapa la pantalla entera y, si no le decimos nada al compositor, se traga
+   todos los clics y toda la rueda: no se puede dar a pausa en el video ni mover la barra de
+   avance porque lo que se pica es el visor. Le marcamos una region de entrada con la pastilla (y
+   con el aviso, si esta puesto): fuera de esas cajas el raton atraviesa el visor y llega a la
+   ventana de atras. Las teclas siguen yendo a la ventana que tenga el foco: un clic en el video
+   se lo queda y un clic en la pastilla devuelve el mando al visor. --sin-pasar-raton lo apaga. */
+struct RegionEntrada {
+  struct wl_compositor *comp = nullptr;  /* quien fabrica las cajas de la region */
+  struct wl_surface *surf = nullptr;     /* la superficie de la ventana del visor */
+  std::string firma = "?";              /* lo mandado la ultima vez, para no repetir cada cuadro.
+                                       Empieza con un valor imposible: la region vacia (sin pastilla)
+                                       tambien tiene una firma vacia y hay que mandarla igual. */
+  bool avisoImpreso = false;               /* la explicacion del teclado solo se dice una vez */
+  bool activo = false;
+};
+
 struct VkUi {
   WeaveTuning tune{};
   Hud hud;
+  RegionEntrada region;
   bool quit = false;
   float convBase = 0.0f;  /* la convergencia que mueven las teclas; la del deslizador se suma */
   double mx = -1.0, my = -1.0;
@@ -306,6 +335,106 @@ void pointerScale(GLFWwindow *win, const VkUi *ui, float &kx, float &ky) {
   ky = lh > 0 && ui->fbH > 0 ? (float)ui->fbH / (float)lh : 1.0f;
 }
 
+#ifdef HAVE_WAYLAND_WM
+/* el compositor hace falta para crear la region. GLFW ya esta conectado al compositor, asi que le
+   pedimos el gestor a esa misma conexion; el registro se suelta enseguida y el gestor sigue valido. */
+void alRegistrar(void *dat, struct wl_registry *reg, uint32_t id, const char *iface, uint32_t ver) {
+  RegionEntrada *re = (RegionEntrada *)dat;
+  if (!re->comp && !std::strcmp(iface, "wl_compositor"))
+    re->comp = (struct wl_compositor *)wl_registry_bind(reg, id, &wl_compositor_interface, ver > 1u ? 1u : ver);
+}
+void alQuitarRegistro(void *, struct wl_registry *, uint32_t) {}
+const struct wl_registry_listener oyenteDelRegistro = {alRegistrar, alQuitarRegistro};
+#endif
+
+void abrirRegionEntrada(GLFWwindow *win, RegionEntrada *re) {
+#ifdef HAVE_WAYLAND_WM
+  if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) return;  /* visor sobre X11: ahi no hay regiones */
+  re->surf = glfwGetWaylandWindow(win);
+  struct wl_display *dpy = glfwGetWaylandDisplay();
+  if (!re->surf || !dpy) return;
+  struct wl_registry *reg = wl_display_get_registry(dpy);
+  if (!reg) return;
+  wl_registry_add_listener(reg, &oyenteDelRegistro, re);
+  wl_display_roundtrip(dpy);
+  wl_registry_destroy(reg);
+  re->activo = re->comp != nullptr;
+  if (!re->activo)
+    std::fprintf(stderr, "[raton] el compositor no dio wl_compositor: el visor seguira tragando los clics\n");
+#else
+  (void)win;
+  (void)re;
+#endif
+}
+
+/* la caja esta en pixeles del lienzo; la region de entrada se mide en el espacio logico de la
+   ventana (el que ve el escritorio y el raton), que es el lienzo partido por la escala */
+void cajaEnLogico(float kx, float ky, float px, float py, float pw, float ph, int out[4]) {
+  out[0] = (int)std::floor(px / kx);
+  out[1] = (int)std::floor(py / ky);
+  out[2] = (int)std::ceil(pw / kx);
+  out[3] = (int)std::ceil(ph / ky);
+}
+
+void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dejarPasar) {
+#ifdef HAVE_WAYLAND_WM
+  if (!re->activo) return;
+  /* arrastrando un deslizador hace falta quedarnos el raton entero, si no el puntero se sale de la
+     caja a medio arrastre y el deslizador se queda plantado */
+  const bool pleno = !dejarPasar || ui->dragging != Hud::HitNone;
+  float kx = 1.0f, ky = 1.0f;
+  pointerScale(win, ui, kx, ky);
+  int cajas[2][4];
+  int n = 0;
+  const Hud::State &st = ui->hud.state();
+  float px = 0.0f, py = 0.0f, pw = 0.0f, ph = 0.0f;
+  if (!pleno && ui->hud.pillBounds(&px, &py, &pw, &ph)) {
+    cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
+    n++;
+  }
+  if (!pleno && st.ask && n < 2 && ui->hud.askBounds(&px, &py, &pw, &ph)) {
+    cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
+    n++;
+  }
+  std::string firma;
+  char pedazo[48];
+  if (pleno) firma = "la ventana entera";
+  for (int i = 0; i < n; i++) {
+    std::snprintf(pedazo, sizeof pedazo, " %d,%d %dx%d", cajas[i][0], cajas[i][1], cajas[i][2], cajas[i][3]);
+    firma += pedazo;
+  }
+  if (firma == re->firma) return;  /* sin cambio de tamano no se le habla al compositor cada cuadro */
+  if (pleno) {
+    wl_surface_set_input_region(re->surf, nullptr);  /* region sin fronteras: la ventana oye todo */
+  } else {
+    struct wl_region *r = wl_compositor_create_region(re->comp);
+    if (!r) return;
+    for (int i = 0; i < n; i++) wl_region_add(r, cajas[i][0], cajas[i][1], cajas[i][2], cajas[i][3]);
+    wl_surface_set_input_region(re->surf, r);  /* caja vacia = aqui no se pica nada: pasa todo */
+    wl_region_destroy(r);
+  }
+  wl_surface_commit(re->surf);  /* la region se aplica con el siguiente envío de la superficie */
+  re->firma = firma;
+  std::printf("[raton] %s · region de entrada:%s\n",
+              pleno ? (dejarPasar ? "arrastrando: el raton se queda en el visor"
+                                  : "el visor se queda todos los clics (--sin-pasar-raton)")
+                    : (n ? "el raton atraviesa el visor fuera de la pastilla"
+                         : "la pastilla esta oculta: el raton pasa entero"),
+              firma.empty() ? " ninguna" : (" " + firma).c_str());
+  if (!re->avisoImpreso) {
+    re->avisoImpreso = true;
+    std::printf("          el teclado se queda con la ventana activa: clic en el video y manda el video, clic\n"
+                "          en la pastilla y el mando vuelve al visor\n");
+  }
+  std::fflush(stdout);
+#else
+  (void)win;
+  (void)re;
+  (void)ui;
+  (void)dejarPasar;
+#endif
+}
+
 void onCursorVK(GLFWwindow *win, double x, double y) {
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
   if (!ui) return;
@@ -332,8 +461,16 @@ void onCursorVK(GLFWwindow *win, double x, double y) {
 }
 
 void onEnterVK(GLFWwindow *win, int entered) {
-  if (!std::getenv("ODYSSEY_CONV")) return;
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
+  if (!ui) return;
+  /* con la region de entrada el puntero "sale" de la ventana en cuanto se va de la pastilla: si no
+     limpiamos la posicion, el boton se queda resaltado aunque el raton este manejando el video */
+  if (!entered && ui->dragging == Hud::HitNone) {
+    ui->mx = ui->my = -1.0;
+    ui->hud.setMouse(-1.0f, -1.0f);
+    ui->inputChanged = true;
+  }
+  if (!std::getenv("ODYSSEY_CONV")) return;
   std::printf("[tarjeta] el puntero %s la ventana (ahora %.0f,%.0f)\n", entered ? "entra en" : "sale de",
               ui ? ui->mx : -1.0, ui ? ui->my : -1.0);
   std::fflush(stdout);
@@ -523,6 +660,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      del video. */
   ui.hud.state().ask = (kind == SourceKind::Capture) && !opts.noHud && !opts.fmtGiven;
   ui.hud.state().overlayOn = !opts.noHud;
+  ui.hud.state().ratonLibre = !opts.noPassthrough;
   /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
   if (opts.uiScale > 0.25f) {
     ui.hud.setScale(opts.uiScale);
@@ -535,6 +673,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   glfwSetCursorEnterCallback(win, onEnterVK);
   glfwSetMouseButtonCallback(win, onButtonVK);
   glfwSetWindowFocusCallback(win, onFocusVK);
+  abrirRegionEntrada(win, &ui.region);
   /* cursor visible, como en el hub oficial */
   GLFWcursor *arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
   if (arrow) glfwSetCursor(win, arrow);
@@ -822,6 +961,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("\n  teclas  ESC salir · 3 2D/3D · F invertir profundidad · ←/→ fase · RePag/SavPg paso de lente\n"
               "          ↑/↓ crosstalk · , . pendiente de filtro · 9/0 convergencia · 8 reiniciar ajuste\n");
   std::printf("          raton  botones y deslizadores de la pastilla · Ctrl+Shift 1..6 como el hub oficial\n");
+  std::printf("                 fuera de la pastilla el raton atraviesa el visor: pausar el video, mover la\n");
+  std::printf("                 barra o manejar el navegador sin quitar el 3D (--sin-pasar-raton lo apaga)\n");
   std::printf("                 Ctrl+Shift+7 achica la pastilla · Ctrl+Shift+8 la agranda\n");
   std::printf("          P o espacio  pausa o reanuda el video · Tab entrega la pantalla al navegador (nos\n");
   std::printf("          minimizamos y el panel vuelve a 2D; Meta+Alt+Tab o un clic en la barra de tareas la\n          "
@@ -1304,6 +1445,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo, ui.convInfo));
     ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
+    /* la pastilla cambio de sitio o se oculto: la caja que deja pasar el raton se actualiza aqui */
+    aplicarRegionEntrada(win, &ui.region, &ui, !opts.noPassthrough);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
 

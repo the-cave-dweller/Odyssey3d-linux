@@ -2,6 +2,36 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El raton atraviesa el visor: se puede pausar el video sin quitar el 3D (v0.22)
+- Lo pedido: «no puedo controlar lo que está en la pantalla, el overlay no me debería quitar control del
+  resto del contenido mostrado». Con el visor a pantalla completa no se podía dar a pausa, ni mover la barra
+  de avance, ni pinchar en el navegador de abajo.
+- **La causa**: en todo el proyecto no había ninguna región de entrada (`wl_surface_set_input_region`). La
+  ventana del visor cubre la pantalla entera y, si no se le dice nada, el compositor le manda todos los clics
+  y toda la rueda. Lo mismo pasaba con la capa del hub: su lienzo llega hasta el borde de la salida y lo que
+  no es tarjeta es transparente, pero se picaba igual.
+- **El visor** (`src/vkview.cpp`): la ventana la pone GLFW, así que sacamos su superficie con
+  `glfwGetWaylandWindow` sobre la misma conexión de GLFW y le marcamos una región con la pastilla y, si está
+  puesto, con el aviso. Fuera de esas cajas el ratón atraviesa el visor y lo que se pica es la ventana de
+  atrás. La región sólo se manda cuando cambia (se compara la firma de las cajas, no cada cuadro). Al
+  arrastrar un deslizador la ventana vuelve a quedarse el ratón entero: si no, el puntero se sale de la caja a
+  medio arrastre y el deslizador se planta. `--sin-pasar-raton` devuelve el comportamiento de antes.
+- **La capa del hub** (`src/overlay.cpp`): lo mismo con la tarjeta de aviso, sólo la caja de la tarjeta es
+  pinchable y el resto del lienzo deja pasar el ratón. Viaja en el mismo envío del lienzo, sin commit extra.
+- **Se avisa**: encima de la pastilla aparece `clic fuera de la pastilla  manda sobre el video de atras`, en
+  el arranque del visor salen dos líneas explicándolo y cada cambio de región se anota
+  (`[raton] el raton atraviesa el visor fuera de la pastilla · region de entrada: 814,22 763x78 …`).
+- **Lo que hay que saber**: el teclado se queda con la ventana activa. Un clic en el vídeo se lleva el foco y
+  las teclas finas del visor (`3`, `F`, flechas…) dejan de ir al visor hasta que se pica la pastilla; la rueda
+  y los clics sobre la pastilla siguen en el visor, y `Tab` / `ESC` siguen siendo la salida limpia. Sobre X11
+  no hay regiones: el visor se queda los clics y lo dice (`el compositor no dio wl_compositor`).
+- Comprobado: con la pastilla puesta la región sale con las dos cajas y con la capa oculta sale
+  `region de entrada: ninguna`; con un ratón falso de `uinput` el puntero entraba en la ventana sobre la
+  pastilla y salía al irse de ella, y con `--sin-pasar-raton` el mismo barrido de ocho puntos daba eventos en
+  varias partes de la ventana. El posicionamiento del ratón falso no era fino, así que la prueba de clic sobre
+  el vídeo queda para el escritorio real. En el camino salió un bug: con la pastilla oculta la región vacía no
+  se mandaba nunca porque la firma inicial también estaba vacía; ahora la firma empieza con un valor imposible.
+
 ## Boton 1 / 2 en la pastilla: cambiar de red de profundidad sin cerrar el visor (v0.21)
 - Lo pedido: un boton que alterne entre el modelo de Samsung (1) y el nuestro (2), y que se recuerde
   la ultima que usamos.

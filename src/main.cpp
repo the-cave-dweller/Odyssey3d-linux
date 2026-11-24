@@ -90,6 +90,8 @@ static const char *kUsage =
     "  --hz N            frecuencia objetivo del modo (por defecto 120)\n"
     "  --windowed        ventana en lugar de pantalla completa\n"
     "  --no-panel        no tocar el modo / la escala / la rotacion del panel\n"
+    "  --sin-pasar-raton el visor se traga todos los clics (como antes); por defecto el\n"
+    "                    raton atraviesa la ventana fuera de la pastilla\n"
     "  --no-lens         no tocar la lente lenticular\n"
     "  --no-scaler       no tocar el modo 3D del scaler del monitor\n"
     "  --2d              arrancar en pase 2D (sin tramar)\n"
@@ -1195,6 +1197,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--h") { if (!need("h")) return false; o.h = atoi(argv[++i]); }
     else if (a == "--windowed") o.windowed = true;
     else if (a == "--no-panel") o.noPanel = true;
+    else if (a == "--sin-pasar-raton") o.noPassthrough = true;
     else if (a == "--no-lens") o.noLens = true;
     else if (a == "--no-scaler") o.noScaler = true;
     else if (a == "--2d") { o.no3d = true; o.fmtGiven = true; }
@@ -1442,7 +1445,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
                                {"Red sin conversor", 14.0f, 136.0f},      {"1 / 2  cambia de red", 11.0f, 160.0f},
                                {"teclas 1 / 2", 11.0f, 160.0f},           {"Tab  entrega la pantalla", 11.0f, 272.0f},
                                {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
-                               {"Ctrl+Shift+5 / 6", 11.0f, 120.0f}};
+                               {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
+                              {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
     std::printf("  letra  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w, (double)m.caja,

@@ -246,7 +246,37 @@ struct Overlay::Impl {
   /* Alto del escritorio en puntos logicos. El monitor es 3840x2160 fisicos pero con la escala
      del escritorio al 150% el escritorio mide 1440 de alto: la tarjeta se mide ahi, si no sale
      un 50% mas grande que cualquier ventana normal. */
+  int regionCuadrada[4] = {-1, -1, -1, -1};  /* la ultima caja de entrada mandada a la capa */
+
   float altoLogico() const { return (float)altoE / (escala > 0.25 ? escala : 1.0); }
+
+  /* El lienzo de la capa llega hasta el borde de la pantalla y lo que no es tarjeta es
+     transparente, pero sin decirle nada al compositor se pica igual: se tragaba los clics y la
+     rueda que caian encima. La region de entrada deja la capa pinchable solo sobre la tarjeta; el
+     resto del lienzo deja pasar el raton a la ventana de atras. Las coordenadas son logicas del
+     lienzo (pixeles reales partido por la escala que anuncio el compositor). */
+  void poneRegionEntrada() {
+    if (!surf || !comp) return;
+    float ax = 0.0f, ay = 0.0f, aw = 0.0f, ah = 0.0f;
+    const double e = escala > 0.25 ? escala : 1.0;
+    int caja[4] = {0, 0, 0, 0};
+    if (tarjetaPuesta && hud.askBounds(&ax, &ay, &aw, &ah)) {
+      caja[0] = (int)std::floor((ax - (float)ox) / e);
+      caja[1] = (int)std::floor((ay - (float)oy) / e);
+      caja[2] = (int)std::ceil(aw / e);
+      caja[3] = (int)std::ceil(ah / e);
+    }
+    if (caja[0] == regionCuadrada[0] && caja[1] == regionCuadrada[1] && caja[2] == regionCuadrada[2] &&
+        caja[3] == regionCuadrada[3])
+      return;  /* la misma caja que el cuadro anterior: no hay nada que mandar */
+    struct wl_region *r = wl_compositor_create_region(comp);
+    if (!r) return;
+    if (caja[2] > 0 && caja[3] > 0) wl_region_add(r, caja[0], caja[1], caja[2], caja[3]);
+    wl_surface_set_input_region(surf, r);  /* caja vacia = aqui no se pica nada: pasa todo */
+    wl_region_destroy(r);
+    regionCuadrada[0] = caja[0]; regionCuadrada[1] = caja[1];
+    regionCuadrada[2] = caja[2]; regionCuadrada[3] = caja[3];
+  }
 
   void pintar() {
     if (bufAncho <= 0 || bufAlto <= 0) return;
@@ -359,6 +389,7 @@ struct Overlay::Impl {
          protocolo: el compositor cierra la conexion de la capa y desde ahi la tarjeta ya no
          vuelve a aparecer nunca. Pasaba al rehacer la capa, que es lo que dejaba el aviso
          "tarjeta puesta" en el registro pero nada en la pantalla. */
+      poneRegionEntrada();  /* va en el mismo envio que el lienzo */
       wl_surface_attach(surf, bl->buf, 0, 0);
       wl_surface_damage(surf, 0, 0, supAncho, supAlto);
       wl_surface_commit(surf);

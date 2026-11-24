@@ -224,6 +224,26 @@ así que conserva las proporciones de la aplicación oficial a 3840x2160. Se apa
 `--sin-interfaz` (o `Ctrl+Shift+2`). Las teclas finas de alineado (`3`, `F`, flechas, `RePag`…)
 siguen funcionando igual.
 
+### El ratón atraviesa el visor (desde v0.22)
+
+La ventana del visor cubre la pantalla entera, pero **no se queda con el ratón**: declara como región de
+entrada la pastilla (y el aviso, si está puesto), así que los clics y la rueda que caen fuera de esas cajas
+atraviesan el visor y llegan a la ventana de atrás. Se puede dar a pausa en el vídeo, mover la barra de
+avance o manejar el navegador sin quitar el 3D. La tarjeta de aviso del servicio hace lo mismo: sólo su
+recuadro es pinchable y el resto del lienzo deja pasar el ratón.
+
+Dos detalles:
+
+* mientras se arrastra un deslizador el visor sí se queda el ratón entero, para que el arrastre no se plante
+  a media caja;
+* el teclado se queda con la ventana activa. Un clic en el vídeo se lleva el foco, y desde ahí las teclas
+  finas (`3`, `F`, flechas, `9`/`0`…) mandan sobre el navegador hasta que se pica la pastilla, que devuelve
+  el mando al visor. `Tab` y `ESC` siguen siendo la salida limpia de la sesión.
+
+Con `--sin-pasar-raton` la ventana vuelve a quedarse todos los clics, que era el comportamiento hasta v0.21.
+Sobre X11 no hay regiones de entrada: el visor se queda los clics y lo avisa
+(`[raton] el compositor no dio wl_compositor: el visor seguira tragando los clics`).
+
 ## Servicio que arranca con la sesión
 
 `install.sh` activa una unidad de **systemd de usuario** que se levanta con la sesión gráfica y se
@@ -386,17 +406,20 @@ del navegador:
   `odyssey3d play archivo.mp4` usa mpv y el flujo se mantiene (60-63 f/s con el hardware en marcha).
 
 Lo segundo que hace el navegador es **pausar el vídeo él solo** al cambiar el modo del monitor o al quedar
-tapado: el flujo de KWin sigue llegando (se midieron 51 f/s) pero la imagen no avanza. Como el visor se queda
-el teclado y el ratón de la pantalla, no se puede pulsar el botón de pausa del reproductor, así que el visor lo
-hace por MPRIS (Zen, Firefox y Chrome publican un reproductor en la sesión):
+tapado: el flujo de KWin sigue llegando (se midieron 51 f/s) pero la imagen no avanza. Para no depender de
+acertarle al botón de pausa del reproductor con el visor encima, el visor lo hace por MPRIS (Zen, Firefox y
+Chrome publican un reproductor en la sesión):
 
 - al arrancar la sesión, si el vídeo estaba parado lo reanuda solo (`[video] el navegador habia parado el
   video (Paused): se reanuda solo`);
-- **`P` o espacio** pausan y reanudan el vídeo sin quitar la capa;
+- **`P` o espacio** pausan y reanudan el vídeo sin quitar la capa (hace falta que el visor tenga el foco:
+  un clic en la pastilla se lo devuelve);
 - desde una terminal, en cualquier momento: `odyssey3d ctl video status|pause|play|toggle`.
 
-Si aun así hace falta usar el ratón sobre el reproductor (cambiar la calidad, buscar en la línea de tiempo),
-la salida limpia es `ESC`: cierra la sesión, devuelve el panel a 2D y vuelve a aparecer la tarjeta del hub.
+Si hace falta usar el ratón sobre el reproductor (cambiar la calidad, buscar en la línea de tiempo), desde
+v0.22 basta con pinchar **fuera de la pastilla**: el clic atraviesa el visor y lo recibe la ventana de atrás,
+que además se queda el teclado. La salida limpia sigue siendo `Tab` o `ESC`: cierra la sesión, devuelve el
+panel a 2D y vuelve a aparecer la tarjeta del hub.
 
 El visor hace lo que puede por su parte: si el flujo se corta lo vuelve a pedir una y otra vez mientras
 dure la sesión, no vuelve a gastar GPU presentando el mismo cuadro (`--siempre` recupera el ritmo de panel

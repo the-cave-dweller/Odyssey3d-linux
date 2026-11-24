@@ -20,6 +20,10 @@ struct ViewerOpts {
   bool noLens = false;
   bool noScaler = false;
   bool noPanel = false;
+  /* el raton atraviesa la ventana del visor salvo sobre la pastilla: asi se puede dar a pausa en
+     el video, avanzar la barra o manejar el navegador sin quitar el 3D. Con --sin-pasar-raton el
+     visor vuelve a tragarse todos los clics, que era lo que pasaba siempre. */
+  bool noPassthrough = false;
   bool no3d = false;       /* arrancar en pase 2D */
   /* conversor de video normal (2D) a 3D: la red de profundidad dice cuanto desplazar cada ojo.
      vacio = el modelo que esta en ~/.local/share/odyssey3d/modelos */

@@ -360,6 +360,11 @@ void Hud::begin(int w, int h, float altoLogico) {
     else if (st_.hud != 0) { dotc[0] = 1.0f; dotc[1] = 0.6f; dotc[2] = 0.0f; }
     mask9({x0 + 8.0f, y0 + 8.0f, 6.0f, 6.0f}, 0, 3.0f, dotc[0], dotc[1], dotc[2], 1.0f);
     text(hw, x0 + 20.0f, y0 - 16.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+    /* como se maneja el raton: la pastilla se pica aqui arriba y el resto de la pantalla manda
+       sobre lo que hay detras (el video, el navegador). La frase va en la misma linea. */
+    if (st_.ratonLibre)
+      text("clic fuera de la pastilla  manda sobre el video de atras",
+           x0 + 20.0f + textWidth(hw, 11.0f) + 14.0f, y0 - 16.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
   }
 
   /* ---- aviso abajo a la derecha ---- */

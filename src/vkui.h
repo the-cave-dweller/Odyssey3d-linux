@@ -28,6 +28,7 @@ public:
     bool remember = false;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nuestra */
+    bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
     bool redViva = false;  /* hay conversor abierto (si no, el boton de la red se apaga) */
   };
 
