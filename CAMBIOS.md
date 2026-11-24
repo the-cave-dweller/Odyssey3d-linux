@@ -2,6 +2,32 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El vídeo queda chico en el lienzo al cambiar el modo: se lo devuelve el hub (v0.27)
+- Lo pedido: «servía mejor en la build anterior, en esa el problema era el posicionamiento; en esta también
+  me está sacando de pantalla completa el video y la pantalla se ve mal». O sea: 0.26 cerraba sesiones que
+  el usuario quería vivas y además la imagen se veía mal.
+- **Lo que estaba mal no era la pantalla completa, era el tamaño.** Mirando los registros de las sesiones
+  reales: `[captura] el fotograma del compositor es 2560x1440 y el panel esta en 3840x2160: la trama
+  necesita pixel a pixel`. Al pasar el panel al modo 3D cambia la escala de la salida, y KWin deja la ventana
+  del vídeo con el tamaño viejo: **conserva el estado de pantalla completa pero sigue en 2560x1440 sobre un
+  lienzo de 3840x2160**. El vídeo ocupa una parte del monitor y la trama se ve mal. La guardia de 0.26, además,
+  leía la pérdida momentánea del estado como «el usuario se fue» y cerraba la sesión.
+- **El hub reacomoda la ventana del vídeo.** Mientras la sesión es joven (12 s, los segundos del cambio de
+  modo) si al video le falta el estado **o no cubre la salida del panel**, se lo devolvemos: cuando conserva
+  el estado pero está chica hay que **quitarle y volverle a poner** `Fullscreen`, porque ponerla otra vez no
+  hace nada. Hasta ocho intentos, separados 0,6 s para no machacar al compositor. Asentada la sesión, la
+  pantalla completa que falta sí es el usuario: se cierra con 2,5 s de paciencia (antes 8 s).
+- **Medido con la copia instalada (23-nov, YouTube en DP-4, `sbs`).** Antes del arreglo: flujo `#12 2560x1440`
+  y el aviso de `pixel a pixel` en cada sesión, cierre a los segundos. Después: **un solo** `[ventana] el
+  cambio de modo dejó al video sin cubrir el lienzo (2560x1440 en una salida de 3840x2160, pantalla completa
+  si): lo reacomodamos (1/8)`, flujo `#12 3840x2160` desde el primer fotograma, cero avisos de `pixel a pixel`,
+  y la sesión siguió viva 62 s con el conteo subiendo (1 → 4405 fotogramas). Al irse del vídeo
+  (`ctl ventana normal`) la sesión se cerró en unos tres segundos con `[scaler] modo 3D apagado`,
+  `[lente] devuelta a 2D` y `[panel] restaurado: modo 19 3840x2160@164.98, escala 1.5`.
+- **Arreglo de compilación:** CMake no volvía a configurar cuando cambiaba `VERSION`, así que el binario
+  instalado seguía diciendo la versión vieja (con `VERSION` en 0.26 respondía `odyssey3d 0.25`). Se agregó
+  `set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS VERSION)`.
+
 ## Al irse del vídeo se apaga la sesión, no se queda el monitor en 3D (v0.26)
 - Lo pedido: «now that works but letting the video leaves the 3d screen active and the overlay behind the
   active window, I need to close it manually». Al salir del vídeo (ESC, cambiar de pestaña, minimizar o

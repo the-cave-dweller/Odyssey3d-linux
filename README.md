@@ -329,10 +329,11 @@ el modo del panel) y, si había una sesión 3D abierta, la cierra devolviendo el
 Irse del vídeo es la forma normal de apagar la sesión: si la ventana del vídeo se cierra, se minimiza o
 deja de estar a pantalla completa, el servicio avisa al visor para que se vaya por la puerta de adelante
 —devuelve el panel a su modo normal, apaga la lente y el scaler— y la pastilla deja de quedar detrás de
-la ventana activa. Tarda unos ocho segundos en reaccionar: cada vez que el monitor cambia de modo KWin le
-quita a la ventana del vídeo el estado de pantalla completa unos cinco segundos, y hay que dejar que se
-acomode para no cerrar una sesión que está bien. Si el visor se muere de golpe (o se detiene el servicio),
-el servicio recupera el panel con la copia que quedó guardada.
+la ventana activa; tarda unos tres segundos. Al cambiar el modo del monitor KWin deja a la ventana del
+vídeo con el tamaño que tenía en 2D —queda chica dentro del lienzo y la trama se ve mal—, así que el
+servicio se lo vuelve a dar en cuanto arranca la sesión (en el registro: `[ventana] el cambio de modo
+dejó al video sin cubrir el lienzo … lo reacomodamos`). Si el visor se muere de golpe (o se detiene el
+servicio), el servicio recupera el panel con la copia que quedó guardada.
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
 `espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué

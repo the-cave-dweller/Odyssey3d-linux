@@ -2220,6 +2220,9 @@ static int cmdServe(int argc, char **argv) {
   double fueraVideoDesde = 0.0;   /* cuando el video empezo a estar fuera de su sitio */
   bool cerrandoSesion = false;    /* ya avisamos al visor que se vaya; estamos esperando que muera */
   double hijoDesde = 0.0;         /* cuando arranco la sesion en curso */
+  int reafirmadas = 0;            /* veces que le devolvimos la pantalla completa al video en esta sesion */
+  double reacomodoDesde = 0.0;    /* cuando fue el ultimo reintento: no machacar al compositor */
+  bool avisoChicoHecho = false;   /* el aviso de "el video no cubre el lienzo" va una sola vez */
   double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
   int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
 
@@ -2306,6 +2309,9 @@ static int cmdServe(int argc, char **argv) {
         hijoUuid.clear();
         fueraVideoDesde = 0.0;
         cerrandoSesion = false;
+        reafirmadas = 0;          /* la proxima sesion empieza con sus ocho intentos frescos */
+        reacomodoDesde = 0.0;
+        avisoChicoHecho = false;
         /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
            que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
            al instante, entramos en un bucle de lanzar/cerrar que deja el monitor parpadeando. */
@@ -2394,23 +2400,26 @@ static int cmdServe(int argc, char **argv) {
           }
         }
       }
-      /* El otro lado de la trama es el video. Aqui antes peleabamos: si el navegador perdia la
-         pantalla completa la volviamos a poner. Estaba mal: irse del video (ESC, cambiar de pestana,
-         minimizar, cerrar la ventana) es la forma normal de terminar una sesion, y el resultado era
-         quedarse con el monitor en modo 3D y la pastilla detras de la ventana activa, cerrando a mano.
-         Ahora la salida del video es el boton de apagar: mandamos SIGTERM al visor para que se vaya
-         por la puerta de adelante (devuelve el panel a 2D, apaga lente y scaler).
-         Hay que separar dos cosas que se parecen. Cuando el panel cambia de modo, KWin le quita el
-         estado de pantalla completa a la ventana del video unos 5 segundos (medido con
-         `odyssey3d ctl windows` ventana por segundo: la ventana se corre a 640,360 y luego vuelve a
-         0,0). Eso NO es que el usuario se haya ido del video, y si cerramos al instante entramos en un
-         ciclo de lanzar y cerrar que deja el monitor parpadeando. Lo que las separa es cuanto duran:
-         el cambalache del cambio de modo se acomoda solo, la salida real del video se queda. */
+      /* El otro lado de la trama es el video, y la pantalla completa del video se pierde por dos
+         motivos que hay que tratar distinto:
+         - El cambio de modo del panel. KWin suelta la pantalla completa de la ventana del video y la
+           deja achicada y corrida. Medido ventana por segundo con `ctl windows`: en 2D esta en 0,0
+           2560x1440, y al arrancar la sesion pasa a 640,360 sin el estado. En la sesion real el flujo
+           seguia llegando a 2560x1440 mientras el panel estaba en 3840x2160, o sea el video no tapaba
+           el lienzo y la trama se veia mal. Eso lo provoca nuestro propio cambio de modo, asi que se
+           lo devolvemos al video.
+         - El usuario, que se va del video (ESC, cambiar de pestana, minimizar, cerrar la ventana). Ahi
+           la ventana se queda sin pantalla completa y no vuelve: la salida del video es el boton de
+           apagar, y mandamos SIGTERM al visor para que se vaya por la puerta de adelante (devuelve el
+           panel a 2D, apaga lente y scaler). Antes nos peleabamos con esto y la sesion no se cerraba.
+         Lo que las separa es el reloj: mientras la sesion es joven (los segundos del cambalache del
+         cambio de modo) insistimos con la pantalla completa; asentada la sesion, si al video le falta
+         el estado o no cubre la salida del panel, cerramos la sesion. */
       if (!hijoUuid.empty()) {
         WindowInfo video{};
         const char *motivo = nullptr;
         double paciencia = 1.5;   /* lo que tiene que durar la senal antes de cerrar */
-        const bool asentada = hijoDesde > 0.0 && now - hijoDesde >= 5.0;
+        const bool asentada = hijoDesde > 0.0 && now - hijoDesde >= 12.0;
         int sx = 0, sy = 0, sw = 0, sh = 0;
         bool salidaVista = false;
         for (const WindowMonitor::Salida &s : wm.outputs()) {
@@ -2420,14 +2429,43 @@ static int cmdServe(int argc, char **argv) {
         }
         if (!wm.find(hijoUuid, video) || !video.mapped) motivo = "la ventana del video ya no esta";
         else if (video.minimized()) motivo = "la ventana del video esta minimizada";
-        else if (asentada && !video.fullscreen()) {
-          motivo = "la ventana del video salio de pantalla completa";
-          paciencia = 8.0;   /* por encima de los ~5 s que tarda KWin en acomodar el cambio de modo */
-        } else if (asentada && salidaVista) {
-          const int cx = video.x + (int)video.w / 2, cy = video.y + (int)video.h / 2;
-          if (cx < sx || cx >= sx + sw || cy < sy || cy >= sy + sh)
-            motivo = "la ventana del video se fue de la salida del panel";
-          paciencia = 3.0;
+        else {
+          const bool sinEstado = !video.fullscreen();
+          /* "chica" es el caso que mas se ve: KWin deja el estado de pantalla completa puesto pero la
+             ventana conserva el tamano que tenia la salida en 2D. Medido en la sesion real: el flujo
+             llegaba a 2560x1440 con el panel en 3840x2160 y el visor lo avisaba ("la trama necesita
+             pixel a pixel"), o sea el video ocupaba una parte del lienzo y la pantalla se veia mal. */
+          const bool chica = salidaVista && ((int)video.w < sw || (int)video.h < sh);
+          if (!asentada && (sinEstado || chica) && reafirmadas < 8 && now - reacomodoDesde >= 0.6) {
+            reacomodoDesde = now;
+            ++reafirmadas;
+            std::string e4;
+            /* Si conserva el estado pero esta chica, volver a poner Fullscreen no hace nada: hay que
+               quitarla y volverla a poner para que KWin la coloque otra vez sobre toda la salida. */
+            if (chica && !sinEstado) wm.setState(hijoUuid, WindowInfo::Fullscreen, false, &e4);
+            const bool pudo = wm.setState(hijoUuid, WindowInfo::Fullscreen, true, &e4);
+            if (reafirmadas == 1 || reafirmadas == 8 || !pudo)
+              std::printf("[ventana] el cambio de modo dejó al video sin cubrir el lienzo "
+                          "(%ux%u en una salida de %dx%d, pantalla completa %s): lo reacomodamos (%d/8)%s\n",
+                          (unsigned)video.w, (unsigned)video.h, sw, sh, sinEstado ? "no" : "si",
+                          reafirmadas, pudo ? "" : (" " + e4).c_str());
+            std::fflush(stdout);
+            fueraVideoDesde = 0.0;   /* esto lo provocamos nosotros, no es una salida del video */
+          } else if (asentada && sinEstado) {
+            motivo = "la ventana del video salio de pantalla completa";
+            paciencia = 2.5;
+          } else if (asentada && chica && !avisoChicoHecho) {
+            avisoChicoHecho = true;   /* ya no insistimos: avisamos una vez y dejamos mirar */
+            std::printf("[ventana] el video sigue a %ux%u en una salida de %dx%d: la trama no va a ser"
+                        " pixel a pixel. Volvé a poner pantalla completa en la aplicación.\n",
+                        (unsigned)video.w, (unsigned)video.h, sw, sh);
+            std::fflush(stdout);
+          } else if (asentada && salidaVista) {
+            const int cx = video.x + (int)video.w / 2, cy = video.y + (int)video.h / 2;
+            if (cx < sx || cx >= sx + sw || cy < sy || cy >= sy + sh)
+              motivo = "la ventana del video se fue de la salida del panel";
+            paciencia = 2.5;
+          }
         }
         if (motivo) {
           if (fueraVideoDesde <= 0.0) fueraVideoDesde = now;
