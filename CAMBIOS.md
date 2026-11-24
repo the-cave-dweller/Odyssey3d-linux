@@ -2,6 +2,44 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La nuestra y la de Windows escriben la MISMA rejilla (medido, v0.41)
+- Llega la ronda 3 de Windows con la sospecha de que Linux pinta una "rejilla virtual" propia y que
+  por eso los bordes diagonales se rompen en ciertas secciones. Se mide con el estimador de ellos,
+  replicado en `tools/portador_windows.py` (bloques 512, Hanning, banda radio 0,045 alrededor de
+  (0,4501, -0,1607), piso anular 0,14-0,26, mas controles angular y de periodo).
+- Cuadro: `odyssey3d weave --solid --out /tmp/trama_solida.png` (la trama real de este visor, con los
+  mapas de correccion de la unidad cargados; no toca el panel).
+- Porteadora nuestra medida = **kx 0,4473 +- 0,0005 · ky -0,1598 +- 0,0005 · angulo -19,7 grad ·
+  periodo horizontal 2,2358 px = 0,34744 mm · perpendicular 2,1049 px = 0,32710 mm**.
+- Porteadora de Windows = kx 0,450 +- 0,006 · ky -0,1607 · angulo -19,6 grad · horizontal 2,222 px =
+  0,34530 mm · perpendicular 2,0923 px = 0,32515 mm. Diferencia: 0,6 % en el paso y 0,1 grad.
+- Consecuencia: el "batido de 9,63 px = 1,497 mm" de la ronda 3 compara el valor **escrito** en el
+  shader (0,55394, por encima de Nyquist) con el que **sale** por la pantalla (0,4461, su espejo).
+  El batido entre las dos maquinas es 1/0,0027 = **370 px = 57,5 mm**, no 1,5 mm. No hay error de
+  paso de rejilla que corregir.
+- Rigidez de la nuestra, en la misma rejilla de bloques: kx local **0,4473 +- 0,0000** en los 28
+  bloques, o sea el paso es constante en toda la pantalla; la fase se desvia de una onda plana
+  **21 grad de mediana y 85 grad peor** (los mapas A/B la doblan). Ellos reportan 141 grad de
+  dispersion para la suya, medida sobre una fuerza de 0,98 niveles; la nuestra sale con fuerza
+  259,2 +- 2,7 niveles en el cuadro rojo/verde. No son comparables tal cual.
+- Control sin trama (fondo plano, sin disparidad): fuerza **< 3** y amplitud **0,00 niveles**. O sea
+  este visor **no pinta rejilla donde no hay disparidad**; Windows si ve 0,98 niveles sobre blanco.
+  Eso apunta a que los mapas de correccion de ellos mueven la **ganancia** por subpixel, no solo la
+  fase, y oscurecen un 5 % de la imagen.
+- Pendiente y no hecho a proposito: una fuerza comparable pide un cuadro plano con relieve suave (no
+  el salto rojo/verde), y el A/B de `fase_temblor` necesita una sesion que tome el panel.
+
+## Camara IR 04e8:20d7: se levanta, se cuelga, y un reset USB no la revive (hoy)
+- `lsusb -d 04e8:20d7 -v` la ve (UVC 1.00, High Speed) y `v4l2-ctl --list-formats-ext` en
+  `/dev/video0` lista **MJPG 1280x480 @60 · MJPG 640x480 @60 · YUYV 640x480 @30 · YUYV 1280x480 @15**.
+  Confirma lo de Windows: a 1280x480 en crudo (YUYV) solo hay 15 fps, y `/dev/video1` es el nodo de
+  metadatos (no lista ningun formato).
+- Pero `VIDIOC_S_FMT` contesta **EIO** ("Input/output error"): la interfaz de flujo esta colgada.
+  Se pidio un reset USB (`USBDEVFS_RESET` sobre `/dev/bus/usb/005/015`) y el resultado fue peor:
+  el kernel encadena `device descriptor read/64, error -110` y la camara **desaparece del bus**; ya
+  no hay `/dev/video*`. Hace falta apagar y encender el monitor. Leccion para los dos lados: con la
+  interfaz UVC colgada, el reset de USB no la levanta; hay que cortarle la alimentacion.
+
 ## Las franjas son armonicas aliasadas de la propia trama (v0.41)
 - Reportado despues de la v0.40: las franjas **no desaparecen** bajando `3D Salida` a 0, y los bordes
   de los objetos se ven rotos, con grietas y raspon.
