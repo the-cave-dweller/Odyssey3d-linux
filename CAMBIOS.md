@@ -2,6 +2,33 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## En zonas llanas nuestra pantalla lleva cuatro veces mas grano que la de Windows (medido, v0.41)
+- Herramienta nueva `tools/rejilla_en_llano.py`: toma baldosas de 160x160 con brillo medio y
+  **desviacion tipica menor de 8 niveles** (color de verdad parejo) y mide dentro de ellas cuanto
+  reencaje de color, cuanto grano cuadro a cuadro y que periodicidades quedan.
+- Comparacion honesta, con las dos fotos a la misma escala (1,166 px de panel por px de foto el
+  nuestro, 1,159 el de Windows):
+  - grano (salto horizontal medio dentro de lo llano): **nosotros 4,41 niveles · Windows 0,95**
+  - banda fina (1,4-6 px de foto): pico/piso **40,7 a 6,1 px de panel** nosotros · **19,0 a 6,2 px** ellos
+  - banda media (6-20 px de foto): **44,2 a 9,1 px de panel (1,41 mm)** nosotros · **4,7** ellos
+- Ojo con la trampa: la foto de Windows es un videojuego (zonas llanas sinteticas, limpias) y las
+  nuestras son un video comprimido con su propio grano, asi que parte del 4,4 puede ser del video.
+  Lo que si vale es que el pico fino sale a 6,1-6,2 px de panel en las dos (eso es panel + lente,
+  comun) y que en nosotros la banda de 1,41 mm esta unas diez veces mas fuerte.
+- En el CUADRO ESCRITO (volcado `/tmp/faseA-trama-vulkan.png`, antes de la lente y de la camara) las
+  zonas mas llanas tienen reencaje verde-rojo de **solo 1,32 niveles de desviacion** y la porteadora
+  en brillo apenas 2,7 veces el piso: el visor NO estampa una rejilla fija donde los dos ojos ven lo
+  mismo (era la sospecha del conversor 2D a 3D). La rejilla solo aparece donde hay diferencia entre
+  ojos, que es como debe ser.
+- Correccion a la nota de abajo: la diferencia de paso contra Windows (0,6 %) no es despreciable, es
+  un batido de **352 px = 54,8 mm** a traves de la pantalla, que es del orden de las franjas de color
+  que se ven en las fotos nuevas. Hay un boton para probarlo en vivo: `paso =` en serve.conf
+  (`--pitch`, escala de la rampa de fase) y las teclas RePag/SavPg, que lo mueven de a 0,0002.
+  0,6 % son 30 pulsaciones. La rampa escrita (0,55394) esta por encima de Nyquist, asi que lo que
+  sale por la pantalla es su espejo: kx emitido = 1 - rampa + pendiente de los mapas = 1 - 0,55394 +
+  0,00124 = 0,4473, que es justo lo medido. Para que salga 0,4501 hace falta rampa 0,55114, o sea
+  **paso = 0,995** (por debajo de 1, no por encima). La barrida con RePag/SavPg confirma el sentido.
+
 ## La nuestra y la de Windows escriben la MISMA rejilla (medido, v0.41)
 - Llega la ronda 3 de Windows con la sospecha de que Linux pinta una "rejilla virtual" propia y que
   por eso los bordes diagonales se rompen en ciertas secciones. Se mide con el estimador de ellos,
@@ -15,8 +42,9 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   0,34530 mm · perpendicular 2,0923 px = 0,32515 mm. Diferencia: 0,6 % en el paso y 0,1 grad.
 - Consecuencia: el "batido de 9,63 px = 1,497 mm" de la ronda 3 compara el valor **escrito** en el
   shader (0,55394, por encima de Nyquist) con el que **sale** por la pantalla (0,4461, su espejo).
-  El batido entre las dos maquinas es 1/0,0027 = **370 px = 57,5 mm**, no 1,5 mm. No hay error de
-  paso de rejilla que corregir.
+  El batido entre las dos maquinas es 1/0,0027 = **370 px = 57,5 mm**, no 1,5 mm. (Ahi escribimos
+  "no hay error de paso que corregir": hay que leerlo al reves, ese 0,6 % es un batido de 5,5 cm que
+  cruza la pantalla de arriba abajo y si se puede probar, ver la nota de arriba.)
 - Rigidez de la nuestra, en la misma rejilla de bloques: kx local **0,4473 +- 0,0000** en los 28
   bloques, o sea el paso es constante en toda la pantalla; la fase se desvia de una onda plana
   **21 grad de mediana y 85 grad peor** (los mapas A/B la doblan). Ellos reportan 141 grad de
