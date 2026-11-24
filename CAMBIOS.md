@@ -2,6 +2,31 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El click en la barra del video y la cara de 140 mm (v0.38)
+- El otro fallo de sesion reportado: durante el 3D no habia forma de picar la barra de tiempos de abajo.
+  La causa esta en nuestro propio truco de apilamiento. Para que un click en el video no suba el
+  navegador por encima de la trama le ponemos «debajo de todo», pero ese debajo manda al video al fondo
+  del apilamiento COMPLETO: con otra ventana normal abierta (medido: la ventana maximizada del lanzador
+  de juegos, posicion 9 de 10) el click que el visor deja pasar se lo queda ESA ventana y el video no se
+  entera de nada. Se veia el video perfecto, porque la imagen la sacamos de la ventana y no de la
+  pantalla, pero el click caia en otro lado.
+- Como quedo: mientras dura la sesion bajamos tambien a las demas ventanas, asi el video queda arriba
+  dentro del grupo de abajo (es la ventana activa, o sea la ultima de su grupo) y el click llega a su
+  barra de tiempos. Lo revisamos cada cinco segundos por si abren algo a mitad de pelicula. Al terminar,
+  cada ventana vuelve a su lugar: si alguna tenia «siempre encima», se lo devolvemos. Medido en la sesion
+  real de las 03:55 con `ctl apilamiento`: cinco ventanas por debajo del navegador y el navegador en la
+  posicion 6 de 11, o sea el primero que recibe el click; el aviso nuevo dice «6 ventana(s) mas pasaron
+  por debajo del visor». Si el servicio se muere de una muerte brusca y alguna ventana se queda abajo,
+  `odyssey3d ctl ventana libre --uuid ...` la suelta.
+- Un arreglo de la v0.35 que no llegaba a ninguna sesion. Pusimos la cara de 140 mm (el numero de
+  Samsung) en el visor y en el rastreador, pero el hub lanza al visor con `--track-cara` y ese valor suyo
+  seguia en 150: todas las sesiones reales seguian con 150 mm, o sea el +7 % de sesgo en la distancia que
+  sacamos del ancho de la cara seguia ahi. Ahora el hub arranca en 140, y la linea de ayuda de
+  `--track-cara` dice lo mismo.
+- Con los dos arreglos de ventana puestos, la sesion de prueba no cerro la sesion: el video siguio con el
+  estado de pantalla completa todo el tiempo, y el registro nuevo lo apunta («video: ... pantalla completa
+  0,0 2560x1440 -> ... 3840x2160 (sesion de 3 s)»). O sea KWin agranda la ventana solo, despues de
+  nuestro cambio de modo, y no hace falta pelearse con ella.
 ## El video volvia a su reproductor dentro de la pagina (v0.37)
 - Lo que se veia: al aceptar la tarjeta encima de un video del navegador, el conversor arrancaba con el
   video **ya fuera de pantalla completa** (volvia al reproductor chico dentro de la pestana) y la trama

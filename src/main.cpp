@@ -110,7 +110,7 @@ static const char *kUsage =
     "  --track-offset-x/y/z CM      corregir lo medido · --track-flip-x/-y invertir un eje\n"
     "  --track-score 0.6            umbral de cara · --track-suavizado 0.35 · --track-fixed\n"
     "  --track-mono si|no|auto      cualquier webcam, midiendo el tamano de la cara (sin calibrar)\n"
-    "  --track-campo 65  --track-cara 150   campo horizontal (grados) y ancho de cara (mm) de esa via\n"
+    "  --track-campo 65  --track-cara 140   campo horizontal (grados) y ancho de cara (mm) de esa via\n"
     "  --texto-panel si|no          apoyar rotulos y subtitulos en el plano de la pantalla\n"
     "  --align CICLOS    desfase de fase inicial   --pitch F  escala de la rampa de fase\n"
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
@@ -1890,7 +1890,9 @@ struct ServeCfg {
   std::string camara;         /* dispositivo concreto; vacio = elegir el mejor */
   std::string mono = "auto";  /* si = webcam normal por la cara; no = la camara del monitor; auto = mirar cual es */
   double campo = 65.0;        /* campo horizontal de la webcam, en grados */
-  double cara = 150.0;        /* ancho de cara de oreja a oreja, en milimetros */
+  double cara = 140.0;        /* ancho de cara de oreja a oreja: el numero de Samsung (tracker-ft_
+                                   user.ini, FaceWidth_mm=140). Ojo: el hub pasa este valor al visor, asi que
+                                   mientras estuviera en 150 la correccion del visor no llegaba a ninguna sesion. */
   std::string texto = "auto";  /* rotulos apoyados en la pantalla: si / no / auto (auto = si) */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
@@ -1975,7 +1977,7 @@ static void loadServeCfg(ServeCfg &cfg) {
       for (char &c : numero)
         if (c == ',') c = '.';
       const double d = std::atof(numero.c_str());
-      cfg.cara = (d >= 80.0 && d <= 260.0) ? d : 150.0;
+      cfg.cara = (d >= 80.0 && d <= 260.0) ? d : 140.0;
     }
     else if (k == "suavizado") {
       std::string numero = v;
@@ -2606,8 +2608,46 @@ static int cmdServe(int argc, char **argv) {
   bool debajoAvisado = false;     /* el aviso de "el video pasa por debajo" va una sola vez */
   std::string firmaVideo;         /* estados y tamano del video la ultima vez que lo miramos, para dar
                                      cuenta de cualquier cambio con su reloj */
+  /* Otras ventanas que bajamos con KeepBelow mientras dura la sesion: guardamos su uuid y si tenian
+     KeepAbove puesto, para devolvérselo tal cual. */
+  std::vector<std::pair<std::string, bool>> bajadas;
+  double otrosDesde = 0.0;        /* ultimo momento en que cuidamos a las demas ventanas */
+  bool otrosAvisado = false;      /* el aviso de por que las bajamos va una sola vez */
   double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
   int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
+
+  /* Bajar a las demas ventanas mientras dura la sesion. El video va con KeepBelow para que un click en
+     su barra de tiempos no suba el navegador por encima de la trama, pero KeepBelow lo manda al fondo
+     del apilamiento ENTERO: si ademas hay otra ventana normal, el click que el visor deja pasar se lo
+     queda ESA ventana y el video no contesta a nada (medido con `ctl apilamiento`: la ventana maximizada
+     del lanzador de juegos quedaba en la posicion 9 de 10, por encima del video ya bajado). Bajando
+     tambien a las demas, el video queda arriba dentro del grupo de abajo —era la ventana activa, o sea
+     la ultima de su grupo— y el click llega a su barra de tiempos igual. Al terminar se devuelve todo. */
+  auto bajarDemas = [&]() -> int {
+    int hechas = 0;
+    for (const WindowInfo &w : wm.windows()) {
+      if (!w.mapped || w.minimized() || w.uuid == hijoUuid) continue;
+      if (w.appId == "odyssey3d") continue;              /* el visor y la tarjeta, no */
+      if (w.states & (WindowInfo::KeepBelow | WindowInfo::KeepAbove)) continue;  /* ya tiene orden propio */
+      std::string e7;
+      if (wm.setState(w.uuid, WindowInfo::KeepBelow, true, &e7)) {
+        bajadas.emplace_back(w.uuid, (w.states & WindowInfo::KeepAbove) != 0);
+        ++hechas;
+      }
+    }
+    return hechas;
+  };
+  auto devolverDemas = [&]() {
+    std::string e7;
+    for (const auto &u : bajadas) {
+      if (!wm.setState(u.first, WindowInfo::KeepBelow, false, &e7))
+        std::printf("[ventana] no se le pudo quitar el debajo a %s: %s\n", u.first.c_str(), e7.c_str());
+      else if (u.second && !wm.setState(u.first, WindowInfo::KeepAbove, true, &e7))
+        std::printf("[ventana] no se le pudo devolver el encima a %s: %s\n", u.first.c_str(), e7.c_str());
+    }
+    bajadas.clear();
+    std::fflush(stdout);
+  };
 
   nt.setOnAction([&](const std::string &id, const std::string &action) {
     auto it = idUuid.find(id);
@@ -2714,11 +2754,12 @@ static int cmdServe(int argc, char **argv) {
                         hijoUuid.c_str(), e6.c_str());
           std::fflush(stdout);
         }
+        devolverDemas();          /* las otras ventanas vuelven a su lugar del apilamiento */
         hijo = -1;
         hijoUuid.clear();
         fueraVideoDesde = 0.0;
         cerrandoSesion = false;
-        reafirmadas = 0;          /* la proxima sesion empieza con sus ocho intentos frescos */
+        reafirmadas = 0;          /* la proxima sesion empieza con sus tres intentos frescos */
         reacomodoDesde = 0.0;
         avisoChicoHecho = false;
         videoActivaAntes = false;
@@ -2727,6 +2768,8 @@ static int cmdServe(int argc, char **argv) {
         avisoPilaHecho = false;
         debajoDesde = 0.0;
         debajoAvisado = false;
+        otrosDesde = 0.0;
+        otrosAvisado = false;
         firmaVideo.clear();
         /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
            que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
@@ -2846,6 +2889,20 @@ static int cmdServe(int argc, char **argv) {
             debajoAvisado = true;
             std::printf("[ventana] el video pasa por debajo del visor: un click en el video (la barra de"
                         " tiempos) ya no tapa la trama\n");
+            std::fflush(stdout);
+          }
+        }
+        /* Las demas ventanas, tambien por debajo: si no, el click que el visor deja pasar cae en la
+           ventana que este arriba en ese punto y el video no se entera. Cada cinco segundos, por si
+           abrieron algo durante la sesion. */
+        if (videoVivo && (foco.states & WindowInfo::KeepBelow) && now - otrosDesde >= 5.0) {
+          otrosDesde = now;
+          const int hechas = bajarDemas();
+          if (hechas > 0 && !otrosAvisado) {
+            otrosAvisado = true;
+            std::printf("[ventana] %d ventana(s) mas pasaron por debajo del visor: asi el click que el"
+                        " visor deja pasar llega al video y no a otra ventana. Las devolvemos al"
+                        " terminar la sesion.\n", hechas);
             std::fflush(stdout);
           }
         }
@@ -3202,6 +3259,7 @@ static int cmdServe(int argc, char **argv) {
                   hijoUuid.c_str(), e6.c_str());
     std::fflush(stdout);
   }
+  devolverDemas();              /* y las demas ventanas que bajamos, todas de vuelta a su lugar */
   /* Al parar el servicio el visor se va con nosotros y restaura el panel el solo; si no llego a
      hacerlo (lo mato systemd, o revento antes), el monitor quedaba en modo 3D hasta el reinicio. */
   devolverPanelHuerfano("el servicio se detuvo");
