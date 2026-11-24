@@ -16,6 +16,9 @@ struct TrackFeedOptions {
   std::string device;    /* vacio = buscar la camara sola */
   std::string model;     /* .onnx de YuNet */
   std::string calibDir;  /* vacio = buscar la calibracion de fabrica */
+  /* -1 = mirar el dispositivo y decidir; 0 = fuerza las dos vistas de la camara
+     del monitor; 1 = fuerza la via de una sola vista (cualquier webcam). */
+  int fuerzaMono = -1;
   TrackSettings set;
 };
 
@@ -27,6 +30,7 @@ struct TrackFeedState {
   long long good = 0;            /* cuadros con pose aceptada */
   double cameraFps = 0.0;        /* cuadros por segundo leidos */
   std::string camera;            /* dispositivo en uso */
+  bool mono = false;             /* se va por la cara en una sola vista (webcam normal) */
   std::string mode;              /* modo de la camara, ej. MJPG 1280x480 @ 60 */
   std::string note;              /* ultimo problema: sin cara, sin camara... */
 };
@@ -56,4 +60,5 @@ private:
   std::atomic<bool> stop_{false};
   bool running_ = false;
   double startedAt_ = 0.0, acceptedAt_ = -1.0;
+  bool mono_ = false;
 };

@@ -292,7 +292,9 @@ void Hud::begin(int w, int h, float altoLogico) {
   /* ---- pastilla superior derecha ---- */
   if (st_.overlayOn) {
     float pw = std::min(824.0f, (float)vw - 48.0f);
-    float ph = 84.0f;
+    /* la fila del rastreo y del angulo anade 50 px de alto; solo la pide el visor,
+       la tarjeta del hub sigue con su pastilla de siempre */
+    float ph = st_.controlOjo ? 134.0f : 84.0f;
     float x0 = (float)vw - 24.0f - pw, y0 = 24.0f;
     pillPanel_ = {x0, y0, pw, ph};
     mask9(pillPanel_, 0, 24.0f, 0.12f, 0.13f, 0.15f, 0.78f);
@@ -352,6 +354,35 @@ void Hud::begin(int w, int h, float altoLogico) {
     popTrack_ = {x0 + 684.0f, y0 + 34.0f, 120.0f, 4.0f};
     slider(&depTrack_, &depKnob_, "3D Profundidad", "Ctrl+Shift+3 / 4", dfrac, std::to_string(st_.depth).c_str());
     slider(&popTrack_, &popKnob_, "3D Salida", "Ctrl+Shift+5 / 6", pfrac, std::to_string(st_.popout).c_str());
+
+    /* ---- fila del rastreo: boton y deslizador del angulo -----------------------
+       El boton decide si la trama sigue la pose que mide la camara o si se queda
+       con la pose a mano. El deslizador gira la linea de vision unos grados
+       respecto al centro del panel: sin camara (o con la camara tapada) es la
+       manera de encontrar el punto donde el relieve queda limpio, y se puede
+       afinar sin estar moviendose de lado a lado frente al monitor. */
+    if (st_.controlOjo) {
+      const float fila = y0 + 92.0f;
+      btnTrack_ = {x0 + 18.0f, fila, 180.0f, 30.0f};
+      const bool hovT = btnTrack_.inside(mx_, my_);
+      const float tbg = hovT ? 0.30f : 0.22f;
+      const bool siguiendo = st_.rastreoVivo && st_.rastreoPuesto;
+      mask9(btnTrack_, 1, 8.0f, siguiendo ? accent[0] : tbg, siguiendo ? accent[1] : tbg,
+            siguiendo ? accent[2] : tbg, 0.95f);
+      const char *ttxt = !st_.rastreoVivo   ? "Sin camara (T)"
+                       : st_.rastreoPuesto  ? "Rastreo puesto (T)" : "Rastreo a mano (T)";
+      text(ttxt, btnTrack_.x + 10.0f, btnTrack_.y + 7.0f, 14.0f, ink[0], ink[1], ink[2],
+           st_.rastreoVivo ? 1.0f : 0.55f);
+
+      const float afrac = (float)(st_.angulo + 150) / 300.0f;
+      angTrack_ = {x0 + 214.0f, y0 + 106.0f, pw - 232.0f, 4.0f};
+      char valor[40];
+      const int absDec = std::abs(st_.angulo);
+      std::snprintf(valor, sizeof valor, "%s%d,%d grados", st_.angulo < 0 ? "-" : "+", absDec / 10, absDec % 10);
+      slider(&angTrack_, &angKnob_, "Angulo de vision", "[ ]  girar   \\  centrar", afrac, valor);
+    } else {
+      btnTrack_ = angTrack_ = angKnob_ = Rect{};
+    }
 
     /* indicador pequeño del estado de la lente y el scaler */
     const char *hw = st_.hud == 3 ? "lente y scaler activos" : (st_.hud == 0 ? "sin lente ni scaler" : "hardware parcial");
@@ -510,6 +541,11 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (dt.inside(mx, my)) return HitDepth;
   if (pt.inside(mx, my)) return HitPopout;
   if (btnRed_.inside(mx, my)) return HitRed;
+  if (st_.controlOjo) {
+    if (btnTrack_.inside(mx, my)) return HitTrack;
+    Rect at = {angTrack_.x - pad, angTrack_.y - pad, angTrack_.w + 2.0f * pad, angTrack_.h + 2.0f * pad};
+    if (at.inside(mx, my)) return HitAngle;
+  }
   return HitNone;
 }
 
@@ -521,5 +557,9 @@ void Hud::dragTo(Hit which, float mxa) {
   } else if (which == HitPopout) {
     float f = (mx - popTrack_.x) / std::max(1.0f, popTrack_.w);
     st_.popout = std::max(-50, std::min(50, (int)std::lround(f * 100.0f)));
+  } else if (which == HitAngle) {
+    /* el recorrido completo son 30 grados (-15 .. +15), guardados en decimas */
+    float f = (mx - angTrack_.x) / std::max(1.0f, angTrack_.w);
+    st_.angulo = std::max(-150, std::min(150, (int)std::lround(f * 300.0f) - 150));
   }
 }

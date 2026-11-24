@@ -55,6 +55,12 @@ public:
      camara del monitor y si no, el primer /dev/videoN que anuncie modos. */
   static bool pickDevice(std::string &dev, std::string *err = nullptr);
 
+  /* Cierto si el nodo es la camara estereo del monitor (04e8:20d7): entrega un
+     solo cuadro con las dos vistas pegadas y esta calibrado de fabrica.
+     Cualquier otra webcam es UNA sola vista, y ahi el rastreo no puede
+     triangular: tiene que ir por la via de la cara (HeadTracker::processMono). */
+  static bool esEstereoDelMonitor(const std::string &device);
+
   /* formatos que el propio dispositivo anuncia (tamanos e intervalos). */
   struct Mode {
     std::string fourcc;

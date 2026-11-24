@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -106,6 +107,8 @@ static const char *kUsage =
     "  --track-dev DEV  --track-model ONNX  --track-calib-dir DIR   (se solos por separado)\n"
     "  --track-offset-x/y/z CM      corregir lo medido · --track-flip-x/-y invertir un eje\n"
     "  --track-score 0.6            umbral de cara · --track-suavizado 0.35 · --track-fixed\n"
+    "  --track-mono si|no|auto      cualquier webcam, midiendo el tamano de la cara (sin calibrar)\n"
+    "  --track-campo 65  --track-cara 150   campo horizontal (grados) y ancho de cara (mm) de esa via\n"
     "  --align CICLOS    desfase de fase inicial   --pitch F  escala de la rampa de fase\n"
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
@@ -390,6 +393,32 @@ static int cmdCamera(int argc, char **argv) {
 #ifdef HAVE_OPENCV
 static int cmdTrack(int argc, char **argv) {
   TrackSettings set;
+  /* --mono: si = usar la webcam normal por la via de una sola vista; no = exigir
+     las dos vistas de la camara del monitor; auto (por defecto) = mirar el
+     dispositivo. La via de una sola vista no necesita calibracion de fabrica. */
+  const std::string pedidoMono = flag(argc, argv, "--mono").empty() ? "auto" : flag(argc, argv, "--mono");
+  if (!flag(argc, argv, "--campo").empty()) set.hFovDegrees = atof(flag(argc, argv, "--campo").c_str());
+  if (!flag(argc, argv, "--cara").empty()) set.faceWidthMillimetres = atof(flag(argc, argv, "--cara").c_str());
+  if (hasFlag(argc, argv, "--mono-simulacro")) {
+    /* La cuenta de la via mono, sin camara ni red: una cara de 150 mm a 650 mm
+       con el campo de una webcam normal. Si la inversa no devuelve lo mismo, la
+       formula o las unidades se fueron de sitio. */
+    std::printf("via mono sin camara (cara de %.0f mm, campo de %.0f grados)\n",
+                set.faceWidthMillimetres, set.hFovDegrees);
+    std::printf("ancho de imagen  cara medida   distancia recuperada\n");
+    bool ok = true;
+    for (const int ancho : {640, 1280}) {
+      for (const double dist : {400.0, 650.0, 900.0}) {
+        double px = 0.0, rec = 0.0;
+        HeadTracker::monoSimular(set.hFovDegrees, ancho, set.faceWidthMillimetres, dist, &px, &rec);
+        const double error = std::fabs(rec - dist);
+        if (error > 0.01) ok = false;
+        std::printf("      %4d px        %6.1f px          %8.1f mm  (error %.3f)\n", ancho, px, rec, error);
+      }
+    }
+    std::printf("%s\n", ok ? "la cuenta cuadra" : "MAL: la distancia no vuelve");
+    return ok ? 0 : 1;
+  }
   set.model = flag(argc, argv, "--track-model");
   if (set.model.empty()) set.model = defaultModelPath();
   if (set.model.empty()) {
@@ -405,16 +434,53 @@ static int cmdTrack(int argc, char **argv) {
   CameraCalibration calib;
   TrackerTransform xform;
   const std::string dir = flag(argc, argv, "--calib-dir");
-  if (!loadFactoryCalib(dir, &calib, &xform, &err)) {
-    std::fprintf(stderr, "%s\n", err.c_str());
-    return 1;
+  bool calibVale = loadFactoryCalib(dir, &calib, &xform, &err);
+  const std::string calibFallo = err;
+  const bool pedidoFoto = !flag(argc, argv, "--foto").empty();
+  const bool pedidoSintetico = hasFlag(argc, argv, "--sintetico");
+  bool mono = false;
+  std::string dev = flag(argc, argv, "--dev");
+  bool delMonitor = false;
+  if (pedidoFoto || pedidoSintetico) {
+    /* La foto y la prueba de la geometria trabajan sobre las dos vistas: lo que
+       haya enchufado ahora no cambia lo que se esta probando. */
+    mono = (pedidoMono == "si" || pedidoMono == "1");
+  } else {
+    if (!pickCameraDevice(dev, &err)) {
+      std::fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    delMonitor = Camera::esEstereoDelMonitor(dev);
+    if (pedidoMono == "si" || pedidoMono == "1") mono = true;
+    else if (pedidoMono == "no" || pedidoMono == "0") mono = false;
+    else mono = !delMonitor;   /* auto: cualquier otra webcam va por la cara */
   }
-  std::printf("calibracion  %s\n", dir.empty() ? "calib/" : dir.c_str());
+  set.mono = mono;
+  if (mono) {
+    if (!pedidoFoto && !pedidoSintetico)
+      std::printf("camara       %s: una sola vista, la distancia sale del ancho de la cara (no hace falta calibracion)\n",
+                  dev.c_str());
+  } else if (!calibVale) {
+    std::fprintf(stderr, "%s\n", calibFallo.c_str());
+    return 1;
+  } else {
+    std::printf("calibracion  %s\n", dir.empty() ? "calib/" : dir.c_str());
+    if (!pedidoFoto && !pedidoSintetico && !delMonitor) {
+      std::printf("aviso      %s no es la camara del monitor: sus dos mitades no son dos vistas de lo mismo\n",
+                  dev.c_str());
+      std::printf("             (usa --mono si, o auto, para rastrear por el tamano de la cara)\n");
+    }
+  }
   std::printf("modelo       %s\n", set.model.c_str());
 
   const std::string dump = flag(argc, argv, "--dump");
   const std::string foto = flag(argc, argv, "--foto");
-  if (!foto.empty()) {
+  if (pedidoFoto) {
+    if (mono) {
+      std::fprintf(stderr, "--foto trabaja sobre las dos vistas de la camara del monitor; con una webcam"
+                           " normal usa --dev y mira las lineas de rastreo\n");
+      return 1;
+    }
     HeadTracker tracker;
     if (!tracker.init(calib, xform, set, &err)) {
       std::fprintf(stderr, "rastreador: %s\n", err.c_str());
@@ -436,7 +502,11 @@ static int cmdTrack(int argc, char **argv) {
     std::fprintf(stderr, "rastreador: %s\n", err.c_str());
     return 1;
   }
-  if (hasFlag(argc, argv, "--sintetico")) {
+  if (pedidoSintetico && mono) {
+    std::fprintf(stderr, "--sintetico prueba la geometria de las dos vistas: no vale --mono si\n");
+    return 1;
+  }
+  if (pedidoSintetico) {
     /* Se comprime un punto 3D conocido en las dos vistas y se devuelve por toda
        la cadena: asi se ve si la geometria y los signos cuadran sin camara. */
     const double puntos[][3] = {{0, 0, 600},  {0, 0, 500},   {0, 0, 700},  {30, 0, 600},
@@ -461,8 +531,7 @@ static int cmdTrack(int argc, char **argv) {
     return 0;
   }
 
-  std::string dev = flag(argc, argv, "--dev");
-  if (!pickCameraDevice(dev, &err)) {
+  if (dev.empty() && !pickCameraDevice(dev, &err)) {
     std::fprintf(stderr, "%s\n", err.c_str());
     return 1;
   }
@@ -477,9 +546,14 @@ static int cmdTrack(int argc, char **argv) {
     int w, h, fps;
     const char *fourcc;
   };
-  const Intento intentos[] = {{1280, 480, 60, "MJPG"}, {1280, 480, 15, "YUYV"}, {640, 480, 30, "YUYV"}};
+  Intento listaEstereo[] = {{1280, 480, 60, "MJPG"}, {1280, 480, 15, "YUYV"}, {640, 480, 30, "YUYV"}};
+  Intento listaMono[] = {{1280, 720, 30, "MJPG"}, {640, 480, 30, "MJPG"}, {640, 480, 60, "MJPG"},
+                         {640, 480, 30, "YUYV"}, {320, 240, 30, "YUYV"}};
+  const Intento *intentos = mono ? listaMono : listaEstereo;
+  const size_t cuenta = mono ? sizeof listaMono / sizeof listaMono[0] : sizeof listaEstereo / sizeof listaEstereo[0];
   bool listo = false;
-  for (const auto &it : intentos) {
+  for (size_t numero = 0; numero < cuenta && !listo; numero++) {
+    const Intento &it = intentos[numero];
     if (cam.setFormat(it.w, it.h, it.fourcc, it.fps, &err)) {
       std::printf("camara       %s %dx%d %s @ %d\n", dev.c_str(), it.w, it.h, it.fourcc, it.fps);
       listo = true;
@@ -511,17 +585,28 @@ static int cmdTrack(int argc, char **argv) {
     leidos++;
     std::vector<uint8_t> left, right;
     int vw = 0, vh = 0;
-    if (!HeadTracker::decodeFrame(data, size, cam.width(), cam.height(), cam.mjpeg(), left, right, vw,
-                                  vh, &why)) {
+    bool dec = false;
+    if (mono) {
+      dec = HeadTracker::decodeMono(data, size, cam.width(), cam.height(), cam.mjpeg(), left, &why);
+      vw = cam.width();
+      vh = cam.height();
+    } else {
+      dec = HeadTracker::decodeFrame(data, size, cam.width(), cam.height(), cam.mjpeg(), left, right, vw,
+                                     vh, &why);
+    }
+    if (!dec) {
       cam.release();
       std::fprintf(stderr, "decodificacion: %s\n", why.c_str());
       continue;
     }
     const uint8_t *lp = left.data(), *rp = right.data();
     TrackSample sample;
-    tracker.process(lp, rp, vw, vh, sample, &why);
+    if (mono)
+      tracker.processMono(lp, vw, vh, sample, &why);
+    else
+      tracker.process(lp, rp, vw, vh, sample, &why);
     if (sample.accepted && !sample.predicted) aceptados++;
-    if (!dump.empty() && !dumpHecho && sample.detected) {
+    if (!dump.empty() && !dumpHecho && sample.detected && !mono) {
       std::string d2;
       if (HeadTracker::saveAnnotated(lp, rp, vw, vh, set, dump, &d2))
         std::printf("anotado      %s\n", dump.c_str());
@@ -531,9 +616,17 @@ static int cmdTrack(int argc, char **argv) {
     }
     cam.release();
     if (leidos % mostrarCada == 0) {
-      std::printf("cara %s  panel %7.2f %7.2f %7.2f cm  ipd %5.1f  error %4.2f px  %5.1f ms  %s\n",
+      std::string detalle;
+      if (mono)
+        detalle = sample.faceWidthPx > 0 ? "cara " + std::to_string((int)sample.faceWidthPx) + " px" : "sin cara";
+      else {
+        char ipd[32];
+        std::snprintf(ipd, sizeof ipd, "ipd %5.1f", sample.ipdMillimetres);
+        detalle = ipd;
+      }
+      std::printf("cara %s  panel %7.2f %7.2f %7.2f cm  %-14s  error %4.2f px  %5.1f ms  %s\n",
                   sample.detected ? "si " : "no ", sample.panelCentimetres[0],
-                  sample.panelCentimetres[1], sample.panelCentimetres[2], sample.ipdMillimetres,
+                  sample.panelCentimetres[1], sample.panelCentimetres[2], detalle.c_str(),
                   sample.reprojectionPx, sample.latencyMs,
                   sample.accepted ? (sample.predicted ? "mantenida" : "valida")
                                   : (sample.reason.empty() ? "sin usar" : sample.reason.c_str()));
@@ -1266,6 +1359,16 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--track-offset-z") { if (!need("track-offset-z")) return false; o.trackOffsetZ = atof(argv[++i]); }
     else if (a == "--track-score") { if (!need("track-score")) return false; o.trackScore = (float)atof(argv[++i]); }
     else if (a == "--track-suavizado") { if (!need("track-suavizado")) return false; o.trackSmoothing = atof(argv[++i]); }
+    else if (a == "--track-mono") {
+      if (!need("track-mono")) return false;
+      const std::string v = argv[++i];
+      if (v == "si" || v == "1") o.trackMono = 1;
+      else if (v == "no" || v == "0") o.trackMono = 0;
+      else if (v == "auto") o.trackMono = -1;
+      else { std::fprintf(stderr, "--track-mono quiere si, no o auto\n"); return false; }
+    }
+    else if (a == "--track-campo") { if (!need("track-campo")) return false; o.trackCampo = atof(argv[++i]); }
+    else if (a == "--track-cara") { if (!need("track-cara")) return false; o.trackCara = atof(argv[++i]); }
     else if (a == "--align") { if (!need("align")) return false; o.align = atof(argv[++i]); }
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
@@ -1421,26 +1524,51 @@ static int cmdHudSelfTest(int argc, char **argv) {
   }
   const int W = o.w > 0 ? o.w : 1920, H = o.h > 0 ? o.h : 1080;
   hud.state().ask = true;
+  hud.state().controlOjo = true;   /* el visor ensena la fila del rastreo y del angulo */
+  hud.state().rastreoVivo = true;
   hud.setInfo("prueba de la interfaz");
   hud.begin(W, H);
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
   static const char *nom[] = {"nada",              "boton 3D",   "boton capa",   "deslizador profundidad",
                               "deslizador salida", "boton red",  "tesela SxS",   "tesela arriba/abajo",
-                              "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso"};
-  int cuenta[12] = {0}, px0[12] = {0}, py0[12] = {0};
+                              "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso",
+                              "boton rastreo", "deslizador angulo"};
+  int cuenta[14] = {0}, px0[14] = {0}, py0[14] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
-      if (h < 0 || h > 11) continue;
+      if (h < 0 || h > 13) continue;
       if (!cuenta[h]) {
         px0[h] = x;
         py0[h] = y;
       }
       cuenta[h]++;
     }
-  for (int h = 1; h <= 11; h++)
+  for (int h = 1; h <= 13; h++)
     std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
+
+  /* El deslizador del angulo: el recorrido completo tiene que caber en la caja y
+     los dos extremos tienen que dar -15 y +15 grados. Si la caja se quedo corta
+     (una ventana chiquita) se avisa en vez de dibujar el pomo fuera de la pastilla. */
+  {
+    float ax = 0.0f, aw = 0.0f;
+    if (!hud.angleBounds(&ax, &aw)) {
+      std::printf("  deslizador de angulo: NO esta dibujado (la pastilla no pidio la fila)\n");
+    } else {
+      hud.centerAngle();
+      hud.dragTo(Hud::HitAngle, ax + aw - 1.0f);
+      const int der = hud.angulo();
+      hud.dragTo(Hud::HitAngle, ax + 1.0f);
+      const int izq = hud.angulo();
+      std::printf("  deslizador de angulo %.0f px de ancho · extrema derecha %+.1f grados · extrema izquierda %+.1f"
+                  "  %s\n", (double)aw, (double)der * 0.1, (double)izq * 0.1,
+                  (der >= 149 && izq <= -149) ? "recorrido completo" : "RECORRIDO CORTO");
+    }
+    float tx = 0.0f, ty = 0.0f, tw = 0.0f, th = 0.0f;
+    if (hud.trackBounds(&tx, &ty, &tw, &th))
+      std::printf("  boton de rastreo %.0fx%.0f en (%.0f,%.0f)\n", (double)tw, (double)th, (double)tx, (double)ty);
+  }
 
   /* Rotulos de la pastilla, con la caja real donde se dibujan (ancho del boton menos el aire a cada
      lado). Si la letra mide mas que su caja se sale del recuadro, que es lo que pasaba antes. */
@@ -1455,6 +1583,9 @@ static int cmdHudSelfTest(int argc, char **argv) {
                                {"teclas 1 / 2", 11.0f, 160.0f},           {"Tab  entrega la pantalla", 11.0f, 272.0f},
                                {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
                                {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
+                              {"Rastreo puesto (T)", 14.0f, 160.0f},   {"Rastreo a mano (T)", 14.0f, 160.0f},
+                              {"Sin camara (T)", 14.0f, 160.0f},       {"Angulo de vision", 12.0f, 150.0f},
+                              {"[ ]  girar   \\  centrar", 11.0f, 150.0f},  {"+15,0 grados", 12.0f, 90.0f},
                               {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
@@ -1590,6 +1721,10 @@ struct ServeCfg {
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
   bool rastreo = false;       /* pasar --track al visor: la camara IR del monitor sigue los ojos */
   float suavizado = 0.0f;     /* 0 = el valor de fabrica del visor (0,35); menor = responde antes */
+  std::string camara;         /* dispositivo concreto; vacio = elegir el mejor */
+  std::string mono = "auto";  /* si = webcam normal por la cara; no = la camara del monitor; auto = mirar cual es */
+  double campo = 65.0;        /* campo horizontal de la webcam, en grados */
+  double cara = 150.0;        /* ancho de cara de oreja a oreja, en milimetros */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -1652,6 +1787,25 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "modelo") cfg.modelo = expansionRuta(v);
     else if (k == "nuestra") cfg.nuestra = expansionRuta(v);
     else if (k == "rastreo") cfg.rastreo = (v == "si" || v == "on" || v == "1" || v == "track");
+    else if (k == "camara") cfg.camara = v;
+    else if (k == "mono") {
+      const std::string m = strLower(v);
+      cfg.mono = (m == "si" || m == "no" || m == "auto") ? m : "auto";
+    }
+    else if (k == "campo") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      cfg.campo = (d >= 20.0 && d <= 170.0) ? d : 65.0;
+    }
+    else if (k == "cara") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      cfg.cara = (d >= 80.0 && d <= 260.0) ? d : 150.0;
+    }
     else if (k == "suavizado") {
       std::string numero = v;
       for (char &c : numero)
@@ -1700,7 +1854,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
                         const std::string &alterno = std::string(), bool rastreo = false,
-                        float suavizado = 0.0f) {
+                        float suavizado = 0.0f, const ServeCfg *pila = nullptr) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
@@ -1716,6 +1870,19 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       char valor[32];
       std::snprintf(valor, sizeof valor, "%.3f", suavizado);
       args.push_back("--track-suavizado");
+      args.push_back(valor);
+    }
+    if (pila) {
+      /* con webcam normal la distancia sale del tamano de la cara: el campo y el
+         ancho de cara se pueden ajustar desde serve.conf sin recompilar */
+      if (!pila->camara.empty()) { args.push_back("--track-dev"); args.push_back(pila->camara); }
+      if (!pila->mono.empty() && pila->mono != "auto") { args.push_back("--track-mono"); args.push_back(pila->mono); }
+      char valor[32];
+      std::snprintf(valor, sizeof valor, "%.1f", pila->campo);
+      args.push_back("--track-campo");
+      args.push_back(valor);
+      std::snprintf(valor, sizeof valor, "%.1f", pila->cara);
+      args.push_back("--track-cara");
       args.push_back(valor);
     }
   }
@@ -2705,7 +2872,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
           hijoDesde = now;
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
@@ -2743,7 +2910,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
             hijoDesde = now;
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
@@ -2792,7 +2959,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
           hijoDesde = now;
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());

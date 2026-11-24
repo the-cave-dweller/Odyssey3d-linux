@@ -351,6 +351,56 @@ std::vector<Camera::Mode> Camera::modes(const std::string &device) {
   return out;
 }
 
+/* Nombre del nodo sysfs (/dev/video7 -> video7). */
+static std::string nombreNodo(const std::string &device) {
+  const size_t barra = device.find_last_of('/');
+  return barra == std::string::npos ? device : device.substr(barra + 1);
+}
+
+bool Camera::esEstereoDelMonitor(const std::string &device) {
+  /* 1) el nombre que anuncia el conductor: "3D Stereo WebCam" en la del monitor */
+  char texto[160] = {};
+  const std::string sys = "/sys/class/video4linux/" + nombreNodo(device) + "/name";
+  FILE *f = std::fopen(sys.c_str(), "rb");
+  if (f) {
+    if (std::fgets(texto, sizeof texto, f)) {
+      std::string nombre(texto);
+      for (char &car : nombre) car = (char)std::tolower((unsigned char)car);
+      if (nombre.find("stereo") != std::string::npos || nombre.find("3d") != std::string::npos) {
+        std::fclose(f);
+        return true;
+      }
+    }
+    std::fclose(f);
+  }
+  /* 2) la id USB del dispositivo al que cuelga la interfaz UVC */
+  std::string dir;
+  if (usbSysfs(device, &dir)) {
+    std::string ruta = dir;
+    for (int subidas = 0; subidas < 8 && ruta != "/" && !ruta.empty(); subidas++) {
+      char vid[32] = {}, pid[32] = {};
+      FILE *fv = std::fopen((ruta + "/idVendor").c_str(), "rb");
+      FILE *fp = std::fopen((ruta + "/idProduct").c_str(), "rb");
+      const bool leido = fv && fp && std::fgets(vid, sizeof vid, fv) && std::fgets(pid, sizeof pid, fp);
+      if (fv) std::fclose(fv);
+      if (fp) std::fclose(fp);
+      if (leido) {
+        std::string v(vid), p(pid);
+        while (!v.empty() && isspace((unsigned char)v.back())) v.pop_back();
+        while (!p.empty() && isspace((unsigned char)p.back())) p.pop_back();
+        if (v == "04e8" && p == "20d7") return true;
+      }
+      const size_t barra = ruta.find_last_of('/');
+      ruta = barra == std::string::npos ? std::string() : ruta.substr(0, barra);
+    }
+  }
+  /* 3) senales de siempre: un modo con el doble de ancho que de alto son las dos
+     vistas pegadas, que solo tiene la camara del monitor */
+  for (const Mode &m : modes(device))
+    if (m.height > 0 && m.width == 2 * m.height && m.width >= 1024) return true;
+  return false;
+}
+
 bool Camera::pickDevice(std::string &dev, std::string *err) {
   if (!dev.empty()) return true;
   std::string alterno;

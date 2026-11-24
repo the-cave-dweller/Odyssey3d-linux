@@ -2,6 +2,48 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Rastreo con cualquier webcam y deslizador de ángulo en la pastilla (v0.31)
+- Lo pedido: «la camara esta en 3d stereo webcam /dev/video0 segun discord, no puedes usarla? … quiero
+  que añadas un fallback que use cualquier otra camara conectada para tracking, y ultima cosa, en el
+  overlay quiero un boton para activar o desactivar el tracking junto con un slider largo sobre el
+  overlay que permita ajustar manualmente el angulo del modelo, para poder hacer buen enfoque si no hay
+  camara y que no tenga que estarse moviendo de lado a lado sin verse bien».
+- **Estado de la camara del monitor:** sigue sin enumerarse. `ls /dev/video*` no la lista, `lsusb` no ve
+  el `04e8:20d7`, y `ctl camera` no la encuentra. El LED rojo del borde de arriba encendido no prueba
+  nada: sin nodo `video4linux` no hay de dónde leer. Lo único que la hace aparecer es apagar y encender
+  el monitor (o reenchufar el cable USB-B); `udevadm trigger` sobre el monitor no sirve de nada.
+- **De verdad hay una webcam conectada:** `HP 320 FHD Webcam` (`03f0:654a`) en `/dev/video0` y
+  `/dev/video1`. Es una cámara normal, una sola vista, sin calibrar.
+- **Como funciona el respaldo (`src/track.cpp`, modo `mono`).** Sin la calibración de fábrica no hay
+  dos vistas que triangular, así que la posición sale del tamaño de la cara: `f = (0,5·ancho) /
+  tan(0,5·campo)` y `z = f·cara/px`, con el centro de la caja de la cara dando `x` e `y` en centímetros
+  del panel. No hace falta `calib/`, y `init()` deja de exigir la calibración cuando `set.mono`.
+  `Camera::esEstereoDelMonitor()` decide: si el nombre del nodo dice «stereo»/«3D», si el USB es
+  `04e8:20d7`, o si algún modo anunciado mide el doble de ancho que de alto, es la del monitor; si no,
+  webcam normal. `ctl track --mono-simulacro` comprueba la cuenta sin cámara (devuelve la distancia
+  pedida con error 0,000 en 640 y 1280 px).
+- **En vivo, con la HP:** `ctl track --dev /dev/video0 --segundos 8` → `camara /dev/video0: una sola
+  vista`, formato `1280x720 MJPG @ 30`, `123 fotogramas leidos, 123 poses validas`, cara de 170 a 250 px
+  y distancia de 60 a 90 cm, unos 3 ms por cuadro. Con `--cara 175 --campo 70` la distancia sube a 83 cm,
+  o sea que las dos llaves hacen lo que dicen.
+- **Opciones nuevas:** `--track-mono si|no|auto`, `--track-campo GRADOS`, `--track-cara MM`; en
+  `serve.conf` `camara`, `mono`, `campo`, `cara` (se pasan al visor al abrir la ventana). `ctl track`
+  acepta `--mono`, `--campo`, `--cara` y `--mono-simulacro`, y avisa si se le pide la vía de dos vistas
+  a una cámara que no es la del monitor.
+- **Botón y deslizador en la pastilla (`src/vkui.cpp`).** La pastilla con rastreo pasa de 84 a 134 px de
+  alto y gana una fila: `Rastreo puesto (T)` / `Rastreo a mano (T)` / `Sin camara (T)` (180x30) y un
+  deslizador de 592 px de ancho, de −15° a +15° en décimas de grado. El punto verde del botón solo brilla
+  si hay rastreo puesto **y** la cámara está dando poses. La prueba de la interfaz (`ctl hud`) ya cubre
+  los dos sitios nuevos y comprueba el recorrido: extrema derecha +14,9°, extrema izquierda −14,9°.
+- **Teclas:** `[` `]` giran 1,0° (con `Shift`, 0,2°), `\` centra, `T` aparta el rastreo. En la ventana 3D;
+  en `play` `[` `]` siguen siendo cuadro a cuadro.
+- **Como se aplica el ángulo (`src/vkview.cpp`).** El ojo que usa la trama sale de una sola fuente
+  (`ui.ojoBase`): si el rastreo está puesto y la cámara da una pose fresca, esa pose es la base; si está
+  apartado, la base vuelve a la posición nominal de fábrica. Sobre la base se suma siempre el desplazamiento
+  del deslizador, `x += tan(angulo)·z`, y sólo se llama a `setEye` cuando el resultado cambia (así no se
+  recalcula la trama cada cuadro sin necesidad). Con el rastreo apartado y el deslizador puesto, el
+  relieve queda enfocado en un sitio fijo: ya no hace falta moverse de lado a lado.
+
 ## «Se inicio la pura rejilla 3D» y al salir se veia horrible: el conversor abortaba y el panel se quedaba en 3D (v0.30)
 - Lo pedido: «en las ultimas ejecuciones se inicio la pura rejilla 3d sin mostrar el video en 3d, checa el
   motivo, tambien note que en unas pocas el video se mostraba bien en 3d pero al salir el overlay se veia

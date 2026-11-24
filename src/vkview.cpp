@@ -82,6 +82,12 @@ struct VkUi {
   float convBase = 0.0f;  /* la convergencia que mueven las teclas; la del deslizador se suma */
   double mx = -1.0, my = -1.0;
   Hud::Hit dragging = Hud::HitNone;
+  /* La pose del ojo que usa la trama, de un cuadro al siguiente. La trae la camara
+     cuando el rastreo esta puesto y entrega una pose fresca; si no, es la nominal de
+     siempre. Encima se suma siempre el angulo del deslizador de la pastilla. */
+  EyePose ojoBase{};
+  bool ojoBasePuesto = false;
+  int anguloImpreso = 0;     /* el ultimo angulo del que dimos cuenta en el journal */
   bool inputChanged = true;  /* forzar cuadro cuando el raton o el teclado se movieron */
   int fbW = 0, fbH = 0;
   int logH = 0;            /* alto logico de la ventana (el que ve el escritorio), para la interfaz */
@@ -163,6 +169,16 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       break;
     case Hud::HitRed:
       ui.redPedida = (st.red == 1) ? 2 : 1;   /* el boton pasa de una red a la otra */
+      break;
+    case Hud::HitTrack:
+      ui.hud.toggleTrack();
+      std::printf("[pastilla] rastreo %s: %s\n", ui.hud.rastreoPuesto() ? "puesto" : "apartado",
+                  ui.hud.rastreoPuesto() ? "la trama sigue lo que mide la camara"
+                                         : "la trama se queda con la pose a mano (deslizador del angulo)");
+      std::fflush(stdout);
+      break;
+    case Hud::HitAngle:
+      ui.dragging = hit;   /* el arrastre lo sigue onKeyMotion con dragTo */
       break;
     case Hud::HitAskSbs:
       st.ask = false;
@@ -333,6 +349,28 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      marcha: el bucle cambia la red cuando el hilo de la estimacion esta libre. */
   if (key == GLFW_KEY_1 || key == GLFW_KEY_2) {
     ui->redPedida = key == GLFW_KEY_1 ? 1 : 2;
+    return;
+  }
+  /* El angulo de la linea de vision: el deslizador largo de la pastilla y estas teclas.
+     Mover el punto de mira unos grados hacia un lado hace en el relieve lo mismo que
+     moverse uno de lado a lado delante del monitor, pero sin moverse: cuando no hay
+     camara, o la camara no ve, es la unica manera de quedarse en el punto donde el
+     enfoque queda limpio. Con Shift el paso es mas corto, para afinar. */
+  if (key == GLFW_KEY_LEFT_BRACKET || key == GLFW_KEY_RIGHT_BRACKET || key == GLFW_KEY_BACKSLASH) {
+    const int paso = (mods & GLFW_MOD_SHIFT) ? 2 : 10;   /* decimas de grado */
+    if (key == GLFW_KEY_BACKSLASH) ui->hud.centerAngle();
+    else ui->hud.nudgeAngle(key == GLFW_KEY_RIGHT_BRACKET ? paso : -paso);
+    std::printf("[angulo] %+d,%d grados %s\n", ui->hud.angulo() / 10, std::abs(ui->hud.angulo()) % 10,
+                key == GLFW_KEY_BACKSLASH ? "(centrado)"
+                                          : ((mods & GLFW_MOD_SHIFT) ? "paso fino" : "paso normal"));
+    std::fflush(stdout);
+    return;
+  }
+  if (key == GLFW_KEY_T) {
+    ui->hud.toggleTrack();
+    std::printf("[rastreo] %s con la tecla T: %s\n", ui->hud.rastreoPuesto() ? "puesto" : "apartado",
+                ui->hud.rastreoPuesto() ? "manda la camara" : "manda la pose a mano");
+    std::fflush(stdout);
     return;
   }
   const char *tag = nullptr;
@@ -531,6 +569,9 @@ void onButtonVK(GLFWwindow *win, int button, int action, int) {
   if (!ui || button != GLFW_MOUSE_BUTTON_LEFT) return;
   ui->inputChanged = true;
   if (action == GLFW_RELEASE) {
+    if (ui->dragging == Hud::HitAngle)
+      std::printf("[angulo] %+d,%d grados (se quedo asi al soltar el deslizador)\n", ui->hud.angulo() / 10,
+                  std::abs(ui->hud.angulo()) % 10);
     ui->dragging = Hud::HitNone;
     return;
   }
@@ -931,6 +972,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     fo.set.model = opts.trackModel;
     fo.set.score = opts.trackScore;
     fo.set.smoothing = opts.trackSmoothing;
+    fo.fuerzaMono = opts.trackMono;
+    fo.set.hFovDegrees = opts.trackCampo;
+    fo.set.faceWidthMillimetres = opts.trackCara;
     std::string trk;
     if (!feed.start(fo, &trk))
       std::fprintf(stderr, "[rastreo] no arranco: %s\n", trk.c_str());
@@ -1651,20 +1695,38 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   "  (Ctrl+Shift+2 la oculta otra vez)\n");
       std::fflush(stdout);
     }
+    /* la fila del rastreo y del angulo solo existe en el visor: el hub no rastrea */
+    ui.hud.state().controlOjo = true;
+#ifdef HAVE_OPENCV
+    ui.hud.state().rastreoVivo = rastreoVivo;
+#else
+    ui.hud.state().rastreoVivo = false;
+#endif
     ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
     /* la pastilla cambio de sitio o se oculto: la caja que deja pasar el raton se actualiza aqui */
     aplicarRegionEntrada(win, &ui.region, &ui, !opts.noPassthrough);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
 
+    /* ---- la pose del ojo que ve la trama --------------------------------------
+       La base es la nominal del arranque; con el rastreo puesto (boton de la
+       pastilla o tecla T) la camara la va moviendo. Encima se suma siempre el
+       angulo del deslizador: girar la linea de vision unos grados respecto al
+       centro del panel es lo mismo que moverse uno de lado, pero sin moverse, y
+       asi se puede afinar el relieve a mano cuando la camara no ayuda. */
+    if (!ui.ojoBasePuesto) {
+      ui.ojoBasePuesto = true;
+      ui.ojoBase = EyePose{opts.eyeX, opts.eyeY, opts.eyeZ};
+    }
+    bool fresco = false;
 #ifdef HAVE_OPENCV
     if (rastreoVivo) {
       const TrackFeedState fs = feed.state();
       const double altoCm = (double)fbH * wv.field().pxPcm;
       const bool dentro = fs.sample.panelCentimetres[1] >= -50.0 && fs.sample.panelCentimetres[1] <= 50.0 &&
                           fs.sample.panelCentimetres[2] >= 50.0 && fs.sample.panelCentimetres[2] <= 130.0;
-      const bool fresco = fs.seen && fs.age >= 0.0 && fs.age <= 0.15 && dentro;
-      if (fresco && !opts.trackFixed) {
+      fresco = fs.seen && fs.age >= 0.0 && fs.age <= 0.15 && dentro;
+      if (fresco && !opts.trackFixed && ui.hud.rastreoPuesto()) {
         const TrackSample &m = fs.sample;
         double x = m.panelCentimetres[0], y = m.panelCentimetres[1], z = m.panelCentimetres[2];
         if (opts.trackFlipX) x = -x;
@@ -1676,7 +1738,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
            dos marcos caen iguales justo en la pose nominal (8.3916 cm) */
         e.y = altoCm * 0.5 - y + opts.trackOffsetY;
         e.z = z + opts.trackOffsetZ;
-        wv.setEye(e);
+        ui.ojoBase = e;
+      } else if (!ui.hud.rastreoPuesto()) {
+        /* el boton apartado: vuelta a la pose de siempre, con el angulo a mano */
+        ui.ojoBase = EyePose{opts.eyeX, opts.eyeY, opts.eyeZ};
       }
       if (now - ultimoRastreo >= 1.0) {
         ultimoRastreo = now;
@@ -1691,6 +1756,15 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
     }
 #endif
+    {
+      EyePose puesto = ui.ojoBase;
+      const double decimas = (double)ui.hud.angulo();
+      if (decimas != 0.0)
+        puesto.x += std::tan(decimas * 0.1 * 3.14159265358979323846 / 180.0) * puesto.z;
+      if (std::fabs(puesto.x - wv.eye().x) > 1e-4 || std::fabs(puesto.y - wv.eye().y) > 1e-4 ||
+          std::fabs(puesto.z - wv.eye().z) > 1e-4)
+        wv.setEye(puesto);
+    }
 
     ultimoPresente = now;
     ui.inputChanged = false;

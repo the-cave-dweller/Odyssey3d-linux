@@ -53,6 +53,11 @@ struct ViewerOpts {
   bool trackFixed = false;   /* ignora lo que mide la camara (para comparar) */
   float trackScore = 0.6f;
   double trackSmoothing = 0.35;
+  /* respaldo con cualquier webcam: -1 = mirar el dispositivo y decidir, 0 = forzar
+     las dos vistas de la camara del monitor, 1 = forzar la via de una sola vista */
+  int trackMono = -1;
+  double trackCampo = 65.0;  /* campo horizontal de la webcam, en grados */
+  double trackCara = 150.0;  /* ancho de cara de oreja a oreja, en milimetros */
 
   std::string corrA, corrB, corrDir;
   std::string file;

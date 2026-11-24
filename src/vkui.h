@@ -6,6 +6,7 @@
 #ifndef ODYSSEY_VKUI_H
 #define ODYSSEY_VKUI_H
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -30,6 +31,12 @@ public:
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nuestra */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
     bool redViva = false;  /* hay conversor abierto (si no, el boton de la red se apaga) */
+    /* La fila de abajo de la pastilla: el boton del rastreo y el deslizador del angulo.
+       Solo la enseña el visor (el hub no rastrea), asi que la pastilla del hub no crece. */
+    bool controlOjo = false;
+    bool rastreoPuesto = true;  /* se usa la pose que mide la camara; apagado = pose a mano */
+    bool rastreoVivo = false;   /* hay hilo de camara abierto (si no, el boton se apaga) */
+    int angulo = 0;             /* decimas de grado: -150 = -15,0 grados .. +150 = +15,0 */
   };
 
   enum Hit {
@@ -44,7 +51,9 @@ public:
     HitAskFlat,
     HitAskConv,
     HitAskDont,
-    HitAskClose
+    HitAskClose,
+    HitTrack,     /* boton de la pastilla: usar o no la pose de la camara */
+    HitAngle      /* deslizador largo: angulo manual de la linea de vision */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -84,6 +93,13 @@ public:
   void showOverlay() { st_.overlayOn = true; }
   void nudgeDepth(int delta);
   void nudgePopout(int delta);
+  /* el rastreo se puede quitar con el boton de la pastilla o con la tecla T: la
+     trama sigue moviendose con la pose a mano (la del deslizador del angulo) */
+  void toggleTrack() { st_.rastreoPuesto = !st_.rastreoPuesto; }
+  bool rastreoPuesto() const { return st_.rastreoPuesto; }
+  int angulo() const { return st_.angulo; }   /* decimas de grado */
+  void nudgeAngle(int decimas) { st_.angulo = std::max(-150, std::min(150, st_.angulo + decimas)); }
+  void centerAngle() { st_.angulo = 0; }
   /* el raton llega en pixeles reales de la ventana y se pasa al espacio virtual */
   void setMouse(float x, float y) { mx_ = x / sc_, my_ = y / sc_; }
   bool interactive() const { return st_.overlayOn || st_.ask; }
@@ -108,6 +124,22 @@ public:
     return true;
   }
   bool pillBounds(float *x, float *y, float *w, float *h) const;
+  /* caja del boton del rastreo, para poder pulsarlo en las pruebas sin raton */
+  bool trackBounds(float *x, float *y, float *w, float *h) const {
+    if (btnTrack_.w <= 0.0f) return false;
+    if (x) *x = btnTrack_.x;
+    if (y) *y = btnTrack_.y;
+    if (w) *w = btnTrack_.w;
+    if (h) *h = btnTrack_.h;
+    return true;
+  }
+  /* el deslizador del angulo: la prueba de la interfaz comprueba su recorrido */
+  bool angleBounds(float *x, float *w) const {
+    if (angTrack_.w <= 0.0f) return false;
+    if (x) *x = angTrack_.x;
+    if (w) *w = angTrack_.w;
+    return true;
+  }
   /* La punta derecha de la caja que ocuparia la pastilla, aun estando ocultada. Es el rincon que
      el visor deja pinchable para que el raton pueda devolver la pastilla sin usar el teclado. */
   bool huecoDeLaPastilla(float *x, float *y, float *w, float *h) const;
@@ -153,6 +185,7 @@ private:
   float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
   Rect pillPanel_, btn3D_, btnOv_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
+  Rect btnTrack_, angTrack_, angKnob_;
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
 };
 

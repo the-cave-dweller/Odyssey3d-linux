@@ -19,6 +19,13 @@ struct TrackSettings {
   double smoothing = 0.35;          /* alfa del filtro exponencial (0 = sin filtro) */
   int holdFrames = 40;              /* cuadros que se aguanta sin cara */
   int detectWidth = 448, detectHeight = 320;  /* como el hub: 0.7 de la vista 640x480 */
+
+  /* Via de respaldo: una webcam normal, que es UNA sola vista y no esta
+     calibrada. La distancia sale del ancho de la caja de la cara (de oreja a
+     oreja) y el lado del campo horizontal que se le supone a la camara. */
+  bool mono = false;
+  double faceWidthMillimetres = 150.0;
+  double hFovDegrees = 65.0;
 };
 
 struct TrackSample {
@@ -30,6 +37,8 @@ struct TrackSample {
   double rawPanelCentimetres[3] = {0, 0, 0};
   double ipdMillimetres = 0;
   double reprojectionPx = 0;
+  bool mono = false;          /* pose sacada de una sola vista (webcam normal) */
+  double faceWidthPx = 0;     /* ancho de la caja de la cara, en la via mono */
   int faces = 0;
   int misses = 0;
   double latencyMs = 0;
@@ -50,6 +59,20 @@ public:
   static bool decodeFrame(const uint8_t *data, size_t size, int width, int height, bool mjpeg,
                           std::vector<uint8_t> &grayLeft, std::vector<uint8_t> &grayRight, int &viewW,
                           int &viewH, std::string *err = nullptr);
+
+  /* Una sola vista (la webcam que sea): de la caja de la cara salen el lado,
+     arriba/abajo y la distancia, sin calibracion y sin triangulacion. */
+  bool processMono(const uint8_t *gray, int w, int h, TrackSample &out, std::string *err = nullptr);
+
+  /* Decodifica el cuadro de una webcam normal (MJPG o YUYV, una sola vista). */
+  static bool decodeMono(const uint8_t *data, size_t size, int width, int height, bool mjpeg,
+                         std::vector<uint8_t> &gray, std::string *err = nullptr);
+
+  /* La cuenta de la via mono, para comprobarla sin camara: cuantos pixeles mide
+     una cara de `caraMm` a `distanciaMm` con el campo `hFovDegrees` en una fila
+     de `anchoPx` pixeles, y la inversa. */
+  static void monoSimular(double hFovDegrees, int anchoPx, double caraMm, double distanciaMm,
+                          double *pixeles, double *profundidadMm);
 
   /* Un solo ojo descrito por sus pixeles en las dos vistas (x,y izquierda y
      x,y derecha) y toda la cadena detras: triangulacion, transformada al panel

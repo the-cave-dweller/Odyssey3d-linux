@@ -120,8 +120,16 @@ static double nowSeconds() {
 
 bool HeadTracker::init(const CameraCalibration &calib, const TrackerTransform &xform,
                        const TrackSettings &set, std::string *err) {
-  if (!calib.valid) {
+  if (!set.mono && !calib.valid) {
     if (err) *err = "hace falta la calibracion de fabrica (ctl calib)";
+    return false;
+  }
+  if (set.mono && (set.hFovDegrees < 20.0 || set.hFovDegrees > 170.0)) {
+    if (err) *err = "el campo horizontal de la webcam ha de estar entre 20 y 170 grados";
+    return false;
+  }
+  if (set.mono && set.faceWidthMillimetres < 80.0) {
+    if (err) *err = "el ancho de cara ha de ser de al menos 80 mm";
     return false;
   }
   set_ = set;
@@ -145,7 +153,8 @@ bool HeadTracker::init(const CameraCalibration &calib, const TrackerTransform &x
 /* busca la cara mas grande y saca los dos ojos (YuNet: 4-5 ojo derecho, 6-7 ojo
    izquierdo, en coordenadas de la imagen de entrada). */
 static bool detectEyes(const uint8_t *gray, int w, int h, const TrackSettings &set,
-                       std::vector<cv::Point2f> &eyes, float &score, int &faces, std::string &why) {
+                       std::vector<cv::Point2f> &eyes, float &score, int &faces, std::string &why,
+                       cv::Rect *caja = nullptr) {
   /* la red se carga una sola vez: crearla por cuadro costaria decenas de ms */
   static cv::Ptr<cv::FaceDetectorYN> detector;
   static std::string usedModel;
@@ -219,6 +228,7 @@ static bool detectEyes(const uint8_t *gray, int w, int h, const TrackSettings &s
   const float *v = out.ptr<float>(best);
   score = v[14];
   eyes = {cv::Point2f(v[4], v[5]), cv::Point2f(v[6], v[7])};
+  if (caja) *caja = cv::Rect((int)v[0], (int)v[1], (int)v[2], (int)v[3]);
   return true;
 }
 
@@ -327,6 +337,69 @@ bool HeadTracker::publish(const double raw[3], TrackSample &out) {
   out.accepted = true;
   for (int i = 0; i < 3; i++) out.panelCentimetres[i] = last_[i];
   return true;
+}
+
+/* ---------- la via de una sola vista: cualquier webcam -------------------------
+   La camara infrarroja del monitor trae dos vistas calibradas y se puede
+   triangular. Una webcam normal no: tiene una sola imagen y ninguna
+   calibracion, asi que la pose sale de la caja de la cara. La focal se deduce
+   del campo horizontal que se le supone al bicho (--track-campo); con eso, una
+   cara de `caraMm` de ancho que en la imagen ocupa `caraPx` pixeles esta a
+   `f * caraMm / caraPx`. El numero de distancia es grueso (la caja de YuNet
+   cambia con la barba, las gafas o el pelo) pero el centro de la cara y el lado
+   son buenos, y para afinar la distancia ya esta el deslizador de la pastilla. */
+bool HeadTracker::processMono(const uint8_t *gray, int w, int h, TrackSample &out, std::string *err) {
+  out = TrackSample{};
+  out.mono = true;
+  if (!ready_) {
+    if (err) *err = "el rastreador no esta preparado";
+    return false;
+  }
+  const double t0 = nowSeconds();
+  std::vector<cv::Point2f> ojos;
+  float puntaje = 0.0f;
+  int caras = 0;
+  std::string porQue;
+  cv::Rect caja;
+  if (!detectEyes(gray, w, h, set_, ojos, puntaje, caras, porQue, &caja)) {
+    out.detected = false;
+    out.faces = caras;
+    out.reason = porQue;
+    out.latencyMs = (nowSeconds() - t0) * 1000.0;
+    hold(out);
+    return true;
+  }
+  const double fov = set_.hFovDegrees;
+  const double focal = (0.5 * (double)w) / std::tan(0.5 * fov * CV_PI / 180.0);
+  /* la cara de frente mide unos 150 mm de oreja a oreja; de ahi la distancia.
+     Si la caja sale absurda (pegada a la camara o fuera de la imagen), se planta en el
+     rango que la trama puede seguir. */
+  const double caraPx = caja.width > 1 ? (double)caja.width : 1.0;
+  double z = focal * set_.faceWidthMillimetres / caraPx;
+  if (z < set_.minDepthMillimetres) z = set_.minDepthMillimetres;
+  if (z > 3000.0) z = 3000.0;
+  const double x = ((double)caja.x + 0.5 * (double)caja.width - 0.5 * (double)w) * z / focal;
+  const double y = (0.5 * (double)h - ((double)caja.y + 0.5 * (double)caja.height)) * z / focal;
+  out.detected = true;
+  out.faces = caras;
+  out.faceWidthPx = caraPx;
+  out.eyeMillimetres[0] = x;
+  out.eyeMillimetres[1] = y;
+  out.eyeMillimetres[2] = z;
+  out.latencyMs = (nowSeconds() - t0) * 1000.0;
+  /* Sin calibracion el paso a la pantalla es directo: la webcam esta pegada al
+     borde de arriba del monitor, mas o menos centrada, y el panel mide en
+     centimetros. `y` hacia arriba, que es como lo espera el visor. */
+  const double cm[3] = {x * 0.1, y * 0.1, z * 0.1};
+  return publish(cm, out);
+}
+
+void HeadTracker::monoSimular(double hFovDegrees, int anchoPx, double caraMm, double distanciaMm,
+                              double *pixeles, double *profundidadMm) {
+  const double focal = (0.5 * (double)anchoPx) / std::tan(0.5 * hFovDegrees * CV_PI / 180.0);
+  const double px = focal * caraMm / (distanciaMm > 1.0 ? distanciaMm : 1.0);
+  if (pixeles) *pixeles = px;
+  if (profundidadMm) *profundidadMm = focal * caraMm / (px > 1.0 ? px : 1.0);
 }
 
 bool HeadTracker::submitEyes(const double pixels[4], TrackSample &out, std::string *err) {
@@ -465,6 +538,35 @@ bool HeadTracker::decodeFrame(const uint8_t *data, size_t size, int width, int h
     grayRight.assign(right.data, right.data + (size_t)right.total() * right.elemSize());
     viewW = half;
     viewH = frame.rows;
+    return true;
+  } catch (const cv::Exception &e) {
+    if (err) *err = std::string("OpenCV al decodificar: ") + e.what();
+    return false;
+  }
+}
+
+bool HeadTracker::decodeMono(const uint8_t *data, size_t size, int width, int height, bool mjpeg,
+                             std::vector<uint8_t> &gray, std::string *err) {
+  try {
+    cv::Mat frame;
+    if (mjpeg) {
+      frame = cv::imdecode(cv::Mat(1, (int)size, CV_8UC1, (void *)data), cv::IMREAD_GRAYSCALE);
+    } else {
+      cv::Mat yuyv(height, width, CV_8UC2, (void *)data);
+      cv::cvtColor(yuyv, frame, cv::COLOR_YUV2GRAY_YUYV);
+    }
+    if (frame.empty() || frame.cols != width || frame.rows != height) {
+      if (err)
+        *err = "el cuadro decodificado no cuadra (" + std::to_string(frame.cols) + "x" +
+               std::to_string(frame.rows) + ")";
+      return false;
+    }
+    if (frame.type() != CV_8UC1) {
+      cv::Mat g;
+      cv::cvtColor(frame, g, cv::COLOR_BGR2GRAY);
+      frame = g;
+    }
+    gray.assign(frame.data, frame.data + (size_t)frame.total() * frame.elemSize());
     return true;
   } catch (const cv::Exception &e) {
     if (err) *err = std::string("OpenCV al decodificar: ") + e.what();
