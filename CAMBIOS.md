@@ -2,6 +2,41 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La rejilla que escribiamos estaba un 0,6 % desviada del paso real de la lente (medido, v0.42)
+- Herramienta nueva `tools/paso_rejilla.py`: FFT con ventana de Hann de 512 sobre cuatro recortes
+  del **cuadro escrito** (no de una foto), pico afinado por centroide. Da el paso en pixeles de
+  panel y en milimetros, la inclinacion, la fuerza frente al piso, y el batido contra el blanco.
+- Blanco (lo que escribe el conversor de Windows, medido sobre su foto con escala 1,159):
+  **kx 0,4501 · periodo 2,2217 px = 0,34530 mm · inclinacion -19,0 grados**.
+- Lo nuestro hasta ahora: **kx 0,4473 · 2,2358 px = 0,34744 mm**. 0,62 % mas largo, o sea dos tramas
+  que baten a `1/0,0028 = 353 px` de panel = **54,9 mm**: franjas verticales de cinco centimetros y
+  medio, que es exactamente la magnitud de las franjas que el usuario ve y no se van con la fase.
+- Llave nueva **`rampa_x`** (variable `ODYSSEY3D_RAMPA_X`, ciclos de porteadora por pixel de panel,
+  tope ±0,05): rampa limpia de fase **igual para los tres canales**, metida dentro del `fract()` de
+  la fase en `shaders/weave.frag`. Con `rampa_x = -0,00283` el cuadro escrito queda
+  **kx 0,4501 · 2,2219 px = 0,34529 mm** clavado al blanco, y la inclinacion sin tocar (-0,1598).
+  La fuerza de la porteadora no baja (437 → 429 sobre el piso). Respuesta medida 1:1: cada 0,001 de
+  rampa mueve 0,001 de kx.
+- El signo va al reves del ajuste que se busca: la porteadora que sale por la pantalla es el espejo
+  de la escrita (`kx medido = 1 - kx escrito`), asi que para subir el kx medido hay que restar rampa.
+- **`paso` (la escala "--pitch") no sirve para esto**: cuadra el paso igual (0,995 -> kx 0,4500)
+  pero escala la rampa de la lente entera, y en esa rampa van metidos los desfases entre los canales
+  rojo/verde/azul; afloja la inclinacion (ky -0,1589 en vez de -0,1598) y corre los canales. Se queda
+  en 1 y se usa `rampa_x`.
+- Rectificacion de la ronda anterior, que escribimos aqui mal: con `paso = 0,995` la inclinacion NO
+  se caia a -9,7 grados. Eso lo decia el estimador por bloques (`tools/portador_windows.py`), que con
+  el pico ya movido salta de un maximo al de al lado; la FFT directa dice -19,5 grados. Por eso nacio
+  `paso_rejilla.py`, que es el que hay que usar con cuadros escritos. Con foto sigue valiendo
+  `portador_windows.py`, que trae la correccion de escala.
+- `rampa_y` es la misma llave en vertical. Con -0,0012 baja la inclinacion de -0,1598 a -0,1585, o
+  sea que para subir a -0,1607 (el valor de la foto de Windows) tendria que ser unos +0,0009. La
+  diferencia nuestra con ese valor da un batido de 17 cm, demasiado gordo para verlo: se deja en 0 y
+  se mira primero el efecto de `rampa_x`.
+- El servicio imprime al arrancar que numeros de trama cargo (`[serve] trama cruda ...`), para no
+  adivinar si la linea de `serve.conf` entro o se la comio un tope de rango.
+- Falta lo unico que falta: **una foto por valor en el panel** (rampa 0 y rampa -0,00283, mismo
+  encuadre que «conversor2») para confirmar que el batido de 55 mm desaparece de la pantalla.
+
 ## En zonas llanas nuestra pantalla lleva cuatro veces mas grano que la de Windows (medido, v0.41)
 - Herramienta nueva `tools/rejilla_en_llano.py`: toma baldosas de 160x160 con brillo medio y
   **desviacion tipica menor de 8 niveles** (color de verdad parejo) y mide dentro de ellas cuanto

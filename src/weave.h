@@ -83,7 +83,7 @@ public:
 private:
   GLuint prog_ = 0, vao_ = 0, vbo_ = 0, corrA_ = 0, corrB_ = 0;
   GLint uRes_ = -1, uFS_ = -1, uXTF_ = -1, uXTD_ = -1, uContrast_ = -1, uCAS_ = -1, uConv_ = -1, uAlign_ = -1,
-      uPitch_ = -1, uWeave_ = -1, uSwap_ = -1, uHud_ = -1, uLayout_ = -1, uFlipY_ = -1, uCorrA_ = -1, uCorrB_ = -1, uSrc_ = -1;
+      uPitch_ = -1, uRampaX_ = -1, uRampaY_ = -1, uWeave_ = -1, uSwap_ = -1, uHud_ = -1, uLayout_ = -1, uFlipY_ = -1, uCorrA_ = -1, uCorrB_ = -1, uSrc_ = -1;
   int W_ = 3840, H_ = 2160, hud_ = 0, srcFlipY_ = 1;
   bool corrReal_ = false;
   EyePose eye_{};

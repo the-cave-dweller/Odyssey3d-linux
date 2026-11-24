@@ -497,7 +497,7 @@ sesión guarde `/tmp/chk-trama-vulkan.png`, `/tmp/chk-trama-con-mapa.png`,
 `/tmp/chk-trama-sin-releve.png`, `/tmp/chk-profundidad.pgm` y `/tmp/chk-chico.ppm` sin cerrarse,
 que es como se miden las franjas de arriba.
 
-Y cuatro para medir sin recompilar (desde v0.41), porque ninguna teclas las alcanza: `relieve`
+Y seis para medir sin recompilar (los cuatro primeros desde v0.41), porque ninguna teclas las alcanza: `relieve`
 (escala del relieve; `0` deja la imagen **plana del todo**, cosa que `3D Salida = 0` no hace porque
 allí quedan 4 px de separación entre ojos), `temblor` (pixeles del temblor del desplazamiento,
 0,25 de fábrica; `0` lo apaga para ver las rayitas sin disimulo), `canto` (ancho del puente del
@@ -505,6 +505,17 @@ canto, 0,004 de fábrica; subirlo deja los bordes sin mordeduras pero les quita 
 `fase_temblor` (temblor de la propia fase de la trama, en ciclos; `0,1` baja unas cinco veces las
 armónicas de 4,3 y 8,2 px y casi no toca el 3D). Estas cuatro se aplican al reiniciar el servicio,
 no en caliente.
+
+Las otras dos son `rampa_x` y `rampa_y` (desde v0.42): aprietan o aflojan el **paso de la rejilla que
+escribimos**, en ciclos de porteadora por pixel de panel. Sirven para cuadrar nuestro paso con el de
+la lente de este ejemplar: medido sobre el cuadro escrito, el nuestro salía un 0,6 % más largo
+(2,2358 px frente a los 2,2217 px que escribe Windows), y dos tramas con pasos que difieren un 0,6 %
+baten a 353 px de panel, o sea **55 mm**: esas son las franjas verticales gruesas. Con
+`rampa_x = -0,00283` queda clavado (2,2219 px = 0,34529 mm) sin tocar la inclinación ni el color.
+**No es lo mismo que `paso`**: `paso` escala la rampa de la lente entera, y en esa rampa van metidos
+los desfases entre los canales rojo, verde y azul, así que desplaza el color y afloja la inclinación;
+por eso `paso` se queda en 1. `tools/paso_rejilla.py` mide el paso escrito y propone el valor de la
+rampa, y el servicio imprime al arrancar los números de trama que cargó.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

@@ -216,8 +216,25 @@ void main()
     float jr = 0.0;
     if (P.tun6.x != 0.0)
         jr = (fract(sin(dot(floor(px), vec2(39.3467, 11.1355))) * 24634.6345) - 0.5) * P.tun6.x;
+    /* Rampa fina aparte (ODYSSEY3D_RAMPA_X / _Y, ciclos de porteadora por pixel de panel).
+       Apretar o aflojar el paso de la rejilla escrita sin tocar lo demas. La rampa de la lente
+       (v4) lleva metidos tambien los desfases entre los canales rojo, verde y azul, y escalarla
+       entera con "paso" corre esos desfases y afloja un poco la inclinacion. Midiendo el cuadro
+       escrito con FFT (tools/paso_rejilla.py, cuadro solido 3840x2160):
+         rampa 0          -> kx 0,4473  ky -0,1598  periodo 2,2358 px = 0,34744 mm
+         rampa -0,00277   -> kx 0,4500  ky -0,1598  periodo 2,2224 px = 0,34536 mm
+         paso 0,995       -> kx 0,4500  ky -0,1589  periodo 2,2224 px = 0,34536 mm
+       Los dos aciertan el paso (el de Windows medido en foto es 2,2217 px = 0,34530 mm) pero la
+       rampa deja la inclinacion exacta y el paso la afloja 0,0009. La respuesta es 1:1: cada
+       0,001 de rampa mueve 0,001 el kx medido.
+       El numero va con el signo contrario al ajuste que se busca en el periodo medido: la
+       porteadora que sale por la pantalla es el espejo de la escrita, asi que para ACORTAR el
+       periodo (subir kx) hay que RESTAR rampa en x. px.y es hacia abajo en Vulkan; la copia GL
+       del instrumento de laboratorio lo compensa para que el mismo numero signifique lo mismo. */
+    float rampa = (P.tun6.y != 0.0 || P.tun6.z != 0.0)
+                ? fract(P.tun6.y * px.x + P.tun6.z * px.y) : 0.0;
     for (int c = 0; c < 3; c++) {
-        float phase = fract(base + v4[c] * P.tun2.y + P.tun2.x - 0.25 + jr);
+        float phase = fract(base + v4[c] * P.tun2.y + P.tun2.x - 0.25 + jr + rampa);
         float t = 2.0 * phase - 1.0;
         float w = clamp(-abs(t) * P.res.z + P.res.z * 0.5 + 0.5, 0.0, 1.0);
         outc[c] = mix(Rp[c], Lp[c], w);

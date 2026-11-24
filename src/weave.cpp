@@ -1,6 +1,7 @@
 #include "weave.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <vector>
 
@@ -16,6 +17,7 @@ static const char *FRAG = R"GLSL(#version 330
 uniform sampler2D uSrc, uCorrA, uCorrB;
 uniform vec2 uRes;
 uniform float uFS, uXTalkFac, uXTalkDyn, uContrast, uCorrAScale, uConv, uAlign, uPitch;
+uniform float uRampaX, uRampaY;
 uniform int uWeave, uSrcSwapLR, uHudOk, uLayout, uSrcFlipY;
 in vec2 fuv; in vec2 v2; in vec2 v3; in vec3 v4;
 out vec4 o;
@@ -45,9 +47,17 @@ void main(){
     float xt = ((1.0 + dot(v3, v3)) * v2.y*v2.y) * uXTalkDyn + uXTalkFac;
     xt = xt/(1.0 - xt);
     vec3 Lp = L - xt*dRL; vec3 Rp = R + xt*dRL;
+    /* Rampa fina de fase, igual para los tres canales (ODYSSEY3D_RAMPA_X / _Y, ciclos por pixel
+       de panel). Mueve solo el paso de la rejilla escrita; los numeros y el por que estan en
+       shaders/weave.frag y tools/paso_rejilla.py. El signo va al reves del ajuste que se busca en
+       la porteadora medida: la que sale por la pantalla es el espejo de la escrita, asi que para
+       subir el kx medido de 0,4473 a 0,4501 hace falta rampa_x = -0,00283. El y va al reves que en
+       el camino Vulkan porque gl_FragCoord.y apunta hacia arriba y px.y del shader real, abajo. */
+    float rampa = (uRampaX != 0.0 || uRampaY != 0.0)
+                ? fract(uRampaX * gl_FragCoord.x + uRampaY * (uRes.y - gl_FragCoord.y)) : 0.0;
     vec3 outc;
     for(int c=0;c<3;c++){
-        float phase = fract(base + v4[c]*uPitch + uAlign - 0.25);
+        float phase = fract(base + v4[c]*uPitch + uAlign - 0.25 + rampa);
         float t = 2.0*phase - 1.0;
         float w = clamp(-abs(t)*uFS + uFS*0.5 + 0.5, 0.0, 1.0);
         outc[c] = mix(Rp[c], Lp[c], w);
@@ -68,6 +78,8 @@ bool Weave::init(std::string *err) {
   uConv_ = glGetUniformLocation(prog_, "uConv");
   uAlign_ = glGetUniformLocation(prog_, "uAlign");
   uPitch_ = glGetUniformLocation(prog_, "uPitch");
+  uRampaX_ = glGetUniformLocation(prog_, "uRampaX");
+  uRampaY_ = glGetUniformLocation(prog_, "uRampaY");
   uWeave_ = glGetUniformLocation(prog_, "uWeave");
   uSwap_ = glGetUniformLocation(prog_, "uSrcSwapLR");
   uHud_ = glGetUniformLocation(prog_, "uHudOk");
@@ -215,6 +227,22 @@ void Weave::draw(GLuint srcTex) {
   glUniform1f(uConv_, tune_.conv);
   glUniform1f(uAlign_, tune_.align);
   glUniform1f(uPitch_, tune_.pitch);
+  /* el visor real pasa la rampa por el bloque uniforme (src/vkweave.cpp); esta copia GL es el
+     instrumento de laboratorio, asi que lee el mismo ajuste del entorno */
+  {
+    static const float rx = [] { const char *e = std::getenv("ODYSSEY3D_RAMPA_X"); return e ? (float)std::atof(e) : 0.0f; }();
+    static const float ry = [] { const char *e = std::getenv("ODYSSEY3D_RAMPA_Y"); return e ? (float)std::atof(e) : 0.0f; }();
+    if (uRampaX_ >= 0) glUniform1f(uRampaX_, rx);
+    if (uRampaY_ >= 0) glUniform1f(uRampaY_, ry);
+    if (std::getenv("ODYSSEY_UBO")) {
+      GLint cur = 0, loc = -99; GLfloat back = -99.f;
+      glGetIntegerv(GL_CURRENT_PROGRAM, &cur);
+      loc = glGetUniformLocation(prog_, "uRampaX");
+      glGetUniformfv(prog_, uRampaX_, &back);
+      std::fprintf(stderr, "[ubo-gl] rx=%.6f locales %d %d prog=%u current=%d relink=%d readback=%.6f err=%d\n",
+                   rx, (int)uRampaX_, (int)uRampaY_, (unsigned)prog_, (int)cur, (int)loc, back, (int)glGetError());
+    }
+  }
   glUniform1i(uWeave_, tune_.weave ? 1 : 0);
   glUniform1i(uSwap_, tune_.swapLR ? 1 : 0);
   glUniform1i(uHud_, hud_);

@@ -746,9 +746,33 @@ void VkWeave::fillUbo(uint8_t *dst) {
     return v > 0.0f && v < 1.0f ? v : 0.0f;
   }();
   t6[0] = faseTemblor;
+  /* ODYSSEY3D_RAMPA_X y ODYSSEY3D_RAMPA_Y  rampa limpia de fase en ciclos por pixel de panel,
+     la misma para los tres canales. Mueve el paso de la rejilla escrita sin tocar nada mas.
+     Medido sobre el cuadro escrito (tools/paso_rejilla.py, `weave --solid`, cuadro solido
+     3840x2160; el blanco es lo que escribe el conversor de Windows, kx 0,4501 = 2,2217 px =
+     0,34530 mm):
+       rampa 0         kx 0,4473  ky -0,1598  2,2358 px = 0,34744 mm  batido a los 353 px = 54,9 mm
+       rampa -0,00283  kx 0,4501  ky -0,1598  2,2219 px = 0,34529 mm  batido a los 3492 mm
+     "--pitch" (paso) tambien cuadra el paso (0,995 -> kx 0,4500) pero escala la rampa de la lente
+     entera, y ahi van metidos los desfases entre canales rojo/verde/azul: afloja la inclinacion
+     (ky -0,1589 en vez de -0,1598). La rampa deja la inclinacion exacta, asi que esa es la llave.
+     Tope +/-0,05 ciclos por pixel: mas de ahi ya no es un ajuste fino, es otra rejilla. */
+  static const float rampaX = [] {
+    const char *e = std::getenv("ODYSSEY3D_RAMPA_X");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return (v > -0.05f && v < 0.05f) ? v : 0.0f;
+  }();
+  static const float rampaY = [] {
+    const char *e = std::getenv("ODYSSEY3D_RAMPA_Y");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return (v > -0.05f && v < 0.05f) ? v : 0.0f;
+  }();
+  t6[1] = rampaX;
+  t6[2] = rampaY;
+  t6[3] = 0.0f;
   if (std::getenv("ODYSSEY_UBO")) {
-    std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · v4 TL %.2f %.2f %.2f\n",
-                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], v4[0], v4[1], v4[2]);
+    std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · rampa %.5f %.5f · v4 TL %.2f %.2f %.2f\n",
+                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], rampaX, rampaY, v4[0], v4[1], v4[2]);
   }
 }
 

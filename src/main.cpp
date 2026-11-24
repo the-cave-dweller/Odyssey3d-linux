@@ -1923,6 +1923,8 @@ struct ServeCfg {
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
   double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
   double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
+  double rampaX = 999.0;    /* rampa de fase en x, ciclos por pixel de panel; 999 = sin ajustar */
+  double rampaY = 999.0;    /* lo mismo en y (hacia abajo en la pantalla) */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2018,7 +2020,8 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "fase" || k == "paso" || k == "filtro" ||
-             k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor") {
+             k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
+             k == "rampa_x" || k == "rampa_y") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2030,6 +2033,8 @@ static void loadServeCfg(ServeCfg &cfg) {
       else if (k == "relieve") cfg.relieve = d;
       else if (k == "temblor") cfg.temblor = d;
       else if (k == "canto") cfg.canto = d;
+      else if (k == "rampa_x") cfg.rampaX = (d > -0.05 && d < 0.05) ? d : 999.0;
+      else if (k == "rampa_y") cfg.rampaY = (d > -0.05 && d < 0.05) ? d : 999.0;
       else cfg.faseTemblor = d;
     }
     else if (k == "auto") {
@@ -2178,6 +2183,19 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (pila->faseTemblor >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->faseTemblor);
       ::setenv("ODYSSEY3D_FASE_TEMBLOR", valor, 1);
+    }
+    /* `rampa_x` / `rampa_y`: aprieta o afloja el paso de la rejilla escrita, en ciclos por pixel
+       de panel. Vale para cuadradlo con el paso real de la lente de ESTE panel; el valor medido
+       para el nuestro es -0,00283 (ver tools/paso_rejilla.py). No es lo mismo que `paso`. */
+    if (pila->rampaX < 900.0) {
+      std::snprintf(valor, sizeof valor, "%.6f", pila->rampaX);
+      ::setenv("ODYSSEY3D_RAMPA_X", valor, 1);
+      std::fprintf(stderr, "[serve] rampa_x = %s ciclos por pixel de panel\n", valor);
+    }
+    if (pila->rampaY < 900.0) {
+      std::snprintf(valor, sizeof valor, "%.6f", pila->rampaY);
+      ::setenv("ODYSSEY3D_RAMPA_Y", valor, 1);
+      std::fprintf(stderr, "[serve] rampa_y = %s ciclos por pixel de panel\n", valor);
     }
   }
   ::execv(exe.c_str(), av.data());
@@ -2619,6 +2637,18 @@ static int cmdServe(int argc, char **argv) {
   if (std::string v = flag(argc, argv, "--nuestra"); !v.empty()) cfg.nuestra = expansionRuta(v);
   if (std::string v = flag(argc, argv, "--ignore"); !v.empty()) splitList(v, cfg.ignore);
   if (cfg.modo == "preguntar") cfg.modo = "ask";
+
+  /* Que numeros de trama ha leido el servicio, para no tener que adivinar si la ultima linea de
+     serve.conf entro o se la comio un tope de rango. -1 en los crudos significa sin ajustar. */
+  {
+    char rx[32], ry[32];
+    if (cfg.rampaX < 900.0) std::snprintf(rx, sizeof rx, "%.6f", cfg.rampaX); else std::snprintf(rx, sizeof rx, "sin ajustar");
+    if (cfg.rampaY < 900.0) std::snprintf(ry, sizeof ry, "%.6f", cfg.rampaY); else std::snprintf(ry, sizeof ry, "sin ajustar");
+    std::printf("[serve] trama cruda (-1 = sin ajustar): fase %.4f paso %.4f filtro %.4f temblor %.4f"
+                " canto %.4f fase_temblor %.4f · rampa_x %s rampa_y %s\n",
+                cfg.fase, cfg.paso, cfg.filtro, cfg.temblor, cfg.canto, cfg.faseTemblor, rx, ry);
+    std::fflush(stdout);
+  }
 
   ensureWaylandEnv();
   std::signal(SIGTERM, onServeSignal);
