@@ -2,6 +2,46 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Franjas verticales y los mapas de correccion de ESTA unidad (v0.40)
+- Reportado: con el 3D puesto quedan unas franjas verticales claras y oscuras por toda la pantalla,
+  separadas entre si un milimetro o tres; con el mismo video en Windows no se perciben.
+- Preguntado en la pantalla, para no adivinar: siguen al video (se mueven con los objetos), se
+  deslizan al mover la cabeza y desaparecen con `3` (2D plano). Esas tres respuestas descartan la
+  rejilla del panel y el escalado, y apuntan al mapa de profundidad antes que a la trama: una raya
+  cada T pixeles por desajuste del paso sale con `T = 1/(0,554 * delta)`, o sea habria que llevar el
+  paso un 1,8 % torcido para rayas cada 100 px, y esas rayas quedan FIJAS en el panel, no se deslizan
+  con la cabeza. Las curvas de nivel de un mapa de profundidad mal temblado hacen lo contrario: se
+  van con el video y con la cabeza.
+- Medido aparte, y era un fallo real: los mapas de correccion que llevamos instalados NO son los de
+  este panel. Comparados con los volcados de `C:\ProgramData\Simulated Reality\Devices\` de la unidad
+  `VN022514ET0194` (480x270, misma pinta, tamano identico):
+  * A instalado 1..57 media 31,2 frente al de la unidad 0..255 media 23,5 · correlacion 0,39 ·
+    diferencia media 10,2 niveles y maxima 237.
+  * B instalado 120..142 frente al de la unidad 117..136 media 127,2 · correlacion 0,83 ·
+    diferencia media 1,3 niveles.
+  * traducido a fase de trama: error medio 0,040 ciclos (p95 0,086, maximo 0,929), o 0,072 px de
+    desplazamiento de la trama (p95 0,156, maximo 1,68 px sobre un periodo de 1,805 px: casi un
+    periodo entero). El error gordo esta localizado en filas 194..213 y columnas 0..16 del mapa, que
+    es la esquina inferior izquierda del panel. Defecto que hay que corregir, pero localizado: no
+    explica franjas en toda la pantalla.
+- Como quedo:
+  * el visor busca `~/.config/odyssey3d/calib` ANTES que los mapas instalados (los de cada unidad
+    valen solo para su panel). Ahi quedaron copiados los de esta unidad, y en `calib/` del repo
+    tambien; los de la otra unidad siguen ahi como `3DStackCorrection_*.de-otra-unidad.png`.
+  * la salida del visor dice de donde salieron los mapas y como son, porque cargar los de otro panel
+    es invisible a simple vista:
+    `[correccion] de /home/rodolfo/.config/odyssey3d/calib/3DStackCorrection_A.png y ...B.png`,
+    `[correccion] mapa A: 0..255 media 23,5`, `[correccion] mapa B: 117..136 media 127,2`.
+  * `serve.conf` admite `fase`, `paso`, `filtro` y `calib`, y se pasan al visor (`--align`, `--pitch`,
+    `--filtro`, `--calib-dir`). Antes el filtro solo se movia en marcha con `,` `.`, asi que habia que
+    recompilar o teclar cada vez para dejar la pendiente puesta.
+  * `volcado = /tmp/chk` en serve.conf deja la sesion en marcha y guarda `chk-trama-vulkan.png`,
+    `chk-profundidad.pgm`, `chk-chico.ppm` y `chk-trama-con-mapa.png`. Para eso hay opcion nueva
+    `--volcado-seguir`: sin ella el volcado cerraba el visor a los cuatro fotogramas.
+  * README: seccion nueva «Si quedan franjas verticales finas por toda la pantalla», con la prueba
+    que separa los dos origenes en un minuto (bajar `3D Salida` a 0 con `Ctrl+Shift+5` si la raya
+    sigue al video; mover `SavPg`/`RePag` si esta fija al panel).
+
 ## El boton 1 no devolvia a la red de Samsung (v0.39)
 - Reportado: dentro del visor el cambio de red salia de la de Samsung a la otra, pero no de vuelta, y
   la otra red estaba nombrada de un modo confuso.

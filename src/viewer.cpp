@@ -177,6 +177,7 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
   ui.tune.topBottom = opts.topBottom;
   ui.tune.align = (float)opts.align;
   ui.tune.pitch = (float)opts.pitch;
+  ui.tune.filterSlope = (float)opts.filtro;
   glfwSetWindowUserPointer(win, &ui);
   glfwSetKeyCallback(win, onKey);
 

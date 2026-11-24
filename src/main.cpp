@@ -113,6 +113,7 @@ static const char *kUsage =
     "  --track-campo 65  --track-cara 140   campo horizontal (grados) y ancho de cara (mm) de esa via\n"
     "  --texto-panel si|no          apoyar rotulos y subtitulos en el plano de la pantalla\n"
     "  --align CICLOS    desfase de fase inicial   --pitch F  escala de la rampa de fase\n"
+    "  --filtro F        pendiente del filtro de la trama (10 de fabrica; 0 corte seco, 3 suave)\n"
     "  --calib-dir DIR   mapas de correccion del panel (3DStackCorrection_A/B.png)\n"
     "  --solid / --no-corr / --out ARCHIVO   solo `weave`: fuente plana, sin correcciones, salida\n"
     "  --sin-interfaz    no dibujar la superposicion del hub (solo Vulkan)\n"
@@ -1270,6 +1271,13 @@ static std::string exeDir() {
 static std::string findDataFile(const std::string &name, const std::string &calibDir) {
   std::vector<std::string> bases;
   if (!calibDir.empty()) bases.push_back(calibDir);
+  /* Los mapas de correccion del panel son de fabrica POR UNIDAD: el de cada G90XF se escribe en su
+     propia linea de montaje y solo vale para ESE panel. Los que llevamos instalados son de otra
+     unidad; el promedio se parece pero dejan errores de fase localizados (medido: 0,04 ciclos de
+     media y hasta 1,7 px de desplazamiento de trama en una esquina). Si el dueno puso los suyos en
+     ~/.config/odyssey3d/calib, esos mandan sobre los instalados. */
+  if (const char *h = std::getenv("HOME"); h && *h)
+    bases.push_back(std::string(h) + "/.config/odyssey3d/calib");
   for (const char *b : {".", "./calib", "../calib"}) bases.push_back(b);
   std::string ed = exeDir();
   if (!ed.empty()) {
@@ -1382,7 +1390,9 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     }
     else if (a == "--align") { if (!need("align")) return false; o.align = atof(argv[++i]); }
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
+    else if (a == "--filtro") { if (!need("filtro")) return false; o.filtro = atof(argv[++i]); }
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
+    else if (a == "--volcado-seguir") o.dumpKeep = true;
     else if (a == "--uuid") { if (!need("uuid")) return false; o.captureUuid = argv[++i]; }
     else if (a == "--segundos") { if (!need("segundos")) return false; o.segundos = atoi(argv[++i]); }
     else if (a == "--help" || a == "-h") { std::fputs(kUsage, stdout); exit(0); }
@@ -1403,6 +1413,11 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
       std::fprintf(stderr, "aviso: no se encontro el mapa de correccion del panel; se usara correccion neutra\n");
       o.corrA.clear(); o.corrB.clear();
     }
+  }
+  if (!o.corrA.empty() && !o.corrB.empty() && !o.noCorr) {
+    /* los mapas de correccion son un numero de serie: decir de donde salieron es la unica
+       manera de ver si son los de este panel o los genericos que llevamos instalados */
+    std::printf("[correccion] de %s y %s\n", o.corrA.c_str(), o.corrB.c_str());
   }
   return true;
 }
@@ -1894,6 +1909,13 @@ struct ServeCfg {
                                    user.ini, FaceWidth_mm=140). Ojo: el hub pasa este valor al visor, asi que
                                    mientras estuviera en 150 la correccion del visor no llegaba a ninguna sesion. */
   std::string texto = "auto";  /* rotulos apoyados en la pantalla: si / no / auto (auto = si) */
+  /* Ajuste de la trama contra la lente de ESTA unidad: son los mismos numeros que se mueven en
+     marcha con las teclas, pero aqui quedan guardados y se pasan a todas las sesiones. */
+  double fase = 0.0;        /* desfase de la trama, en ciclos (flechas izquierda y derecha) */
+  double paso = 1.0;        /* escala del paso de la lente (RePag y SavPg) */
+  double filtro = -1.0;     /* pendiente del filtro (coma y punto); -1 = la de fabrica, que es 10 */
+  std::string calib;        /* carpeta con los mapas de correccion de ESTE panel */
+  std::string volcado;      /* si se pone, el visor guarda -trama / -profundidad / -origen ahi */
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -1933,7 +1955,8 @@ static std::string expansionRuta(std::string r) {
 }
 
 /* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=,
-   modelo= la red del boton 1, nuestra= la nativa del boton 2, rastreo= si/no, suavizado= 0,35). */
+   modelo= la red del boton 1, nuestra= la nativa del boton 2, rastreo= si/no, suavizado= 0,35,
+   calib= carpeta de los mapas de correccion de este panel, fase= paso= filtro= ajuste de la trama). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
   if (!home) return;
@@ -1985,6 +2008,18 @@ static void loadServeCfg(ServeCfg &cfg) {
         if (c == ',') c = '.';
       cfg.suavizado = (float)std::atof(numero.c_str());
     }
+    else if (k == "calib") cfg.calib = expansionRuta(v);
+    else if (k == "volcado") cfg.volcado = expansionRuta(v);
+    else if (k == "fase" || k == "paso" || k == "filtro") {
+      /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      if (k == "fase") cfg.fase = d;
+      else if (k == "paso") cfg.paso = (d > 0.5 && d < 2.0) ? d : 1.0;
+      else cfg.filtro = d;
+    }
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
       std::vector<std::string> pares;
@@ -2035,6 +2070,33 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
+  if (pila) {
+    char valor[32];
+    /* el ajuste fino de la trama contra la lente de esta unidad, si esta en serve.conf */
+    if (pila->fase != 0.0) {
+      std::snprintf(valor, sizeof valor, "%.6f", pila->fase);
+      args.push_back("--align");
+      args.push_back(valor);
+    }
+    if (pila->paso != 1.0) {
+      std::snprintf(valor, sizeof valor, "%.6f", pila->paso);
+      args.push_back("--pitch");
+      args.push_back(valor);
+    }
+    if (pila->filtro >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.3f", pila->filtro);
+      args.push_back("--filtro");
+      args.push_back(valor);
+    }
+    if (!pila->calib.empty()) { args.push_back("--calib-dir"); args.push_back(pila->calib); }
+    if (!pila->volcado.empty()) {
+      /* `volcado = /tmp/chk` en serve.conf: el visor guarda la trama, el mapa de profundidad y
+         el origen, y NO sale: la sesion sigue en el panel mientras se mira. */
+      args.push_back("--dump");
+      args.push_back(pila->volcado);
+      args.push_back("--volcado-seguir");
+    }
+  }
   if (rastreo) {
     /* la camara IR del monitor sigue los ojos y la trama se recalcula; sin esto la
        trama vive para la posicion de ojo nominal de fabrica */

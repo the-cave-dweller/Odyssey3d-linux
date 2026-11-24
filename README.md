@@ -192,7 +192,8 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `espacio`, `-`, `=`, `[`, `]` | pausa, ±5 s, cuadro a cuadro (en `play`) |
 
 Cada cambio imprime una línea con los valores actuales; puedes arrancar desde ellos con
-`--align`, `--pitch` y `--eye-x/--eye-y/--eye-z`.
+`--align`, `--pitch` y `--eye-x/--eye-y/--eye-z`, o dejarlos escritos en `serve.conf`
+(`fase`, `paso`, `filtro`; abajo, en «Servicio que arranca con la sesión»).
 
 ### Cómo alinear
 
@@ -206,6 +207,34 @@ Cada cambio imprime una línea con los valores actuales; puedes arrancar desde e
 5. Si la profundidad está invertida (lo cercano se ve lejos): pulsa `F`.
 6. Para comprobar que la lente y el scaler están bien: `3` (2D) debe verse normal y plano, `3`
    otra vez debe dar volumen.
+
+### Si quedan franjas verticales finas por toda la pantalla
+
+Con la trama ya alineada pueden quedar unas líneas verticales claras y oscuras, muy juntas
+(uno a tres milímetros). Hay dos orígenes posibles y se distinguen en un minuto, porque una
+franja vertical **fina y fija** y una **disparidad que da saltos** se parecen mucho a simple vista:
+
+* **Raya con el vídeo, se va con la cabeza y desaparece al bajar `Ctrl+Shift+5` (3D Salida) a 0** →
+  no es la trama: son las **curvas de nivel del mapa de profundidad**. El mapa llega de la red a
+  518×518 (7,4 px de panel por celda), se limpia y se dilata, y sale en 8 bits: donde el fondo
+  retrocede poco a poco, esos saltitos se ven como líneas verticales. Es lo que el programa de
+  Samsung tapa con su *dither* de profundidad (`depth.dither`, 0,25 px). Con el relieve a 0 las
+  dos vistas son idénticas y las líneas no pueden existir, así que esa es la prueba decisiva.
+* **Está con el relieve puesto, no se mueve con el vídeo y se corre con `RePag`/`SavPg`** → es la
+  trama desajustada con el paso real de la lente de esta unidad. El batido sale a
+  `T = 1/(0,554·δ)` píxeles, donde `δ` es el error relativo del paso: una raya cada 100 px
+  (0,42 mm) pide `δ ≈ 1,8 %`, o sea `paso = 0,982` o `1,018`. Empieza con dos o tres pulsaciones
+  de `SavPg` (cada una mueve el paso un 0,02 %) y mira si las rayas se separan y desaparecen.
+  Ojo: si al mover la cabeza las rayas **se deslizan**, casi seguro es lo primero, no esto.
+* Antes de nada, `3` (2D plano): si en 2D también se ven, no es nada de esto; sería escalado
+  (mira `[aviso] la ventana es WxH … la trama necesita pixel a pixel` en la salida del visor)
+  o el propio panel.
+
+Para medirlo desde fuera, `volcado = /tmp/chk` en `serve.conf` deja la sesión en marcha y guarda
+`/tmp/chk-trama-vulkan.png` (la trama entera tal y como sale al panel), `/tmp/chk-profundidad.pgm`
+(el mapa de profundidad) y `/tmp/chk-chico.ppm` (lo que vio la red). Con esos tres archivos se ve
+de dónde sale cada raya sin tener que adivinar.
+
 
 ## Cuál es el indicador de la esquina
 
@@ -433,6 +462,32 @@ redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualqu
 se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
 y la elección queda en `~/.config/odyssey3d/red-elegida`, aunque **al arrancar se vuelve siempre a la
 de Samsung** (desde v0.34): el archivo recuerda tu último cambio, pero el arranque empieza por la 1.
+
+Y para la trama, cuatro claves más (desde v0.40), que son lo mismo que se mueve en marcha con las
+teclas pero queda guardado para todas las sesiones: `fase` (ciclos, teclas `←` `→`), `paso`
+(multiplicador del paso de lente, teclas `RePag` `SavPg`; `1,004` es un +0,4 %), `filtro`
+(pendiente del filtro, teclas `,` `.`; sin esta clave se usa la de fábrica, 10) y `calib` (carpeta
+con los `3DStackCorrection_A/B.png` de **este** panel). Además `volcado = /tmp/chk` hace que cada
+sesión guarde `/tmp/chk-trama-vulkan.png`, `/tmp/chk-profundidad.pgm` y `/tmp/chk-chico.ppm` sin
+cerrarse, que es como se miden las franjas de arriba.
+
+**Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
+línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía
+el instalador eran de otra unidad: midiendo, la media del mapa A coincidía más o menos (31 frente
+a 23 niveles) pero la correlación era 0,39 y había zonas con 237 niveles de diferencia —0,93
+ciclos de fase, casi un periodo entero de trama en una esquina—. Ahora el visor busca
+`~/.config/odyssey3d/calib` **antes** que los instalados, y en la salida dice de dónde salieron y
+cómo son:
+
+```
+[correccion] de /home/rodolfo/.config/odyssey3d/calib/3DStackCorrection_A.png y …B.png
+[correccion] mapas 480x270 y 480x270
+[correccion] mapa A: 0..255 media 23,5
+[correccion] mapa B: 117..136 media 127,2
+```
+
+Si esos números no coinciden con los de tu unidad, tienes los mapas equivocados: saque los tuyos
+en Windows de `C:\ProgramData\Simulated Reality\Devices\` y ponlos en `~/.config/odyssey3d/calib/`.
 
 **El botón 1 con la gráfica justa** (arreglado en v0.33): la red de Samsung **solo** arranca en la
 gráfica. Pedirla por CPU no llega a crear la sesión —medido el 24-nov con `mde_large.onnx`: más de

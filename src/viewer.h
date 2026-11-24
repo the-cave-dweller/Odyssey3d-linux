@@ -45,6 +45,7 @@ struct ViewerOpts {
   double eyeZ = 65.11128998; /* cm de distancia */
   double align = 0.0;      /* desfase de fase inicial (ciclos) */
   double pitch = 1.0;      /* escala de la rampa de fase */
+  double filtro = 10.0;    /* pendiente del filtro de la trama (weave.h); 0 = corte seco */
   /* rastreo de cabeza con la camara infrarroja del monitor (necesita OpenCV) */
   bool track = false;
   std::string trackDevice, trackModel, trackCalibDir;
@@ -68,6 +69,7 @@ struct ViewerOpts {
   std::string captureUuid;   /* ventana a capturar (SourceKind::Capture) */
   std::string outPath;     /* salida de `weave` */
   std::string dumpPath;    /* guardar fotogramas PNG (diagnostico) y salir */
+  bool dumpKeep = false;   /* ... pero seguir: el hub lo usa cuando `volcado` esta en serve.conf */
   int segundos = 0;      /* salir solos tras N segundos (por secuencias y pruebas) */
 };
 

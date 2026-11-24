@@ -731,6 +731,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.tune.topBottom = opts.topBottom;
   ui.tune.align = (float)opts.align;
   ui.tune.pitch = (float)opts.pitch;
+  ui.tune.filterSlope = (float)opts.filtro;
   ui.hud.state().weaveOn = ui.tune.weave;
   /* La tarjeta de "que formato tiene el video" solo sirve si nadie lo eligio antes: si el hub
      o la linea de ordenes ya lo dijeron (--sbs, --tb, --2d), no la volvemos a pintar encima
@@ -1021,7 +1022,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     int aw = 0, ah = 0, bw = 0, bh = 0;
     if (loadCorrections(opts, a, aw, ah, b, bw, bh)) {
       wv.setCorrections(a.data(), aw, ah, b.data(), bw, bh);
+      /* Los mapas de correccion son de fabrica POR UNIDAD y cargar los de otro panel pasa
+         desapercibido (mismo tamano, mismo aspecto), asi que decimos de donde salieron y como
+         son: el rango y la media cambian mucho de una unidad a otra. */
+      auto estad = [](const std::vector<uint8_t> &m, const char *que) {
+        int lo = 255, hi = 0;
+        double suma = 0.0;
+        for (uint8_t v : m) { if (v < lo) lo = v; if (v > hi) hi = v; suma += (double)v; }
+        std::printf("[correccion] mapa %s: %d..%d media %.1f\n", que, lo, hi,
+                    m.empty() ? 0.0 : suma / (double)m.size());
+      };
       std::printf("[correccion] mapas %dx%d y %dx%d\n", aw, ah, bw, bh);
+      estad(a, "A");
+      estad(b, "B");
     }
   }
 
@@ -1878,8 +1891,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       dumpHecho = true;
       /* si ademas se pidio un tiempo (--segundos), el volcado no corta la sesion: deja ver
-         el 3D en el panel y sale al cumplirse el tiempo */
-      if (opts.segundos <= 0) ui.quit = true;
+         el 3D en el panel y sale al cumplirse el tiempo. Con --volcado-seguir pasa lo mismo
+         para siempre: es lo que usa el hub cuando `volcado` esta en serve.conf, para poder
+         mirar la pantalla mientras se guardan la trama y el mapa de profundidad. */
+      if (opts.segundos <= 0 && !opts.dumpKeep) ui.quit = true;
     }
 #endif
     frames++;
