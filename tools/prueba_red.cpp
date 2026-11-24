@@ -65,7 +65,8 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::vector<uint8_t> depth;
-  for (int i = 0; i < 3; i++)
+  const int veces = argc > 4 ? std::atoi(argv[4]) : 3;   /* con ODYSSEY3D_MEDIR=1 ensena el reparto */
+  for (int i = 0; i < veces; i++)
     if (!net.estimate(img.data(), W, H, depth, &err)) {
       std::fprintf(stderr, "[conversor] fallo: %s\n", err.c_str());
       return 1;

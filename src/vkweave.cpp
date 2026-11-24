@@ -711,7 +711,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   float *t5 = (float *)(dst + kOffTun5);
   static const float ditherPx = [] {
     const char *e = std::getenv("ODYSSEY3D_DITHER");
-    return e ? (float)std::atof(e) : 0.35f;
+    return e ? (float)std::atof(e) : 0.25f;   /* 0,01 de dither_strength sobre los 25 px de recorrido */
   }();
   static const bool conTope = [] {
     const char *e = std::getenv("ODYSSEY3D_TOPE");

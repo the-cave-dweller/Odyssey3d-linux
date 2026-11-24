@@ -45,6 +45,8 @@ public:
   int size() const { return sz_; }                    /* el modelo trabaja a sz_ x sz_ */
   const std::string &device() const { return dev_; }  /* "NVIDIA" o "CPU" */
   double lastMs() const { return ms_; }               /* lo que tardo la ultima estimacion */
+  double lastMsRed() const { return msRed_; }          /* solo la pasada de la red */
+  double lastMsPost() const { return msPost_; }        /* limpiar, dilatar, apoyo, subir la textura */
 
   /* rgba con la primera fila arriba, w x h. Escribe un byte por punto, del tamano del modelo
      (255 = lo mas cerca de la pantalla, 0 = el fondo). */
@@ -82,6 +84,8 @@ private:
   int gpu_ = 0;
   std::string dev_ = "nada";
   double ms_ = 0.0;
+  double msRed_ = 0.0, msPost_ = 0.0;   /* reparto del tiempo: red por un lado, lo demas por otro */
+  double msIir_ = 0.0, msFilt_ = 0.0, msPlano_ = 0.0, msSubida_ = 0.0;
   float smooth_ = 0.60f;
   void *impl_ = nullptr;                 /* ocultar ONNX Runtime de este fichero de cabecera */
   std::vector<uint8_t> prev_;            /* mapa anterior, para suavizar */

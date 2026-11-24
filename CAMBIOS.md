@@ -2,6 +2,45 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Acabado: números oficiales en la cara y el temblor, y el cuadro mas barato (v0.35)
+- Lo pedido fue mirar el acabado (suavizado en el tiempo, temblor por contorno, cara de 140 mm,
+  lienzo de 384x160). Antes de tocar nada se comprob6 cada punto del informe de Windows contra
+  nuestro c6digo, y dos de las cuatro cosas que decia que faltaban **ya estaban**:
+  - el suavizado temporal del mapa existe (`smooth_` en `src/depth.cpp`, 0,35 de fabrica, con la
+    guarda de cambio de plano), y el plano de apoyo tambien va filtrado en el tiempo (`focus_`,
+    0,06 frente al 0,02 de Samsung, que responde antes a proposito);
+  - el temblor del desplazamiento ya estaba **puenteado por contorno** (`canto` en
+    `shaders/weave.frag:144-155`): solo se suma donde el mapa esta llano, que es donde se ven las
+    bandas, justo al reves de lo que decia el informe.
+- **Lo unico que se aline6 del temblor es la medida**: de 0,35 px a **0,25 px**, que es lo que sale
+  de `filter.dither_strength = 0,01` sobre los 25 px de recorrido oficial (`src/vkweave.cpp:712`).
+  `ODYSSEY3D_DITHER` sigue mandando sin recompilar.
+- **Cara de 140 mm, no 150** (`src/track.h`, `src/viewer.h`): el rastreador de Samsung usa
+  `FaceWidth_mm = 140` y nosotros 150, o sea un +7 % de sesgo en la distancia sacada del ancho de
+  cara con la webcam normal. Se puede volver atras sin recompilar con `--track-cara 150`.
+- **La medida que cambio el plan.** Con `ODYSSEY3D_MEDIR=1` el conversor ensena el reparto del
+  cuadro sin sentarse delante del panel. Salia: red 6,6 ms · suavizado 0,7 · **limpiar y dilatar
+  4,0** · plano de apoyo 0,5. O sea: los filtros del mapa costaban casi lo que la red, y bajar el
+  lienzo a 384x160 (lo que hace Samsung) no hacia falta y ademas choca con lo de los rotulos, que
+  necesita el mapa fino de 518. Se ataco el coste por otro lado.
+- **El filtro guiado y la dilatacion van en cuatro hebras** (`caja` y `dilatar` en `src/depth.cpp`,
+  OpenMP; `CMakeLists.txt` lo enlaza). Cada fila y cada columna es independiente, asi que el
+  resultado es el mismo; con las treinta y dos hebras de la maquina el reparto se comia la ganancia,
+  por eso el tope son cuatro y se puede cambiar con `OMP_NUM_THREADS`.
+- **Comprobado fuera del panel, mapa por medio**: `tools/prueba_red.cpp` acepta ahora un numero de
+  repeticiones y se compar6 el mapa escrito antes y despues del cambio. Con la red por CPU (que si
+  es repetible) sale **identico byte a byte**, e identico con una, cuatro y ocho hebras. Por el
+  camino salio un fallo propio: al separar los productos `guia x guia` y `guia x prof` la fila de
+  paso de una caja quedó en la misma bufeta que su entrada, y la suma deslizante escribia por
+  delante de donde leia (10.866 puntos movidos, hasta 4 de 255); corregido, y con un comentario para
+  que no vuelva.
+- **Cifras de cuadro ya sin panel** (NVIDIA, 518x518): con la red de Samsung 10,4 -> **7,8 ms**
+  (red 3,0 + filtros 1,9 + apoyo 0,5 + subida 0,1), por debajo de los 8,3 ms que deja un panel a
+  120 Hz; con la nuestra 13,4 -> **11,2 ms**. Ojo: la red de Samsung por GPU es la que abre la
+  sesion mas rapida pero no da el mapa igual de dos pasadas seguidas, asi que para comparar calidad
+  hay que mirar mapas sueltos, no restarlos.
+- No se dispar6 ninguna prueba de relieve: todo se midio con herramientas de linea de comandos.
+
 ## Fuera el deslizador de ángulo a mano, y al arrancar siempre la red de Samsung (v0.34)
 - Lo pedido: «quita el slider manual, manten el viejo comportamiento pero no toques lo de las camaras,
   eso está bien, inicia por defecto todo siempre en el modelo de samsung».

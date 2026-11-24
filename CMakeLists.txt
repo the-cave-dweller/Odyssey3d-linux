@@ -135,6 +135,8 @@ if(WAYLAND_CLIENT_FOUND)
   endif()
 endif()
 
+find_package(OpenMP)
+
 add_executable(odyssey3d
   src/main.cpp
   src/util.cpp
@@ -175,6 +177,10 @@ if(WAYLAND_CLIENT_FOUND)
 endif()
 
 target_include_directories(odyssey3d PRIVATE src ${GLFW_INCLUDE_DIRS} ${CRYPTO_INCLUDE_DIRS} ${PROTO_DIR} ${SP_DIR} ${VULKAN_INCLUDE_DIRS})
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(odyssey3d PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
 target_link_libraries(odyssey3d PRIVATE ${GLFW_LIBRARIES} ${CRYPTO_LIBRARIES} ${VULKAN_LIBRARIES} GL EGL pthread m)
 if(WAYLAND_CLIENT_FOUND)
   target_include_directories(odyssey3d PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIRS})

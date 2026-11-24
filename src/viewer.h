@@ -57,7 +57,7 @@ struct ViewerOpts {
      las dos vistas de la camara del monitor, 1 = forzar la via de una sola vista */
   int trackMono = -1;
   double trackCampo = 65.0;  /* campo horizontal de la webcam, en grados */
-  double trackCara = 150.0;  /* ancho de cara de oreja a oreja, en milimetros */
+  double trackCara = 140.0;  /* ancho de cara de oreja a oreja, en milimetros (Samsung usa 140) */
 
   /* rotulos y subtitulos: 1 los apoya en el plano de la pantalla (asi no se deslizan con la
      cabeza), 0 los deja con la profundidad que les da la red, -1 = apoyados (lo de fabrica) */

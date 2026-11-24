@@ -13,6 +13,9 @@
 #include <stdexcept>
 #include <dlfcn.h>
 #include <unordered_map>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -81,6 +84,9 @@ void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) 
    falta para el filtro guiado, y sale barato a 518 x 518. */
 void caja(const float *entra, float *temp, float *sale, int n, int r) {
   const float inv = 1.0f / (float)(2 * r + 1);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
   for (int y = 0; y < n; y++) {                      /* filas */
     const float *fila = entra + (size_t)y * n;
     float *o = temp + (size_t)y * n;
@@ -93,6 +99,9 @@ void caja(const float *entra, float *temp, float *sale, int n, int r) {
       suma += fila[nuevo >= n ? n - 1 : nuevo];
     }
   }
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
   for (int x = 0; x < n; x++) {                      /* columnas */
     float suma = 0.0f;
     for (int y = -r; y <= r; y++) suma += temp[(size_t)(y < 0 ? 0 : (y >= n ? n - 1 : y)) * n + x];
@@ -112,13 +121,18 @@ void filtroGuiado(const float *guia, const float *prof, float *fuera, int n, int
                   float *trabajo) {
   const size_t plane = (size_t)n * (size_t)n;
   float *mI = trabajo, *mP = trabajo + plane, *cII = trabajo + 2 * plane, *cIP = trabajo + 3 * plane,
-        *a = trabajo + 4 * plane, *b = trabajo + 5 * plane, *aux = trabajo + 6 * plane;
+        *a = trabajo + 4 * plane, *b = trabajo + 5 * plane, *iia = trabajo + 6 * plane,
+        *ipa = trabajo + 7 * plane, *aux = trabajo + 8 * plane;
+  /* los productos guia x guia y guia x prof viven en su propio hueco: asi no hay que copiar uno
+     encima del otro y las dos cajas de arriba pueden solaparse en las hebras */
   caja(guia, aux, mI, n, r);
   caja(prof, aux, mP, n, r);
-  for (size_t i = 0; i < plane; i++) aux[i] = guia[i] * guia[i];
-  caja(aux, trabajo + 7 * plane, cII, n, r);
-  for (size_t i = 0; i < plane; i++) aux[i] = guia[i] * prof[i];
-  caja(aux, trabajo + 7 * plane, cIP, n, r);
+  /* ojo: la fila de paso (aux) nunca puede ser la misma bufeta que la entrada de la caja, porque
+     la suma deslizante escribe por delante de donde todavia lee. */
+  for (size_t i = 0; i < plane; i++) iia[i] = guia[i] * guia[i];
+  caja(iia, aux, cII, n, r);
+  for (size_t i = 0; i < plane; i++) ipa[i] = guia[i] * prof[i];
+  caja(ipa, aux, cIP, n, r);
   for (size_t i = 0; i < plane; i++) {
     const float var = cII[i] - mI[i] * mI[i];
     const float aa = (cIP[i] - mI[i] * mP[i]) / (var + eps);
@@ -134,6 +148,9 @@ void filtroGuiado(const float *guia, const float *prof, float *fuera, int n, int
 /* Dilatar lo cercano unos puntos: tras suavizar, los objetos encogen y el canto queda corrido hacia
    dentro. Radio 3 puntos a 518 de ancho, que es lo que equivale la cifra de Samsung (0,006). */
 void dilatar(float *mapa, float *aux, int n, int r) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
   for (int y = 0; y < n; y++)
     for (int x = 0; x < n; x++) {
       float m = mapa[(size_t)y * n + x];
@@ -145,6 +162,9 @@ void dilatar(float *mapa, float *aux, int n, int r) {
       }
       aux[(size_t)y * n + x] = m;
     }
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
   for (int y = 0; y < n; y++)
     for (int x = 0; x < n; x++) {
       float m = aux[(size_t)y * n + x];
@@ -452,6 +472,16 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
 #ifdef HAVE_ORT
   if (!ready_ || !rgba || w < 2 || h < 2) return false;
   OrtImpl *im = (OrtImpl *)impl_;
+  /* Las pasadas del filtro van en cuatro hebras: a 518 x 518 baja de 4,0 ms a 1,7 ms y no hace
+     falta mas (con las treinta y dos hebras de la maquina el gasto de repartir se come la ganancia).
+     Se puede cambiar con OMP_NUM_THREADS sin recompilar. */
+#ifdef _OPENMP
+  static const bool hebrasPuestas = [] {
+    if (!std::getenv("OMP_NUM_THREADS")) omp_set_num_threads(4);
+    return true;
+  }();
+  (void)hebrasPuestas;
+#endif
   const auto t0 = std::chrono::steady_clock::now();
   const size_t plane = (size_t)sz_ * (size_t)sz_;
   sampleBilinear(rgba, w, h, im->in.data(), sz_);
@@ -473,12 +503,14 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       Ort::Value::CreateTensor<float>(mem, im->in.data(), im->in.size(), shape.data(), shape.size());
   const char *inN = im->inN.c_str(), *outN = im->outN.c_str();
   std::vector<Ort::Value> outs;
+  const auto tRed0 = std::chrono::steady_clock::now();
   try {
     outs = im->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);
   } catch (const std::exception &e) {
     if (err) *err = std::string("el modelo fallo: ") + resumenOrt(e.what());
     return false;
   }
+  const auto tRed1 = std::chrono::steady_clock::now();
   const float *d = outs[0].GetTensorData<float>();
   auto info = outs[0].GetTensorTypeAndShapeInfo();
   const size_t n = info.GetElementCount();
@@ -544,7 +576,9 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   }
   if ((size_t)ow * (size_t)oh != n) ow = oh = 0;   /* respondio a otra resolucion: remuestreamos */
 
-  std::vector<float> mapa(plane), limpio(plane), salida(plane), trabajo((size_t)8 * plane);
+  /* nueve huecos de trabajo: cinco medias del filtro guiado, dos productos (guia x guia y
+     guia x prof) y una fila de paso para cada caja. Si se anade otra pasada, subir aqui. */
+  std::vector<float> mapa(plane), limpio(plane), salida(plane), trabajo((size_t)9 * plane);
   if (ow == 0) {
     for (int y = 0; y < sz_; y++) {
       const int sy = (int)((float)y * (float)oh / (float)sz_);
@@ -572,6 +606,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     limpio = mapa;
   }
 
+  const auto tFiltro0 = std::chrono::steady_clock::now();
   /* limpiar el mapa siguiendo los bordes de la foto y dilatar lo cercano unos puntos: con esto los
      cantos de los objetos quedan en su sitio y el relieve deja de temblar cuadro a cuadro. Con
      ODYSSEY3D_LIMPIEZA=0 se apaga, para comparar en el panel la misma red con el mapa en crudo. */
@@ -582,6 +617,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     salida = limpio;
   }
 
+  const auto tPlano0 = std::chrono::steady_clock::now();
   /* plano de apoyo: el pico del histograma ponderado (mas peso en el centro y en los cantos, que es
      donde suele estar el sujeto). Con el apoyo ahi el sujeto se queda en el plano de la pantalla y
      el relieve se abre detras, que es como menos cansa la vista. De suelo se usa la mediana, para
@@ -618,13 +654,30 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       focus_ += (nuevo - focus_) * (corte_ ? 1.0f : 0.06f);   /* Samsung usa 0,02; 0,06 responde antes */
   }
 
+  const auto tPlano1 = std::chrono::steady_clock::now();
   out.resize(plane);
   for (size_t i = 0; i < plane; i++) {
     const float v = salida[i] < 0.0f ? 0.0f : (salida[i] > 1.0f ? 1.0f : salida[i]);
     out[i] = (uint8_t)(v * 255.0f + 0.5f);
   }
   prev_ = out;
-  ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+  const auto tfin = std::chrono::steady_clock::now();
+  ms_ = std::chrono::duration<double, std::milli>(tfin - t0).count();
+  msRed_ = std::chrono::duration<double, std::milli>(tRed1 - tRed0).count();
+  msPost_ = std::chrono::duration<double, std::milli>(tfin - tRed1).count();
+  msIir_ = std::chrono::duration<double, std::milli>(tFiltro0 - tRed1).count();
+  msFilt_ = std::chrono::duration<double, std::milli>(tPlano0 - tFiltro0).count();
+  msPlano_ = std::chrono::duration<double, std::milli>(tPlano1 - tPlano0).count();
+  msSubida_ = std::chrono::duration<double, std::milli>(tfin - tPlano1).count();
+  /* ODYSSEY3D_MEDIR=1 enseña el reparto del cuadro sin sentarse delante del panel: hace falta
+     para decidir si conviene bajar el lienzo de disparidad (ellos trabajan el mapa a 384x160) o si
+     lo que manda es la red y el resto da igual. */
+  static const bool medir = std::getenv("ODYSSEY3D_MEDIR") != nullptr;
+  static long nmed = 0;
+  if (medir && ++nmed % 30 == 1)
+    std::printf("[medir] mapa %d x %d por %s · red %.1f · suavizado %.1f · limpiar y dilatar %.1f · "
+                "plano de apoyo %.1f · subir %.1f ms · total %.1f ms\n",
+                sz_, sz_, dev_.c_str(), msRed_, msIir_, msFilt_, msPlano_, msSubida_, ms_);
   return true;
 #else
   (void)rgba, (void)w, (void)h, (void)out;

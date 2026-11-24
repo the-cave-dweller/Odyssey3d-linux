@@ -24,7 +24,9 @@ struct TrackSettings {
      calibrada. La distancia sale del ancho de la caja de la cara (de oreja a
      oreja) y el lado del campo horizontal que se le supone a la camara. */
   bool mono = false;
-  double faceWidthMillimetres = 150.0;
+  double faceWidthMillimetres = 140.0;  /* oreja a oreja; el rastreador de Samsung usa 140
+                                           (tracker-ft_user.ini: FaceWidth_mm=140). Se cambia sin
+                                           recompilar con --track-cara. */
   double hFovDegrees = 65.0;
 };
 
