@@ -114,10 +114,19 @@ struct WindowCapture::Impl {
     }
     /* Empezar de cero: el contador de enlace y el nodo anterior se quedaban guardados, asi que
        maybeLink creia que ya habia enlace y el flujo nuevo nunca se conectaba. Era la razon de
-       que la imagen se quedara congelada despues de un corte (reintentos que no reanimaban nada). */
+       que la imagen se quedara congelada despues de un corte (reintentos que no reanimaban nada).
+       Faltaba pwStarted, y con esa bandera puesta el dano era total: readyToConnect() dice "ya
+       estoy conectado" y connectToNode() no volvia a ejecutarse nunca, asi que el flujo nuevo de
+       PipeWire no se creaba ni despues de muchos reintentos. Medido el 23-nov: tras un
+       minimizado devuelto, el contador del visor se clavo en 3361 fotogramas mientras
+       `ctl flujo` medía 65,6 fps en la misma ventana; o sea el video si estaba, lo que no
+       existia era nuestro flujo. */
     linkMade = false;
+    pwStarted = false;
     nodeId = 0;
     ourNodeId = 0;
+    nodeSerial.clear();
+    nodeName.clear();
     ports.clear();
     created = false;
     pwState.clear();

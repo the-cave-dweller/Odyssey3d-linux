@@ -293,6 +293,13 @@ trozos sueltos. Son dos cosas distintas, y cada una tiene su arreglo.
   vídeo: si pierde la pantalla completa o sale del rectángulo de esa salida, la devuelven
   (`[ventana] el video (…) lo devolvemos a pantalla completa en DP-4`).
 
+* **Y sin quedarse sin vídeo (desde v0.25).** Al rearmar la captura se quedaba encendida la bandera de «flujo de PipeWire ya
+  conectado», así que el flujo nuevo nunca se creaba: la pastilla volvía pero con el último cuadro congelado, y los
+  reintentos no servían. `stop()` ahora limpia esa bandera y el nombre/serial del nodo anterior. Medido: con el visor
+  clavado, `ctl flujo --uuid <video>` seguía midiendo **65,6 fotogramas por segundo** en esa ventana —el compositor sí
+  repintaba—, y tras el arreglo el conteo del visor siguió subiendo (797 → 968 → 1217 → 1366) a través de tres
+  minimizados seguidos, sin un solo aviso de corte.
+
 Para ver lo que ve el compositor, sin adivinar: `ctl salidas` (nombres y rectángulos lógicos) y
 `ctl apilamiento` (el orden de arriba y abajo).
 
@@ -436,6 +443,11 @@ de recibirlo —porque la ventana quedó tapada por nuestra capa a pantalla comp
 deja de producir fotogramas, y sin fotogramas nuevos no hay nada que entrelazar. **No es un problema del
 visor**: con mpv, VLC o reproductores parecidos el flujo no se corta nunca, y con vídeos locales en el
 navegador (1080p y 4K60 probados) tampoco.
+
+Antes de tocar nada del navegador, comprobar quién está roto: `odyssey3d ctl flujo --uuid <id> --segundos 5`
+mide el flujo con una conexión nueva. En KWin 6.8 esa medición dio **65,6 fotogramas por segundo** en una
+ventana tapada por completo por el visor, así que si el aviso aparece con `flujo: sin estado` o
+`flujo: paused` el cortado es el nuestro, no el del navegador (así estaba el caso arreglado en v0.24).
 
 Se comprueba en dos segundos, sin abrir la capa:
 

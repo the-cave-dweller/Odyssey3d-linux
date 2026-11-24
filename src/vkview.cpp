@@ -1416,14 +1416,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (cortado && avisosCorte < 4) {
             ++avisosCorte;
             ++avisosFlujo;
+            const std::string flujo = cap.stateText();
             std::printf("[captura] %d s sin fotogramas nuevos del compositor (flujo: %s)\n",
-                        (int)(now - ultimoNuevo), cap.stateText().c_str());
+                        (int)(now - ultimoNuevo), flujo.c_str());
             bool viva = true;
             const std::string est = estadoVentana(opts.captureUuid, &viva);
             if (!est.empty()) std::printf("[captura] ventana capturada: %s\n", est.c_str());
-            if (pareceNavegador(est) && avisosFlujo == 1) {
+            /* el consejo del navegador solo aplica si nuestro flujo sigue vivo: si el estado no es
+               "streaming" el roto es nuestro (el flujo nuevo nunca se conecto), y mandarnos a
+               about:config era ruido. Medido el 23-nov: con el contador clavado,
+               `ctl flujo --uuid <video> --segundos 8` seguia dando 65,6 fps. */
+            if (pareceNavegador(est) && avisosFlujo == 1 && flujo.rfind("streaming", 0) == 0) {
               std::printf("[captura] el navegador dejo de pintar porque el compositor ya no le manda el sincronismo"
                           " (la tapamos por completo).\n"
+                          "            primero descartar lo nuestro: odyssey3d ctl flujo --uuid <id> --segundos 5\n"
+                          "            (si ahi si llegan fotogramas, el flujo del visor es el que no arranca)\n"
                           "            Firefox o Zen: about:config -> gfx.vsync.compositor.unobserve-count = 0"
                           " y reiniciar el navegador\n"
                           "            Chrome o Chromium: arrancarlos con --disable-gpu-vsync\n"

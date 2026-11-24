@@ -2,6 +2,27 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El flujo de captura sobrevive al rearme (v0.25)
+- Lo pedido: «en un momento noté que volvia el hub pero ya sin el video». La pastilla volvía por encima del vídeo,
+  pero la trama seguía mostrando el último cuadro de antes del minimizado.
+- **El conteo clavado no era KWin dejando de repintar.** Con el visor clavado —`3361 fotogramas` repetido y
+  `[captura] el flujo se corto, pidiendo el flujo otra vez (intento 1)` en bucle— medimos la MISMA ventana del vídeo
+  con una conexión nueva: `ctl flujo --uuid <video> --segundos 8` → **528 fotogramas en 8,0 s = 65,6 fps**. El
+  compositor sí repintaba y mandaba fotogramos de una ventana a pantalla completa tapada por otra; lo que no existía
+  era nuestro flujo.
+- **La bandera que no se limpiaba.** `stop()` destruía el flujo de PipeWire pero dejaba `pwStarted` en true, así que
+  `readyToConnect()` respondía «ya estoy conectado» y `connectToNode()` no volvía a crear el nodo: los doce reintentos
+  del vigía gastaban `stop()` + `start()` sin crear nunca un flujo nuevo, y el contador se quedaba helado. `closeAll()`
+  ahora limpia también `pwStarted`, el nombre y el serial del nodo anterior —ese nodo ya estaba muerto, y usarlo de
+  objetivo garantizaba el corte.
+- **El aviso ya no manda a tocar el navegador.** El consejo de `gfx.vsync.compositor.unobserve-count = 0` sólo se
+  imprime si nuestro flujo sigue en `streaming`; con `sin estado` o `paused` el roto es nuestro. La propia línea ahora
+  dice cómo comprobarlo: `odyssey3d ctl flujo --uuid <id> --segundos 5`.
+- **Medido con la copia instalada (23-nov, sesión real sobre YouTube en DP-4, tres minimizados seguidos)**: el conteo
+  del visor siguió subiendo a través de los ciclos — 3046 → 3270 → 3526 → 3894 → 4188 → 4458 → 4712 fotogramas —, con
+  `[ventana] de vuelta: lienzo 3840x2160 en DP-4, intercambio y captura rehechos` y **cero** avisos de corte, cero
+  importaciones fallidas y el panel sin parpadear.
+
 ## El visor vuelve delante del vídeo, en su pantalla y sin gráficos rotos (v0.24)
 - Lo pedido: «ok, el overlay vuelve pero se queda detras del video en otra ventana llena de glitch graficos».
 - **Dos fallos, el uno encima del otro.**
@@ -26,8 +47,9 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   —hub muerto— y seguimos ocultos 2 s: con el hub vivo la ventana vuelve sola y apagar el panel hacía parpadear
   el monitor 3D→2D→3D en cada minimizado (así salió en la prueba del 23-nov). Al volver:
   `glfwRestoreWindow` + `glfwSetWindowMonitor` en nuestra salida, `wv.resize()` y rearme de la captura
-  (`cap.stop()` + `cap.start()`), que es lo que estaba detrás de los cortes de flujo. Si el compositor nos deja con
-  un lienzo que no mide lo del modo, se vuelve a pedir la pantalla completa (aviso único, cada 3 s).
+  (`cap.stop()` + `cap.start()`), que en esta 0.24 todavía no servía: el flujo nuevo no llegaba a crearse, y eso se
+  arregla abajo, en la 0.25. Si el compositor nos deja con un lienzo que no mide lo del modo, se vuelve a pedir la
+  pantalla completa (aviso único, cada 3 s).
 - **Fuente que no se importa, no se trama**: `newSource` sólo se marca si `sourceFromDma` tuvo éxito, y tras 12
   importaciones falladas seguidas se avisa de que falta memoria de video (en la máquina había 712 MB libres).
 - **Mandos para no adivinar**: `ctl salidas` (nombre, posición y tamaño lógicos: `DP-4 0,0 2560x1440`),
@@ -40,12 +62,9 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   3840x2160 en DP-4, intercambio y captura rehechos` y de nuevo arriba del vídeo. Quitándole la pantalla completa
   al vídeo a propósito, el guardia lo devolvió: `[ventana] el video (…) esta en 640,360 2560x1440 con activa,
   maximizada: lo devolvemos a pantalla completa en DP-4`.
-- **Lo que queda abierto y no es de este arreglo**: tras varios minimizados seguidos, el conteo de fotogramas de la
-  captura se quedó clavado (`864 fotogramas` repetido) con `[captura] el flujo se corto, pidiendo el flujo otra vez
-  (intento 1)` en bucle y `[captura] el navegador dejo de pintar porque el compositor ya no le manda el
-  sincronismo (la tapamos por completo)`. KWin deja de repintar una ventana a pantalla completa tapada por otra, así
-  que el vídeo se congela y el reintento no lo arregla: es el asunto que motivaba la ruta `--sin-borde`, y hay que
-  pelearlo aparte.
+- **El panel no debe parpadear al devolver la ventana**: el visor sólo devuelve el panel a 2D si el servicio **dejó de
+  escribir** la marca de ventana (marcador viejo y la ventana minimizada). Con el umbral corto (1,5 s) el panel hacía
+  3D → 2D → 3D en cada minimizado, porque el hub tarda unos 2 s en devolver la ventana.
 
 ## La pastilla vuelve siempre: tecla PB y ventana minimizada devuelta (v0.23)
 - Lo pedido: «el overlay al esfumarse ya no vuelve con los keys», «la tele se quedó en el modo de malla 3D»
