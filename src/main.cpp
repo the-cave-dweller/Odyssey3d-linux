@@ -2223,6 +2223,12 @@ static int cmdServe(int argc, char **argv) {
   int reafirmadas = 0;            /* veces que le devolvimos la pantalla completa al video en esta sesion */
   double reacomodoDesde = 0.0;    /* cuando fue el ultimo reintento: no machacar al compositor */
   bool avisoChicoHecho = false;   /* el aviso de "el video no cubre el lienzo" va una sola vez */
+  bool videoActivaAntes = false;  /* el video tenia el foco en el tick anterior */
+  double pilaDesde = 0.0;         /* ultimo momento en que pedimos el orden de apilamiento */
+  int apilados = 0;               /* veces que volvimos a poner el visor por encima del video */
+  bool avisoPilaHecho = false;    /* el aviso de "no quiso ponerlo encima" va una sola vez */
+  double debajoDesde = 0.0;       /* ultimo momento en que le pusimos KeepBelow al video */
+  bool debajoAvisado = false;     /* el aviso de "el video pasa por debajo" va una sola vez */
   double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
   int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
 
@@ -2305,6 +2311,18 @@ static int cmdServe(int argc, char **argv) {
       if (r == hijo) {
         std::printf("[serve] sesion 3D terminada (%s)\n", hijoUuid.c_str());
         std::fflush(stdout);
+        /* El video estuvo debajo de todo para que un click no tapara la trama: al terminar la sesion
+           vuelve a su lugar, si no el usuario se queda con el video escondido detras de las ventanas. */
+        {
+          std::string e6;
+          WindowInfo videoAntes{};
+          if (wm.find(hijoUuid, videoAntes) && videoAntes.mapped &&
+              (videoAntes.states & WindowInfo::KeepBelow) &&
+              !wm.setState(hijoUuid, WindowInfo::KeepBelow, false, &e6))
+            std::printf("[ventana] no se le pudo quitar el debajo al video %s: %s\n",
+                        hijoUuid.c_str(), e6.c_str());
+          std::fflush(stdout);
+        }
         hijo = -1;
         hijoUuid.clear();
         fueraVideoDesde = 0.0;
@@ -2312,6 +2330,12 @@ static int cmdServe(int argc, char **argv) {
         reafirmadas = 0;          /* la proxima sesion empieza con sus ocho intentos frescos */
         reacomodoDesde = 0.0;
         avisoChicoHecho = false;
+        videoActivaAntes = false;
+        pilaDesde = 0.0;
+        apilados = 0;
+        avisoPilaHecho = false;
+        debajoDesde = 0.0;
+        debajoAvisado = false;
         /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
            que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
            al instante, entramos en un bucle de lanzar/cerrar que deja el monitor parpadeando. */
@@ -2397,6 +2421,72 @@ static int cmdServe(int argc, char **argv) {
               std::printf("[ventana] el compositor no quiso poner el visor por encima: %s\n", e3.c_str());
               std::fflush(stdout);
             }
+          }
+        }
+      }
+      /* El apilamiento es la otra mitad del "por encima", y era la que se rompia con un click: KWin
+         sube al frente la ventana a pantalla completa que recibe el foco. Si el usuario toca el video
+         (la barra de tiempos de YouTube) el navegador recupera el foco y tapa la trama, la pantalla se
+         ve otra vez en 2D y "se empieza a ver mal". Medido con `ctl apilamiento` (de abajo hacia
+         arriba): con el video activo el visor baja de 11 a 10 conservando su KeepAbove, y ninguna
+         combinacion de KeepAbove / pantalla completa del visor lo vuelve a subir; este protocolo
+         (plasma-window-management, rev 21) no tiene pedido de "elevar" ni de "activar", asi que no hay
+         forma de traer el visor al frente. Lo que si funciona, medido: poner el VIDEO con KeepBelow.
+         Ahí el video queda en la posicion 1 del apilamiento, el visor en la 11, y activar el video otra
+         vez ya no lo sube por encima del visor. Al terminar la sesion se lo sacamos. */
+      if (hayVisor && !cerrandoSesion) {
+        WindowInfo foco{};
+        const bool videoVivo = wm.find(hijoUuid, foco) && foco.mapped;
+        if (videoVivo && !(foco.states & WindowInfo::KeepBelow) && now - debajoDesde >= 1.0) {
+          debajoDesde = now;
+          std::string e5;
+          if (!wm.setState(hijoUuid, WindowInfo::KeepBelow, true, &e5) && !avisoPilaHecho) {
+            avisoPilaHecho = true;
+            std::printf("[ventana] el compositor no quiso dejar el video por debajo del visor: %s\n",
+                        e5.c_str());
+            std::fflush(stdout);
+          } else if (!debajoAvisado) {
+            debajoAvisado = true;
+            std::printf("[ventana] el video pasa por debajo del visor: un click en el video (la barra de"
+                        " tiempos) ya no tapa la trama\n");
+            std::fflush(stdout);
+          }
+        }
+        /* La red: si a pesar de eso el compositor puso el video por encima del visor, lo volvemos a
+           meter debajo (quitarla y ponerla: reenviar el mismo estado no hace nada) y revisamos. */
+        const bool focoMovido = videoVivo && foco.active() && !videoActivaAntes;
+        videoActivaAntes = videoVivo && foco.active();
+        if ((focoMovido || now - pilaDesde >= 5.0) && now - pilaDesde >= 0.5) {
+          pilaDesde = now;
+          std::vector<std::string> pila;
+          std::string e5;
+          if (wm.stackingOrder(&pila, &e5)) {
+            int lugarVisor = -1, lugarVideo = -1;
+            for (size_t i = 0; i < pila.size(); ++i) {
+              if (pila[i] == visor.uuid) lugarVisor = (int)i + 1;
+              else if (pila[i] == hijoUuid) lugarVideo = (int)i + 1;
+            }
+            if (lugarVisor > 0 && lugarVideo > 0 && lugarVisor < lugarVideo) {
+              wm.setState(hijoUuid, WindowInfo::KeepBelow, false, &e5);
+              ++apilados;
+              if (!wm.setState(hijoUuid, WindowInfo::KeepBelow, true, &e5)) {
+                if (!avisoPilaHecho) {
+                  avisoPilaHecho = true;
+                  std::printf("[ventana] el video tapa la trama y el compositor no quiso meterlo debajo:"
+                              " %s\n", e5.c_str());
+                  std::fflush(stdout);
+                }
+              } else if (apilados <= 3 || apilados % 20 == 0) {
+                std::printf("[ventana] el video se habia puesto encima del visor (visor en %d de %zu,"
+                            " video en %d): lo volvemos a meter debajo\n", lugarVisor, pila.size(),
+                            lugarVideo);
+                std::fflush(stdout);
+              }
+            }
+          } else if (!avisoPilaHecho) {
+            avisoPilaHecho = true;
+            std::printf("[ventana] %s\n", e5.c_str());
+            std::fflush(stdout);
           }
         }
       }
@@ -2672,6 +2762,18 @@ static int cmdServe(int argc, char **argv) {
     ::kill(hijo, SIGTERM);
     int st = 0;
     ::waitpid(hijo, &st, 0);
+  }
+  /* y el video vuelve a su lugar en el apilamiento: lo tuvimos con KeepBelow para que un click no
+     tapara la trama, y si se queda asi el usuario ve su escritorio con el video escondido. */
+  if (!hijoUuid.empty()) {
+    WindowInfo videoAntes{};
+    std::string e6;
+    if (wm.find(hijoUuid, videoAntes) && videoAntes.mapped &&
+        (videoAntes.states & WindowInfo::KeepBelow) &&
+        !wm.setState(hijoUuid, WindowInfo::KeepBelow, false, &e6))
+      std::printf("[ventana] no se le pudo quitar el debajo al video %s: %s\n",
+                  hijoUuid.c_str(), e6.c_str());
+    std::fflush(stdout);
   }
   /* Al parar el servicio el visor se va con nosotros y restaura el panel el solo; si no llego a
      hacerlo (lo mato systemd, o revento antes), el monitor quedaba en modo 3D hasta el reinicio. */

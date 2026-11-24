@@ -332,8 +332,12 @@ deja de estar a pantalla completa, el servicio avisa al visor para que se vaya p
 la ventana activa; tarda unos tres segundos. Al cambiar el modo del monitor KWin deja a la ventana del
 vídeo con el tamaño que tenía en 2D —queda chica dentro del lienzo y la trama se ve mal—, así que el
 servicio se lo vuelve a dar en cuanto arranca la sesión (en el registro: `[ventana] el cambio de modo
-dejó al video sin cubrir el lienzo … lo reacomodamos`). Si el visor se muere de golpe (o se detiene el
-servicio), el servicio recupera el panel con la copia que quedó guardada.
+dejó al video sin cubrir el lienzo … lo reacomodamos`). Mientras dura la sesión el servicio además deja
+la ventana del vídeo **por debajo** del visor: KWin sube al frente la ventana a pantalla completa que
+recibe el foco, así que un clic en la barra de tiempos de YouTube volvía a poner el vídeo encima de la
+trama y la pantalla se veía otra vez en 2D (`ctl apilamiento` lo comprueba: el visor arriba, el vídeo
+abajo). Al terminar la sesión le quita esa marca y el vídeo vuelve a su sitio. Si el visor se muere de
+golpe (o se detiene el servicio), el servicio recupera el panel con la copia que quedó guardada.
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
 `espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué

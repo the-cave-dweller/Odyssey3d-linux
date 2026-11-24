@@ -2,6 +2,33 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Un click en el vídeo tapaba la trama: el hub lo deja por debajo del visor (v0.28)
+- Lo pedido: «al dar click en otro punto del video (en el timeline) el overlay pierde foco y se va al
+  fondo, se empieza a ver mal cuando eso pasa».
+- **La causa, medida con `ctl apilamiento`** (el orden que manda el compositor, de abajo hacia arriba).
+  En una sesión sana: vídeo en 9 y visor en 11. Al activar el vídeo —que es lo que hace un click en su
+  barra de tiempos— el navegador sube a 11 y el visor baja a 10: **KWin pone al frente la ventana a
+  pantalla completa que tiene el foco**, y ahí el `KeepAbove` del visor no manda nada. Probado y anotado:
+  reenviar `KeepAbove`, quitarlo y volverlo a poner, o quitar y volver a poner la pantalla completa del
+  visor **no** lo devuelven arriba. Y no hay forma de traerlo: `plasma-window-management` (rev 21) no trae
+  pedido de `raise` ni de `request_activate` (está en el XML del sistema), y por D-Bus `/KWin` tampoco.
+- **Lo que sí funciona, medido: poner el vídeo con `KeepBelow`.** Con eso el vídeo queda en la posición 1
+  del apilamiento y el visor en la 11, y activar el vídeo dos o tres veces seguidas ya no lo sube por
+  encima. El hub lo pone al arrancar la sesión (`[ventana] el video pasa por debajo del visor: un click en
+  el video (la barra de tiempos) ya no tapa la trama`), lo vuelve a poner si el compositor se lo quita al
+  cambiar el modo, y tiene una red: cada 5 s (o cuando el vídeo recupera el foco) pide el orden de
+  apilamiento y, si el vídeo quedó encima, se lo vuelve a meter debajo con el truco de quitarla y ponerla.
+  Al cerrar la sesión (o al detener el servicio) se le quita la marca para que el usuario no se quede con
+  el vídeo escondido detrás de las ventanas.
+- **Comprobado con la copia instalada:** sesión con el vídeo en `1` y el visor en `11`, tres activaciones
+  simuladas del vídeo (`qdbus org.kde.KWin /WindowsRunner Run`) y el apilamiento sin cambiar; el flujo de
+  captura siguió llegando `3840x2160` (3408 fotogramas) aunque el vídeo estuviera abajo, porque la trama
+  captura la ventana, no lo que se ve en pantalla. Al cerrar, el vídeo volvió a `activa, maximizada` sin
+  el `debajo`.
+- **Ruido quitado:** mientras la sesión se está cerrando ya no se pide el orden de apilamiento, porque al
+  restaurar el monitor el compositor contesta tarde y salía `[ventana] el compositor no termino de mandar
+  el orden de apilamiento`.
+
 ## El vídeo queda chico en el lienzo al cambiar el modo: se lo devuelve el hub (v0.27)
 - Lo pedido: «servía mejor en la build anterior, en esa el problema era el posicionamiento; en esta también
   me está sacando de pantalla completa el video y la pantalla se ve mal». O sea: 0.26 cerraba sesiones que
