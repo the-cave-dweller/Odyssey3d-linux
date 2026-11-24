@@ -2,6 +2,28 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La tarjeta del aviso siempre va al panel del Odyssey (v0.17)
+- Pasaba esto: con dos monitores conectados (el Odyssey y un Sun Electronics X7149A de 1600x1200) la tarjeta
+  aparecio en la pantalla equivocada. Tres cosas lo provocaban, y las tres estan corregidas:
+  - **El monitor se elegia una sola vez**, al arrancar el servicio. Ahora se vuelve a elegir cada vez
+    que se pone la tarjeta, asi que un monitor conectado despues, una suspension o un cambio de modo
+    de la lente ya no dejan la tarjeta en un sitio viejo.
+  - **El compositor puede retirar y volver a anunciar una pantalla** (pasa al cambiar el modo 3D de la
+    lente). No haciamos caso al aviso de "global removed", asi que la capa se creaba con un monitor ya
+    muerto y el compositor la colocaba donde queria. Ahora esa pantalla se marca como muerta, se suelta
+    su objeto y la capa se rehace sobre la que sigue en pie.
+  - **Se guardaba el ultimo modo anunciado, no el mas grande**, asi que "la pantalla de mas pixeles" se
+    podia calcular con un modo pequeno. Ahora se guarda el modo mas grande de cada pantalla.
+- Y por las dudas, la eleccion ya no es solo "la de mas pixeles": se prefieren los monitores cuyo nombre
+  o modelo contiene odyssey / syncmaster / g90. Se puede fijar a mano con `pantalla = DP-4` en
+  ~/.config/odyssey3d/serve.conf (ya puesto en tu equipo) o con la variable ODYSSEY3D_PANTALLA.
+- `ctl overlay` ahora lista every screen the compositor announces with its exact name, so finding the
+  right `pantalla=` is easy, and the log of `serve` says on which screen the card was actually placed.
+- Arreglados de paso tres mensajes de error que mandaban una cadena de C++ donde iba un %s (podian
+  imprimir basura o cortar el programa al equivocar una opcion).
+- Probado: con el navegador a pantalla completa, registro "tarjeta puesta por zen · pantalla DP-4
+  (Samsung Electric Company Odyssey G90XF) 3840x2160", aguantada sin moverse de sitio.
+
 ## La tarjeta para elegir la conversion ya no se retira sola (v0.16)
 - Estaba pasando que la tarjeta aparecia y a los 4 o 6 segundos se iba sola, y volvia: una oscilacion
   que no dejaba tiempo de pulsar nada. La causa: al comprobar si la tarjeta seguia teniendo sentido se

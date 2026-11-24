@@ -51,6 +51,18 @@ public:
   /* Vuelca la tarjeta a un archivo PNG (para comprobar el dibujo sin el compositor). */
   bool dumpPng(const std::string &ruta, std::string *err = nullptr);
 
+  /* Preferencia de pantalla para la tarjeta (nombre o modelo, sin distinguir
+     mayúsculas; por ejemplo "DP-4"). Sin esto se elige solo, y por defecto se buscan
+     las palabras odyssey / syncmaster / g90 en el monitor que anuncia el compositor.
+     Vale también la variable de entorno ODYSSEY3D_PANTALLA. */
+  void setPantalla(const std::string &pista);
+  /* Cierto si la pantalla elegida se reconoció como el panel del Odyssey (o la pediste
+     tú a propósito). Si es false, avisa: puede que la tarjeta caiga en otro monitor. */
+  bool pantallaReconocida() const;
+
+  /* Todas las pantallas que anunció el compositor, para elegir `pantalla=`. */
+  std::vector<std::string> pantallas() const;
+
   /* Monitor donde se colocó la tarjeta y su escala, para los mensajes. */
   std::string outputName() const;
   double scale() const;

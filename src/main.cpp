@@ -1205,14 +1205,14 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
       o.fmtGiven = true;   /* el formato ya esta elegido: no hace falta volver a preguntar */
     }
     else if (a == "--modelo" || a == "--model") {
-      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a); return 2; }
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a.c_str()); return 2; }
       o.modelPath = argv[++i];
       o.conver = true;
     } else if (a == "--red" || a == "--red-gpu") {
-      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a); return 2; }
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a.c_str()); return 2; }
       o.convGpu = std::max(0, std::atoi(argv[++i]));
     } else if (a == "--cada") {
-      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a); return 2; }
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a.c_str()); return 2; }
       o.convEach = std::max(1, std::atoi(argv[++i]));
     }
     else if (a == "--ui-escala" || a == "--ui-scale") {
@@ -1532,6 +1532,7 @@ static void onServeSignal(int) { g_stopServe = 1; }
 struct ServeCfg {
   std::vector<std::string> ignore;
   int esperaSeg = 40;
+  std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
@@ -1564,7 +1565,7 @@ static void splitList(const std::string &text, std::vector<std::string> &out) {
   if (!item.empty()) out.push_back(strLower(strTrim(item)));
 }
 
-/* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=). */
+/* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
   if (!home) return;
@@ -1583,6 +1584,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "red") cfg.red = std::max(0, std::atoi(v.c_str()));
     else if (k == "cada") cfg.cada = std::max(1, std::atoi(v.c_str()));
     else if (k == "modo") cfg.modo = strLower(v);
+    else if (k == "pantalla") cfg.pantalla = v;
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
       std::vector<std::string> pares;
@@ -1832,13 +1834,17 @@ static int cmdOverlay(int argc, char **argv) {
   std::signal(SIGTERM, onServeSignal);
   std::signal(SIGINT, onServeSignal);
 
+  const std::string pista = flag(argc, argv, "--pantalla");
   Overlay ov;
+  if (!pista.empty()) ov.setPantalla(pista);
   std::string err;
   if (!ov.open(&err)) {
     std::fprintf(stderr, "[capa] %s\n", err.c_str());
     return 1;
   }
-  std::printf("[capa] %s · escala %.2f\n", ov.outputName().c_str(), ov.scale());
+  std::printf("[capa] %s · escala %.2f%s\n", ov.outputName().c_str(), ov.scale(),
+              ov.pantallaReconocida() ? "" : "  (no reconocido como el Odyssey)");
+  for (const std::string &p : ov.pantallas()) std::printf("[capa] pantalla anunciada: %s\n", p.c_str());
   std::fflush(stdout);
   ov.showAsk(titulo, cuerpo);
   if (!ov.askVisible()) {
@@ -1890,6 +1896,7 @@ static int cmdServe(int argc, char **argv) {
   if (std::string v = flag(argc, argv, "--red"); !v.empty()) cfg.red = std::max(0, std::atoi(v.c_str()));
   if (std::string v = flag(argc, argv, "--cada"); !v.empty()) cfg.cada = std::max(1, std::atoi(v.c_str()));
   if (std::string v = flag(argc, argv, "--modo"); !v.empty()) cfg.modo = strLower(v);
+  if (std::string v = flag(argc, argv, "--pantalla"); !v.empty()) cfg.pantalla = v;
   if (std::string v = flag(argc, argv, "--ignore"); !v.empty()) splitList(v, cfg.ignore);
   if (cfg.modo == "preguntar") cfg.modo = "ask";
 
@@ -1907,9 +1914,14 @@ static int cmdServe(int argc, char **argv) {
   /* La tarjeta propia va por encima del video a pantalla completa; el portal de
      avisos de KDE queda debajo, así que sólo lo usamos de respaldo. */
   Overlay ov;
+  if (!cfg.pantalla.empty()) ov.setPantalla(cfg.pantalla);
   bool hayTarjeta = ov.open(&err);
-  if (hayTarjeta)
+  if (hayTarjeta) {
     std::printf("[serve] tarjeta superpuesta en %s (escala %.2f)\n", ov.outputName().c_str(), ov.scale());
+    if (!ov.pantallaReconocida())
+      std::printf("[serve] OJO: esa no parece la pantalla del Odyssey. Fija cual es con "
+                  "pantalla=DP-4 en ~/.config/odyssey3d/serve.conf\n");
+  }
   else
     std::fprintf(stderr, "[serve] sin capa superpuesta: %s\n", err.c_str());
   Notifier nt;
@@ -2109,7 +2121,10 @@ static int cmdServe(int argc, char **argv) {
           tarjetaUuid = w.uuid;
           tarjetaApp = app;
           tarjetaT = now;
-          std::printf("[serve] tarjeta puesta por %s | %s (%s)\n", w.appId.c_str(), w.title.c_str(), w.uuid.c_str());
+          std::printf("[serve] tarjeta puesta por %s | %s (%s) · pantalla %s\n", w.appId.c_str(),
+                      w.title.c_str(), w.uuid.c_str(), ov.outputName().c_str());
+          if (!ov.askVisible())
+            std::printf("[serve] el compositor no llego a poner la tarjeta: %s\n", ov.lastError().c_str());
           std::fflush(stdout);
         } else if (cfg.modo == "ask") {
           std::string id = "odyssey3d-" + w.uuid.substr(0, 8);

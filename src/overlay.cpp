@@ -65,6 +65,7 @@ struct Overlay::Impl {
   /* monitores que anuncia el compositor */
   struct Monitor {
     wl_output *obj = nullptr;
+    uint32_t global = 0;                      /* nombre del global: así se sabe si desaparece */
     int32_t x = 0, y = 0, ancho = 0, alto = 0;   /* en píxeles lógicos */
     int anchoFis = 0, altoFis = 0;               /* en píxeles reales */
     int anchoLog = 0, altoLog = 0;               /* tamaño lógico anunciado por xdg_output */
@@ -76,6 +77,8 @@ struct Overlay::Impl {
   };
   std::vector<Monitor *> monitores;
   Monitor *elegido = nullptr;
+  wl_output *capaEn = nullptr;   /* monitor para el que se creó la capa actual */
+  bool reconocido = false;       /* el monitor elegido es claramente el panel del Odyssey */
   int anchoE = 0, altoE = 0;      /* tamaño real del monitor elegido, en píxeles */
   double escala = 1.0;            /* 1.0, 1.5, 2.0 ... */
 
@@ -352,6 +355,7 @@ struct Overlay::Impl {
     if (layer) {
       zwlr_layer_surface_v1_destroy(layer);
       layer = nullptr;
+      capaEn = nullptr;
     }
   }
 
@@ -364,22 +368,51 @@ struct Overlay::Impl {
     tarjetaPuesta = false;
   }
 
+  static std::string minusc(std::string v) {
+    for (char &c : v) c = (char)std::tolower(c);
+    return v;
+  }
+  /* El panel del Odyssey es el único que puede hacer 3D, así que la tarjeta tiene que
+     caer SIEMPRE ahí. Bastaba "el monitor de más píxeles" mientras solo había uno, pero
+     con dos pantallas conectadas (o cuando el compositor vuelve a anunciar la salida
+     después de cambiar el modo de la lente) eso ponía la tarjeta en el monitor
+     equivocado. Estas palabras reconocen el panel; si no cuadran, se arregla con
+     pantalla=DP-4 en ~/.config/odyssey3d/serve.conf o con ODYSSEY3D_PANTALLA=DP-4. */
+  static bool esPanelOdyssey(const Monitor &m) {
+    const std::string n = minusc(m.nombre), d = minusc(m.modelo);
+    for (const char *aguja : {"odyssey", "syncmaster", "g90xf", "g90xc", "g90"})
+      if (d.find(aguja) != std::string::npos || n.find(aguja) != std::string::npos) return true;
+    return false;
+  }
+  static long areaDe(const Monitor &m) {
+    const long a = m.anchoFis > 0 ? m.anchoFis : m.ancho;
+    const long b = m.altoFis > 0 ? m.altoFis : m.alto;
+    return a * b;
+  }
+
   void eligeMonitor() {
-    elegido = nullptr;
-    for (Monitor *m : monitores) {
-      if (!m->vivo) continue;
-      if (!pistaMonitor.empty()) {
-        std::string bus = m->nombre;
-        for (char &c : bus) c = (char)std::tolower(c);
-        std::string aguja = pistaMonitor;
-        for (char &c : aguja) c = (char)std::tolower(c);
-        if (bus.find(aguja) == std::string::npos && m->modelo.find(aguja) == std::string::npos) continue;
-      }
-      if (!elegido || (double)m->anchoFis * (double)m->altoFis >
-                          (double)elegido->anchoFis * (double)elegido->altoFis)
-        elegido = m;
+    if (pistaMonitor.empty()) {
+      if (const char *e = std::getenv("ODYSSEY3D_PANTALLA"); e && e[0]) pistaMonitor = e;
     }
-    if (!elegido && !monitores.empty()) elegido = monitores.front();
+    Monitor *porPista = nullptr, *porPanel = nullptr, *elGrande = nullptr;
+    for (Monitor *m : monitores) {
+      if (!m->vivo || !m->obj) continue;
+      if (!pistaMonitor.empty()) {
+        const std::string bus = minusc(m->nombre), aguja = minusc(pistaMonitor);
+        if (bus.find(aguja) == std::string::npos && minusc(m->modelo).find(aguja) == std::string::npos)
+          continue;
+        if (!porPista || areaDe(*m) > areaDe(*porPista)) porPista = m;
+        continue;
+      }
+      if (!elGrande || areaDe(*m) > areaDe(*elGrande)) elGrande = m;
+      if (esPanelOdyssey(*m) && (!porPanel || areaDe(*m) > areaDe(*porPanel))) porPanel = m;
+    }
+    elegido = porPista ? porPista : (porPanel ? porPanel : elGrande);
+    reconocido = porPista || porPanel;
+    if (!elegido && !monitores.empty()) {
+      for (Monitor *m : monitores)
+        if (m->obj) { elegido = m; break; }
+    }
     if (elegido) {
       anchoE = elegido->anchoFis > 0 ? elegido->anchoFis : elegido->ancho;
       altoE = elegido->altoFis > 0 ? elegido->altoFis : elegido->alto;
@@ -430,9 +463,16 @@ struct Overlay::Impl {
           wl_registry_bind(reg, name, &zxdg_output_manager_v1_interface, std::min<uint32_t>(version, 2)));
     } else if (!std::strcmp(iface, wl_output_interface.name)) {
       Monitor *m = new Monitor();
+      m->global = name;
       m->obj = static_cast<wl_output *>(
           wl_registry_bind(reg, name, &wl_output_interface, std::min<uint32_t>(version, 4)));
       if (m->obj) wl_output_add_listener(m->obj, &s->outputListener, m);
+      /* una pantalla anunciada tardé (otra conectada, un cambio de modo de la lente):
+         su tamaño lógico se pide ahora mismo, si no la tarjeta saldría a la escala mala */
+      if (m->obj && s->xdgMgr && !m->xdg) {
+        m->xdg = zxdg_output_manager_v1_get_xdg_output(s->xdgMgr, m->obj);
+        if (m->xdg) zxdg_output_v1_add_listener(m->xdg, &s->xdgListener, m);
+      }
       s->monitores.push_back(m);
     }
 #ifdef HAVE_FRACTIONAL_SCALE
@@ -444,7 +484,27 @@ struct Overlay::Impl {
           wl_registry_bind(reg, name, &wp_viewporter_interface, std::min<uint32_t>(version, 1)));
 #endif
   }
-  static void registryGlobalRemove(void *, wl_registry *, uint32_t) {}
+  static void registryGlobalRemove(void *data, wl_registry *, uint32_t name) {
+    Impl *s = static_cast<Impl *>(data);
+    for (Monitor *m : s->monitores) {
+      if (m->global != name) continue;
+      /* el compositor ya destruyó el objeto del lado del servidor: el cliente tiene que
+         soltar el suyo y dejar de contar esa pantalla */
+      m->vivo = false;
+      const bool capaAqui = s->capaEn && m->obj && s->capaEn == m->obj;
+      if (m->obj) { wl_output_destroy(m->obj); m->obj = nullptr; }
+      if (s->elegido == m) s->elegido = nullptr;
+      if (capaAqui) {
+        /* la capa estaba puesta en esa pantalla: se quita y en el siguiente aviso se
+           pondrá en la que siga en pie */
+        s->quitaEscuchaLayer();
+        if (s->layer) { zwlr_layer_surface_v1_destroy(s->layer); s->layer = nullptr; }
+        s->capaEn = nullptr;
+        s->tarjetaPuesta = false;
+      }
+      return;
+    }
+  }
 
   static const struct wl_registry_listener registryListener;
 
@@ -457,8 +517,10 @@ struct Overlay::Impl {
   }
   static void outMode(void *data, wl_output *, uint32_t, int32_t w, int32_t h, int32_t) {
     Monitor *m = static_cast<Monitor *>(data);
-    m->anchoFis = (int)w;
-    m->altoFis = (int)h;
+    if ((long)w * (long)h > (long)m->anchoFis * (long)m->altoFis) {
+      m->anchoFis = (int)w;
+      m->altoFis = (int)h;
+    }
   }
   static void outDone(void *data, wl_output *) {
     Monitor *m = static_cast<Monitor *>(data);
@@ -669,6 +731,14 @@ bool Overlay::open(std::string *err) {
   return true;
 }
 
+void Overlay::setPantalla(const std::string &pista) {
+  if (!d) return;
+  d->pistaMonitor = pista;
+  d->eligeMonitor();
+}
+
+bool Overlay::pantallaReconocida() const { return d && d->reconocido; }
+
 bool Overlay::available() const { return d && d->shell && d->comp && d->shm && d->surf; }
 
 int Overlay::fd() const { return d->dpy ? wl_display_get_fd(d->dpy) : -1; }
@@ -698,6 +768,18 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
   s.hud.state().overlayOn = false;
   s.hud.setAskText(s.titulo, s.cuerpo);
   s.hud.begin(s.anchoE, s.altoE, s.altoLogico());
+
+  /* El escritorio puede haber cambiado desde que arrancó el servicio (otra pantalla
+     conectada, el modo 3D de la lente, una suspensión): se vuelve a elegir el monitor
+     y, si la capa estaba puesta en otro, se rehace para que la tarjeta no acabe en la
+     pantalla equivocada. */
+  s.eligeMonitor();
+  if (s.layer && s.capaEn != (s.elegido ? s.elegido->obj : nullptr)) {
+    s.quitaEscuchaLayer();
+    zwlr_layer_surface_v1_destroy(s.layer);
+    s.layer = nullptr;
+    s.capaEn = nullptr;
+  }
 
   float ax = 0, ay = 0, aw = 0, ah = 0;
   if (!s.hud.askBounds(&ax, &ay, &aw, &ah)) return;
@@ -735,6 +817,7 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
       return;
     }
     zwlr_layer_surface_v1_add_listener(s.layer, &Impl::layerListener, d.get());
+    s.capaEn = s.elegido ? s.elegido->obj : nullptr;
   }
   zwlr_layer_surface_v1_set_anchor(s.layer, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                                                 ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
@@ -804,6 +887,22 @@ bool Overlay::dumpPng(const std::string &ruta, std::string *err) {
     return false;
   }
   return true;
+}
+
+std::vector<std::string> Overlay::pantallas() const {
+  std::vector<std::string> out;
+  if (!d) return out;
+  for (const Impl::Monitor *m : d->monitores) {
+    if (!m->vivo || !m->obj) continue;
+    std::string linea = m->nombre.empty() ? "(sin nombre)" : m->nombre;
+    if (!m->modelo.empty()) linea += " (" + m->modelo + ")";
+    linea += " ";
+    linea += std::to_string(m->anchoFis > 0 ? m->anchoFis : m->ancho);
+    linea += "x";
+    linea += std::to_string(m->altoFis > 0 ? m->altoFis : m->alto);
+    out.push_back(linea);
+  }
+  return out;
 }
 
 std::string Overlay::outputName() const {
