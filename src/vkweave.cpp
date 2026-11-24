@@ -8,10 +8,13 @@
 #include "weave_vert_sp.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include "hoyos.h"
 
 namespace {
 constexpr size_t kMaxHudVerts = 65536;
@@ -91,11 +94,12 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   /* reserva negra y corrección neutra (A = 0, B = medio gris) hasta que lleguen los mapas */
   std::string e2;
   static const uint8_t negro[4] = {0, 0, 0, 255};
-  static const uint8_t cero[1] = {0}, medio[1] = {128};
+  static const uint8_t cero[1] = {0}, medio[1] = {128}, medio2[2] = {128, 128};
   uploadRgba8(negro, 1, 1, black_, &e2);
   uploadR8(cero, 1, 1, corrA_, &e2);
   uploadR8(medio, 1, 1, corrB_, &e2);
-  uploadR8(medio, 1, 1, depth_, &e2);   /* el shader siempre necesita una textura valida */
+  /* el shader siempre necesita una textura valida, y la suya lleva un canal por ojo */
+  uploadR8(medio2, 1, 1, depth_, &e2, VK_FORMAT_R8G8_UNORM, 2);
   return createFrames(err);
 }
 
@@ -523,15 +527,15 @@ void VkWeave::barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkIma
                        nullptr, 1, &b);
 }
 
-bool VkWeave::uploadR8(const uint8_t *px, int w, int h, VkImg &out, std::string *err) {
-  if (!px || w <= 0 || h <= 0) {
+bool VkWeave::uploadR8(const uint8_t *px, int w, int h, VkImg &out, std::string *err, VkFormat fmt, int canales) {
+  if (!px || w <= 0 || h <= 0 || canales < 1) {
     if (err) *err = "imagen de 8 bits sin datos";
     return false;
   }
   std::string e2;
   dev_->destroyImg(out);
-  VkDeviceSize n = (VkDeviceSize)w * (VkDeviceSize)h;
-  if (!dev_->createImage(w, h, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, out,
+  const VkDeviceSize n = (VkDeviceSize)w * (VkDeviceSize)h * (VkDeviceSize)canales;
+  if (!dev_->createImage(w, h, fmt, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, out,
                          &e2)) {
     if (err) *err = "imagen R8: " + e2;
     return false;
@@ -717,9 +721,19 @@ void VkWeave::fillUbo(uint8_t *dst) {
     const char *e = std::getenv("ODYSSEY3D_TOPE");
     return !e || e[0] != '0';
   }();
+  /* ODYSSEY3D_CANTO  ancho del puente del canto (0,004 de fabrica). Cuanto mas chico, menos se le
+     quita desplazamiento a un canto donde el mapa cambia mucho: con el relleno de huecos el mapa
+     pone mas filo, asi que este numero es el que manda cuanto relieve conserva el borde de un
+     objeto. 0 en el shader significa "el de fabrica", por eso se manda siempre positivo. */
+  static const float cantoS = [] {
+    const char *e = std::getenv("ODYSSEY3D_CANTO");
+    const float v = e ? (float)std::atof(e) : 0.004f;
+    return v > 0.0f ? v : 0.004f;
+  }();
   t5[0] = ditherPx;
   t5[1] = conTope ? 12.67f : 0.0f;
   t5[2] = conTope ? 9.98f : 0.0f;
+  t5[3] = cantoS;
   if (std::getenv("ODYSSEY_UBO")) {
     std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · v4 TL %.2f %.2f %.2f\n",
                  res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], v4[0], v4[1], v4[2]);
@@ -1182,6 +1196,30 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
   }
   waitIdle();   /* el mapa anterior puede estar en manos de un cuadro en vuelo */
   const VkDeviceSize n = (VkDeviceSize)w * (VkDeviceSize)h;
+  const VkDeviceSize nrg = n * 2;
+
+  /* Antes de subir nada, cada ojo recibe su propio mapa: el desplazamiento deparael deja detras
+     del canto de un objeto un hueco sin color (en el programa de Samsung lo tapan warp.least_hole,
+     warp.hole_edge e inpaint.push/pull). Aqui se rellena el MAPA en el sitio de destino y con la
+     guarda de que gana la superficie mas cercana, que es lo que quita el borde babbeado. Ver
+     src/hoyos.cpp y tools/prueba_hoyos.cpp, que lo mide sin mirar el panel.
+     ODYSSEY3D_HOYOS=0 lo apaga: los dos canales llevan entonces el mapa en crudo, que es
+     exactamente lo que hacia la v0.35. */
+  static const bool conHoyos = hoyosActivo();
+  mapRG_.resize((size_t)nrg);
+  int huecos = 0;
+  const auto tHoyos0 = std::chrono::steady_clock::now();
+  if (conHoyos) {
+    /* convGain_ esta en unidades de la pantalla; multiplicado por el ancho del mapa pasa a
+       puntos del propio mapa, que es la medida en la que esparcimos */
+    rellenarVistas(g, w, convGain_ * (float)w, convRef_, mapRG_.data(), &huecos);
+  } else {
+    for (VkDeviceSize i = 0; i < n; i++) { mapRG_[2 * i] = g[i]; mapRG_[2 * i + 1] = g[i]; }
+  }
+  msHoyos_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tHoyos0).count();
+  if (std::getenv("ODYSSEY3D_MEDIR") && (++mapasContados_ % 30 == 1))
+    std::fprintf(stderr, "[medir] huecos rellenados %d de %lld puntos (%.2f%%) en %.1f ms\n", huecos,
+                 (long long)(2 * n), 100.0 * (double)huecos / (double)(2 * n), msHoyos_);
   if (!depth_.valid() || depthW_ != w || depthH_ != h) {
     /* la primera vez, o si cambia el tamano del modelo: imagen nueva y buffer de paso a su medida */
     if (mapStage_) {
@@ -1190,8 +1228,8 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
       mapStage_ = VK_NULL_HANDLE;
       mapStageMem_ = VK_NULL_HANDLE;
     }
-    if (!uploadR8(g, w, h, depth_, err)) return false;
-    if (!dev_->createBuffer(n, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    if (!uploadR8(mapRG_.data(), w, h, depth_, err, VK_FORMAT_R8G8_UNORM, 2)) return false;
+    if (!dev_->createBuffer(nrg, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mapStage_,
                             mapStageMem_, err))
       return false;
@@ -1200,11 +1238,11 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
     /* y ya solo movemos bytes dentro de la misma imagen: crear y borrar una imagen cada cuadro
        acabó dejando a la tarjeta sin memoria de dispositivo */
     void *p = nullptr;
-    if (vkMapMemory(dev_->device(), mapStageMem_, 0, n, 0, &p) != VK_SUCCESS) {
+    if (vkMapMemory(dev_->device(), mapStageMem_, 0, nrg, 0, &p) != VK_SUCCESS) {
       if (err) *err = "no se pudo preparar el mapa de profundidad";
       return false;
     }
-    memcpy(p, g, (size_t)n);
+    memcpy(p, mapRG_.data(), (size_t)nrg);
     vkUnmapMemory(dev_->device(), mapStageMem_);
     VkCommandBuffer cb = dev_->beginOneTime(err);
     if (!cb) return false;

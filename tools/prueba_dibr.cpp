@@ -2,6 +2,7 @@
    calcula la profundidad y aplica el mismo desplazamiento por ojo que hace el shader de la trama,
    y escribe la vista izquierda, la derecha y un anaglifo (rojo/cian) para poder mirarlo. */
 #include "depth.h"
+#include "hoyos.h"
 
 #include <cmath>
 #include <cstdio>
@@ -95,8 +96,9 @@ int main(int argc, char **argv) {
   float referencia = argc > 3 ? (float)std::atof(argv[3]) : 0.5f;
 
   const char *redg = std::getenv("RED");
+  const char *ruta = std::getenv("MODELO");   /* MODELO=/ruta.onnx prueba la red oficial de Samsung */
   DepthNet red;
-  if (!red.init("", &err, redg ? std::atoi(redg) : 0)) {
+  if (!red.init(ruta ? ruta : "", &err, redg ? std::atoi(redg) : 0)) {
     std::fprintf(stderr, "[conversor] %s\n", err.c_str());
     return 1;
   }
@@ -109,7 +111,33 @@ int main(int argc, char **argv) {
   std::printf("[prueba] imagen %dx%d, mapa %dx%d en %.1f ms (%s)\n", w, h, msz, msz, red.lastMs(),
               red.device().c_str());
 
+  /* HOYOS=0 compara contra lo que hacia la v0.35: sin relleno, los dos ojos ven el mapa en crudo */
+  const bool conHoyos = !(std::getenv("HOYOS") && std::getenv("HOYOS")[0] == '0');
+  std::vector<uint8_t> rg;
+  int huecos = 0;
+  if (conHoyos) {
+    rg.resize((size_t)2 * (size_t)msz * (size_t)msz);
+    rellenarVistas(mapa.data(), msz, ganancia * (float)msz, referencia, rg.data(), &huecos);
+    std::printf("[prueba] relleno de huecos: %d de %d puntos (%.2f%%)\n", huecos, 2 * msz * msz,
+                100.0 * (double)huecos / (double)(2 * msz * msz));
+  } else {
+    std::printf("[prueba] relleno de huecos APAGADO (HOYOS=0): mapa en crudo para los dos ojos\n");
+  }
+
+  /* MAPA=/tmp/mapa.pgm vuelca el mapa que produce la red ya filtrada, para medirlo aparte */
+  if (const char *mp = std::getenv("MAPA")) {
+    FILE *f = std::fopen(mp, "wb");
+    if (f) {
+      std::fprintf(f, "P5\n%d %d\n255\n", msz, msz);
+      std::fwrite(mapa.data(), 1, mapa.size(), f);
+      std::fclose(f);
+      std::printf("[prueba] mapa escrito en %s\n", mp);
+    }
+  }
+
   std::vector<uint8_t> izq((size_t)w * (size_t)h * 3), der((size_t)w * (size_t)h * 3), ana((size_t)w * (size_t)h * 3);
+  double cambioAcum = 0.0;
+  int cambiosGruesos = 0;
   double difAcum = 0.0;
   double shiftPelota = 0.0, shiftFondo = 0.0;
   int nPelota = 0, nFondo = 0;
@@ -120,18 +148,33 @@ int main(int argc, char **argv) {
       int mx = (int)(u * (float)msz), my = (int)(v * (float)msz);
       if (mx >= msz) mx = msz - 1;
       if (my >= msz) my = msz - 1;
-      float cerca = (float)mapa[(size_t)my * (size_t)msz + (size_t)mx] / 255.0f;
-      float s = (cerca - referencia) * ganancia * (float)w;   /* desplazamiento en pixeles */
+      const size_t mp = (size_t)my * (size_t)msz + (size_t)mx;
+      /* desplazamiento propio de cada ojo: el mapa ya esta puesto donde cae ese ojo */
+      const float cercaI = (float)(rg.empty() ? mapa[mp] : rg[2 * mp]) / 255.0f;
+      const float cercaD = (float)(rg.empty() ? mapa[mp] : rg[2 * mp + 1]) / 255.0f;
+      const float sI = (cercaI - referencia) * ganancia * (float)w;
+      const float sD = (cercaD - referencia) * ganancia * (float)w;
       uint8_t a[3], b[3];
-      muestrea(img, w, h, (float)x - s, (float)y, a);   /* ojo izquierdo: el contenido va a la derecha */
-      muestrea(img, w, h, (float)x + s, (float)y, b);   /* ojo derecho: hacia la izquierda */
+      muestrea(img, w, h, (float)x - sI, (float)y, a);   /* ojo izquierdo: el contenido va a la derecha */
+      muestrea(img, w, h, (float)x + sD, (float)y, b);   /* ojo derecho: hacia la izquierda */
+      if (!rg.empty()) {   /* cuanto se movio el color respecto del mapa en crudo de la v0.35 */
+        const float sViejo = ((float)mapa[mp] / 255.0f - referencia) * ganancia * (float)w;
+        uint8_t v[3];
+        muestrea(img, w, h, (float)x - sViejo, (float)y, v);
+        for (int c = 0; c < 3; c++) {
+          const int d = std::abs((int)a[c] - (int)v[c]);
+          cambioAcum += d;
+          if (d > 24) cambiosGruesos++;
+        }
+      }
       size_t o = ((size_t)y * (size_t)w + (size_t)x) * 3;
       izq[o] = a[0]; izq[o + 1] = a[1]; izq[o + 2] = a[2];
       der[o] = b[0]; der[o + 1] = b[1]; der[o + 2] = b[2];
       ana[o] = a[0]; ana[o + 1] = b[1]; ana[o + 2] = b[2];
       difAcum += std::abs((int)a[0] - (int)b[0]) + std::abs((int)a[1] - (int)b[1]) + std::abs((int)a[2] - (int)b[2]);
-      if (cerca > 0.9f) { shiftPelota += s; nPelota++; }
-      if (cerca < 0.1f) { shiftFondo += s; nFondo++; }
+      const float sMedio = 0.5f * (sI + sD);
+      if (cercaI > 0.9f) { shiftPelota += sMedio; nPelota++; }
+      if (cercaI < 0.1f) { shiftFondo += sMedio; nFondo++; }
     }
   }
   escribePpm("/tmp/ojo_izq.ppm", izq, w, h);
@@ -140,6 +183,10 @@ int main(int argc, char **argv) {
   std::printf("[prueba] diferencia media entre ojos %.2f por canal\n", difAcum / ((double)w * (double)h * 3.0));
   std::printf("[prueba] desplazamiento (positivo = sale de la pantalla): cerca %.1f px (%d puntos), fondo %.1f px (%d puntos)\n",
               nPelota ? shiftPelota / nPelota : 0.0, nPelota, nFondo ? shiftFondo / nFondo : 0.0, nFondo);
+  if (!rg.empty())
+    std::printf("[prueba] el relleno mueve el color en la vista izquierda: medio %.3f por canal, %d pixeles con mas de 24 de salto (%.2f%%)\n",
+                cambioAcum / ((double)w * (double)h * 3.0), cambiosGruesos,
+                100.0 * (double)cambiosGruesos / ((double)w * (double)h));
   std::printf("[prueba] escritos /tmp/ojo_izq.ppm /tmp/ojo_der.ppm /tmp/anaglifo.ppm\n");
   return 0;
 }

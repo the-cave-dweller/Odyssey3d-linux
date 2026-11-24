@@ -89,7 +89,11 @@ private:
   bool createPipelines(std::string *err);
   bool createFrames(std::string *err);
   void destroyFrames();
-  bool uploadR8(const uint8_t *px, int w, int h, VkImg &out, std::string *err);
+  /* canales=2 es el mapa de la profundidad, que lleva un canal por ojo (R8G8: .r izquierdo,
+     .g derecho). Cada ojo ve el mapa ya puesto en su sitio de destino y con el hueco de detras
+     del canto relleno; ver src/hoyos.cpp. */
+  bool uploadR8(const uint8_t *px, int w, int h, VkImg &out, std::string *err,
+                VkFormat fmt = VK_FORMAT_R8_UNORM, int canales = 1);
   bool uploadRgba8(const uint8_t *px, int w, int h, VkImg &out, std::string *err);
   void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to, VkAccessFlags srcA,
                VkAccessFlags dstA);
@@ -130,7 +134,10 @@ private:
   VkBuffer smallUbo_ = VK_NULL_HANDLE;     /* parametros fijos del pase pequeno */
   VkDeviceMemory smallUboMem_ = VK_NULL_HANDLE;
   VkDescriptorSet smallSet_ = VK_NULL_HANDLE;
-  VkImg depth_{};          /* mapa de profundidad (R8) que lee el shader de la trama */
+  VkImg depth_{};          /* mapa de profundidad (R8G8: un canal por ojo) que lee el shader */
+  std::vector<uint8_t> mapRG_;   /* el mapa ya partido por ojo, antes de subirlo */
+  double msHoyos_ = 0.0;         /* lo que tarda rellenar los huecos (medible con ODYSSEY3D_MEDIR=1) */
+  long mapasContados_ = 0;
   bool depthUsable_ = false;
   int smallW_ = 0, smallH_ = 0;
   VkBuffer mapStage_ = VK_NULL_HANDLE;    /* por aqui sube el mapa de profundidad, sin crear y

@@ -161,6 +161,7 @@ add_executable(odyssey3d
   src/vkview.cpp
   src/mpris.cpp
   src/depth.cpp
+  src/hoyos.cpp
 )
 
 add_dependencies(odyssey3d shaders)

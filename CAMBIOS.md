@@ -2,6 +2,59 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Relleno de huecos en el canto del objeto (v0.36)
+- Frente elegido: que el canto de los objetos no se rompa ni babee. En el programa de Samsung eso lo
+  hacen `warp.least_hole`, `warp.hole_edge` e `inpaint.push/pull/padtopot`; aqui son `src/hoyos.cpp`
+  y `src/hoyos.h`.
+- Como se hizo, y por que sale barato. Al subir el mapa se guarda **una version por ojo** en la misma
+  textura (pasa de R8 a R8G8: un canal por ojo), asi que el shader sigue haciendo las mismas
+  dieciseis lecturas y solo cambia `.r` por `.rg`. Lo guardado no es el mapa en crudo sino el mapa
+  **puesto ya en el sitio de destino de ese ojo**: cada punto se esparce hacia donde cae, **gana la
+  superficie mas cercana** (ahi esta la guarda que evita que el fondo se suba por encima del canto),
+  y el hueco que queda detras se rellena interpolando entre los validos vecinos. Como el
+  desplazamiento de la lente es solo horizontal, los huecos son horizontales: se rellena fila a fila
+  y no hace falta la piramide push-pull de dos dimensiones ni dos texturas mas.
+- Coste medido: **0,93 ms por mapa** con cuatro hebras (1,08 antes de quedarse los tampones entre
+  cuadros). Ademas la red va en su propio hilo y el mapa se sube cada tres cuadros, asi que en el
+  presupuesto de 8,3 ms por cuadro de imagen quedan unos **0,3 ms**. Sin tocar los 7,8 ms ganados en
+  la v0.35.
+- Cifras fuera del panel (`tools/prueba_hoyos.cpp`, escena sintetica de cantos duros, 518x518,
+  ganancia 3,06 puntos de mapa = relieve de 50, plano de apoyo 0,50; la referencia es el esparcido
+  directo con oclusion, que es lo que deberia verse):
+  - huecos rellenados 4066 de 536648 puntos (**0,76 %**);
+  - ojo izquierdo: error medio **1,714 -> 0,824** y errores gordos **4078 -> 2039**;
+  - ojo derecho: **1,713 -> 0,852** y **4170 -> 2131**;
+  - ancho del canto (distancia 10-90 de la rampa) ojo izquierdo **2,12 -> 1,26** puntos de mapa,
+    que multiplicado por 7,4 son puntos de pantalla. Ojo derecho 0,48 -> 0,46.
+- Lo que se descarto por medir menos de lo que cuesta: guardar en lugar del valor el **desplazamiento
+  exacto** del punto ganador (ancho del canto 1,22 frente a 1,26, practicamente igual y mas riesgoso).
+  Y la metrica de "cuantas lecturas caen al otro lado de un salto" resulto inutil (4170 -> 4182):
+  castiga el fondo revelado correctamente, que esta bien que aparezca.
+- Material de verdad, sin panel: con una captura del propio panel a 3840x2160 recortada y con la
+  escena de la pelota, al relieve de fabrica el relleno toca **0,02-0,06 %** de los puntos y mueve el
+  color de la vista izquierda en el **0,02 %** de los pixeles (mas de 24 de salto). O sea: quita el
+  halo de un lado en los cantos mas duros, pero no es un cambio enorme con tan poco recorrido total
+  (3 puntos de mapa de ida y vuelta).
+- Y salio un numero que cambia el plan siguiente: midiendo el mapa que suelta la red de Samsung, el
+  salto **maximo** del mapa es de ~10 puntos de 255 en 24 puntos de mapa (perfil de una fila
+  cruzando el borde de un objeto). No hay saltos duros en el mapa, así que el canto se abre en unos
+  180 puntos de pantalla. El babbeo que queda no es falta de relleno sino de **filo en el propio
+  mapa**: ahi van la curva angular `vcs`, `inpaint.detail` y quizas un filo extra en el filtro guiado.
+- Sin recompilar: `ODYSSEY3D_HOYOS=0` apaga el relleno (los dos canales llevan el mapa en crudo, que
+  es la imagen de la v0.35). `ODYSSEY3D_MEDIR=1` anade una linea con los huecos rellenados y su coste.
+- Y una perilla nueva para mirarlo en el panel: **`ODYSSEY3D_CANTO`** (0,004 de fabrica) es el
+  `CantoSuave` del shader, o sea cuanto cambio de mapa por punto hace falta para no podar nada en un
+  canto. Es la pareja del relleno: mapa con mas filo => la poda corta mas relieve en el borde. Bajo
+  (0,001) conserva mas relieve en el canto; alto (0,010) lo deja mas quieto. Viaja en `tun5.w`, que
+  estaba libre, asi que el tamano del bloque de parametros no cambia (288 bytes).
+- Herramientas: `tools/prueba_hoyos.cpp` nuevo
+  (`g++ -O2 -fopenmp -Isrc tools/prueba_hoyos.cpp src/hoyos.cpp -o /tmp/hoyos && /tmp/hoyos 518 3.06 0.50`);
+  `tools/prueba_dibr.cpp` ahora arma las dos vistas con el mapa de cada ojo, acepta
+  `MODELO=/ruta.onnx` para probar con la red de Samsung y `MAPA=/ruta.pgm` para volcar el mapa y
+  medirlo aparte.
+- Pendiente: mirarlo en el panel. Al pasar el mapa a dos canales el shader lee `.rg`, asi que si algo
+  fuera raro en la textura la senal de aviso es que un ojo deja de desplazarse.
+
 ## Acabado: números oficiales en la cara y el temblor, y el cuadro mas barato (v0.35)
 - Lo pedido fue mirar el acabado (suavizado en el tiempo, temblor por contorno, cara de 140 mm,
   lienzo de 384x160). Antes de tocar nada se comprob6 cada punto del informe de Windows contra

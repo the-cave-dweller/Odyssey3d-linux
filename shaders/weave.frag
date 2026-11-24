@@ -10,7 +10,10 @@
 layout(set = 0, binding = 0) uniform sampler2D uSrc;    /* estéreo: lado a lado o arriba/abajo */
 layout(set = 0, binding = 1) uniform sampler2D uCorrA;  /* mapa de corrección A (R8) */
 layout(set = 0, binding = 2) uniform sampler2D uCorrB;  /* mapa de corrección B (R8) */
-layout(set = 0, binding = 4) uniform sampler2D uDepth;  /* profundidad estimada (R8, 255 = cerca) */
+layout(set = 0, binding = 4) uniform sampler2D uDepth;  /* profundidad (R8G8: .r ojo izq, .g ojo der, 255 = cerca).
+   Cada canal es el mismo mapa puesto ya en el sitio de destino de ese ojo y con el hueco que deja
+   el desplazamiento relleno; lo hace src/hoyos.cpp. Con ODYSSEY3D_HOYOS=0 los dos canales traen el
+   mapa en crudo y el resultado es el de la v0.35. */
 
 layout(set = 0, binding = 3) uniform WeaveParams {
     vec2 v2c[4];   /* campo v2 en TL, TR, BL, BR */
@@ -52,21 +55,25 @@ vec4 crDeriv(float t) {
     float t2 = t * t;
     return 0.5 * vec4(-3.0 * t2 + 4.0 * t - 1.0, 9.0 * t2 - 10.0 * t, -9.0 * t2 + 8.0 * t + 1.0, 3.0 * t2 - 2.0 * t);
 }
-/* devuelve en .x el valor del mapa y en .y cuanto cambia por punto de mapa en horizontal */
-vec2 mapaCubico(vec2 uv) {
+/* devuelve en .x/.y el valor del ojo izquierdo y cuanto cambia por punto de mapa en horizontal,
+   y en .z/.w lo mismo para el ojo derecho. Los dos canales vienen en la misma textura, asi que las
+   16 lecturas del mapa no se duplican: cada lectura trae los dos valores. */
+vec4 mapaCubico(vec2 uv) {
     ivec2 tam = textureSize(uDepth, 0);
     vec2 p = uv * vec2(tam) - 0.5;
     ivec2 i = ivec2(floor(p));
     vec2 f = p - vec2(i);
     vec4 ax = crBase(f.x), ex = crDeriv(f.x), ay = crBase(f.y);
-    vec2 v = vec2(0.0);
+    vec4 v = vec4(0.0);
     for (int r = 0; r < 4; r++) {
         int y = clamp(i.y + r - 1, 0, tam.y - 1);
         for (int c = 0; c < 4; c++) {
             int x = clamp(i.x + c - 1, 0, tam.x - 1);
-            float d = texelFetch(uDepth, ivec2(x, y), 0).r;
-            v.x += ay[r] * ax[c] * d;
-            v.y += ay[r] * ex[c] * d;
+            vec2 d = texelFetch(uDepth, ivec2(x, y), 0).rg;
+            v.x += ay[r] * ax[c] * d.x;
+            v.y += ay[r] * ex[c] * d.x;
+            v.z += ay[r] * ax[c] * d.y;
+            v.w += ay[r] * ex[c] * d.y;
         }
     }
     return v;
@@ -133,31 +140,39 @@ void main()
         /* Video normal (una sola imagen): el mapa de profundidad dice cuanto hay que desplazar
            cada ojo. Lo que esta en el plano de referencia (tun4.z) no se mueve; lo que esta por
            delante sale hacia fuera de la pantalla y el fondo hacia dentro. */
-        float cerca, pendiente;
-        vec2 mp = mapaCubico(fuv);
-        cerca = mp.x;
-        pendiente = abs(mp.y);
+        float pendienteI, pendienteD;
+        vec4 mp = mapaCubico(fuv);
+        pendienteI = abs(mp.y);
+        pendienteD = abs(mp.w);
         /* En los cantos del mapa sale borroso: alli desplazar de mas estira el color en peine.
            Donde la profundidad cambia rapido en horizontal se recorta el desplazamiento, asi que
-           el canto se queda en su sitio en vez de babearse.
-           CantoSuave manda: subelo si aun se babea, bajalo si el relieve se apaga. */
-        const float CantoSuave = 0.004;
-        float canto = clamp(CantoSuave / max(pendiente, 0.00001), 0.10, 1.0);
-        float s = (cerca - P.tun4.z) * P.tun4.y * canto;
+           el canto se queda en su sitio en vez de babearse. CantoSuave es cuanto cambio de mapa por
+           punto hace falta para no podar nada: por debajo de ahi el recorte cae en proportion, y el
+           tope de 0,10 es que un canto nunca conserva menos de una decima del relieve. Viene por
+           tun5.w (ODYSSEY3D_CANTO); 0 significa el de fabrica. Ojo con la pareja: el relleno de huecos
+           (src/hoyos.cpp) pone el mapa mas filo en el canto, y un mapa con mas filo hace que esta
+           poda corte mas. CantoSuave bajo = canto con mas relieve; alto = canto mas quieto. */
+        const float CantoSuave = P.tun5.w > 0.0 ? P.tun5.w : 0.004;
+        float cantoI = clamp(CantoSuave / max(pendienteI, 0.00001), 0.10, 1.0);
+        float cantoD = clamp(CantoSuave / max(pendienteD, 0.00001), 0.10, 1.0);
+        float sI = (mp.x - P.tun4.z) * P.tun4.y * cantoI;
+        float sD = (mp.z - P.tun4.z) * P.tun4.y * cantoD;
         /* El programa de Samsung mueve el desplazamiento de a saltos y en las zonas llanas (pared,
            cielo) se ven bandas: por eso le suma un temblor de 0,25 a 0,4 px al mapa. Aqui se suma
            igual, pero solo donde el mapa esta llano (canto = 1), que es justo donde la banda se ve
            y donde el temblor no se nota porque el color de fondo es parejo. */
         if (P.tun5.x != 0.0) {
             float r = fract(sin(dot(floor(px), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-            s += r * (P.tun5.x / P.res.x) * canto;
+            sI += r * (P.tun5.x / P.res.x) * cantoI;
+            sD += r * (P.tun5.x / P.res.x) * cantoD;
         }
         /* topes por ojo del programa de Samsung: -9,98 px para adentro y +12,67 px para afuera
            (0 en tun5.y/z = sin tope, que es como venia funcionando) */
         if (P.tun5.y > 0.0 || P.tun5.z > 0.0) {
             float arriba = P.tun5.y > 0.0 ? P.tun5.y / P.res.x : 1.0;
             float abajo = P.tun5.z > 0.0 ? P.tun5.z / P.res.x : 1.0;
-            s = clamp(s, -abajo, arriba);
+            sI = clamp(sI, -abajo, arriba);
+            sD = clamp(sD, -abajo, arriba);
         }
         vec2 q4 = fuv;
         if (P.tun3.z == 1.0)
@@ -165,8 +180,8 @@ void main()
         /* lo que esta por delante del plano de referencia va hacia fuera en la pantalla: en la
            vista izquierda el contenido se corre a la derecha y en la derecha a la izquierda (se
            muestrea al reves de hacia donde se mueve) */
-        L = texture(uSrc, q4 + vec2(-s + cnv, 0.0)).rgb;
-        R = texture(uSrc, q4 + vec2(s + cnv, 0.0)).rgb;
+        L = texture(uSrc, q4 + vec2(-sI + cnv, 0.0)).rgb;
+        R = texture(uSrc, q4 + vec2(sD + cnv, 0.0)).rgb;
         if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
     } else if (P.tun4.w == 2.0) {
         /* conversor puesto pero aun sin mapa de profundidad: los dos ojos ven lo mismo, o sea la
