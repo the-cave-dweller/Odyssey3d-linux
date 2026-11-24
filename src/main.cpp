@@ -1933,12 +1933,26 @@ static int cmdServe(int argc, char **argv) {
   }
   /* La tarjeta propia va por encima del video a pantalla completa; el portal de
      avisos de KDE queda debajo, así que sólo lo usamos de respaldo. */
-  Overlay ov;
-  if (!cfg.pantalla.empty()) ov.setPantalla(cfg.pantalla);
-  bool hayTarjeta = ov.open(&err);
+  /* La tarjeta vive en su propia conexion de Wayland. Si el compositor la cierra (paso un
+     momento malo con el tamano del lienzo), la tarjeta deja de salir para siempre: se vuelve
+     a abrir sola para que el aviso de pantalla completa no se pierda. */
+  std::unique_ptr<Overlay> ov;
+  auto abrirTarjeta = [&]() {
+    std::unique_ptr<Overlay> nueva(new Overlay());
+    if (!cfg.pantalla.empty()) nueva->setPantalla(cfg.pantalla);
+    std::string e2;
+    if (!nueva->open(&e2)) {
+      std::fprintf(stderr, "[serve] sin capa superpuesta: %s\n", e2.c_str());
+      std::fflush(stderr);
+      return false;
+    }
+    ov = std::move(nueva);
+    return true;
+  };
+  bool hayTarjeta = abrirTarjeta();
   if (hayTarjeta) {
-    std::printf("[serve] tarjeta superpuesta en %s (escala %.2f)\n", ov.outputName().c_str(), ov.scale());
-    if (!ov.pantallaReconocida())
+    std::printf("[serve] tarjeta superpuesta en %s (escala %.2f)\n", ov->outputName().c_str(), ov->scale());
+    if (!ov->pantallaReconocida())
       std::printf("[serve] OJO: esa no parece la pantalla del Odyssey. Fija cual es con "
                   "pantalla=DP-4 en ~/.config/odyssey3d/serve.conf\n");
   }
@@ -1980,14 +1994,22 @@ static int cmdServe(int argc, char **argv) {
   while (!g_stopServe) {
     if (hayTarjeta) {
       /* dos conexiones de Wayland abiertas: ninguna puede bloquear a la otra */
-      struct pollfd ojea[2] = {{wm.fd(), POLLIN, 0}, {ov.fd(), POLLIN, 0}};
+      struct pollfd ojea[2] = {{wm.fd(), POLLIN, 0}, {ov->fd(), POLLIN, 0}};
       ::poll(ojea, 2, 200);
       wm.waitAndDispatch(0);
-      ov.waitAndDispatch(0);
+      ov->waitAndDispatch(0);
       /* el compositor a veces coloca la capa en otra pantalla: se comprueba y se rehace */
-      if (ov.corrigeColocacion() && ov.hayAvisoColocacion()) {
-        std::printf("[serve] %s\n", ov.lastError().c_str());
-        std::printf("[serve] la tarjeta vuelve a intentarse en %s\n", ov.outputName().c_str());
+      if (ov->corrigeColocacion() && ov->hayAvisoColocacion()) {
+        std::printf("[serve] %s\n", ov->lastError().c_str());
+        std::printf("[serve] la tarjeta vuelve a intentarse en %s\n", ov->outputName().c_str());
+        std::fflush(stdout);
+      }
+      if (ov->conexionCaida()) {
+        std::printf("[serve] %s\n", ov->lastError().c_str());
+        ov.reset();                       /* se suelta la conexion muerta */
+        hayTarjeta = abrirTarjeta();
+        if (hayTarjeta)
+          std::printf("[serve] capa superpuesta reabierta en %s\n", ov->outputName().c_str());
         std::fflush(stdout);
       }
     } else {
@@ -2030,7 +2052,7 @@ static int cmdServe(int argc, char **argv) {
                     tarjetaUuid.c_str(),
                     actual.uuid.empty() ? "desapareció" : WindowInfo::stateList(actual.states).c_str());
         std::fflush(stdout);
-        ov.hideAsk();
+        ov->hideAsk();
         preguntadas.erase(tarjetaUuid);   /* si vuelve a pantalla completa, se vuelve a ofrecer */
         tarjetaUuid.clear();
         tarjetaApp.clear();
@@ -2040,27 +2062,27 @@ static int cmdServe(int argc, char **argv) {
     if (!tarjetaUuid.empty() && now - tarjetaT > (double)cfg.esperaSeg) {
       std::printf("[serve] tarjeta sin respuesta, se retira (%s)\n", tarjetaUuid.c_str());
       std::fflush(stdout);
-      ov.hideAsk();
+      ov->hideAsk();
       tarjetaUuid.clear();
     }
 
     if (hayTarjeta) {
-      if (std::string acto = ov.takeAction(); !acto.empty()) {
-        ov.hideAsk();
+      if (std::string acto = ov->takeAction(); !acto.empty()) {
+        ov->hideAsk();
         if (acto == "close") {
           std::printf("[serve] tarjeta cerrada sin elegir (%s)\n", tarjetaUuid.c_str());
         } else {
           accion = acto;
           avisoUuid = tarjetaUuid;
           std::printf("[serve] tarjeta -> %s (%s)\n", acto.c_str(), avisoUuid.c_str());
-          if (ov.remember() && !tarjetaApp.empty() && acto != "flat") {
+          if (ov->remember() && !tarjetaApp.empty() && acto != "flat") {
             cfg.porApp[tarjetaApp] = acto;
             guardarAutoEnDisco(tarjetaApp, acto);
             std::printf("[serve] apuntado: %s pasa directo a %s sin preguntar\n", tarjetaApp.c_str(), acto.c_str());
           }
         }
         tarjetaApp.clear();
-        ov.setRemember(false);
+        ov->setRemember(false);
         tarjetaUuid.clear();
         std::fflush(stdout);
       }
@@ -2145,14 +2167,14 @@ static int cmdServe(int argc, char **argv) {
           std::string titulo = "¿Convertir el vídeo actual a 3D?";
           std::string cuerpo = w.title.empty() ? w.appId : w.title;
           cuerpo += "  ·  " + std::to_string(w.w) + "x" + std::to_string(w.h);
-          ov.showAsk(titulo, cuerpo);
+          ov->showAsk(titulo, cuerpo);
           tarjetaUuid = w.uuid;
           tarjetaApp = app;
           tarjetaT = now;
           std::printf("[serve] tarjeta puesta por %s | %s (%s) · pantalla %s\n", w.appId.c_str(),
-                      w.title.c_str(), w.uuid.c_str(), ov.outputName().c_str());
-          if (!ov.askVisible())
-            std::printf("[serve] el compositor no llego a poner la tarjeta: %s\n", ov.lastError().c_str());
+                      w.title.c_str(), w.uuid.c_str(), ov->outputName().c_str());
+          if (!ov->askVisible())
+            std::printf("[serve] el compositor no llego a poner la tarjeta: %s\n", ov->lastError().c_str());
           std::fflush(stdout);
         } else if (cfg.modo == "ask") {
           std::string id = "odyssey3d-" + w.uuid.substr(0, 8);
@@ -2194,7 +2216,7 @@ static int cmdServe(int argc, char **argv) {
   }
 
   if (!avisoId.empty()) nt.remove(avisoId);
-  if (hayTarjeta) ov.hideAsk();
+  if (hayTarjeta) ov->hideAsk();
   if (hijo > 0) {
     ::kill(hijo, SIGTERM);
     int st = 0;

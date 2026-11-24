@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <unistd.h>
 
 #ifdef HAVE_FREETYPE
@@ -26,12 +27,12 @@ unsigned nextCp(const std::string &s, size_t &i) {
   if ((c & 0xE0) == 0xC0 && i + 1 < s.size()) {
     unsigned v = ((unsigned)(c & 0x1F) << 6) | (unsigned)(s[i + 1] & 0x3F);
     i += 2;
-    return v < 256 ? v : '?';
+    return v;   /* si el atlas no lo tiene, abajo se dibuja como un espacio */
   }
   if ((c & 0xF0) == 0xE0 && i + 2 < s.size()) {
     unsigned v = ((unsigned)(c & 0x0F) << 12) | ((unsigned)(s[i + 1] & 0x3F) << 6) | (unsigned)(s[i + 2] & 0x3F);
     i += 3;
-    return v < 256 ? v : '?';
+    return v;   /* antes esto saltaba a "?" el euro, la raya y las comillas bonitas */
   }
   i++;
   return '?';
@@ -44,7 +45,11 @@ uint8_t roundedCover(int px, int py, int size, float radius) {
   float dx = std::fabs(px + 0.5f - c) - inner;
   float dy = std::fabs(py + 0.5f - c) - inner;
   float ox = std::max(dx, 0.0f), oy = std::max(dy, 0.0f);
-  float dist = std::hypot(ox, oy) + std::min(std::max(dx, dy), 0.0f);
+  /* distancia con signo del rectangulo redondeado: dentro es negativo. Faltaba restar el
+     radio, asi que la zona opaca quedaba encogida un radio por cada lado y la caja dibujada
+     salia mas pequena que la caja de verdad: la letra de las opciones se veia fuera de su
+     recuadro (y la pastilla y las tarjetas del visor tambien salian recortadas). */
+  float dist = std::hypot(ox, oy) + std::min(std::max(dx, dy), 0.0f) - radius;
   float a = 0.5f - dist;
   if (a <= 0.0f) return 0;
   if (a >= 1.0f) return 255;
@@ -126,16 +131,15 @@ bool Hud::buildAtlas(std::string *err) {
     FT_Set_Pixel_Sizes(face, 0, kFontPx);
     asc_ = (float)face->size->metrics.ascender / 64.0f;
     bool okAll = true;
-    for (unsigned cp = 32; cp < 256; cp++) {
-      if (cp == 32) continue;
-      if (FT_Load_Char(face, cp, FT_LOAD_RENDER) != 0) continue;
+    /* 0 = glifo puesto, 1 = el tipo no lo tiene, -1 = el atlas se llenó */
+    auto cargar = [&](unsigned cp, Glyph &gl) -> int {
+      if (FT_Load_Char(face, cp, FT_LOAD_RENDER) != 0) return 1;
       FT_GlyphSlot g = face->glyph;
       int w = (int)g->bitmap.width, h = (int)g->bitmap.rows;
-      if (!w || !h) continue;
+      if (!w || !h) return 1;
       int x, y;
-      if (!place(w, h, &x, &y)) { okAll = false; break; }
+      if (!place(w, h, &x, &y)) return -1;
       put(x, y, w, h, g->bitmap.buffer);
-      Glyph &gl = glyphs_[cp];
       gl.w = w, gl.h = h;
       gl.bx = (int)g->bitmap_left;
       gl.by = (int)g->bitmap_top;
@@ -145,6 +149,17 @@ bool Hud::buildAtlas(std::string *err) {
       gl.u1 = (float)(x + w) / (float)aw_;
       gl.v1 = (float)(y + h) / (float)ah_;
       gl.ok = true;
+      return 0;
+    };
+    for (unsigned cp = 32; cp < 256; cp++) {
+      if (cp == 32) continue;
+      if (cargar(cp, glyphs_[cp]) < 0) { okAll = false; break; }   /* atlas lleno */
+    }
+    /* fuera del rango latino-1: los signos que mas salen en titulos de videos */
+    for (unsigned cp : {0x2014u, 0x2013u, 0x2026u, 0x2018u, 0x2019u, 0x201Cu, 0x201Du, 0x20ACu, 0x00A9u}) {
+      Glyph gl;
+      if (cargar(cp, gl) != 0) continue;
+      extra_.emplace_back(cp, gl);
     }
     hasText_ = true;
     std::printf("[interfaz] fuente %s a %d px en atlas %dx%d\n", path, kFontPx, aw_, ah_);
@@ -211,14 +226,21 @@ void Hud::mask9(Rect r, int which, float radius, float cr, float cg, float cb, f
     }
 }
 
+const Hud::Glyph *Hud::glifo(unsigned cp) const {
+  if (cp < 256) return &glyphs_[cp];
+  for (const std::pair<unsigned, Glyph> &e : extra_)
+    if (e.first == cp) return &e.second;
+  return nullptr;   /* fuera de la tabla: se dibuja como un espacio */
+}
+
 float Hud::textWidth(const std::string &s, float size) const {
   float sc = size / (float)kFontPx;
   float wsum = 0.0f;
   size_t i = 0;
   while (i < s.size()) {
     unsigned cp = nextCp(s, i);
-    const Glyph &g = glyphs_[cp < 256 ? cp : '?'];
-    wsum += g.ok ? (float)g.adv : (float)kFontPx * 0.5f;
+    const Glyph *gp = glifo(cp);
+    wsum += (gp && gp->ok) ? (float)gp->adv : (float)kFontPx * 0.5f;
   }
   return wsum * sc;
 }
@@ -231,8 +253,9 @@ float Hud::text(const std::string &s, float x, float y, float size, float cr, fl
   size_t i = 0;
   while (i < s.size()) {
     unsigned cp = nextCp(s, i);
-    const Glyph &g = glyphs_[cp < 256 ? cp : '?'];
-    if (!g.ok) { pen += (float)kFontPx * 0.5f * sc; continue; }
+    const Glyph *gp = glifo(cp);
+    if (!gp || !gp->ok) { pen += (float)kFontPx * 0.5f * sc; continue; }
+    const Glyph &g = *gp;
     /* el glifo cuelga de la línea base: su borde superior está a asc_-bearingY */
     Rect r{pen + (float)g.bx * sc, top0 + (asc_ - (float)g.by) * sc, (float)g.w * sc, (float)g.h * sc};
     quad(r, {g.u0, g.v0, g.u1 - g.u0, g.v1 - g.v0}, cr, cg, cb, ca);
@@ -351,15 +374,18 @@ void Hud::begin(int w, int h, float altoLogico) {
     text(encaja(askCuerpo_.empty() ? "Elige el formato de la imagen que estás viendo." : askCuerpo_, 13.0f,
                 aw - 48.0f),
          ax + 24.0f, ay + 52.0f, 13.0f, dim[0], dim[1], dim[2], dim[3]);
-    float tw = (aw - 48.0f - 36.0f) / 4.0f;
+    /* tres opciones, no cuatro: el estereo vertical (arriba y abajo) practicamente nadie lo
+       usa en este panel y apretaba las cajas hasta que la letra se salia de ellas. Sigue
+       disponible por linea de orden con --tb. */
+    float tw = (aw - 48.0f - 24.0f) / 3.0f;
     askSbs_ = {ax + 24.0f, ay + 86.0f, tw, 78.0f};
-    askTop_ = {ax + 24.0f + tw + 12.0f, ay + 86.0f, tw, 78.0f};
-    askFlat_ = {ax + 24.0f + 2.0f * (tw + 12.0f), ay + 86.0f, tw, 78.0f};
-    askConv_ = {ax + 24.0f + 3.0f * (tw + 12.0f), ay + 86.0f, tw, 78.0f};
-    Rect tiles[4] = {askSbs_, askTop_, askFlat_, askConv_};
-    const char *names[4] = {"Lado a lado", "Arriba y abajo", "2D plano", "Vídeo normal"};
-    const char *subs[4] = {"estéreo horizontal", "estéreo vertical", "sin profundidad", "2D a 3D"};
-    for (int i = 0; i < 4; i++) {
+    askTop_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* fuera del alcance: no hay quinta caja */
+    askFlat_ = {ax + 24.0f + tw + 12.0f, ay + 86.0f, tw, 78.0f};
+    askConv_ = {ax + 24.0f + 2.0f * (tw + 12.0f), ay + 86.0f, tw, 78.0f};
+    Rect tiles[3] = {askSbs_, askFlat_, askConv_};
+    const char *names[3] = {"Lado a lado", "2D plano", "Vídeo normal"};
+    const char *subs[3] = {"estéreo horizontal", "sin profundidad", "2D a 3D (el conversor)"};
+    for (int i = 0; i < 3; i++) {
       bool hov = tiles[i].inside(mx_, my_);
       mask9(tiles[i], 1, 10.0f, hov ? 0.20f : 0.15f, hov ? 0.22f : 0.16f, hov ? 0.24f : 0.18f, 0.98f);
       if (hov) mask9(tiles[i], 1, 10.0f, accent[0], accent[1], accent[2], 0.35f);
@@ -369,17 +395,14 @@ void Hud::begin(int w, int h, float altoLogico) {
         solid(ix, iy, 20.0f, 14.0f, 0.85f, 0.86f, 0.9f, 0.9f);
         solid(ix + 24.0f, iy, 20.0f, 14.0f, 0.55f, 0.58f, 0.66f, 0.9f);
       } else if (i == 1) {
-        solid(ix, iy, 20.0f, 6.0f, 0.85f, 0.86f, 0.9f, 0.9f);
-        solid(ix, iy + 8.0f, 20.0f, 6.0f, 0.55f, 0.58f, 0.66f, 0.9f);
-      } else if (i == 2) {
         solid(ix, iy, 44.0f, 14.0f, 0.7f, 0.72f, 0.78f, 0.9f);
       } else {
         /* dos vistas de la misma imagen, desplazadas: eso hace el conversor */
         solid(ix, iy, 22.0f, 14.0f, 0.35f, 0.37f, 0.42f, 0.9f);
         solid(ix + 12.0f, iy, 22.0f, 14.0f, 0.85f, 0.86f, 0.9f, 0.95f);
       }
-      /* en ventanas pequenas las cuatro tarjetas se aprietan: letra menor y texto recortado */
-      float fs = tw < 110.0f ? 11.0f : 14.0f, fss = tw < 110.0f ? 9.5f : 11.0f;
+      /* en ventanas pequenas las tarjetas se aprietan: letra menor y texto recortado */
+      float fs = tw < 110.0f ? 11.0f : 15.0f, fss = tw < 110.0f ? 9.5f : 11.5f;
       text(encaja(names[i], fs, tw - 20.0f), tiles[i].x + 10.0f, tiles[i].y + 38.0f, fs, ink[0], ink[1], ink[2], 1.0f);
       text(encaja(subs[i], fss, tw - 20.0f), tiles[i].x + 10.0f, tiles[i].y + 58.0f, fss, dim[0], dim[1], dim[2],
            dim[3]);

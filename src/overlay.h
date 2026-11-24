@@ -60,6 +60,11 @@ public:
      tú a propósito). Si es false, avisa: puede que la tarjeta caiga en otro monitor. */
   bool pantallaReconocida() const;
 
+  /* Cierto si el compositor nos cerró la conexión de la capa (algo salió mal con el
+     tamaño o con el lienzo). Desde ahi la tarjeta no vuelve a aparecer: reiniciar el
+     servicio la recupera. */
+  bool conexionCaida() const;
+
   /* Comprueba si el compositor puso la capa en la pantalla pedida; si no, la rehace
      (como mucho dos veces) y deja el motivo en `lastError()`. Devuelve true si reaccionó. */
   bool corrigeColocacion();

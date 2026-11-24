@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 struct HudVertex {
@@ -111,6 +112,10 @@ private:
   /* máscaras del atlas: 0 píxel blanco, 1 píldora, 2 tarjeta */
   Rect white_, pill_, card_;
   Glyph glyphs_[256]{};
+  /* unos pocos signos fuera del rango latino-1 (euro, raya, comillas tipograficas, puntos
+     suspensivos): sin ellos el titulo de la tarjeta salta a "?" en mitad de la frase */
+  std::vector<std::pair<unsigned, Glyph>> extra_;
+  const Glyph *glifo(unsigned cp) const;
   float asc_ = 17.0f;   /* ascenso de la fuente en píxeles del atlas */
   bool hasText_ = false;
   std::vector<uint8_t> atlas_;

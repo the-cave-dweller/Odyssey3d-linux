@@ -2,6 +2,40 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La tarjeta del aviso vuelve a salir sola, y la letra deja de salirse de su caja (v0.20)
+- Sintoma: al pasar un video a pantalla completa ya no aparecia la tarjeta de aviso, y en la ultima vez
+  que salio los textos y las cajas se salian del recuadro.
+- **Por que dejo de salir**: el compositor cortaba la comunicacion de la capa porque le mandabamos el
+  lienzo dibujado antes de su primera confirmacion de tamano ("a buffer has been attached to a layer
+  surface prior to the first layer_surface.configure"). Al intentar arreglar la colocacion se seguia
+  usando esa conexion muerta, así que la tarjeta no volvia nunca. Ahora no se manda nada hasta la
+  confirmacion, la capa nueva espera la suya, y si el compositor corta la conexion se nota
+  (`el compositor cerro la conexion de la capa superpuesta`), se suelta y se abre una capa nueva sola
+  (`capa superpuesta reabierta en DP-4`).
+- **Por que la letra se salia**: dos cosas.
+  - El compositor anuncia su propia escala para esta capa: 1,80, no la 1,50 del escritorio. El recorte
+    del lienzo se calculaba con la escala vieja y la tarjeta se dibujaba un 20 % mas grande que su
+    propio lienzo. Ahora, si la escala cambia a mitad de camino, se recalculan lienzo y posicion
+    (`la escala del compositor paso de 1,50 a 1,80: la tarjeta se reajusta`).
+  - La plantilla de las esquinas redondeadas estaba mal calculada: a la distancia del rectangulo no se
+    le restaba el radio, así que la parte opaca quedaba encogida un radio por cada lado. Toda caja,
+    pastilla o tarjeta dibujada con esa plantilla salia unos 10 px logicos mas pequena que su recuadro
+    y sin esquinas redondeadas. Medido píxel a píxel sobre el lienzo volcado: la caja pedia
+    2651..3004 x 1883..2023 y el relleno solo ocupaba 176..287 de alto. Después del arreglo el relleno
+    coincide exacto con la caja y las esquinas se ven redondeadas. Lo mismo sirve para la pastilla del
+    visor, que usa la misma plantilla.
+  - La separacion desde el borde de la pantalla ya no se pide con el margen del compositor (lo
+    multiplica por su escala y se comia parte de la tarjeta): el lienzo llega hasta el borde y la
+    separacion va dentro, en zona transparente.
+- Comprobacion de la colocacion mas tolerante: que el compositor ofrezca un area MAS PEQUENA que la
+  pedida es normal (800x267 logico = 668x224 en su escala 1,8); solo una oferta claramente MAS GRANDE
+  delata otra pantalla. Antes saltaba el aviso en cada pasada.
+- Menos ruido en la tarjeta: fuera la opcion "estereo vertical" (quedan Lado a lado, 2D plano y Video
+  normal) y el texto ya saca el euro, la raya y las comillas tipograficas en vez de signos de
+  interrogacion: el lector de texto convertia cualquier caracter fuera del rango latino en "?".
+- Probado con una ventana real a pantalla completa (Zen): `tarjeta puesta por zen | ... pantalla DP-4`,
+  sin error de protocolo y la tarjeta se queda en el rincon inferior derecho del Odyssey.
+
 ## El visor dejaba de irse al monitor normal: causa encontrada (v0.19)
 - Síntoma que daba la prueba de v0.18: la imagen se veía como una imagen 2D normal con los bordes
   difuminados o punteados. No era la red ni el relieve: con dos monitores conectados el visor elegía
@@ -43,13 +77,13 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
 - Pasaba esto: con dos monitores conectados (el Odyssey y un Sun Electronics X7149A de 1600x1200) la tarjeta
   aparecio en la pantalla equivocada. Tres cosas lo provocaban, y las tres estan corregidas:
   - **El monitor se elegia una sola vez**, al arrancar el servicio. Ahora se vuelve a elegir cada vez
-    que se pone la tarjeta, asi que un monitor conectado despues, una suspension o un cambio de modo
+    que se pone la tarjeta, así que un monitor conectado despues, una suspension o un cambio de modo
     de la lente ya no dejan la tarjeta en un sitio viejo.
   - **El compositor puede retirar y volver a anunciar una pantalla** (pasa al cambiar el modo 3D de la
-    lente). No haciamos caso al aviso de "global removed", asi que la capa se creaba con un monitor ya
+    lente). No haciamos caso al aviso de "global removed", así que la capa se creaba con un monitor ya
     muerto y el compositor la colocaba donde queria. Ahora esa pantalla se marca como muerta, se suelta
     su objeto y la capa se rehace sobre la que sigue en pie.
-  - **Se guardaba el ultimo modo anunciado, no el mas grande**, asi que "la pantalla de mas pixeles" se
+  - **Se guardaba el ultimo modo anunciado, no el mas grande**, así que "la pantalla de mas pixeles" se
     podia calcular con un modo pequeno. Ahora se guarda el modo mas grande de cada pantalla.
 - Y por las dudas, la eleccion ya no es solo "la de mas pixeles": se prefieren los monitores cuyo nombre
   o modelo contiene odyssey / syncmaster / g90. Se puede fijar a mano con `pantalla = DP-4` en
@@ -66,7 +100,7 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   que no dejaba tiempo de pulsar nada. La causa: al comprobar si la tarjeta seguia teniendo sentido se
   volvía a preguntar por "la mejor ventana a pantalla completa" en vez de mirar la ventana concreta. En
   cuanto la tarjeta aparecia, el navegador perdía el foco un instante y la "mejor ventana" pasaba a ser
-  otra, asi que el vigilante consideraba que la original ya no estaba a pantalla completa, retiraba la
+  otra, así que el vigilante consideraba que la original ya no estaba a pantalla completa, retiraba la
   tarjeta y la volvia a poner en el siguiente recorrido. En el registro se veian seis ciclos en 20 segundos.
 - Ahora se comprueba esa ventana por su identificador (`find` + `usable()`), sin importar que haya otra
   ventana por delante o sin foco. La tarjeta se aguanta los 40 segundos de rigor y solo se va si ESA
@@ -83,7 +117,7 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   usa la base cubica de Catmull-Rom, que pasa por los puntos, y la pendiente sale de la derivada de esa
   misma base: las 16 lecturas del mapa se hacen una sola vez. Medido sobre el mapa real que vuelca el
   visor (`../analisis-samsung/comparar-muestreo.py`): el desplazamiento medio entregido no cambia
-  (7,73 → 7,68 px, asi que el relieve no se sube ni se baja), el salto maximo de un pixel al siguiente
+  (7,73 → 7,68 px, así que el relieve no se sube ni se baja), el salto maximo de un pixel al siguiente
   baja de 12,26 a 10,59 px y la diferencia entre lo viejo y lo nuevo es de 0,31 px rms. Coste: nada
   medible (108,0 cuadros/s en ventana con conversor, igual que antes).
 - **Temblor del desplazamiento (lo que ellos llaman `dither`).** Se le suma un patron fijo de 0,35 px al
@@ -96,7 +130,7 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   (`virt.max_disparity 0,0033` / `min_disparity −0,0026`, en fraccion del ancho y por ojo), o sea
   **22,6 px de separacion binocular**, y en juegos medidos con esa capa la disparidad tipica era de
   6,8 a 12,3 px. El nuestro entregaba 65 px de separacion (32,5 por ojo), 2,9 veces mas. Ahora el
-  deslizador a 50 vale 22,6 px y el cuadro ademas recorta cada ojo a los dos numeros de ellos, asi que
+  deslizador a 50 vale 22,6 px y el cuadro ademas recorta cada ojo a los dos numeros de ellos, así que
   ningun objeto se sale del volumen comodo del panel. Ajuste a mano: `ODYSSEY3D_TOPE=0` quita el recorte
   y `ODYSSEY3D_RELIEVE=2.9` devuelve el recorrido viejo de 65 px; el arranque dice en el registro que
   modo esta puesto (`arranque: relieve 50 (23 px de separacion entre ojos a 3840 px de ancho, tope por
@@ -152,7 +186,7 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   → `inpaint.dll` (relleno de huecos en cantos) → `degraph.dll` (compensacion de fantasma). El envoltorio
   `ConversionWrapper.dll` solo exporta `GetFPS`, `Start` y `Stop`.
 - **Las siete DLL de etapa exportan unicamente `get_proc_address`** y estan empaquetadas (secciones con
-  nombres basura), asi que desarmarlas sin un volcado de memoria en marcha no da nada util. Los seis
+  nombres basura), así que desarmarlas sin un volcado de memoria en marcha no da nada util. Los seis
   volcados que ya habia en la carpeta tampoco sirven: cero apariciones del modelo.
 - **El "cifrado" de la configuracion y de los modelos es un XOR con una clave fija de 229 bytes**,
   alineada en el offset 0, la misma para todo. Con la clave en la mano el config
@@ -186,8 +220,8 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
 - **Se ve de cuanto hablamos.** Al encender el conversor el registro dice la separacion en pixeles
   entre ojos y el plano de referencia, y en pantalla aparece un aviso de 9 segundos con las teclas
   `Ctrl+Shift+6` (subir) y `Ctrl+Shift+5` (bajar), para ajustar el relieve mirando el panel.
-- **Volcado util.** Con `--dump` ahora se guarda tambien `-trama-con-mapa.png`: la trama leida de
-  Vulkan con el mapa ya puesto. El volcado de siempre se hacía antes de la primera estimacion, asi que
+- **Volcado util.** Con `--dump` ahora se guarda también `-trama-con-mapa.png`: la trama leida de
+  Vulkan con el mapa ya puesto. El volcado de siempre se hacía antes de la primera estimacion, así que
   nunca dejaba ver el relieve aplicado.
 
 ## El conversor aguantado: cantos limpios, red en su propio hilo y tarjetas llenas

@@ -94,6 +94,8 @@ struct Overlay::Impl {
   int bufAncho = 0, bufAlto = 0;  /* mapa en píxeles reales */
   int margenDer = 0, margenAb = 0;
   double ox = 0.0, oy = 0.0;      /* esquina de la tarjeta en píxeles del monitor */
+  double escalaGeom = 0.0;        /* escala con la que se calculo el recorte actual */
+  bool conexionCaida = false;     /* el compositor cerró la conexión de la capa */
 
   /* mapas de memoria para los cuadros (doble buffer: uno en pantalla, otro dibujando) */
   struct Bloque {
@@ -253,6 +255,16 @@ struct Overlay::Impl {
     liberaBloques(false);
     /* la disposición es determinista: misma ventana, misma tarjeta, mismos píxeles */
     hud.begin(anchoE, altoE, altoLogico());
+    if (tarjetaPuesta && std::fabs(hud.scale() - escalaGeom) > 0.01) {
+      /* el compositor anuncio su escala despues de montar la ventana: la tarjeta se dibuja
+         de otro tamano y hay que volver a recortar, si no la letra se sale de las cajas */
+      std::printf("[capa] la escala del compositor paso de %.2f a %.2f: la tarjeta se reajusta\n",
+                  escalaGeom, hud.scale());
+      ajustaGeometria();
+    }
+    if (std::getenv("ODYSSEY3D_DEBUG_UI"))
+      std::printf("[depurar capa] al dibujar: hud %.2f | recorte ox=%.0f buf=%dx%d\n",
+                  hud.scale(), ox, bufAncho, bufAlto);
     std::vector<HudVertex> vv = hud.vertices();
 
     const size_t npx = (size_t)bufAncho * (size_t)bufAlto;
@@ -342,7 +354,11 @@ struct Overlay::Impl {
                  canal(fuente[p * 4u + 2u]);
     }
 
-    if (surf) {
+    if (surf && !(layer && !hayConfigure)) {
+      /* enganchar un lienzo antes de la primera confirmacion de tamano es un error de
+         protocolo: el compositor cierra la conexion de la capa y desde ahi la tarjeta ya no
+         vuelve a aparecer nunca. Pasaba al rehacer la capa, que es lo que dejaba el aviso
+         "tarjeta puesta" en el registro pero nada en la pantalla. */
       wl_surface_attach(surf, bl->buf, 0, 0);
       wl_surface_damage(surf, 0, 0, supAncho, supAlto);
       wl_surface_commit(surf);
@@ -350,6 +366,54 @@ struct Overlay::Impl {
   }
 
   /* ---------- colocación de la tarjeta ---------- */
+
+  /* Recorte del lienzo y tamano de la ventana de la tarjeta, sacados de la disposicion que
+     calculo el hud. Se vuelve a llamar al dibujar: el compositor anuncia su escala despues de
+     montar la ventana (aqui paso de 1,50 a 1,80) y con la escala nueva la tarjeta se dibuja
+     mas grande; si el recorte se queda con la escala vieja, la letra sale cortada por la
+     izquierda y se sale de sus cajas. */
+  bool ajustaGeometria() {
+    float ax = 0, ay = 0, aw = 0, ah = 0;
+    if (!hud.askBounds(&ax, &ay, &aw, &ah)) return false;
+    const float holgura = 4.0f * (float)std::max(1.0, escala);   /* para el borde suave */
+    ax -= holgura;
+    ay -= holgura;
+    aw += 2.0f * holgura;
+    ah += 2.0f * holgura;
+    if (ax < 0.0f) {
+      aw += ax;
+      ax = 0.0f;
+    }
+    if (ay < 0.0f) {
+      ah += ay;
+      ay = 0.0f;
+    }
+    aw = std::min(aw, (float)anchoE - ax);
+    ah = std::min(ah, (float)altoE - ay);
+    /* El lienzo llega hasta el borde de la pantalla y la separacion con el borde se deja
+       DENTRO del lienzo, en zona transparente. Con `set_margin` el compositor multiplica el
+       margen por su escala, que no siempre coincide con la nuestra, y el sobrante se lo comia
+       a la tarjeta: salia encogida y con la letra fuera de las cajas. */
+    const int nAncho = (int)std::lround((float)anchoE - ax);
+    const int nAlto = (int)std::lround((float)altoE - ay);
+    if (nAncho < 16 || nAlto < 16) return false;
+    const bool cambio = (nAncho != bufAncho || nAlto != bufAlto);
+    ox = ax;
+    oy = ay;
+    bufAncho = nAncho;
+    bufAlto = nAlto;
+    escalaGeom = hud.scale();
+    margenDer = margenAb = 0;
+    supAncho = aQuiere((double)bufAncho);
+    supAlto = aQuiere((double)bufAlto);
+    if (layer && cambio) {
+      zwlr_layer_surface_v1_set_size(layer, (uint32_t)supAncho, (uint32_t)supAlto);
+#ifdef HAVE_FRACTIONAL_SCALE
+      if (viewport) wp_viewport_set_destination(viewport, supAncho, supAlto);
+#endif
+    }
+    return true;
+  }
 
   int32_t aQuiere(double pixelesReales) const {
     return (int32_t)std::lround(pixelesReales / std::max(0.25, escala));
@@ -362,6 +426,7 @@ struct Overlay::Impl {
       capaEn = nullptr;
     }
     ofrecidoAncho = ofrecidoAlto = 0;
+    hayConfigure = false;   /* la capa nueva tiene que esperar su propia confirmacion */
   }
 
   void limpiaTarjeta() {
@@ -431,8 +496,21 @@ struct Overlay::Impl {
     }
   }
 
+  /* un error de protocolo (tamano o lienzo mal puestos) cierra la conexion del compositor:
+     sin avisar de esto la tarjeta "se pone" segun el registro pero no vuelve a aparecer
+     jamas, que es exactamente lo que pasaba cuando la tarjeta dejaba de salir */
+  void marcaConexionCaida() {
+    if (conexionCaida) return;
+    conexionCaida = true;
+    aviso = "el compositor cerró la conexión de la capa superpuesta";
+  }
+
   int esperar(int ms) {
     if (!dpy) return -1;
+    if (wl_display_get_error(dpy) != 0) {
+      marcaConexionCaida();
+      return -1;
+    }
     while (wl_display_prepare_read(dpy) != 0) wl_display_dispatch_pending(dpy);
     wl_display_flush(dpy);
     struct pollfd p{wl_display_get_fd(dpy), POLLIN, 0};
@@ -576,12 +654,13 @@ struct Overlay::Impl {
     Impl *s = static_cast<Impl *>(data);
     s->ofrecidoAncho = (int)w;
     s->ofrecidoAlto = (int)h;
-    if (w > 0 && h > 0) {
-      /* lo que ofrece el compositor es el area util de la pantalla donde puso la capa, no
-         el tamano de la tarjeta: solo se recorta cuando resulta mas pequeno que lo pedido */
-      if (s->supAncho > (int)w) s->supAncho = (int)w;
-      if (s->supAlto > (int)h) s->supAlto = (int)h;
-    }
+    /* Lo que ofrece el compositor es el area util de la pantalla donde puso la capa, no el
+       tamano de la tarjeta, y ademas lo da en SU escala (aqui ofrecio 668x224 para una
+       ventana nuestra de 800x267: los mismos pixeles contados con escala 1,80 en vez de
+       1,50). Recortarse a esa cifra encogia la tarjeta y la letra salia fuera de sus cajas,
+       asi que solo se guarda como huella de la pantalla y no se toca el tamano pedido. */
+    (void)w;
+    (void)h;
     s->hayConfigure = true;
     zwlr_layer_surface_v1_ack_configure(s->layer, serial);
 #ifdef HAVE_FRACTIONAL_SCALE
@@ -753,7 +832,12 @@ bool Overlay::available() const { return d && d->shell && d->comp && d->shm && d
 
 int Overlay::fd() const { return d->dpy ? wl_display_get_fd(d->dpy) : -1; }
 
-int Overlay::dispatchPending() { return d->dpy ? wl_display_dispatch_pending(d->dpy) : -1; }
+int Overlay::dispatchPending() {
+  if (!d->dpy) return -1;
+  const int r = wl_display_dispatch_pending(d->dpy);
+  if (wl_display_get_error(d->dpy) != 0) d->marcaConexionCaida();
+  return r;
+}
 
 int Overlay::waitAndDispatch(int ms) {
   if (!d->dpy) return -1;
@@ -763,7 +847,9 @@ int Overlay::waitAndDispatch(int ms) {
   int n = ::poll(&p, 1, ms);
   if (n > 0) {
     wl_display_read_events(d->dpy);
-    return wl_display_dispatch_pending(d->dpy);
+    const int r = wl_display_dispatch_pending(d->dpy);
+    if (wl_display_get_error(d->dpy) != 0) d->marcaConexionCaida();
+    return r;
   }
   wl_display_cancel_read(d->dpy);
   return 0;
@@ -794,33 +880,12 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
   if (s.layer && s.capaEn != (s.elegido ? s.elegido->obj : nullptr))
     s.quitaEscuchaLayer();   /* destruye la capa: se volvera a crear sobre el monitor bueno */
 
-  float ax = 0, ay = 0, aw = 0, ah = 0;
-  if (!s.hud.askBounds(&ax, &ay, &aw, &ah)) return;
-  const float holgura = 4.0f * (float)std::max(1.0, s.escala);   /* para el borde suave */
-  ax -= holgura;
-  ay -= holgura;
-  aw += 2.0f * holgura;
-  ah += 2.0f * holgura;
-  if (ax < 0.0f) {
-    aw += ax;
-    ax = 0.0f;
-  }
-  if (ay < 0.0f) {
-    ah += ay;
-    ay = 0.0f;
-  }
-  aw = std::min(aw, (float)s.anchoE - ax);
-  ah = std::min(ah, (float)s.altoE - ay);
-  s.bufAncho = (int)std::lround(aw);
-  s.bufAlto = (int)std::lround(ah);
-  s.ox = ax;
-  s.oy = ay;
-  if (s.bufAncho < 16 || s.bufAlto < 16) return;
-
-  s.margenDer = s.aQuiere((double)s.anchoE - (ax + aw));
-  s.margenAb = s.aQuiere((double)s.altoE - (ay + ah));
-  s.supAncho = s.aQuiere(aw);
-  s.supAlto = s.aQuiere(ah);
+  s.hud.begin(s.anchoE, s.altoE, s.altoLogico());   /* por si el monitor cambio de tamano */
+  if (!s.ajustaGeometria()) return;
+  if (std::getenv("ODYSSEY3D_DEBUG_UI"))
+    std::printf("[depurar capa] lienzo %dx%d escala %.2f hud %.2f | recorte ox=%.0f oy=%.0f buf=%dx%d | ventana %dx%d\n",
+                s.anchoE, s.altoE, s.escala, s.hud.scale(), s.ox, s.oy, s.bufAncho, s.bufAlto,
+                s.supAncho, s.supAlto);
 
   if (!s.layer) {
     s.layer = zwlr_layer_shell_v1_get_layer_surface(s.shell, s.surf, s.elegido ? s.elegido->obj : nullptr,
@@ -834,7 +899,7 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
   }
   zwlr_layer_surface_v1_set_anchor(s.layer, ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                                                 ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-  zwlr_layer_surface_v1_set_margin(s.layer, 0, s.margenDer, s.margenAb, 0);
+  zwlr_layer_surface_v1_set_margin(s.layer, 0, 0, 0, 0);   /* la separacion vive dentro del lienzo */
   zwlr_layer_surface_v1_set_exclusive_zone(s.layer, -1);
   zwlr_layer_surface_v1_set_size(s.layer, (uint32_t)s.supAncho, (uint32_t)s.supAlto);
 #ifdef HAVE_FRACTIONAL_SCALE
@@ -857,6 +922,8 @@ void Overlay::hideAsk() {
 }
 
 bool Overlay::askVisible() const { return d->tarjetaPuesta; }
+
+bool Overlay::conexionCaida() const { return d && d->conexionCaida; }
 
 bool Overlay::remember() const { return d && d->hud.state().remember; }
 
@@ -918,13 +985,16 @@ std::vector<std::string> Overlay::pantallas() const {
   return out;
 }
 
-/* El compositor manda en el configure el area util de la pantalla donde puso la capa. Si
-   alli no cabe la tarjeta, es que la puso en otra: se rehace la capa sobre la pantalla
-   pedida (dos intentos como mucho) y se guarda el motivo para el registro. */
+/* El compositor manda en el configure el area util de la pantalla donde puso la capa. Si esa
+   area es claramente MAS grande que la ventana que pedimos, la capa esta en otra pantalla: se
+   rehace sobre la pantalla pedida (dos intentos como mucho) y se guarda el motivo. */
 bool Overlay::corrigeColocacion() {
   if (!d || !d->layer || !d->tarjetaPuesta || d->intentosColocacion >= 2 || !d->elegido) return false;
   if (d->ofrecidoAncho <= 0 || d->ofrecidoAlto <= 0 || d->ofrecidoAncho > 8192) return false;
-  if (d->supAncho <= d->ofrecidoAncho && d->supAlto <= d->ofrecidoAlto) return false;
+  /* Una oferta MAS GRANDE que la tarjeta pedida es la huella del area util de otra pantalla.
+     Una mas pequena es el compositor ajustando margenes o contando en su propia escala: eso
+     no significa que la capa este en otro monitor. */
+  if (d->ofrecidoAncho <= d->supAncho + 8 && d->ofrecidoAlto <= d->supAlto + 8) return false;
   const int intentos = ++d->intentosColocacion;
   char texto[240];
   std::snprintf(texto, sizeof texto,
