@@ -21,6 +21,7 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun2;     /* x desfase de fase · y paso de lente · z tramado activo · w invertir ojos */
     vec4 tun3;     /* x estado del indicador · y disposición (0 lado a lado, 1 arriba/abajo) · z invertir Y · w profundidad */
     vec4 tun4;     /* conversor 2D/3D: x activo · y cuanto se desplaza cada ojo · z plano de referencia · w copia pura */
+    vec4 tun5;     /* conversor fino: x temblor del desplazamiento en pixeles · y/z topes por ojo en pixeles (0 = sin tope) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -34,6 +35,41 @@ vec3 srcHalf(vec2 uv, float which)
     if (P.tun3.z == 1.0)
         s.y = 1.0 - s.y;
     return texture(uSrc, s).rgb;
+}
+
+/* --- mapa de profundidad: interpolacion cubica con pendiente de la propia base ----------
+   El mapa llega de 518 x 518 y la pantalla es de 3840, o sea un punto del mapa cubre casi 8
+   pixeles. Con el filtro lineal de siempre el relieve sale quebrado -- los puntos del mapa se
+   notan como peldanos -- y la pendiente, medida a un punto de distancia, da saltos de golpe: por
+   ahi se recortaba el canto y se perdian los bordes de los objetos. Con la base cubica de
+   Catmull-Rom (que pasa por los puntos) la superficie sale continua, y la pendiente sale de la
+   derivada de esa misma base: las 16 lecturas del mapa se hacen una sola vez. */
+vec4 crBase(float t) {
+    float t2 = t * t, t3 = t2 * t;
+    return 0.5 * vec4(-t3 + 2.0 * t2 - t, 3.0 * t3 - 5.0 * t2 + 2.0, -3.0 * t3 + 4.0 * t2 + t, t3 - t2);
+}
+vec4 crDeriv(float t) {
+    float t2 = t * t;
+    return 0.5 * vec4(-3.0 * t2 + 4.0 * t - 1.0, 9.0 * t2 - 10.0 * t, -9.0 * t2 + 8.0 * t + 1.0, 3.0 * t2 - 2.0 * t);
+}
+/* devuelve en .x el valor del mapa y en .y cuanto cambia por punto de mapa en horizontal */
+vec2 mapaCubico(vec2 uv) {
+    ivec2 tam = textureSize(uDepth, 0);
+    vec2 p = uv * vec2(tam) - 0.5;
+    ivec2 i = ivec2(floor(p));
+    vec2 f = p - vec2(i);
+    vec4 ax = crBase(f.x), ex = crDeriv(f.x), ay = crBase(f.y);
+    vec2 v = vec2(0.0);
+    for (int r = 0; r < 4; r++) {
+        int y = clamp(i.y + r - 1, 0, tam.y - 1);
+        for (int c = 0; c < 4; c++) {
+            int x = clamp(i.x + c - 1, 0, tam.x - 1);
+            float d = texelFetch(uDepth, ivec2(x, y), 0).r;
+            v.x += ay[r] * ax[c] * d;
+            v.y += ay[r] * ex[c] * d;
+        }
+    }
+    return v;
 }
 
 void main()
@@ -97,18 +133,32 @@ void main()
         /* Video normal (una sola imagen): el mapa de profundidad dice cuanto hay que desplazar
            cada ojo. Lo que esta en el plano de referencia (tun4.z) no se mueve; lo que esta por
            delante sale hacia fuera de la pantalla y el fondo hacia dentro. */
-        float cerca = texture(uDepth, fuv).r;   /* el mapa ya esta derecho: viene del pase pequeno */
-        /* El mapa llega de 518 x 518 y en los cantos sale borroso: alli desplazar de mas estira el
-           color en peine. Donde la profundidad cambia rapido en horizontal se recorta el
-           desplazamiento, asi que el canto se queda en su sitio en vez de babearse.
+        float cerca, pendiente;
+        vec2 mp = mapaCubico(fuv);
+        cerca = mp.x;
+        pendiente = abs(mp.y);
+        /* En los cantos del mapa sale borroso: alli desplazar de mas estira el color en peine.
+           Donde la profundidad cambia rapido en horizontal se recorta el desplazamiento, asi que
+           el canto se queda en su sitio en vez de babearse.
            CantoSuave manda: subelo si aun se babea, bajalo si el relieve se apaga. */
-        const float pasoMapa = 1.0 / 518.0;
         const float CantoSuave = 0.004;
-        float dI = texture(uDepth, fuv + vec2(-pasoMapa, 0.0)).r;
-        float dD = texture(uDepth, fuv + vec2(+pasoMapa, 0.0)).r;
-        float pendiente = abs(dD - dI) * 0.5;
         float canto = clamp(CantoSuave / max(pendiente, 0.00001), 0.10, 1.0);
         float s = (cerca - P.tun4.z) * P.tun4.y * canto;
+        /* El programa de Samsung mueve el desplazamiento de a saltos y en las zonas llanas (pared,
+           cielo) se ven bandas: por eso le suma un temblor de 0,25 a 0,4 px al mapa. Aqui se suma
+           igual, pero solo donde el mapa esta llano (canto = 1), que es justo donde la banda se ve
+           y donde el temblor no se nota porque el color de fondo es parejo. */
+        if (P.tun5.x != 0.0) {
+            float r = fract(sin(dot(floor(px), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+            s += r * (P.tun5.x / P.res.x) * canto;
+        }
+        /* topes por ojo del programa de Samsung: -9,98 px para adentro y +12,67 px para afuera
+           (0 en tun5.y/z = sin tope, que es como venia funcionando) */
+        if (P.tun5.y > 0.0 || P.tun5.z > 0.0) {
+            float arriba = P.tun5.y > 0.0 ? P.tun5.y / P.res.x : 1.0;
+            float abajo = P.tun5.z > 0.0 ? P.tun5.z / P.res.x : 1.0;
+            s = clamp(s, -abajo, arriba);
+        }
         vec2 q4 = fuv;
         if (P.tun3.z == 1.0)
             q4.y = 1.0 - q4.y;                  /* la fuente puede venir con la primera fila abajo */

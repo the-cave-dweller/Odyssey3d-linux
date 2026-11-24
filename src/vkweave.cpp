@@ -18,10 +18,11 @@ constexpr size_t kMaxHudVerts = 65536;
 /* std140: vec2 v2c[4] en 0, vec2 v3c[4] en 64, vec3 v4c[4] en 128 (paso 16, no 12),
    vec4 res en 192, tun1 en 208, tun2 en 224, tun3 en 240. */
 /* Bloque std140 de weave.frag: cada arreglo de vec2 o vec3 ocupa 64 bytes (la alineacion de un
-   arreglo se redondea a 16) y despues vienen cinco vec4; el ultimo es el del conversor 2D/3D. */
+   arreglo se redondea a 16) y despues vienen seis vec4: el quinto es el del conversor 2D/3D y el
+   sexto los ajustes finos del mismo (temblor y topes por ojo). */
 constexpr size_t kUboBytes = 288;
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
-                 kOffTun3 = 240, kOffTun4 = 256;
+                 kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272;
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -700,6 +701,21 @@ void VkWeave::fillUbo(uint8_t *dst) {
      que pintar la imagen ENTERA y plana. Si cae en la rama de lado a lado se ven dos mitades de la
      pantalla una al lado de la otra, que es lo primero que se notaba al encender el conversor. */
   t4[3] = (convOn_ && !depthUsable_) ? 2.0f : 0.0f;
+  /* conversor fino: lo que el programa de Samsung hace despues del mapa y aqui faltaba.
+     ODYSSEY3D_DITHER  temblor del desplazamiento en pixeles (por defecto 0,35; 0 lo apaga).
+                       El de ellos es 0,25 px (dither_strength 0,01 sobre 25 px de recorrido).
+     ODYSSEY3D_TOPE    puesto a 1 limita cada ojo a lo que limita el de ellos: +12,67 px hacia
+                       afuera y -9,98 px hacia adentro. Sin ponerla no hay tope, que es el
+                       recorrido que se ajusto a ojo con el usuario. */
+  float *t5 = (float *)(dst + kOffTun5);
+  static const float ditherPx = [] {
+    const char *e = std::getenv("ODYSSEY3D_DITHER");
+    return e ? (float)std::atof(e) : 0.35f;
+  }();
+  static const bool conTope = std::getenv("ODYSSEY3D_TOPE") != nullptr;
+  t5[0] = ditherPx;
+  t5[1] = conTope ? 12.67f : 0.0f;
+  t5[2] = conTope ? 9.98f : 0.0f;
   if (std::getenv("ODYSSEY_UBO")) {
     std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · v4 TL %.2f %.2f %.2f\n",
                  res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], v4[0], v4[1], v4[2]);

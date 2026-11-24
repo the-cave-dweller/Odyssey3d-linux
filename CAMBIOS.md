@@ -2,7 +2,42 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
-## El relieve se apoya solo: plano del sujeto, mapa limpio y cortes de escena (v0.14)
+## El mapa ya no llega quebrado al panel: muestreo cubico, temblor y topes por ojo (v0.15)
+- **El mapa de profundidad se interpola cubico.** El mapa llega de 518 x 518 y la pantalla es de 3840,
+  o sea un punto del mapa cubre casi 8 pixeles. Con el filtro lineal el desplazamiento era continuo por
+  pedazos: la pendiente (que se media a un punto de distancia) saltaba de golpe al cruzar de una celda
+  del mapa a la siguiente, y ahi el recorte del canto se comportaba como un escalon. Ahora el cuadro
+  usa la base cubica de Catmull-Rom, que pasa por los puntos, y la pendiente sale de la derivada de esa
+  misma base: las 16 lecturas del mapa se hacen una sola vez. Medido sobre el mapa real que vuelca el
+  visor (`../analisis-samsung/comparar-muestreo.py`): el desplazamiento medio entregido no cambia
+  (7,73 → 7,68 px, asi que el relieve no se sube ni se baja), el salto maximo de un pixel al siguiente
+  baja de 12,26 a 10,59 px y la diferencia entre lo viejo y lo nuevo es de 0,31 px rms. Coste: nada
+  medible (108,0 cuadros/s en ventana con conversor, igual que antes).
+- **Temblor del desplazamiento (lo que ellos llaman `dither`).** Se le suma un patron fijo de 0,35 px al
+  desplazamiento, pero solo donde el mapa esta llano (`canto = 1`), que es donde se ven las bandas de
+  profundidad y donde el temblor no se nota porque el color de fondo es parejo. El programa de Samsung
+  usa 0,25 px (`dither_strength 0,01`); aqui se puede cambiar con `ODYSSEY3D_DITHER=0` para apagarlo o
+  subirlo.
+- **Los topes por ojo del programa de Samsung, ya puestos pero sin activar.** Ellos no pasan de
+  **+12,67 px hacia afuera y −9,98 px hacia adentro por ojo** (`virt.max_disparity 0,0033` /
+  `min_disparity −0,0026` del config, medido como fraccion del ancho y por ojo), o sea 25,3 / −20,0 px
+  de separacion binocular. El nuestro con el deslizador a 50 entrega 32,5 px por ojo (65 px de
+  separacion), 2,4–2,6 veces mas. Con `ODYSSEY3D_TOPE=1` el cuadro se recorta a los valores de ellos
+  para poder comparar lado a lado; sin esa variable sigue el recorrido ajustado a ojo.
+- **Correccion a lo que escribi en la entrada anterior:** ahi dije que los cuatro `.onnx.bin` del
+  programa traian los pesos sustituidos por relleno. **Es falso.** El bloque `[DUMMY_START]…[DUMMY_END]`
+  esta al FINAL del archivo y es solo relleno (1/3/3 MiB segun el modelo); detras vienen inicializadores
+  fp16 con pesos de verdad: `mde_large` 49.477.899 bytes con 224 inicializadores y 49,4 MB de pesos,
+  entrada `input` 1x3x518x518 y salida `depth` 1x518x518. El agente de Windows los descifro y los jo;
+  aqui los baje con la misma clave y los corro con nuestro ONNX Runtime: cargan y valen, y cuestan lo
+  mismo que la nuestra (17,3 ms la primera estimacion en la grafica, 108 cuadros/s en ventana con
+  conversor cada 3 cuadros). En un cuadro real de nuestra muestra los dos mapas correlacionan 0,90–0,94;
+  en la foto que ellos usaron solo 0,36, y la red de ellos tiene el rango de salida mucho mas ancho
+  (0–13 frente a 0,7–4,4). Siguen siendo pesos propietarios de Samsung: no van en el repositorio, y se
+  pueden probar con `--modelo RUTA`.
+- **Hueco libre en el bloque uniforme:** `weave.frag` recibe ahora un `tun5` (temblor y los dos topes)
+  en los 16 bytes que sobraban; el tamano del bloque sigue en 288 bytes.
+
 - **El plano de apoyo lo elige la imagen, no un deslizador fijo.** Se hace un histograma del mapa de
   profundidad donde cada celda vale más si tiene cantos al lado y si cae en el centro del cuadro; el
   pico de ese histograma es el plano donde la separación entre ojos vale cero, o sea lo que queda
