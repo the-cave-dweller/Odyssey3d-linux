@@ -51,6 +51,10 @@ public:
 private:
   void run();
   void note(const std::string &text);
+  /* Reabre el dispositivo con el ultimo modo que funciono. Unica forma decente de levantar una
+     camara que deja de mandar cuadros: NUNCA se manda un reset de USB, que a la 04e8:20d7 del
+     monitor la deja muerta hasta apagar y encender el monitor. */
+  bool reabrirCamara(std::string *err);
 
   TrackFeedOptions opts_;
   Camera cam_;
@@ -61,4 +65,6 @@ private:
   bool running_ = false;
   double startedAt_ = 0.0, acceptedAt_ = -1.0;
   bool mono_ = false;
+  int modoW_ = 0, modoH_ = 0, modoFps_ = 0;   /* el modo que eligio start() */
+  std::string modoCuatro_;
 };

@@ -2,6 +2,31 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La cámara IR: por qué no llegaba un solo cuadro, y qué hacemos ahora si se cuelga (v0.44)
+- Síntoma de las últimas sesiones: `[rastreo] … 0/0 cuadros (0.0 fps) … calibracion: sin SR+CALCAM.bin en .`
+  o sea la cámara se abría pero **nadie leía los fotogramas** y el rastreo usaba la pose de fábrica.
+- Causa: a esta unidad le faltaba la **calibración de fábrica de la cámara** en disco. El hilo del
+  rastreo la necesita para triangular los dos ojos y, si no está, se salía. La leímos del monitor
+  (`odyssey3d ctl calib --out …`, puerto `/dev/ttyACM0`) y la dejamos en
+  `/usr/local/share/odyssey3d/calib/` y `~/.config/odyssey3d/calib/`: `SR+CALCAM.bin`,
+  `SR+CALET.bin`, `SR+CAL3D.bin`. Datos de esta unidad: `fx 474,32 / 476,22`, `cx 322,24 / 321,58`,
+  `cy 242,11 / 249,17`, separación entre las dos vistas **69,97 mm**, cámara→panel
+  `X 3,60 · Y −17,96 · Z 0,41 cm` con giros de media décima de grado.
+- Comprobado en el código: **nunca mandamos un reset de USB** (no hay `USBDEVFS_RESET` ni equivalente).
+  Eso es lo único que tumba del todo la cámara del monitor, y solo se levanta apagando y encendiendo
+  el monitor; no lo hacemos ni lo haremos.
+- Dos cosas que sí arreglamos, para que la cámara no se quede «agarrada»:
+  - Si el rastreo no puede empezar (falta calibración o falla el rastreador), **soltamos el flujo**
+    (`stop` + `close`) en vez de dejarlo montado sin lector. Un flujo montado y no leído es justo lo
+    que revienta el `S_FMT` de la `04e8:20d7` en la sesión siguiente.
+  - Si en medio de la sesión dejan de llegar fotogramas (**3 segundos** sin ninguno), cerramos y
+    **reabrimos el dispositivo con el mismo modo** que funcionaba (MJPG 1280x480 @ 60 en el monitor),
+    con 2 segundos de espera entre intentos. En el log se ve como `[rastreo] camara: flujo reabierto`.
+    Si aun así no vuelve, la nota dice por qué.
+- Fuera de sesión la cámara responde bien: `odyssey3d ctl camera --size 1280x480 --format MJPG` saca
+  5 de 5 fotogramas (~224 KB cada uno). Con la calibración ya en disco, la próxima sesión debería
+  imprimir `N/N cuadros` en vez de `0/0` y la trama se moverá con tus ojos.
+
 ## El paso escrito en una sesión de verdad: 0,3484 mm → 0,3454 mm (medido sobre el cuadro, v0.43)
 - Medido sobre el **cuadro que escribió el visor en una sesión real** (volcado Vulkan del panel,
   `tools/paso_rejilla.py`), no sobre el cuadro de laboratorio:

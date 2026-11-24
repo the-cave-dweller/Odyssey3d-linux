@@ -68,6 +68,10 @@ bool TrackFeed::start(const TrackFeedOptions &opts, std::string *err) {
                   intento.fps, mono_ ? " (una vista, por la cara)" : " (dos vistas, calibrada)");
     st_.mode = texto;
     abierto = true;
+    modoW_ = cam_.width();
+    modoH_ = cam_.height();
+    modoFps_ = intento.fps;
+    modoCuatro_ = intento.fourcc;
     break;
   }
   if (!abierto) {
@@ -81,12 +85,41 @@ bool TrackFeed::start(const TrackFeedOptions &opts, std::string *err) {
   return true;
 }
 
+bool TrackFeed::reabrirCamara(std::string *err) {
+  if (modoCuatro_.empty()) return false;
+  cam_.stop();
+  cam_.close();
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+  std::string local;
+  if (!cam_.open(opts_.device, &local)) {
+    if (err) *err = "abrir: " + local;
+    return false;
+  }
+  if (!cam_.setFormat(modoW_, modoH_, modoCuatro_, modoFps_, &local)) {
+    cam_.close();
+    if (err) *err = "formato: " + local;
+    return false;
+  }
+  if (!cam_.start(&local)) {
+    cam_.close();
+    if (err) *err = "arranque del flujo: " + local;
+    return false;
+  }
+  if (err) err->clear();
+  return true;
+}
+
 void TrackFeed::run() {
   CameraCalibration calib;
   TrackerTransform xform;
   std::string err;
   if (!mono_ && !loadFactoryCalib(opts_.calibDir, &calib, &xform, &err)) {
     note("calibracion: " + err);
+    /* Importante: si nos vamos sin leer, la camara se queda con el flujo montado y nadie se lo
+       come. La 04e8:20d7 no lo lleva bien (deja de responder al S_FMT y hay que apagar el
+       monitor para levantarla), asi que soltamos el flujo antes de salir. */
+    cam_.stop();
+    cam_.close();
     return;
   }
   if (mono_)
@@ -94,6 +127,8 @@ void TrackFeed::run() {
   HeadTracker tracker;
   if (!tracker.init(calib, xform, opts_.set, &err)) {
     note("rastreador: " + err);
+    cam_.stop();
+    cam_.close();
     return;
   }
   std::vector<uint8_t> izquierda, derecha;
@@ -104,8 +139,23 @@ void TrackFeed::run() {
     size_t bytes = 0;
     if (!cam_.read(&datos, &bytes, 250, &err)) {
       if (++sinCuadro % 20 == 1) note("camara: " + err);
+      /* Tres segundos sin un solo cuadro: la camara se colgo del flujo. La unica recuperacion
+         limpia es cerrar el dispositivo y volver a montarlo; no tocar el bus USB (un reset de
+         control deja la camara del monitor muerta hasta apagar y encender el monitor). Cada
+         cuatro intentos following, esperar un poco mas. */
+      if (sinCuadro == 12 || (sinCuadro > 12 && sinCuadro % 40 == 0)) {
+        std::string rerr;
+        if (reabrirCamara(&rerr)) {
+          sinCuadro = 0;
+          note("camara: flujo reabierto");
+        } else {
+          note("camara: reapertura fallida, " + rerr);
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+        }
+      }
       continue;
     }
+    sinCuadro = 0;
     bool decodificado = false;
     if (mono_) {
       decodificado = HeadTracker::decodeMono(datos, bytes, cam_.width(), cam_.height(), cam_.mjpeg(),

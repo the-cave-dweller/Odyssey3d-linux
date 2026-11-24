@@ -584,18 +584,27 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   `journalctl --user -u odyssey3d-serve`). El reproductor interno (`play`, basado en libmpv) sigue
   siendo la ruta más directa; mpv por ahora se dibuja con OpenGL aunque su fotograma se trama en
   Vulkan.
-* El **seguimiento de mirada no está activo en las sesiones**: el hub no pasa `--track`, así que la
-  trama se calcula para la posición de ojo nominal (los valores de fábrica del G90XF), igual que el
-  modo "static" del port X11, y por eso el punto dulce es la posición de trabajo normal. Mover la
-  cabeza en horizontal da un cambio de fase que puedes seguir con `←`/`→`.
-  El rastreo sí está implementado (`--track`, `ctl track`: cámara IR + YuNet + triangulación con la
-  calibración de fábrica que lee `SR+CALCAM`), pero necesita que la cámara entregue fotogramas:
-  * si `ctl camera` falla con `VIDIOC_S_FMT ... Input/output error`, en `dmesg` verás
-    `Failed to set UVC probe control : -110`: la interfaz de flujo de la cámara dejó de contestar a
-    los controles UVC. Suele empezar por una suspensión USB (el kernel la suspenda a los 2 s y el
-    resume no llega detras de los hubs del cable del monitor), por eso la regla
+* El **seguimiento de mirada está activo** si en `serve.conf` pone `rastreo = si` (el hub lo avisa al
+  arrancar: `rastreo activo (la camara IR sigue los ojos)`). Sin él, la trama se calcula para la
+  posición de ojo nominal (los valores de fábrica del G90XF), igual que el modo "static" del port
+  X11, y por eso el punto dulce es la posición de trabajo normal. Mover la cabeza en horizontal da un
+  cambio de fase que puedes seguir con `←`/`→`.
+  El rastreo está implementado (`--track`, `ctl track`: cámara IR + YuNet + triangulación con la
+  calibración de fábrica que lee `SR+CALCAM`), pero necesita dos cosas de la cámara:
+  * **la calibración en disco**. Si falta, el log dice `calibracion: sin SR+CALCAM.bin en ...` y no
+    llega ningún fotograma (`0/0 cuadros`), aunque la cámara esté bien. Se saca del propio monitor con
+    `odyssey3d ctl calib --out /usr/local/share/odyssey3d/calib` (habla con `/dev/ttyACM0`, no toca la
+    pantalla) y deja `SR+CALCAM.bin`, `SR+CALET.bin` y `SR+CAL3D.bin`.
+  * que le contesten los controles UVC: si `ctl camera` falla con `VIDIOC_S_FMT ... Input/output
+    error`, en `dmesg` verás `Failed to set UVC probe control : -110`: la interfaz de flujo de la
+    cámara dejó de responder a los controles UVC. Suele empezar por una suspensión USB (el kernel la
+    suspenda a los 2 s y el resume no llega detras de los hubs del cable del monitor), por eso la regla
     `udev/70-odyssey-3d.rules` pone `power/control=on` en la cámara y en la lente. `odyssey3d doctor`
     y `ctl camera` dicen el estado (`control=... estado=...`).
+    Desde v0.44 el hilo de rastreo **reabre el dispositivo solo** si dejan de llegar fotogramas durante
+    3 s, y suelta el flujo si no puede arrancar (un flujo montado y sin lector es lo que deja el
+    `S_FMT` colgado para la sesión siguiente). Nunca mandamos un reset del bus USB, porque eso deja la
+    cámara muerta de verdad:
   * una vez la cámara ya no enumera (`device descriptor read/64, error -110`) no hay reset por
     software que la levante: hay que **apagar y encender el monitor** (o desenchufar su USB-B).
     Al encender se pierde la autenticación de la lente, que el programa vuelve a hacer solo.
