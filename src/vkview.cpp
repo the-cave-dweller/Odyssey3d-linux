@@ -261,6 +261,24 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   }
 }
 
+/* Cuanto separar la vista izquierda de la derecha segun el deslizador "3D Salida".
+   El recorrido nuevo es el presupuesto del programa de Samsung, medido de su config:
+   +12,67 px por ojo hacia afuera y 9,98 px hacia adentro (fraccion del ancho), o sea
+   ~22,6 px de separacion entre ojos con el deslizador a 50 y a 3840 px de ancho. El
+   recorrido viejo llegaba a ~65 px, 2,9 veces mas; ODYSSEY3D_RELIEVE=2.9 lo devuelve. */
+bool topesPorOjoActivos() {
+  const char *e = std::getenv("ODYSSEY3D_TOPE");
+  return !e || e[0] != '0';
+}
+
+float gananciaRelieve(int popout) {
+  static const float escala = [] {
+    const char *e = std::getenv("ODYSSEY3D_RELIEVE");
+    return e ? (float)std::atof(e) : 1.0f;
+  }();
+  return (0.00104f + (float)popout / 100.0f * 0.00972f) * escala;
+}
+
 /* GLFW da la posicion del raton en los puntos logicos de la ventana, pero la interfaz se dibuja
    sobre el lienzo de pixeles reales del panel. Con el panel en modo normal (escala 1,5) son
    medidas distintas: sin este paso los clics caen por encima de lo que se ve. */
@@ -641,19 +659,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         std::printf("[conversor] la red va por CPU: la profundidad se recalcula cada %d cuadros "
                     "(se cambia con --cada N)\n", cadaConv);
       }
-      /* sin desplazamiento no hay relieve: arrancar en el termino medio de la curva nueva. Con el
-         deslizador a 50 la separacion entre el ojo izquierdo y el derecho es de ~65 px a 3840 de
-         ancho; ahi es donde aun se ve un solo volumen y no dos imagenes despegadas. */
+      /* sin desplazamiento no hay relieve: arrancar en el termino medio de la curva nueva, que
+         es el presupuesto del programa de Samsung (unos 22,6 px de separacion entre ojos a 3840
+         de ancho, repartidos 12,67 px por ojo hacia afuera y 9,98 px hacia adentro). */
       ui.hud.state().popout = 50;
       if (ui.hud.state().depth == 50) ui.hud.state().depth = 55;   /* algo por delante, sin pasarse */
       apoyoAuto = true;
       profundidadVista = ui.hud.state().depth;
       std::printf("[conversor] video normal a 3D con %s, cada %d cuadros (tecla C para apagar)\n",
                   red.device().c_str(), cadaConv);
-      std::printf("[conversor] arranque: relieve %d (%.0f px de separacion entre ojos a %d px de ancho), "
-                  "plano de apoyo automatico -- Ctrl+Shift+6 sube el relieve, Ctrl+Shift+5 lo baja\n",
-                  ui.hud.state().popout, (0.003 + ui.hud.state().popout / 100.0 * 0.028) * 3840.0,
-                  3840);
+      std::printf("[conversor] arranque: relieve %d (%.0f px de separacion entre ojos a %d px de ancho, "
+                  "%s), plano de apoyo automatico -- Ctrl+Shift+6 sube el relieve, "
+                  "Ctrl+Shift+5 lo baja\n",
+                  ui.hud.state().popout, gananciaRelieve(ui.hud.state().popout) * 3840.0, 3840,
+                  topesPorOjoActivos() ? "tope por ojo +12,67 / -9,98 px" : "sin tope por ojo");
       std::printf("[conversor] limpieza del mapa: filtro guiado (radio 8) + dilate 3 + corte de plano "
                   "(umbral 0,12, descanso 15 cuadros); apoyo por saliencia\n");
       ui.convInfo = true;
@@ -1137,10 +1156,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       /* los dos deslizadores de siempre mandan aqui: "3D Depth" pone el plano que se queda
          quieto y "3D Popout" cuanto se separan la vista izquierda y la derecha */
-      /* "3D Salida" (relieve) manda aqui: 0 deja la imagen plana y 100 separa las dos vistas
-         un 2,8 % del ancho de la pantalla. A 50 son ~65 px de separacion entre ojos: con 50 px (la curva
-         vieja) no se notaba y con 98 molestaba, ahi esta el termino medio medido en el panel. */
-      const float ganancia = 0.003f + (float)st.popout / 100.0f * 0.028f;
+      /* "3D Salida" (relieve) manda aqui: 0 deja la imagen plana y con 50 las dos vistas se
+         separan lo que separa el programa de Samsung (ver gananciaRelieve). Antes de cambiar la
+         curva: con 50 px de separacion no se notaba y con 98 molestaba a los ojos. */
+      const float ganancia = gananciaRelieve(st.popout);
       /* El plano de apoyo (lo que se queda quieto en la pantalla) lo sigue la red: toma el pico del
          histograma del mapa ya limpio, o sea el sujeto. Con el sujeto apoyado en la pantalla el
          relieve se abre hacia atras y cansa menos la vista con el mismo relieve. Si el usuario mueve

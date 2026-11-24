@@ -18,12 +18,16 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   profundidad y donde el temblor no se nota porque el color de fondo es parejo. El programa de Samsung
   usa 0,25 px (`dither_strength 0,01`); aqui se puede cambiar con `ODYSSEY3D_DITHER=0` para apagarlo o
   subirlo.
-- **Los topes por ojo del programa de Samsung, ya puestos pero sin activar.** Ellos no pasan de
-  **+12,67 px hacia afuera y −9,98 px hacia adentro por ojo** (`virt.max_disparity 0,0033` /
-  `min_disparity −0,0026` del config, medido como fraccion del ancho y por ojo), o sea 25,3 / −20,0 px
-  de separacion binocular. El nuestro con el deslizador a 50 entrega 32,5 px por ojo (65 px de
-  separacion), 2,4–2,6 veces mas. Con `ODYSSEY3D_TOPE=1` el cuadro se recorta a los valores de ellos
-  para poder comparar lado a lado; sin esa variable sigue el recorrido ajustado a ojo.
+- **El relieve pasa al presupuesto del programa de Samsung (decidido viendo el panel).** El config
+  oficial no deja pasar de **+12,67 px por ojo hacia afuera y −9,98 px hacia adentro**
+  (`virt.max_disparity 0,0033` / `min_disparity −0,0026`, en fraccion del ancho y por ojo), o sea
+  **22,6 px de separacion binocular**, y en juegos medidos con esa capa la disparidad tipica era de
+  6,8 a 12,3 px. El nuestro entregaba 65 px de separacion (32,5 por ojo), 2,9 veces mas. Ahora el
+  deslizador a 50 vale 22,6 px y el cuadro ademas recorta cada ojo a los dos numeros de ellos, asi que
+  ningun objeto se sale del volumen comodo del panel. Ajuste a mano: `ODYSSEY3D_TOPE=0` quita el recorte
+  y `ODYSSEY3D_RELIEVE=2.9` devuelve el recorrido viejo de 65 px; el arranque dice en el registro que
+  modo esta puesto (`arranque: relieve 50 (23 px de separacion entre ojos a 3840 px de ancho, tope por
+  ojo +12,67 / -9,98 px)`). Coste: ninguno (108,3 cuadros/s en ventana con conversor).
 - **Correccion a lo que escribi en la entrada anterior:** ahi dije que los cuatro `.onnx.bin` del
   programa traian los pesos sustituidos por relleno. **Es falso.** El bloque `[DUMMY_START]…[DUMMY_END]`
   esta al FINAL del archivo y es solo relleno (1/3/3 MiB segun el modelo); detras vienen inicializadores

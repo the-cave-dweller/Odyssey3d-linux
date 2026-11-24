@@ -704,15 +704,19 @@ void VkWeave::fillUbo(uint8_t *dst) {
   /* conversor fino: lo que el programa de Samsung hace despues del mapa y aqui faltaba.
      ODYSSEY3D_DITHER  temblor del desplazamiento en pixeles (por defecto 0,35; 0 lo apaga).
                        El de ellos es 0,25 px (dither_strength 0,01 sobre 25 px de recorrido).
-     ODYSSEY3D_TOPE    puesto a 1 limita cada ojo a lo que limita el de ellos: +12,67 px hacia
-                       afuera y -9,98 px hacia adentro. Sin ponerla no hay tope, que es el
-                       recorrido que se ajusto a ojo con el usuario. */
+     ODYSSEY3D_TOPE    por defecto limita cada ojo a lo que limita el de ellos: +12,67 px
+                       hacia afuera y -9,98 px hacia adentro (fraccion del ancho, leido del config
+                       oficial: virt.max_disparity 0,0033 / min_disparity -0,0026). Con
+                       ODYSSEY3D_TOPE=0 se quita el tope. */
   float *t5 = (float *)(dst + kOffTun5);
   static const float ditherPx = [] {
     const char *e = std::getenv("ODYSSEY3D_DITHER");
     return e ? (float)std::atof(e) : 0.35f;
   }();
-  static const bool conTope = std::getenv("ODYSSEY3D_TOPE") != nullptr;
+  static const bool conTope = [] {
+    const char *e = std::getenv("ODYSSEY3D_TOPE");
+    return !e || e[0] != '0';
+  }();
   t5[0] = ditherPx;
   t5[1] = conTope ? 12.67f : 0.0f;
   t5[2] = conTope ? 9.98f : 0.0f;
