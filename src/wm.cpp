@@ -1,6 +1,7 @@
 #include "wm.h"
 
 #include "plasma-window-management-client-protocol.h"
+#include "xdg-output-unstable-v1-client-protocol.h"
 
 #include <wayland-client.h>
 
@@ -55,10 +56,43 @@ struct WindowMonitor::Impl {
   std::function<void()> onChange;
   std::string err;
 
+  /* Salidas del compositor. El nombre ("DP-4") no lo da wl_output: lo pide xdg_output, y con el
+     wl_output en la mano podemos mandarle una ventana a ESA salida. */
+  struct Out {
+    wl_output *obj = nullptr;
+    zxdg_output_v1 *xdg = nullptr;
+    std::string name;
+    int x = 0, y = 0;         /* sitio en el espacio global del compositor */
+    int ancho = 0, alto = 0;  /* tamano logico (con la escala del escritorio aplicada) */
+  };
+  std::vector<Out> outs;
+  zxdg_output_manager_v1 *xdgMgr = nullptr;
+
+  Out *outByName(const std::string &nombre) {
+    for (Out &o : outs)
+      if (o.name == nombre) return &o;
+    return nullptr;
+  }
+  Out *outByObject(wl_output *o) {
+    for (Out &m : outs)
+      if (m.obj == o) return &m;
+    return nullptr;
+  }
+  /* Enlazamos xdg_output sobre una salida ya enlazada (llega en cualquier orden). */
+  void etiquetaSalida(Out &o) {
+    if (o.xdg || !xdgMgr || !o.obj) return;
+    o.xdg = zxdg_output_manager_v1_get_xdg_output(xdgMgr, o.obj);
+    if (o.xdg) zxdg_output_v1_add_listener(o.xdg, &Impl::xdgListener, this);
+  }
+
   ~Impl() {
     for (Entry *e : entries)
       if (e->obj) org_kde_plasma_window_destroy(e->obj);
     for (Entry *e : entries) delete e;
+    /* los zxdg_output los retira el compositor al cerrar la conexión */
+    for (Out &o : outs)
+      if (o.obj) wl_output_destroy(o.obj);
+    if (xdgMgr) zxdg_output_manager_v1_destroy(xdgMgr);
     if (mgr) org_kde_plasma_window_management_destroy(mgr);
     if (registry) wl_registry_destroy(registry);
     if (dpy) wl_display_disconnect(dpy);
@@ -126,6 +160,52 @@ struct WindowMonitor::Impl {
     if (org_kde_plasma_window *obj = org_kde_plasma_window_management_get_window_by_uuid(mgr, uuid))
       s->track(obj, id, uuid);
   }
+
+  /* ------- orden de apilamiento (respuesta a get_stacking_order) ------- */
+  struct Stack {
+    std::vector<std::string> *uuids = nullptr;
+    bool done = false;
+  };
+  static void stackWindow(void *data, org_kde_plasma_stacking_order *, const char *uuid) {
+    Stack *s = static_cast<Stack *>(data);
+    if (s && s->uuids && uuid) s->uuids->push_back(uuid);
+  }
+  static void stackDone(void *data, org_kde_plasma_stacking_order *) {
+    Stack *s = static_cast<Stack *>(data);
+    if (s) s->done = true;
+  }
+  static const org_kde_plasma_stacking_order_listener stackListener;
+
+  /* ------- nombre de cada salida ------- */
+  static void xdgNombre(void *data, zxdg_output_v1 *obj, const char *nombre) {
+    Impl *s = static_cast<Impl *>(data);
+    for (Out &o : s->outs)
+      if (o.xdg == obj) {
+        o.name = nombre ? nombre : "";
+        return;
+      }
+  }
+  static void xdgPosicion(void *data, zxdg_output_v1 *obj, int32_t x, int32_t y) {
+    Impl *s = static_cast<Impl *>(data);
+    for (Out &o : s->outs)
+      if (o.xdg == obj) {
+        o.x = x;
+        o.y = y;
+        return;
+      }
+  }
+  static void xdgTamano(void *data, zxdg_output_v1 *obj, int32_t w, int32_t h) {
+    Impl *s = static_cast<Impl *>(data);
+    for (Out &o : s->outs)
+      if (o.xdg == obj) {
+        o.ancho = w;
+        o.alto = h;
+        return;
+      }
+  }
+  static void xdgHueco(void *, zxdg_output_v1 *, const char *) {}
+  static void xdgTermina(void *, zxdg_output_v1 *) {}
+  static const zxdg_output_v1_listener xdgListener;
 
   /* libwayland aborta si falta la función de un evento, así que declaramos
      vacíos explícitos para lo que no nos interesa. */
@@ -203,6 +283,18 @@ const org_kde_plasma_window_listener WindowMonitor::Impl::windowListener = {
     /* client_geometry      */ &Impl::noOpGeom,
     /* mapped               */ &Impl::winMapped};
 
+const org_kde_plasma_stacking_order_listener WindowMonitor::Impl::stackListener = {
+    /* window */ &Impl::stackWindow,
+    /* done   */ &Impl::stackDone};
+
+/* Huecos en este orden: logical_position, logical_size, done, name, description */
+const zxdg_output_v1_listener WindowMonitor::Impl::xdgListener = {
+    /* logical_position */ &Impl::xdgPosicion,
+    /* logical_size     */ &Impl::xdgTamano,
+    /* done             */ &Impl::xdgTermina,
+    /* name             */ &Impl::xdgNombre,
+    /* description      */ &Impl::xdgHueco};
+
 void WindowMonitor::Impl::onGlobalRemove(void *, wl_registry *, uint32_t name) {
   /* Si desaparece un global (por ejemplo se reinicia KWin) la conexión deja de servir:
      el servicio lo nota al poco porque el descriptor da error. */
@@ -212,6 +304,24 @@ void WindowMonitor::Impl::onGlobalRemove(void *, wl_registry *, uint32_t name) {
 void WindowMonitor::Impl::onGlobal(void *data, wl_registry *registry, uint32_t name, const char *iface,
                                    uint32_t version) {
   Impl *s = static_cast<Impl *>(data);
+  if (!std::strcmp(iface, wl_output_interface.name)) {
+    Out o;
+    o.obj = static_cast<wl_output *>(
+        wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 4u)));
+    if (o.obj) {
+      s->outs.push_back(o);
+      s->etiquetaSalida(s->outs.back());
+    }
+    return;
+  }
+  if (!std::strcmp(iface, zxdg_output_manager_v1_interface.name)) {
+    if (!s->xdgMgr) {
+      s->xdgMgr = static_cast<zxdg_output_manager_v1 *>(wl_registry_bind(
+          registry, name, &zxdg_output_manager_v1_interface, std::min(version, 2u)));
+      for (Out &o : s->outs) s->etiquetaSalida(o);
+    }
+    return;
+  }
   if (s->mgr || std::strcmp(iface, "org_kde_plasma_window_management") != 0) return;
   if (version < 13) {
     s->err = "el compositor ofrece org_kde_plasma_window_management pero es viejo (hace falta 13 o mas)";
@@ -316,6 +426,83 @@ bool WindowMonitor::close(const std::string &uuid, std::string *err) {
   }
   org_kde_plasma_window_close(e->obj);
   flush();
+  return true;
+}
+
+std::vector<std::string> WindowMonitor::outputNames() const {
+  std::vector<std::string> out;
+  for (const Impl::Out &o : d->outs)
+    if (!o.name.empty()) out.push_back(o.name);
+  return out;
+}
+
+std::vector<WindowMonitor::Salida> WindowMonitor::outputs() const {
+  std::vector<Salida> out;
+  for (const Impl::Out &o : d->outs) {
+    if (o.name.empty()) continue;
+    Salida s;
+    s.name = o.name;
+    s.x = o.x;
+    s.y = o.y;
+    s.w = o.ancho;
+    s.h = o.alto;
+    out.push_back(s);
+  }
+  return out;
+}
+
+bool WindowMonitor::sendToOutput(const std::string &uuid, const std::string &outputName,
+                                 std::string *err) {
+  if (!d->mgr) {
+    if (err) *err = "el compositor no ofrece el protocolo de ventanas";
+    return false;
+  }
+  Impl::Entry *e = d->byUuid(uuid);
+  if (!e || !e->obj) {
+    if (err) *err = "no se encontró la ventana " + uuid;
+    return false;
+  }
+  /* El nombre de la salida llega en eventos aparte: si aun no lo tenemos, bombeamos un rato. */
+  Impl::Out *o = d->outByName(outputName);
+  for (int intento = 0; !o && intento < 12; ++intento) {
+    waitAndDispatch(50);
+    o = d->outByName(outputName);
+  }
+  if (!o) {
+    std::string Tenemos;
+    for (const Impl::Out &m : d->outs) {
+      if (!Tenemos.empty()) Tenemos += ", ";
+      Tenemos += m.name.empty() ? "(sin nombre)" : m.name;
+    }
+    if (err) *err = "el compositor no ofrece la salida " + outputName + " (ofrece: " + Tenemos + ")";
+    return false;
+  }
+  org_kde_plasma_window_send_to_output(e->obj, o->obj);
+  flush();
+  return true;
+}
+
+bool WindowMonitor::stackingOrder(std::vector<std::string> *uuids, std::string *err) {
+  if (!d->mgr || !uuids) {
+    if (err) *err = "el compositor no ofrece el protocolo de ventanas";
+    return false;
+  }
+  Impl::Stack acum;
+  acum.uuids = uuids;
+  org_kde_plasma_stacking_order *pila = org_kde_plasma_window_management_get_stacking_order(d->mgr);
+  if (!pila) {
+    if (err) *err = "el compositor no devolvio el orden de apilamiento";
+    return false;
+  }
+  org_kde_plasma_stacking_order_add_listener(pila, &Impl::stackListener, &acum);
+  flush();
+  for (int ronda = 0; ronda < 40 && !acum.done; ++ronda)
+    if (waitAndDispatch(100) <= 0) break;
+  org_kde_plasma_stacking_order_destroy(pila);
+  if (!acum.done) {
+    if (err) *err = "el compositor no termino de mandar el orden de apilamiento";
+    return false;
+  }
   return true;
 }
 

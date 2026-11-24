@@ -78,6 +78,25 @@ public:
   bool setState(const std::string &uuid, uint32_t flags, bool on, std::string *err = nullptr);
   bool close(const std::string &uuid, std::string *err = nullptr);
 
+  /* Mueve una ventana a la salida indicada por su nombre ("DP-4"). Sin esto KWin devuelve la
+     ventana minimizada donde le viene en gana, y la trama necesita pixel a pixel ESA salida. */
+  bool sendToOutput(const std::string &uuid, const std::string &outputName, std::string *err = nullptr);
+  /* Nombres de las salidas que ofrece el compositor, en el orden del registro. */
+  std::vector<std::string> outputNames() const;
+
+  /* Salida con su sitio y su tamano logico en el espacio global del compositor. Sirve para saber
+     si una ventana (que KWin reporta con la misma metrologia) esta en la pantalla del panel. */
+  struct Salida {
+    std::string name;
+    int x = 0, y = 0;
+    int w = 0, h = 0;
+  };
+  std::vector<Salida> outputs() const;
+
+  /* Orden de apilamiento del compositor: pide la lista y espera el `done`. Sirve para comprobar
+     de verdad si el visor quedo por encima del video (no hay forma de "activar" una ventana). */
+  bool stackingOrder(std::vector<std::string> *uuids, std::string *err = nullptr);
+
   void setOnChange(std::function<void()> fn);
 
   const std::string &lastError() const { return err_; }

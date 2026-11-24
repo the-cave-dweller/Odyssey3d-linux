@@ -71,8 +71,11 @@ static const char *kUsage =
     "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
     "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry]\n"
     "  odyssey3d ctl windows [--watch]\n"
-    "  odyssey3d ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|cerrar] [--uuid ID]  como esta la ventana del video\n"
+    "  odyssey3d ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|sobre|debajo|libre|salida NOMBRE|cerrar] [--uuid ID]\n"
+    "                                        como esta la ventana del video; `salida DP-4` la devuelve al Odyssey\n"
     "  odyssey3d ctl aparece   la ventana del visor otra vez a la vista (para atarla a la tecla PB)\n"
+    "  odyssey3d ctl salidas   cada pantalla con su posicion y tamano logicos en el espacio global\n"
+    "  odyssey3d ctl apilamiento  el orden arriba/abajo que ve el compositor (el ultimo esta arriba)\n"
     "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
     "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
@@ -1749,9 +1752,34 @@ static int cmdVentana(int argc, char **argv) {
      sirve para atar la tecla PB a un atajo global del escritorio. */
   else if (!std::strcmp(act, "aparecer")) ok = wm.setState(u, WindowInfo::Minimized, false, &err);
   else if (!std::strcmp(act, "minimizar")) ok = wm.setState(u, WindowInfo::Minimized, true, &err);
+  /* sobre / debajo: el compositor no tiene orden para "traer al frente", pero si para dejar la
+     ventana siempre por encima (KeepAbove). Es lo que evita que el visor vuelva DETRAS del video
+     despues de que el gestor de ventanas lo minimizara. */
+  else if (!std::strcmp(act, "sobre")) ok = wm.setState(u, WindowInfo::KeepAbove, true, &err);
+  else if (!std::strcmp(act, "debajo")) {
+    wm.setState(u, WindowInfo::KeepAbove, false, &err);
+    ok = wm.setState(u, WindowInfo::KeepBelow, true, &err);
+  } else if (!std::strcmp(act, "libre")) {
+    wm.setState(u, WindowInfo::KeepAbove, false, &err);
+    ok = wm.setState(u, WindowInfo::KeepBelow, false, &err);
+  }
+  /* salida DP-4: devolver la ventana a LA salida del Odyssey. KWin la coloca donde le place y la
+     trama necesita pixel a pixel la salida del panel. */
+  else if (!std::strcmp(act, "salida")) {
+    std::string nom = flag(argc, argv, "--salida");
+    if (nom.empty() && argc > 1) nom = argv[1];
+    if (nom.empty()) {
+      std::fprintf(stderr, "falta el nombre de la salida: ctl ventana salida DP-4 [--uuid ID]\n");
+      for (const std::string &p : wm.outputNames()) std::fprintf(stderr, "  salida: %s\n", p.c_str());
+      return 2;
+    }
+    ok = wm.sendToOutput(u, nom, &err);
+  }
   else if (!std::strcmp(act, "cerrar")) ok = wm.close(u, &err);
   else {
-    std::fprintf(stderr, "uso: ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|cerrar] [--uuid ID]\n");
+    std::fprintf(stderr,
+                 "uso: ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|sobre|debajo|libre|salida"
+                 " NOMBRE|cerrar] [--uuid ID]\n");
     return 2;
   }
   if (!ok) {
@@ -1800,6 +1828,19 @@ static int cmdAparece(int, char **) {
     std::fprintf(stderr, "[aparece] %s\n", err.c_str());
     return 1;
   }
+  /* KWin no activa la ventana al sacarla de minimizada, así que se queda detras del video: la
+     ponemos por encima. (Este protocolo no trae orden de activar ventanas.) */
+  wm.setState(nuestra.uuid, WindowInfo::KeepAbove, true, &err);
+  /* Ademas la devolvemos a SU salida y a pantalla completa: KWin la coloca donde le place, y si
+     cae en otra pantalla o le quita el estado de pantalla completa la trama deja de ser pixel a
+     pixel y el panel sale con trozos sueltos. */
+  ServeCfg cfg;
+  loadServeCfg(cfg);
+  if (!nuestra.fullscreen()) wm.setState(nuestra.uuid, WindowInfo::Fullscreen, true, &err);
+  if (!cfg.pantalla.empty()) {
+    if (!wm.sendToOutput(nuestra.uuid, cfg.pantalla, &err))
+      std::fprintf(stderr, "[aparece] %s\n", err.c_str());
+  }
   wm.settle(120, 12);
   WindowInfo desp;
   if (wm.find(nuestra.uuid, desp) && desp.minimized()) {
@@ -1807,6 +1848,54 @@ static int cmdAparece(int, char **) {
     return 1;
   }
   std::printf("[aparece] la ventana del visor vuelve a la vista\n");
+  return 0;
+}
+
+/* ctl apilamiento: orden de apilamiento que tiene el compositor, de abajo hacia arriba (o al
+   reves: se comprueba con la ventana que uno sabe que esta al frente). Es la unica forma de
+   comprobar de verdad si el visor quedo por encima del video. */
+static int cmdApilamiento(int, char **) {
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "[apilamiento] %s\n", err.c_str());
+    return 1;
+  }
+  wm.settle();
+  std::vector<std::string> orden;
+  if (!wm.stackingOrder(&orden, &err)) {
+    std::fprintf(stderr, "[apilamiento] %s\n", err.c_str());
+    return 1;
+  }
+  /* Medido en esta maquina con KWin 6.8: la lista va de ABAJO hacia ARRIBA. Con `ctl ventana sobre`
+     la ventana salta al ultimo puesto y con `libre` vuelve a su hueco, y el fondo de escritorio es
+     siempre el primero. */
+  std::printf("[apilamiento] %zu ventanas, de abajo (1) hacia arriba (%zu), en el orden que manda el compositor\n",
+              orden.size(), orden.size());
+  for (size_t i = 0; i < orden.size(); ++i) {
+    WindowInfo w{};
+    const bool sab = wm.find(orden[i], w);
+    std::printf("  %2zu  %-34s  %-20s  %-24s  %s\n", i + 1, orden[i].c_str(),
+                sab ? w.appId.c_str() : "?", sab ? WindowInfo::stateList(w.states).c_str() : "?",
+                sab ? w.title.c_str() : "?");
+  }
+  return 0;
+}
+
+/* ctl salidas: nombres y geometricas de las salidas, para saber donde esta cada monitor en el
+   espacio global del compositor (la posicion que despues reports las ventanas). */
+static int cmdSalidas(int, char **) {
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) {
+    std::fprintf(stderr, "[salidas] %s\n", err.c_str());
+    return 1;
+  }
+  wm.settle();
+  std::vector<WindowMonitor::Salida> salidas = wm.outputs();
+  std::printf("[salidas] %zu salidas (posicion y tamano logicos en el espacio global)\n", salidas.size());
+  for (const WindowMonitor::Salida &s : salidas)
+    std::printf("  %-10s %d,%d  %dx%d\n", s.name.c_str(), s.x, s.y, s.w, s.h);
   return 0;
 }
 
@@ -1992,6 +2081,20 @@ static int cmdOverlay(int argc, char **argv) {
 }
 #endif
 
+/* El visor no puede ver lo que hace el gestor de ventanas con su propia ventana: ese protocolo solo
+   lo admite un cliente a la vez y lo tiene el hub. Se lo contamos por un archivo en
+   ~/.local/state/odyssey3d con la hora del reloj monotono; caduca, asi que si el hub se va el visor
+   vuelve a dibujar por su cuenta. Con "oculta" el visor deja de dibujar y de pedir fotogramas, y al
+   pasar a "visible" reengancha la captura, que es lo que quita los trozos mal colocados. */
+static void escribirMarcaVentana(const char *estado, double ahora) {
+  std::ofstream os(rutaEstadoOdyssey("ventana"), std::ios::trunc);
+  if (os) os << estado << ' ' << ahora << "\n";
+}
+static void borrarMarcaVentana() {
+  std::error_code ec;
+  std::filesystem::remove(rutaEstadoOdyssey("ventana"), ec);
+}
+
 static int cmdServe(int argc, char **argv) {
 #ifndef HAVE_WAYLAND_WM
   (void)argc; (void)argv;
@@ -2070,6 +2173,9 @@ static int cmdServe(int argc, char **argv) {
   std::string hijoUuid;
   double intentoAparecer = 0.0;   /* cuando intentamos por ultima vez devolver la ventana minimizada */
   bool avisoAparecerHecho = false;
+  double intentoEncima = 0.0;     /* cuando reforzamos el "encima de todo" del visor */
+  bool avisoEncimaHecho = false;
+  double intentoVideo = 0.0;      /* cuando devolvimos el video a su sitio por ultima vez */
 
   nt.setOnAction([&](const std::string &id, const std::string &action) {
     auto it = idUuid.find(id);
@@ -2157,13 +2263,22 @@ static int cmdServe(int argc, char **argv) {
 
     /* Si el gestor de ventanas minimiza la ventana del visor (Meta+F9, un clic en la barra de
        tareas, un gesto del touchpad) la trama desaparece, pero el monitor se queda en modo 3D y ya
-       nadie puede mandar sobre la pastilla: la devolvemos nosotros. La unica minimizacion que
-       dejamos en paz es la nuestra, la de Tab, que el visor avisa escribiendo
+       nadie puede mandar sobre la pastilla: la devolvemos nosotros. Al devolverla KWin no la
+       activa (se queda DETRAS del video) y la coloca en la salida que le place: por eso pedimos
+       tambien el "encima de todo", la pantalla completa y la salida del panel. La unica
+       minimizacion que dejamos en paz es la nuestra, la de Tab, que el visor avisa escribiendo
        ~/.local/state/odyssey3d/entregada con su numero de proceso. */
     if (hijo > 0) {
+      const std::string panelSalida =
+          !cfg.pantalla.empty() ? cfg.pantalla : (hayTarjeta && ov ? ov->outputName() : std::string());
+      WindowInfo visor{};
+      bool hayVisor = false;
       for (const WindowInfo &w : wm.windows()) {
         if (w.appId != "odyssey3d" || w.title != "Odyssey 3D") continue;   /* el visor, no la tarjeta */
-        if (!w.minimized()) { avisoAparecerHecho = false; break; }
+        visor = w;
+        hayVisor = true;
+      }
+      if (hayVisor) {
         std::string marca;
         bool nuestra = readSmallFile(rutaEstadoOdyssey("entregada"), marca);
         if (nuestra) {
@@ -2172,21 +2287,77 @@ static int cmdServe(int argc, char **argv) {
           const long pid = std::atol(marca.c_str());
           nuestra = pid > 0 && ::kill((pid_t)pid, 0) == 0;
         }
-        if (nuestra) break;                     /* entregamos la pantalla a proposito */
-        if (now - intentoAparecer < 2.0) break; /* sin avisar cada dos por tres */
-        intentoAparecer = now;
-        std::string e3;
-        const bool pudo = wm.setState(w.uuid, WindowInfo::Minimized, false, &e3);
-        if (!avisoAparecerHecho) {
-          avisoAparecerHecho = true;
-          std::printf("[ventana] %s\n", pudo
-              ? "el gestor de ventanas minimizo el visor: lo devolvemos. Para estar aparte usa Tab"
-                " (y ESC para salir del todo)"
-              : ("el visor esta minimizado y el compositor no lo devolvio: " + e3).c_str());
-          std::fflush(stdout);
+        if (visor.minimized() && !nuestra) {
+          escribirMarcaVentana("oculta", now);   /* el visor deja de dibujar mientras este oculto */
+          if (now - intentoAparecer >= 2.0) {
+            intentoAparecer = now;
+            std::string e3;
+            const bool pudo = wm.setState(visor.uuid, WindowInfo::Minimized, false, &e3);
+            /* sin activarla (no esta en este protocolo) KWin la coloca detras del video: encima fijo */
+            wm.setState(visor.uuid, WindowInfo::KeepAbove, true, &e3);
+            /* y de vuelta a SU salida, a pantalla completa: si la deja en el otro monitor la trama
+               no casa pixel a pixel y el panel sale con graficos rotos */
+            if (!visor.fullscreen()) wm.setState(visor.uuid, WindowInfo::Fullscreen, true, &e3);
+            if (!panelSalida.empty() && !wm.sendToOutput(visor.uuid, panelSalida, &e3) && !avisoEncimaHecho) {
+              avisoEncimaHecho = true;
+              std::printf("[ventana] %s\n", e3.c_str());
+            }
+            if (!avisoAparecerHecho) {
+              avisoAparecerHecho = true;
+              std::printf("[ventana] %s\n", pudo
+                  ? "el gestor de ventanas minimizo el visor: la devolvemos por encima del video y en la"
+                    " salida del panel. Para estar aparte usa Tab (y ESC para salir del todo)"
+                  : ("el visor esta minimizado y el compositor no lo devolvio: " + e3).c_str());
+              std::fflush(stdout);
+            }
+          }
+        } else {
+          escribirMarcaVentana("visible", now);
+          avisoAparecerHecho = false;
+          /* por si el compositor perdio el "encima" o el "pantalla completa" al recolocar la ventana */
+          if (!visor.minimized() && now - intentoEncima >= 5.0 &&
+              (!(visor.states & WindowInfo::KeepAbove) || !visor.fullscreen())) {
+            intentoEncima = now;
+            std::string e3;
+            if (!visor.fullscreen()) wm.setState(visor.uuid, WindowInfo::Fullscreen, true, &e3);
+            if (!wm.setState(visor.uuid, WindowInfo::KeepAbove, true, &e3) && !avisoEncimaHecho) {
+              avisoEncimaHecho = true;
+              std::printf("[ventana] el compositor no quiso poner el visor por encima: %s\n", e3.c_str());
+              std::fflush(stdout);
+            }
+          }
         }
-        break;
       }
+      /* El otro lado de la trama es el video: si el navegador pierde la pantalla completa o KWin lo
+         recoloca en otra salida, el fotograma deja de medir lo mismo que el lienzo y el 3D sale con
+         trozos sueltos. Lo devolvemos a su sitio y avisamos. */
+      if (!hijoUuid.empty()) {
+        WindowInfo video{};
+        if (wm.find(hijoUuid, video) && video.mapped && !video.minimized()) {
+          bool fuera = !video.fullscreen();
+          if (!fuera && !panelSalida.empty()) {
+            for (const WindowMonitor::Salida &s : wm.outputs()) {
+              if (s.name != panelSalida || s.w <= 0 || s.h <= 0) continue;
+              const int cx = video.x + (int)video.w / 2, cy = video.y + (int)video.h / 2;
+              fuera = (cx < s.x || cx >= s.x + s.w || cy < s.y || cy >= s.y + s.h);
+              break;
+            }
+          }
+          if (fuera && now - intentoVideo >= 5.0) {
+            intentoVideo = now;
+            std::string e3;
+            wm.setState(hijoUuid, WindowInfo::Fullscreen, true, &e3);
+            if (!panelSalida.empty()) wm.sendToOutput(hijoUuid, panelSalida, &e3);
+            std::printf("[ventana] el video (%s) esta en %d,%d %ux%u con %s: lo devolvemos a pantalla"
+                        " completa en %s\n", hijoUuid.c_str(), video.x, video.y, video.w, video.h,
+                        WindowInfo::stateList(video.states).c_str(),
+                        panelSalida.empty() ? "la salida del panel" : panelSalida.c_str());
+            std::fflush(stdout);
+          }
+        }
+      }
+    } else {
+      borrarMarcaVentana();
     }
 
     /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
@@ -2415,6 +2586,8 @@ int main(int argc, char **argv) {
     if (sub == "flujo") return cmdFlujo(argc - 3, argv + 3);
     if (sub == "ventana") return cmdVentana(argc - 3, argv + 3);
     if (sub == "aparece") return cmdAparece(argc - 3, argv + 3);
+    if (sub == "apilamiento") return cmdApilamiento(argc - 3, argv + 3);
+    if (sub == "salidas") return cmdSalidas(argc - 3, argv + 3);
     if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);
 #endif
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);

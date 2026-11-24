@@ -2,6 +2,36 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El visor vuelve delante del vídeo, en su pantalla y sin gráficos rotos (v0.24)
+- Lo pedido: «ok, el overlay vuelve pero se queda detras del video en otra ventana llena de glitch graficos».
+- **Dos fallos, el uno encima del otro.**
+  1. *Detrás del vídeo.* Quitar la minimizada no basta: en `org_kde_plasma_window_management` **no hay petición
+     de «activar/traer al frente»**, así que KWin devuelve la ventana con el orden que ya tenía y el vídeo —activo
+     y a pantalla completa— queda por encima. Medido con el nuevo `ctl apilamiento`: la lista que manda el
+     compositor va de **abajo hacia arriba** (el fondo siempre el primero) y con `KeepAbove` la ventana salta al
+     último puesto, o sea arriba. El hub la pide al devolverla y la **reafirma cada 5 s** si el compositor la perdió.
+  2. *Los gráficos rotos.* GLFW no se entera en Wayland de que lo minimizaron, y el bucle del visor seguía
+     presentando cuadros contra un intercambio sin superficie; al volver, la ventana estaba achicada y en otra
+     salida (los registros la muestran 3840x2160 → 2560x1440 → 2015x869) y la trama dejaba de ser pixel a pixel.
+     A eso se sumaba que, si `vkAllocateMemory` fallaba al importar el DMA-BUF del compositor, el visor marcaba el
+     cuadro como nuevo igual y tramaba una fuente que no se había importado.
+- **El hub habla con el compositor por la salida** (`sendToOutput`, `outputNames()` y `outputs()` en `src/wm.cpp`,
+  enlazando `wl_output` + `zxdg_output_manager_v1` para tener nombres y rectángulos lógicos): al devolver la
+  ventana del visor pide también `Fullscreen` y `send_to_output(DP-4)`. Y vigila la **ventana del vídeo**: si pierde
+  la pantalla completa o su centro cae fuera del rectángulo de la salida del panel, la devuelve y avisa
+  (`[ventana] el video (…) esta en x,y WxH …: lo devolvemos a pantalla completa en DP-4`), como mucho cada 5 s.
+- **El visor deja de trazar mientras esté oculto** (`src/vkview.cpp`): el hub escribe
+  `~/.local/state/odyssey3d/ventana` con `oculta`/`visible` y su reloj monotónico; con `oculta` el bucle no dibuja,
+  espera con `glfwWaitEventsTimeout` y si dura más de 1,5 s devuelve el panel a 2D (`rig.shutDown()`). Al volver:
+  `glfwRestoreWindow` + `glfwSetWindowMonitor` en nuestra salida, `wv.resize()` y rearme de la captura
+  (`cap.stop()` + `cap.start()`), que es lo que estaba detrás de los cortes de flujo. Si el compositor nos deja con
+  un lienzo que no mide lo del modo, se vuelve a pedir la pantalla completa (aviso único, cada 3 s).
+- **Fuente que no se importa, no se trama**: `newSource` sólo se marca si `sourceFromDma` tuvo éxito, y tras 12
+  importaciones falladas seguidas se avisa de que falta memoria de video (en la máquina había 712 MB libres).
+- **Mandos para no adivinar**: `ctl salidas` (nombre, posición y tamaño lógicos: `DP-4 0,0 2560x1440`),
+  `ctl apilamiento` (el orden de arriba y abajo) y `ctl ventana sobre|debajo|libre|salida NOMBRE`. `ctl aparece`
+  ahora, además de quitar la minimizada, pone `KeepAbove`, `Fullscreen` y manda la ventana a la salida del panel.
+
 ## La pastilla vuelve siempre: tecla PB y ventana minimizada devuelta (v0.23)
 - Lo pedido: «el overlay al esfumarse ya no vuelve con los keys», «la tele se quedó en el modo de malla 3D»
   y «¿hay forma de que se pueda mostrar de vuelta siempre el overlay con la tecla PB?».

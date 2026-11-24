@@ -970,6 +970,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double ultimoPresente = 0.0;
   bool haveCap = false;
   bool sizeWarned = false, importWarned = false;
+  int fallosImport = 0;                /* importaciones falladas seguidas (memoria de video agotada) */
+  bool avisoMemoriaHecho = false;
   Mpris media;                       /* pausar/reanudar el video del navegador sin quitar la capa */
   double nextMediaCheck = 0.0;
   int reanudados = 0;
@@ -1024,6 +1026,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
   int frames = 0, errStreak = 0, reintentos = 0;
   bool dumpHecho = false;
+  /* Vigia de la ventana (el bloque esta mas abajo en el bucle): si el compositor nos esconde,
+     dejamos de trazar; al volver, pedimos otra vez la pantalla completa en nuestra salida y
+     rehacemos el intercambio y la captura, que eran del tamano y la salida anteriores. */
+  bool apartado = false;      /* el compositor nos tiene fuera de en medio */
+  bool panelApagado = false;  /* ya devolvimos el panel a 2D mientras estabamos aparte */
+  bool elHubDiceOculto = false;
+  double desdeApartado = 0.0, intentoSitio = 0.0, ultimoChequeoVentana = 0.0;
   std::signal(SIGTERM, onTermSignal);
   std::signal(SIGINT, onTermSignal);
   while (!glfwWindowShouldClose(win) && !ui.quit) {
@@ -1206,6 +1215,106 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       break;
     }
 
+    /* Vigia de la ventana. En Wayland el compositor NO avisa al cliente de que lo minimizaron:
+       simplemente deja de mandarnos sincronismo, y el bucle se queda presentando cuadros contra un
+       intercambio que ya no tiene superficie -> el panel muestra trozos sueltos y ya no hay forma de
+       responder a las teclas. El hub, que si ve el estado de la ventana por el protocolo de ventanas
+       de KWin, escribe ~/.local/state/odyssey3d/ventana con "oculta" o "visible" y su reloj: mientras
+       estemos ocultos no trazamos nada (y si dura, devolvemos el panel a 2D), y al volver pedimos
+       otra vez la pantalla completa en NUESTRA salida, porque KWin devuelve la ventana donde le place
+       y sin pixel a pixel la trama sale rota. */
+    {
+      bool marcaFresca = false;
+      if (now - ultimoChequeoVentana >= 0.2) {
+        ultimoChequeoVentana = now;
+        std::string marca;
+        char estado[32] = {0};
+        double reloj = 0.0;
+        if (readSmallFile(rutaEstadoOdyssey("ventana"), marca) &&
+            std::sscanf(marca.c_str(), "%31s %lf", estado, &reloj) >= 1 && now - reloj < 5.0) {
+          marcaFresca = true;
+          elHubDiceOculto = !std::strcmp(estado, "oculta");
+        } else {
+          elHubDiceOculto = false;
+        }
+      }
+      /* sin marca del hub (visor suelto, sin servicio) nos fiamos de GLFW */
+      const bool escondida = elHubDiceOculto || (!marcaFresca && glfwGetWindowAttrib(win, GLFW_ICONIFIED) != 0);
+      if (escondida) {
+        if (!apartado) {
+          apartado = true;
+          desdeApartado = now;
+          std::printf("[ventana] el compositor nos quito de en medio: dejamos de trazar hasta volver\n");
+          std::fflush(stdout);
+        }
+        if (!panelApagado && now - desdeApartado > 1.5) {
+          panelApagado = true;
+          rig.shutDown(); /* sin ventana propia no hay nada que tramar: el panel, a 2D */
+        }
+        glfwWaitEventsTimeout(0.15);
+        continue;
+      }
+      if (apartado) {
+        apartado = false;
+        glfwRestoreWindow(win);
+        if (!opts.windowed && !opts.borderless && mon) glfwSetWindowMonitor(win, mon, 0, 0, W, H, hz);
+        glfwFocusWindow(win);
+        glfwPollEvents();
+        int nW = 0, nH = 0;
+        glfwGetFramebufferSize(win, &nW, &nH);
+        if (nW > 0 && nH > 0 && (nW != fbW || nH != fbH)) {
+          fbW = nW;
+          fbH = nH;
+          ui.fbW = fbW;
+          ui.fbH = fbH;
+        }
+        if (!wv.resize(fbW, fbH))
+          std::fprintf(stderr, "[vulkan] al volver de minimizada el intercambio no se rehizo\n");
+#ifdef HAVE_CAPTURE
+        if (haveCap) {
+          cap.stop();
+          lastFrameCount = 0;
+          ultimoNuevo = 0.0;
+          reintentos = 0;
+          std::string e2;
+          if (!cap.start(opts.captureUuid, &e2)) std::fprintf(stderr, "[captura] al volver: %s\n", e2.c_str());
+        }
+#endif
+        if (panelApagado) {
+          panelApagado = false;
+          rig.bringUp(opts);
+        }
+        std::printf("[ventana] de vuelta: lienzo %dx%d en %s, intercambio y captura rehechos\n", fbW, fbH,
+                    mon ? glfwGetMonitorName(mon) : "la ventana");
+        std::fflush(stdout);
+        continue; /* una vuelta mas, esperando que el compositor vuelva a mandarnos fotograma */
+      }
+      /* Y si el compositor nos deja achicados o en otra salida, lo pedimos otra vez: el lienzo tiene
+         que medir exactamente lo del modo, si no la red no cae sobre los subpixeles del panel. */
+      if (!opts.windowed && !opts.borderless && mon && now - intentoSitio >= 3.0) {
+        int nW = 0, nH = 0;
+        glfwGetFramebufferSize(win, &nW, &nH);
+        if (nW > 0 && nH > 0 && (nW != W || nH != H)) {
+          intentoSitio = now;
+          std::printf("[ventana] el compositor dejo la ventana a %dx%d (el modo es %dx%d): pedimos otra"
+                      " vez la pantalla completa en %s\n", nW, nH, W, H, glfwGetMonitorName(mon));
+          std::fflush(stdout);
+          glfwSetWindowMonitor(win, mon, 0, 0, W, H, hz);
+          glfwPollEvents();
+          int mW = 0, mH = 0;
+          glfwGetFramebufferSize(win, &mW, &mH);
+          if (mW > 0 && mH > 0 && (mW != fbW || mH != fbH)) {
+            fbW = mW;
+            fbH = mH;
+            ui.fbW = fbW;
+            ui.fbH = fbH;
+            if (!wv.resize(fbW, fbH))
+              std::fprintf(stderr, "[vulkan] el intercambio no siguio el nuevo tamano del lienzo\n");
+          }
+        }
+      }
+    }
+
     /* la fuente de este cuadro */
     bool newSource = false;
     if (kind == SourceKind::Test) {
@@ -1244,17 +1353,30 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                          "necesita pixel a pixel (deja la ventana a pantalla completa en esta salida)\n",
                          cf.w, cf.h, fbW, fbH);
           }
-          if (!wv.sourceFromDma(gf, &err) && !importWarned) {
-            importWarned = true;
-            std::fprintf(stderr,
-                         "[captura] no se pudo importar el fotograma: %dx%d paso %d offset %d fourcc %c%c%c%c "
-                         "modificador 0x%llx descriptor %d\n",
-                         gf.w, gf.h, gf.stride, gf.offset,
-                         char(gf.fourcc & 0xff), char((gf.fourcc >> 8) & 0xff), char((gf.fourcc >> 16) & 0xff),
-                         char((gf.fourcc >> 24) & 0xff), (unsigned long long)gf.modifier, gf.fd);
-            std::fprintf(stderr, "[captura] %s\n", err.c_str());
+          if (!wv.sourceFromDma(gf, &err)) {
+            if (!importWarned) {
+              importWarned = true;
+              std::fprintf(stderr,
+                           "[captura] no se pudo importar el fotograma: %dx%d paso %d offset %d fourcc %c%c%c%c "
+                           "modificador 0x%llx descriptor %d\n",
+                           gf.w, gf.h, gf.stride, gf.offset,
+                           char(gf.fourcc & 0xff), char((gf.fourcc >> 8) & 0xff), char((gf.fourcc >> 16) & 0xff),
+                           char((gf.fourcc >> 24) & 0xff), (unsigned long long)gf.modifier, gf.fd);
+              std::fprintf(stderr, "[captura] %s\n", err.c_str());
+            }
+            /* Y NO marcamos la fuente como nueva: no hay cuadro importado que tramar. Presentando el
+               ultimo que si lo estaba se llenaba la pantalla de trozos sueltos. */
+            if (++fallosImport == 12 && !avisoMemoriaHecho) {
+              avisoMemoriaHecho = true;
+              std::fprintf(stderr, "[captura] %d fotogramas seguidos sin poder importarse: a la grafica le falta"
+                                   " memoria de video. Cierra ventanas o pestanas con aceleracion y el 3D se "
+                                   "reanuda solo\n", fallosImport);
+              std::fflush(stderr);
+            }
+          } else {
+            fallosImport = 0;
+            newSource = true;
           }
-          newSource = true;
         }
       }
       /* El navegador suele dejar el video en pausa cuando cambiamos el modo del monitor o

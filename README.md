@@ -93,6 +93,9 @@ odyssey3d ctl panel restore            # devolver el panel al estado guardado
 odyssey3d serve                        # vigilar ventanas a pantalla completa (el servicio)
 odyssey3d ctl overlay                    # enseña la tarjeta de pregunta en la esquina
 odyssey3d ctl windows                    # lista las ventanas y detecta la pantalla completa
+odyssey3d ctl salidas                    # cada pantalla con su posición y tamaño lógicos
+odyssey3d ctl apilamiento                # el orden arriba/abajo que ve el compositor
+odyssey3d ctl ventana sobre --uuid <id>  # encima de todo / debajo / libre / salida DP-4
 odyssey3d capture3d --uuid <id>        # trama en 3D la ventana que captura KWin
 odyssey3d ctl flujo --uuid <id>        # medir si el compositor manda fotogramas de esa ventana
 ```
@@ -266,7 +269,32 @@ nueva… → acción personalizada**, con nombre «traer la pastilla», comando
 `/usr/local/bin/odyssey3d ctl aparece`, y como disparador pulsar `Pausa`. Este Protocolo de KWin no trae orden
 de activar ventanas, así que la ventana vuelve a la vista pero sin el foco; un clic en la pastilla devuelve el
 mando al visor. Por consola se prueba con `odyssey3d ctl aparece`, y se puede jugar con el estado de cualquier
-ventana en `ctl ventana [minimizar|aparecer] --uuid …`.
+ventana en `ctl ventana [minimizar|aparecer|sobre|debajo|libre|salida DP-4] --uuid …`.
+
+### El visor vuelve delante del vídeo y sin gráficos rotos (desde v0.24)
+
+Devolver la ventana a la vista no bastaba: KWin la dejaba **detrás del vídeo** y achicada, con la trama llena de
+trozos sueltos. Son dos cosas distintas, y cada una tiene su arreglo.
+
+* **Detrás del vídeo.** En el protocolo de ventanas de Plasma no existe la petición «traer al frente», y al
+  quitarle la minimizada KWin no activa la ventana: vuelve con el orden que tenía y el vídeo —activo y a
+  pantalla completa— queda encima. Desde v0.24 el servicio pide también `KeepAbove` y lo reafirma cada 5 s si el
+  compositor lo pierde. Medido con `ctl apilamiento`: la lista del compositor va de abajo hacia arriba, y con
+  `Encima` la ventana salta al último puesto.
+* **Los gráficos rotos.** GLFW no se entera en Wayland de que la ventana fue minimizada, así que el visor seguía
+  presentando cuadros contra un intercambio sin superficie; al volver, la ventana estaba achicada y en otra
+  salida (en el registro: 3840×2160 → 2560×1440 → 2015×869) y la trama dejaba de ser pixel a pixel. El servicio
+  escribe `~/.local/state/odyssey3d/ventana` con `oculta`/`visible` y su reloj; con `oculta` el visor **deja de
+  trazar** (y si dura más de 1,5 s devuelve el panel a 2D), y al volver pide la pantalla completa en su salida,
+  rehace el intercambio y rearma la captura.
+* **La salida también se pide.** `ctl aparece` y el servicio mandan la ventana del visor a la salida del panel
+  (`send_to_output`, con los nombres y las posiciones lógicas que da `zxdg_output_v1`) y vigilan la ventana del
+  vídeo: si pierde la pantalla completa o sale del rectángulo de esa salida, la devuelven
+  (`[ventana] el video (…) lo devolvemos a pantalla completa en DP-4`).
+
+Para ver lo que ve el compositor, sin adivinar: `ctl salidas` (nombres y rectángulos lógicos) y
+`ctl apilamiento` (el orden de arriba y abajo).
+
 
 ## Servicio que arranca con la sesión
 
