@@ -10,8 +10,15 @@
 
 class DepthNet {
 public:
+  ~DepthNet();
   /* ruta del modelo .onnx; vacio = ~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx */
   bool init(const std::string &model, std::string *err, int gpu = 0);   /* gpu: tarjeta NVIDIA a usar */
+
+  /* Cambiar de red con el visor en marcha: primero se suelta la sesion vieja (que es lo que
+     devuelve la memoria de la grafica) y despues se abre la nueva. Si la nueva no abre, se
+     vuelve a abrir la vieja y el conversor sigue como estaba. */
+  bool cambiar(const std::string &model, std::string *err);
+  const std::string &modelPath() const { return ruta_; }   /* la .onnx que esta abierta ahora */
   bool ready() const { return ready_; }
   int size() const { return sz_; }                    /* el modelo trabaja a sz_ x sz_ */
   const std::string &device() const { return dev_; }  /* "NVIDIA" o "CPU" */
@@ -40,7 +47,10 @@ public:
   bool cleaning() const { return limpieza_; }
 
 private:
+  void cierra();          /* suelta la sesion de ONNX Runtime */
+
   bool ready_ = false;
+  std::string ruta_;      /* la ruta de la red abierta ahora */
   int sz_ = 518;
   int gpu_ = 0;
   std::string dev_ = "nada";

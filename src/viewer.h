@@ -25,6 +25,8 @@ struct ViewerOpts {
      vacio = el modelo que esta en ~/.local/share/odyssey3d/modelos */
   bool conver = false;
   std::string modelPath;
+  /* la otra red de profundidad, la del boton 1 / 2 de la pastilla (--alterno RUTA) */
+  std::string altModel;
   int convEach = 3;          /* cada cuantos cuadros se vuelve a calcular la profundidad */
   int convGpu = 0;           /* 0 = primera tarjeta NVIDIA, 1 = la otra (la primera puede estar llena) */
   bool noCorr = false;     /* sin mapas de correccion del panel */

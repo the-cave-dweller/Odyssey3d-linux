@@ -250,7 +250,11 @@ Cuando la ventana del vídeo se cierra, la sesión 3D también se cierra sola.
 
 Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
 `espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué
-GPU corre la red del conversor) y `cada` (cada cuántos fotogramas se calcula la profundidad). Si se
+GPU corre la red del conversor) y `cada` (cada cuántos fotogramas se calcula la profundidad). Las dos
+redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
+`mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
+se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
+y la elección queda en `~/.config/odyssey3d/red-elegida` para la próxima vez. Si se
 marca la casilla de la tarjeta y se pulsa un botón, se guarda una línea `auto = app:modo` en ese
 archivo y desde entonces esa aplicación pasa directa sin preguntar (puedes editar o borrar esa línea a
 mano). `conv` es el vídeo normal pasado a 3D: con `auto = zen:conv` el navegador entra directo en

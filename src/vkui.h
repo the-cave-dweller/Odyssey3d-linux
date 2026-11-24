@@ -27,6 +27,8 @@ public:
     bool ask = false;  /* aviso de conversión (abajo a la derecha) */
     bool remember = false;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
+    int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nuestra */
+    bool redViva = false;  /* hay conversor abierto (si no, el boton de la red se apaga) */
   };
 
   enum Hit {
@@ -35,6 +37,7 @@ public:
     HitOverlay,
     HitDepth,
     HitPopout,
+    HitRed,
     HitAskSbs,
     HitAskTop,
     HitAskFlat,
@@ -89,6 +92,18 @@ public:
      reales de la ventana (los mismos que llevan los vertices). Lo usa la superposicion
      de Wayland para recortar su ventana justo a esa esquina. */
   bool askBounds(float *x, float *y, float *w, float *h) const;
+  /* Cuanto mide una etiqueta con la fuente de la interfaz: para comprobar que el texto de un boton
+     cabe en su caja sin mirar la pantalla (con la letra mal medida los rotulos se salian del recuadro). */
+  float mideTexto(const std::string &s, float px) const { return textWidth(s, px); }
+  /* caja del boton de la red: la usa la depuracion (ODYSSEY_GOLPE=red) para pulsarlo sin raton */
+  bool redBounds(float *x, float *y, float *w, float *h) const {
+    if (btnRed_.w <= 0.0f) return false;
+    if (x) *x = btnRed_.x;
+    if (y) *y = btnRed_.y;
+    if (w) *w = btnRed_.w;
+    if (h) *h = btnRed_.h;
+    return true;
+  }
   bool pillBounds(float *x, float *y, float *w, float *h) const;
 
 private:
@@ -131,7 +146,7 @@ private:
   float sc_ = 1.0f;      /* escala de la interfaz: 1 en 1080, hasta 2 en 2160 */
   float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
-  Rect pillPanel_, btn3D_, btnOv_, depTrack_, popTrack_, depKnob_, popKnob_;
+  Rect pillPanel_, btn3D_, btnOv_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
 };
 

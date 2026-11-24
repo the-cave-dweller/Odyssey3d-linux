@@ -69,6 +69,37 @@ bool readSmallFile(const std::string &path, std::string &out) {
   return true;
 }
 
+std::string rutaConfigOdyssey(const char *nombre) {
+  const char *home = std::getenv("HOME");
+  return std::string(home ? home : "/home") + "/.config/odyssey3d/" + nombre;
+}
+
+std::string rutaRedNuestra() {
+  const char *home = std::getenv("HOME");
+  return std::string(home ? home : "/home") + "/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx";
+}
+
+int slotRed(const std::string &ruta) {
+  const std::string s = strLower(ruta);
+  return (s.find("mde_") != std::string::npos || s.find("disp_") != std::string::npos) ? 1 : 2;
+}
+
+int leerRedPreferida() {
+  std::string txt;
+  if (!readSmallFile(rutaConfigOdyssey("red-elegida"), txt)) return 0;
+  txt = strTrim(txt);
+  return txt == "1" ? 1 : (txt == "2" ? 2 : 0);
+}
+
+void grabarRedPreferida(int red) {
+  if (red != 1 && red != 2) return;
+  const std::string ruta = rutaConfigOdyssey("red-elegida");
+  if (FILE *f = std::fopen(ruta.c_str(), "we")) {   /* 'e': sin permiso de ejecucion */
+    std::fprintf(f, "%d\n", red);
+    std::fclose(f);
+  }
+}
+
 bool fileExists(const std::string &path) {
   return !path.empty() && access(path.c_str(), R_OK) == 0;
 }

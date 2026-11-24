@@ -1208,7 +1208,12 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
       if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a.c_str()); return 2; }
       o.modelPath = argv[++i];
       o.conver = true;
-    } else if (a == "--red" || a == "--red-gpu") {
+    } else if (a == "--alterno" || a == "--alternativa") {
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a.c_str()); return 2; }
+      o.altModel = argv[++i];
+      o.conver = true;   /* la otra red del boton 1 / 2 del visor */
+    }
+    else if (a == "--red" || a == "--red-gpu") {
       if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a.c_str()); return 2; }
       o.convGpu = std::max(0, std::atoi(argv[++i]));
     } else if (a == "--cada") {
@@ -1408,22 +1413,41 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.begin(W, H);
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
-  static const char *nom[] = {"nada",              "boton 3D",   "boton capa",          "deslizador profundidad",
-                              "deslizador salida", "tesela SxS", "tesela arriba/abajo", "tesela plana",
-                              "casilla no preguntar", "cerrar el aviso"};
-  int cuenta[10] = {0}, px0[10] = {0}, py0[10] = {0};
+  static const char *nom[] = {"nada",              "boton 3D",   "boton capa",   "deslizador profundidad",
+                              "deslizador salida", "boton red",  "tesela SxS",   "tesela arriba/abajo",
+                              "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso"};
+  int cuenta[12] = {0}, px0[12] = {0}, py0[12] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
-      if (h < 0 || h > 9) continue;
+      if (h < 0 || h > 11) continue;
       if (!cuenta[h]) {
         px0[h] = x;
         py0[h] = y;
       }
       cuenta[h]++;
     }
-  for (int h = 1; h <= 9; h++)
+  for (int h = 1; h <= 11; h++)
     std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
+
+  /* Rotulos de la pastilla, con la caja real donde se dibujan (ancho del boton menos el aire a cada
+     lado). Si la letra mide mas que su caja se sale del recuadro, que es lo que pasaba antes. */
+  struct Medida {
+    const char *texto;
+    float px, caja;
+  };
+  static const Medida med[] = {{"Apagar 3D", 15.0f, 126.0f},        {"Encender 3D", 15.0f, 126.0f},
+                               {"Ocultar capa", 15.0f, 136.0f},     {"Mostrar capa", 15.0f, 136.0f},
+                               {"Red 1 · Samsung", 14.0f, 136.0f},   {"Red 2 · nuestra", 14.0f, 136.0f},
+                               {"Red sin conversor", 14.0f, 136.0f},      {"1 / 2  cambia de red", 11.0f, 160.0f},
+                               {"teclas 1 / 2", 11.0f, 160.0f},           {"Tab  entrega la pantalla", 11.0f, 272.0f},
+                               {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
+                               {"Ctrl+Shift+5 / 6", 11.0f, 120.0f}};
+  for (const Medida &m : med) {
+    const float w = hud.mideTexto(m.texto, m.px);
+    std::printf("  letra  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w, (double)m.caja,
+                w <= m.caja ? "cabe" : "SE SALE");
+  }
 
   const int d0 = hud.state().depth, p0 = hud.state().popout;
   hud.dragTo(Hud::HitDepth, (float)(W - 1));
@@ -1534,6 +1558,7 @@ struct ServeCfg {
   int esperaSeg = 40;
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
   std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
+  std::string nuestra;            /* la otra red (.onnx), la del boton 2 del visor */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
@@ -1575,7 +1600,8 @@ static std::string expansionRuta(std::string r) {
   return r;
 }
 
-/* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=). */
+/* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=,
+   modelo= la red del boton 1, nuestra= la del boton 2). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
   if (!home) return;
@@ -1596,6 +1622,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "modo") cfg.modo = strLower(v);
     else if (k == "pantalla") cfg.pantalla = v;
     else if (k == "modelo") cfg.modelo = expansionRuta(v);
+    else if (k == "nuestra") cfg.nuestra = expansionRuta(v);
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
       std::vector<std::string> pares;
@@ -1636,7 +1663,8 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
 
 static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo, int red = 0,
                         int cada = 3, const std::string &modelo = std::string(),
-                        const std::string &pantalla = std::string()) {
+                        const std::string &pantalla = std::string(),
+                        const std::string &alterno = std::string()) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
@@ -1654,6 +1682,10 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (!modelo.empty()) {
       args.push_back("--modelo");
       args.push_back(modelo);
+    }
+    if (!alterno.empty()) {   /* la otra red, para el boton 1 / 2 del visor */
+      args.push_back("--alterno");
+      args.push_back(alterno);
     }
   }
   std::vector<char *> av;
@@ -1917,6 +1949,7 @@ static int cmdServe(int argc, char **argv) {
   if (std::string v = flag(argc, argv, "--modo"); !v.empty()) cfg.modo = strLower(v);
   if (std::string v = flag(argc, argv, "--pantalla"); !v.empty()) cfg.pantalla = v;
   if (std::string v = flag(argc, argv, "--modelo"); !v.empty()) cfg.modelo = expansionRuta(v);
+  if (std::string v = flag(argc, argv, "--nuestra"); !v.empty()) cfg.nuestra = expansionRuta(v);
   if (std::string v = flag(argc, argv, "--ignore"); !v.empty()) splitList(v, cfg.ignore);
   if (cfg.modo == "preguntar") cfg.modo = "ask";
 
@@ -1985,8 +2018,31 @@ static int cmdServe(int argc, char **argv) {
     std::fflush(stdout);
   });
 
-  std::printf("[serve] red de profundidad: %s\n",
-              cfg.modelo.empty() ? "la nuestra (Depth Anything V2 pequena)" : cfg.modelo.c_str());
+  /* Las dos redes del boton 1 / 2 del visor, cada una en su boton segun el nombre del archivo:
+     1 = las que trajo el programa de Samsung (mde_*, Disp_*), 2 = la nuestra (Depth Anything).
+     Si en modelo= se puso la nuestra se reconoce y se mueve sola al boton 2. La eleccion que hizo
+     el usuario la guarda el visor en ~/.config/odyssey3d/red-elegida y aca se lee para arrancar con esa. */
+  auto disponible = [](const std::string &r) { return !r.empty() && fileExists(r); };
+  std::string rSamsung = cfg.modelo, rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
+  if (!rSamsung.empty() && slotRed(rSamsung) == 2) {
+    if (rSamsung == rNuestra || !disponible(rNuestra)) {
+      rNuestra = rSamsung;
+      rSamsung.clear();
+    } else
+      std::swap(rSamsung, rNuestra);
+  }
+  const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
+  const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
+  int redElegida = leerRedPreferida();
+  if (!redElegida) redElegida = ruta1.empty() ? 2 : 1;   /* sin preferencia: la de Samsung si esta */
+  if (redElegida == 1 && ruta1.empty()) redElegida = 2;
+  if (redElegida == 2 && ruta2.empty()) redElegida = 1;
+  const std::string redActiva = redElegida == 1 ? ruta1 : ruta2;
+  const std::string redOtra = redElegida == 1 ? ruta2 : ruta1;
+  std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
+              ruta1.empty() ? "no hay" : ruta1.c_str(), ruta2.empty() ? "no hay" : ruta2.c_str());
+  std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
+              redElegida, redElegida == 1 ? "Samsung" : "nuestra");
   std::printf("[serve] vigilando ventanas a pantalla completa (%s) · modo=%s · espera=%d s\n",
               dry ? "sin ejecutar, --dry" : "ejecutando", cfg.modo.c_str(), cfg.esperaSeg);
   std::fflush(stdout);
@@ -2121,7 +2177,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, cfg.modelo, cfg.pantalla);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
@@ -2157,7 +2213,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, cfg.modelo, cfg.pantalla);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
             std::fflush(stdout);
@@ -2205,7 +2261,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, cfg.modelo, cfg.pantalla);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra);
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
           std::fflush(stdout);

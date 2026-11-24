@@ -2,6 +2,39 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Boton 1 / 2 en la pastilla: cambiar de red de profundidad sin cerrar el visor (v0.21)
+- Lo pedido: un boton que alterne entre el modelo de Samsung (1) y el nuestro (2), y que se recuerde
+  la ultima que usamos.
+- **La pastilla** lleva un boton nuevo entre los dos botones y los dos deslizadores: `Red 1 · Samsung`
+  o `Red 2 · nuestra`, con un punto de color cuando el conversor esta abierto y la leyenda
+  `1 / 2  cambia de red` debajo. Si el visor esta sin conversor el boton se apaga y dice
+  `Red sin conversor`. Las teclas sueltas `1` y `2` hacen lo mismo; `Ctrl+Shift+1..8` no cambian.
+- **Cambio en caliente** (`DepthNet::cambiar`): primero se suelta la sesion vieja, que es lo de verdad
+  devuelve la memoria de la grafica, y despues se abre la nueva; se conservan la tarjeta usada, el
+  suavizado y la limpieza del mapa, y se olvidan el mapa anterior y el seguimiento del apoyo para no
+  mezclar las escalas de dos redes distintas. Si la red nueva no abre, se reintenta la vieja y el
+  conversor sigue como estaba, avisando. Medido suelto: el cambio cuesta unos 0,3 s, y un cuadro de
+  518x518 sale en 10,6 ms con la red de Samsung y 14,9 ms con la nuestra (NVIDIA).
+- **Se recuerda la eleccion** en `~/.config/odyssey3d/red-elegida` en cuanto se pulsa el boton o la tecla. Al
+  arrancar, el hub arranca con esa red; si el fichero no esta, usa la de Samsung si existe y si no la
+  nuestra.
+- **Cual de las dos es cual**: la misma regla en el hub y en el visor, por el nombre del fichero
+  (`slotRed`) — lo que lleve `mde_` o `disp_` es la red de Samsung (boton 1); cualquier otra .onnx es
+  la nuestra (boton 2). El hub avisa de las dos rutas: `[serve] redes de profundidad: boton 1 = ... ·
+  boton 2 = ...` y `arrancamos con la N (...)`. Clave nueva en `serve.conf`: `nuestra=RUTA`
+  (y `serve --nuestra RUTA`); el visor acepta `--alterno RUTA` para la otra red del boton. Si la red de
+  un boton no esta en ninguna parte, el visor lo dice en vez de quedarse mudo:
+  `no sabemos donde esta la red N (ruta): pasele --alterno RUTA`.
+- Comprobado: prueba suelta que cambia Samsung → nuestra → Samsung y luego intenta una ruta que no
+  existe (avisa y sigue con la anterior); el hub con preferencia 1, con 2 y sin fichero; y el visor con
+  una ventana real y el clic del boton simulado (`ODYSSEY_GOLPE=red`), que dio `golpe 5` →
+  `cambiada a la red 2 (la nuestra)` → `cambiada a la red 1 (la de Samsung)` y dejo el fichero en 1.
+- La auto-prueba de la interfaz (`ctl hud`) ahora, aparte de recorrer los golpes del raton, mide cada
+  rotulo con la fuente real y dice si cabe en su caja: con el boton nuevo la etiqueta
+  `Red sin conversor` media 130,8 px dentro de una caja de 130, y `Tab  entrega la pantalla` se montaba
+  sobre el boton; el boton paso de 150 a 160 px de ancho y la leyenda del Tab se bajo al hueco de debajo
+  de los deslizadores. Las 13 medidas salen ahora con `cabe`.
+
 ## La tarjeta del aviso vuelve a salir sola, y la letra deja de salirse de su caja (v0.20)
 - Sintoma: al pasar un video a pantalla completa ya no aparecia la tarjeta de aviso, y en la ultima vez
   que salio los textos y las cajas se salian del recuadro.

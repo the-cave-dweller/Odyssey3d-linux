@@ -65,6 +65,10 @@ struct VkUi {
   std::string extraInfo;     /* " · video en pausa" y cosas asi, detras de la frase de estado */
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
+  /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nuestra
+     (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
+  int redPedida = 0;
+  std::string rutaRed[3];    /* [1] y [2]: ruta .onnx de cada red; vacia = esa red no esta disponible */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
 };
 
@@ -102,6 +106,9 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
   return out;
 }
 
+/* slotRed() vive en util.h: es la misma regla para el hub y para el visor. */
+const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nuestra"; }
+
 void applyHit(VkUi &ui, Hud::Hit hit) {
   Hud::State &st = ui.hud.state();
   WeaveTuning &t = ui.tune;
@@ -116,6 +123,9 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
     case Hud::HitDepth:
     case Hud::HitPopout:
       ui.dragging = hit;
+      break;
+    case Hud::HitRed:
+      ui.redPedida = (st.red == 1) ? 2 : 1;   /* el boton pasa de una red a la otra */
       break;
     case Hud::HitAskSbs:
       st.ask = false;
@@ -252,6 +262,13 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     }
     std::fflush(stdout);
     printTuning(*ui, "formato");
+    return;
+  }
+  /* 1 y 2 sin modificar: cambiar la red de profundidad del conversor. La 1 es la de Samsung
+     (mde_large.onnx, la que usa su programa) y la 2 la nuestra (Depth Anything). Se puede hacer en
+     marcha: el bucle cambia la red cuando el hilo de la estimacion esta libre. */
+  if (key == GLFW_KEY_1 || key == GLFW_KEY_2) {
+    ui->redPedida = key == GLFW_KEY_1 ? 1 : 2;
     return;
   }
   const char *tag = nullptr;
@@ -598,6 +615,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        if (hilo.joinable())
          hilo.join();
      }
+     /* quedarse quieto hasta que termine el mapa en el aire: hace falta antes de cambiar de red */
+     void esperar() {
+       if (hilo.joinable())
+         hilo.join();
+       ocupado = false;
+     }
      void arrancar(DepthNet *red, const uint8_t *chico, int sz) {
        if (hilo.joinable())
          hilo.join();
@@ -631,14 +654,34 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        return fuera.empty() ? -1 : 1;
      }
    } hiloRed;
+  /* Las dos redes del boton 1 / 2: la que mande el servicio (--modelo) y la otra (--alterno). Lo
+     que no venga por bandera se rellena por convencion si el archivo esta en su carpeta, y si el
+     usuario ya eligio una vez (el boton la guarda) esa manda al arrancar. */
+  auto anotarRed = [&](const std::string &r) {
+    if (!r.empty())
+      ui.rutaRed[slotRed(r)] = r;
+  };
+  anotarRed(opts.modelPath);
+  anotarRed(opts.altModel);
+  if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra()))
+    ui.rutaRed[2] = rutaRedNuestra();
+  /* "opts" es de solo lectura, asi que la red con la que arrancamos vive aqui: la preferencia
+     guardada manda sobre lo que venga por bandera, y si no vino ninguna se usa la nuestra. */
+  std::string modeloActivo = opts.modelPath;
+  if (const int pref = leerRedPreferida(); pref && !ui.rutaRed[pref].empty())
+    modeloActivo = ui.rutaRed[pref];
+  else if (modeloActivo.empty())
+    modeloActivo = ui.rutaRed[2];
+  ui.hud.state().red = modeloActivo.empty() ? 2 : slotRed(modeloActivo);
+  ui.hud.state().redViva = false;
   int convGpu = opts.convGpu;   /* se sube solo a la 1 si la 0 esta llena (strata, juegos, ...) */
   auto arrancarRed = [&](int &gpu, std::string *e) {
-    if (red.init(opts.modelPath, e, gpu)) return true;
+    if (red.init(modeloActivo, e, gpu)) return true;
     if (gpu == 0) {   /* la GPU de la pantalla suele estar ocupada: probar la siguiente tarjeta */
       std::fprintf(stderr, "[conversor] %s\n[conversor] se prueba en la grafica 1 (se fuerza con --red N)\n",
                    e->c_str());
       std::fflush(stderr);
-      if (red.init(opts.modelPath, e, 1)) {
+      if (red.init(modeloActivo, e, 1)) {
         gpu = 1;
         return true;
       }
@@ -783,7 +826,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("          P o espacio  pausa o reanuda el video · Tab entrega la pantalla al navegador (nos\n");
   std::printf("          minimizamos y el panel vuelve a 2D; Meta+Alt+Tab o un clic en la barra de tareas la\n          "
               "devuelve y el 3D se reanuda solo\n");
-  std::printf("          teclas sueltas  3 sin tramado (2D) · F invierte los ojos · M cambia el formato del video\n"
+  std::printf("          teclas sueltas  3 sin tramado (2D) · F invierte los ojos · M cambia el formato · 1 y 2 cambian la red\n"
               "                            (lado a lado, arriba y abajo, 2D plano) · C conversor de video normal a 3D\n\n");
   std::fflush(stdout);
 
@@ -798,27 +841,52 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::fflush(stdout);
       ui.quit = true;
     }
-    /* depuracion de la tarjeta del hub: ODYSSEY_GOLPE="x,y" simula un clic del raton ahi (en
-       coordenadas logicas de la ventana) para probar las cuatro tarjetas sin raton de verdad */
+    /* depuracion de la tarjeta del hub y de la pastilla: ODYSSEY_GOLPE simula clics sin tocar el
+       raton de verdad. Acepta coordenadas logicas "x,y" o el nombre de un boton ("red" = el boton
+       de la red de profundidad), y varios golpes separados por ";", aplicados uno cada pocos
+       cuadros (hace falta al menos un cuadro trazado para saber donde cae cada control). */
     if (const char *g = std::getenv("ODYSSEY_GOLPE")) {
-      static bool hecho = false;
-      if (!hecho && ui.hud.state().ask && frames >= 3) {   /* hace falta un cuadro trazado para saber
-                                                              donde cae cada tarjeta */
-        int gx = 0, gy = 0;
-        if (std::sscanf(g, "%d,%d", &gx, &gy) == 2) {
+      static std::vector<std::string> goles;
+      static int hechos = 0;
+      if (goles.empty()) {
+        std::string tok;
+        for (char c : std::string(g)) {
+          if (c == ';') {
+            if (!tok.empty()) { goles.push_back(tok); tok.clear(); }
+          } else if (c != ' ')
+            tok += c;
+        }
+        if (!tok.empty()) goles.push_back(tok);
+      }
+      if (hechos < (int)goles.size() && frames >= 4 + hechos * 12) {
+        const std::string tok = strLower(goles[hechos]);
+        float cx = 0.0f, cy = 0.0f;
+        bool tiene = false;
+        if (tok == "red") {
+          float rx = 0, ry = 0, rw = 0, rh = 0;
+          if (ui.hud.redBounds(&rx, &ry, &rw, &rh)) {
+            /* hit() trabaja en pixeles reales de la ventana y la caja viene en el espacio virtual */
+            cx = (rx + rw * 0.5f) * ui.hud.scale(), cy = (ry + rh * 0.5f) * ui.hud.scale();
+            tiene = true;
+          }
+        } else {
           float kx = 1.0f, ky = 1.0f;
           pointerScale(win, &ui, kx, ky);
-          Hud::Hit hit = ui.hud.hit((float)gx * kx, (float)gy * ky);
-          float bx = 0, by = 0, bw = 0, bh = 0;
-          ui.hud.askBounds(&bx, &by, &bw, &bh);
-          std::printf("[tarjeta] clic simulado en %.0f,%.0f (lienzo %.0f,%.0f) -> golpe %d · tarjeta %.0f,%.0f "
-                      "%.0fx%.0f escala %.2f\n",
-                      (double)gx, (double)gy, (double)(gx * kx), (double)(gy * ky), (int)hit, (double)bx, (double)by,
-                      (double)bw, (double)bh, (double)ui.hud.scale());
-          std::fflush(stdout);
-          applyHit(ui, hit);
+          int gx = 0, gy = 0;
+          if (std::sscanf(tok.c_str(), "%d,%d", &gx, &gy) == 2) {
+            cx = (float)gx * kx, cy = (float)gy * ky;
+            tiene = true;
+          }
         }
-        hecho = true;
+        const Hud::Hit hit = tiene ? ui.hud.hit(cx, cy) : Hud::HitNone;
+        float ax = 0, ay = 0, aw = 0, ah = 0;
+        ui.hud.pillBounds(&ax, &ay, &aw, &ah);
+        std::printf("[golpe] %s -> lienzo (%.0f,%.0f) -> golpe %d · pastilla %.0f,%.0f %.0fx%.0f escala %.2f\n",
+                    tok.c_str(), (double)cx, (double)cy, (int)hit, (double)ax, (double)ay, (double)aw, (double)ah,
+                    (double)ui.hud.scale());
+        std::fflush(stdout);
+        if (tiene) applyHit(ui, hit);
+        hechos++;
       }
     }
     glfwPollEvents();
@@ -855,6 +923,56 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       std::fflush(stdout);
     }
+    /* el boton 1 / 2 de la pastilla: pasar de la red de Samsung a la nuestra sin cerrar el visor.
+       Se atiende aqui, en el hilo del visor y con el hilo de la estimacion parado: mover la sesion
+       de ONNX mientras ese hilo trabaja reventaria el cuadro en curso. La red nueva se abre antes
+       de soltar la vieja? No: DepthNet::cambiar suelta la vieja primero para devolver la memoria a
+       la tarjeta, y si la nueva no abre vuelve a cargar la anterior. */
+    if (ui.redPedida) {
+      const int quiero = ui.redPedida;
+      const int ahora = slotRed(red.modelPath());
+      if (quiero != 1 && quiero != 2) {
+        ui.redPedida = 0;
+      } else if (red.ready() && quiero == ahora) {
+        ui.redPedida = 0;                      /* ya estamos en esa red: nada que hacer */
+      } else if (ui.rutaRed[quiero].empty()) {
+        ui.redPedida = 0;
+        std::fprintf(stderr, "[conversor] no sabemos donde esta la red %d (%s): pasele --alterno RUTA\n",
+                     quiero, nombreRed(quiero));
+        std::fflush(stderr);
+      } else if (!red.ready()) {
+        ui.redPedida = 0;                      /* sin conversor no hay nada que cambiar: se apunta */
+        ui.hud.state().red = quiero;
+        grabarRedPreferida(quiero);
+        std::printf("[conversor] apuntada la red %d (%s): se abrira al encender el conversor (tecla C)\n",
+                    quiero, nombreRed(quiero));
+        std::fflush(stdout);
+      } else if (hiloRed.ocupado) {
+        /* espera unos milisegundos a que termine el mapa que esta en el aire */
+      } else {
+        ui.redPedida = 0;
+        hiloRed.esperar();
+        std::string cerr1;
+        if (red.cambiar(ui.rutaRed[quiero], &cerr1)) {
+          if (wv.converterSize() != red.size() && !wv.prepareConverter(red.size(), &cerr1))
+            std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());
+          ui.hud.state().red = quiero;
+          grabarRedPreferida(quiero);
+          std::printf("[conversor] cambiada a la red %d (%s) en %s · mapa %d x %d\n", quiero,
+                      nombreRed(quiero), red.device().c_str(), red.size(), red.size());
+          std::fflush(stdout);
+          ui.extraInfo = std::string("red ") + (quiero == 1 ? "1 (Samsung) · " : "2 (nuestra) · ") + red.device();
+          ui.extraHasta = glfwGetTime() + 6.0;
+        } else {
+          std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());
+          ui.hud.state().red = slotRed(red.modelPath());
+          std::fflush(stderr);
+          ui.extraInfo = "la otra red no abrio: seguimos con la anterior";
+          ui.extraHasta = glfwGetTime() + 9.0;
+        }
+      }
+    }
+    ui.hud.state().redViva = red.ready();
 #endif
     /* Entregar y recuperar la pantalla (Tab). Somos una ventana a pantalla completa por encima
        del navegador, asi que la unica forma de que el raton llegue al video es irnos nosotros:

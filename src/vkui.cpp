@@ -291,7 +291,7 @@ void Hud::begin(int w, int h, float altoLogico) {
 
   /* ---- pastilla superior derecha ---- */
   if (st_.overlayOn) {
-    float pw = std::min(660.0f, (float)vw - 48.0f);
+    float pw = std::min(824.0f, (float)vw - 48.0f);
     float ph = 84.0f;
     float x0 = (float)vw - 24.0f - pw, y0 = 24.0f;
     pillPanel_ = {x0, y0, pw, ph};
@@ -315,7 +315,24 @@ void Hud::begin(int w, int h, float altoLogico) {
     text("Ctrl+Shift+2", btnOv_.x, btnOv_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
     /* el aviso de Tab va en la pastilla: es la tecla que deja el raton y el teclado libres para
        lo que hay detras (nos minimizamos y el panel vuelve a 2D) */
-    text("Tab  entrega la pantalla", btnOv_.x + 76.0f, btnOv_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+    /* el aviso de Tab va abajo a la derecha, en el hueco libre que queda bajo los deslizadores:
+       ahi tiene 270 px para la frase y no se monta sobre el boton de la red */
+    text("Tab  entrega la pantalla", x0 + 534.0f, y0 + 70.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+
+    /* boton de la red de profundidad: 1 = la de Samsung, 2 = la nuestra. Al pulsarlo se pasa de
+       una a otra sin cerrar el visor (abrir la otra sesion cuesta un segundo o dos). */
+    btnRed_ = {x0 + 352.0f, y0 + 26.0f, 160.0f, 34.0f};
+    bool hovR = btnRed_.inside(mx_, my_);
+    float rbg = hovR ? 0.30f : 0.22f;
+    mask9(btnRed_, 1, 8.0f, rbg, rbg + 0.02f, rbg + 0.05f, 0.95f);
+    const char *rtxt = !st_.redViva ? "Red sin conversor"
+                                    : (st_.red == 1 ? "Red 1 · Samsung" : "Red 2 · nuestra");
+    text(rtxt, btnRed_.x + 12.0f, btnRed_.y + 8.0f, 14.0f, ink[0], ink[1], ink[2], st_.redViva ? 1.0f : 0.55f);
+    text(st_.redViva ? "1 / 2  cambia de red" : "teclas 1 / 2", btnRed_.x, btnRed_.y + 44.0f, 11.0f, dim[0], dim[1],
+         dim[2], dim[3]);
+    if (st_.redViva)   /* el punto de acento marca que hay una red abierta */
+      mask9({btnRed_.x + btnRed_.w - 14.0f, btnRed_.y + 14.0f, 6.0f, 6.0f}, 0, 3.0f, accent[0], accent[1],
+            accent[2], 1.0f);
 
     auto slider = [&](Rect *track, Rect *knob, const char *label, const char *keys, float frac, const char *value) {
       float tx = track->x, ty = track->y;
@@ -331,8 +348,8 @@ void Hud::begin(int w, int h, float altoLogico) {
     };
     float dfrac = (float)st_.depth / 100.0f;
     float pfrac = (float)(st_.popout + 50) / 100.0f;
-    depTrack_ = {x0 + 360.0f, y0 + 34.0f, 120.0f, 4.0f};
-    popTrack_ = {x0 + 510.0f, y0 + 34.0f, 120.0f, 4.0f};
+    depTrack_ = {x0 + 534.0f, y0 + 34.0f, 120.0f, 4.0f};
+    popTrack_ = {x0 + 684.0f, y0 + 34.0f, 120.0f, 4.0f};
     slider(&depTrack_, &depKnob_, "3D Profundidad", "Ctrl+Shift+3 / 4", dfrac, std::to_string(st_.depth).c_str());
     slider(&popTrack_, &popKnob_, "3D Salida", "Ctrl+Shift+5 / 6", pfrac, std::to_string(st_.popout).c_str());
 
@@ -471,6 +488,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
   if (dt.inside(mx, my)) return HitDepth;
   if (pt.inside(mx, my)) return HitPopout;
+  if (btnRed_.inside(mx, my)) return HitRed;
   return HitNone;
 }
 

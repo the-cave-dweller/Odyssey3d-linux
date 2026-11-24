@@ -15,17 +15,15 @@
 #include <unistd.h>
 
 #ifdef HAVE_ORT
+#include "util.h"
 #include <onnxruntime_cxx_api.h>
 #endif
 
 namespace {
 
-/* Ruta normal del modelo, la que usa el instalador y el aviso por consola. */
-std::string defaultModelPath() {
-  const char *home = std::getenv("HOME");
-  std::string base = home ? home : "/home";
-  return base + "/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx";
-}
+/* Ruta normal del modelo, la que usa el instalador y el aviso por consola. La misma convencion
+   usa el boton 1 / 2 de la pastilla para saber donde esta "la nuestra". */
+std::string defaultModelPath() { return rutaRedNuestra(); }
 
 /* Muestreo bilineal sobre la imagen de origen (RGBA, primera fila arriba). */
 void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) {
@@ -308,6 +306,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   }
   impl_ = im;
   ready_ = true;
+  ruta_ = path;
   std::printf("[conversor] modelo %s (%d x %d) con %s\n", path.c_str(), sz_, sz_, dev_.c_str());
   return true;
 #else
@@ -315,6 +314,47 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   if (err) *err = "el programa esta compilado sin ONNX Runtime: el conversor 2D a 3D no esta disponible";
   return false;
 #endif
+}
+
+void DepthNet::cierra() {
+#ifdef HAVE_ORT
+  if (impl_) { delete static_cast<OrtImpl *>(impl_); impl_ = nullptr; }
+#endif
+  ready_ = false;
+}
+
+DepthNet::~DepthNet() { cierra(); }
+
+bool DepthNet::cambiar(const std::string &model, std::string *err) {
+  const std::string nueva = model.empty() ? defaultModelPath() : model;
+  if (!ruta_.empty() && nueva == ruta_) return true;   /* ya esta abierta esa red */
+  const std::string vieja = ruta_;
+  const int gpu = gpu_;
+  const float sm = smooth_;
+  const bool lim = limpieza_;
+  /* Se suelta la sesion vieja ANTES de abrir la nueva: es lo que devuelve la memoria de la
+     grafica, y sin eso la segunda red no cabe y se va a la CPU. */
+  cierra();
+  prev_.clear();
+  haveScale_ = false;
+  cuadrosDesdeCorte_ = 0;          /* la otra red no comparte el suavizado anterior */
+  std::string e;
+  if (init(nueva, &e, gpu)) {
+    smooth_ = sm;
+    limpieza_ = lim;
+    return true;
+  }
+  if (!vieja.empty()) {
+    std::string e2;
+    if (init(vieja, &e2, gpu)) {
+      smooth_ = sm;
+      limpieza_ = lim;
+      if (err) *err = "no abrio " + nueva + ": " + e + "\n    se sigue con la anterior (" + vieja + ")";
+      return false;
+    }
+  }
+  if (err) *err = e;
+  return false;
 }
 
 bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &out, std::string *err) {
