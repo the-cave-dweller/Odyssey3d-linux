@@ -141,8 +141,8 @@ void TrackFeed::run() {
       if (++sinCuadro % 20 == 1) note("camara: " + err);
       /* Tres segundos sin un solo cuadro: la camara se colgo del flujo. La unica recuperacion
          limpia es cerrar el dispositivo y volver a montarlo; no tocar el bus USB (un reset de
-         control deja la camara del monitor muerta hasta apagar y encender el monitor). Cada
-         cuatro intentos following, esperar un poco mas. */
+         control deja la camara del monitor muerta hasta apagar y encender el monitor). Despues
+         del primer intento, se reintenta cada 40 cuadros de espera. */
       if (sinCuadro == 12 || (sinCuadro > 12 && sinCuadro % 40 == 0)) {
         std::string rerr;
         if (reabrirCamara(&rerr)) {
@@ -190,6 +190,13 @@ void TrackFeed::run() {
       st_.note.clear();
     } else if (!muestra.reason.empty()) {
       st_.note = muestra.reason;
+      /* Cinco segundos de camara y ni una cara: casi siempre es que la cara no entra en el
+         campo, no que la camara este mal. Las dos vistas del monitor miran rectas al frente, asi
+         que hay que estar centrado bajo ellas. Se comprueba sin montar una sesion con
+         `ctl track`, y la foto que ve la camara sale con
+         `ffmpeg -f v4l2 -input_format mjpeg -video_size 1280x480 -i /dev/video0 -frames:v 1 /tmp/ir.png`. */
+      if (st_.good == 0 && st_.frames > 240)
+        st_.note += " (la cara no entra en el campo de la camara: date un centro bajo la camara del monitor)";
     }
     st_.age = acceptedAt_ < 0.0 ? -1.0 : t - acceptedAt_;
     if (t > startedAt_) st_.cameraFps = (double)st_.frames / (t - startedAt_);
