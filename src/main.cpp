@@ -1664,6 +1664,12 @@ static int cmdDoctor(const ViewerOpts &o, const std::string &waylandSock) {
     std::printf("  ! no aparece la camara 04e8:20d7 (3D Stereo WebCam)\n");
     std::printf("    si antes estaba: su USB se quedo colgado (dmesg: \"device descriptor read/64,\n");
     std::printf("    error -110\") y vuelve solo apagando y encendiendo el monitor\n");
+    std::string alterna;
+    if (pickCameraDevice(alterna, nullptr) && !alterna.empty()) {
+      std::printf("    hay otra camara (%s): el rastreo puede ir con ella por el tamano de la cara\n",
+                  alterna.c_str());
+      std::printf("    (aproximado: la distancia sale del ancho de la cara; se ajusta con --track-cara)\n");
+    }
     problems++;
   } else {
     for (const std::string &c : cams)
@@ -2465,9 +2471,13 @@ static int cmdServe(int argc, char **argv) {
   std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
               redElegida, redElegida == 1 ? "Samsung" : "nuestra");
   {
-    const std::string aviso = (cfg.rastreo && IrCam::findDevices().empty())
-                                  ? " · ojo: no aparece la camara 04e8:20d7 (3D Stereo WebCam)"
-                                  : "";
+    std::string aviso;
+    if (cfg.rastreo && IrCam::findDevices().empty()) {
+      aviso = " · ojo: no aparece la camara 04e8:20d7 (3D Stereo WebCam)";
+      std::string alterna;
+      if (pickCameraDevice(alterna, nullptr) && !alterna.empty())
+        aviso += "; en su lugar se usara " + alterna + " midiendo el tamano de la cara";
+    }
     std::printf("[serve]   rastreo %s%s\n",
                 cfg.rastreo ? "activo (la camara IR sigue los ojos)"
                             : "apagado (trama para la posicion de ojo nominal de fabrica)",
