@@ -2,6 +2,28 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La tarjeta ya no se estira ni se va a otra pantalla, y se puede usar la red de Samsung (v0.18)
+- La tarjeta del aviso seguía cayendo al otro monitor (un Sun Electronics X7149A). Además de lo de v0.17
+  habia dos fallos mas:
+  - **La elección con `pantalla=DP-4` no tenía respaldo**: si la pista no coincida con ninguna pantalla
+    (la pantalla se acaba de anunciar y aún no trae nombre), el programa se quedaba con la primera de
+    la lista, que era la del monitor equivocado. Ahora la elección es en cadena: la pista, si no el panel
+    que se reconoce como Odyssey, y si no el de mas pixeles.
+  - **Se elegía el monitor con datos incompletos**: ahora, si la pantalla elegida aún no tiene nombre
+    ni modos, se esperan hasta 240 ms a que el compositor los mande y se vuelve a elegir.
+  - **El compositor manda en el configure el área útil de la pantalla donde puso la capa, y nosotros la
+    usábamos como tamaño de la tarjeta**: la capa acababa ocupando media pantalla (por eso se podía
+    "mover" con el raton y tapaba de mas). El tamaño pedido se respeta; el configure solo recorta.
+  - **Comprobación de la colocación**: lo que ofreció el compositor delata en qué pantalla cayó la capa.
+    Si la tarjeta no cabe ahi, se destruye y se rehace sobre la pantalla pedida (dos intentos) y queda
+    en el registro.
+- Comprobado con dos monitores conectados: la tarjeta aparece en el rincon inferior derecho del Odyssey
+  y no hay nada en el otro monitor (capturas de pantalla comparadas).
+- El hub puede usar la red de profundidad oficial de Samsung: `modelo = RUTA` en
+  ~/.config/odyssey3d/serve.conf o `--modelo RUTA` en `serve`. Ya esta puesta la linea con
+  ~/.local/share/odyssey3d/modelos/mde_large.onnx; se quita comentando la línea para volver a la nuestra.
+  La primera pasada: 31 ms por mapa en la gráfica NVIDIA, al mismo ritmo que con la nuestra.
+
 ## La tarjeta del aviso siempre va al panel del Odyssey (v0.17)
 - Pasaba esto: con dos monitores conectados (el Odyssey y un Sun Electronics X7149A de 1600x1200) la tarjeta
   aparecio en la pantalla equivocada. Tres cosas lo provocaban, y las tres estan corregidas:

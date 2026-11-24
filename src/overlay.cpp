@@ -78,6 +78,10 @@ struct Overlay::Impl {
   std::vector<Monitor *> monitores;
   Monitor *elegido = nullptr;
   wl_output *capaEn = nullptr;   /* monitor para el que se creó la capa actual */
+  int ofrecidoAncho = 0;         /* area util que ofrecio el compositor: delata donde cayo */
+  int ofrecidoAlto = 0;
+  int intentosColocacion = 0;    /* reintentos hechos para colocar la capa bien */
+  bool avisoColocacion = false;  /* hay aviso pendiente para quien lleve el servicio */
   bool reconocido = false;       /* el monitor elegido es claramente el panel del Odyssey */
   int anchoE = 0, altoE = 0;      /* tamaño real del monitor elegido, en píxeles */
   double escala = 1.0;            /* 1.0, 1.5, 2.0 ... */
@@ -357,6 +361,7 @@ struct Overlay::Impl {
       layer = nullptr;
       capaEn = nullptr;
     }
+    ofrecidoAncho = ofrecidoAlto = 0;
   }
 
   void limpiaTarjeta() {
@@ -397,16 +402,17 @@ struct Overlay::Impl {
     Monitor *porPista = nullptr, *porPanel = nullptr, *elGrande = nullptr;
     for (Monitor *m : monitores) {
       if (!m->vivo || !m->obj) continue;
-      if (!pistaMonitor.empty()) {
-        const std::string bus = minusc(m->nombre), aguja = minusc(pistaMonitor);
-        if (bus.find(aguja) == std::string::npos && minusc(m->modelo).find(aguja) == std::string::npos)
-          continue;
-        if (!porPista || areaDe(*m) > areaDe(*porPista)) porPista = m;
-        continue;
-      }
       if (!elGrande || areaDe(*m) > areaDe(*elGrande)) elGrande = m;
       if (esPanelOdyssey(*m) && (!porPanel || areaDe(*m) > areaDe(*porPanel))) porPanel = m;
+      if (!pistaMonitor.empty()) {
+        const std::string bus = minusc(m->nombre), aguja = minusc(pistaMonitor);
+        if (bus.find(aguja) != std::string::npos || minusc(m->modelo).find(aguja) != std::string::npos)
+          if (!porPista || areaDe(*m) > areaDe(*porPista)) porPista = m;
+      }
     }
+    /* la pista manda; si no coincide con nada (la pantalla se acaba de anunciar y todavia
+       no trae nombre) se sigue con el panel Odyssey o con el de mas pixeles, y nunca con el
+       primero de la lista: asi era como la tarjeta se colaba en el otro monitor */
     elegido = porPista ? porPista : (porPanel ? porPanel : elGrande);
     reconocido = porPista || porPanel;
     if (!elegido && !monitores.empty()) {
@@ -568,9 +574,13 @@ struct Overlay::Impl {
 
   static void layerConfigure(void *data, zwlr_layer_surface_v1 *, uint32_t serial, uint32_t w, uint32_t h) {
     Impl *s = static_cast<Impl *>(data);
+    s->ofrecidoAncho = (int)w;
+    s->ofrecidoAlto = (int)h;
     if (w > 0 && h > 0) {
-      s->supAncho = (int)w;
-      s->supAlto = (int)h;
+      /* lo que ofrece el compositor es el area util de la pantalla donde puso la capa, no
+         el tamano de la tarjeta: solo se recorta cuando resulta mas pequeno que lo pedido */
+      if (s->supAncho > (int)w) s->supAncho = (int)w;
+      if (s->supAlto > (int)h) s->supAlto = (int)h;
     }
     s->hayConfigure = true;
     zwlr_layer_surface_v1_ack_configure(s->layer, serial);
@@ -774,12 +784,15 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
      y, si la capa estaba puesta en otro, se rehace para que la tarjeta no acabe en la
      pantalla equivocada. */
   s.eligeMonitor();
-  if (s.layer && s.capaEn != (s.elegido ? s.elegido->obj : nullptr)) {
-    s.quitaEscuchaLayer();
-    zwlr_layer_surface_v1_destroy(s.layer);
-    s.layer = nullptr;
-    s.capaEn = nullptr;
+  for (int esperarNombre = 0; esperarNombre < 4 && s.elegido &&
+                               (s.elegido->nombre.empty() || s.elegido->anchoFis <= 0); ++esperarNombre) {
+    /* la pantalla se acaba de anunciar y todavia no trae nombre ni modos: sin esos datos la
+       eleccion sale a ciegas y puede caer en el monitor equivocado */
+    s.esperar(60);
+    s.eligeMonitor();
   }
+  if (s.layer && s.capaEn != (s.elegido ? s.elegido->obj : nullptr))
+    s.quitaEscuchaLayer();   /* destruye la capa: se volvera a crear sobre el monitor bueno */
 
   float ax = 0, ay = 0, aw = 0, ah = 0;
   if (!s.hud.askBounds(&ax, &ay, &aw, &ah)) return;
@@ -903,6 +916,36 @@ std::vector<std::string> Overlay::pantallas() const {
     out.push_back(linea);
   }
   return out;
+}
+
+/* El compositor manda en el configure el area util de la pantalla donde puso la capa. Si
+   alli no cabe la tarjeta, es que la puso en otra: se rehace la capa sobre la pantalla
+   pedida (dos intentos como mucho) y se guarda el motivo para el registro. */
+bool Overlay::corrigeColocacion() {
+  if (!d || !d->layer || !d->tarjetaPuesta || d->intentosColocacion >= 2 || !d->elegido) return false;
+  if (d->ofrecidoAncho <= 0 || d->ofrecidoAlto <= 0 || d->ofrecidoAncho > 8192) return false;
+  if (d->supAncho <= d->ofrecidoAncho && d->supAlto <= d->ofrecidoAlto) return false;
+  const int intentos = ++d->intentosColocacion;
+  char texto[240];
+  std::snprintf(texto, sizeof texto,
+                "el compositor puso la capa en otra pantalla: ofrecio %dx%d y la tarjeta pide "
+                "%dx%d para %s; se intenta de nuevo (%d de 2)",
+                d->ofrecidoAncho, d->ofrecidoAlto, d->supAncho, d->supAlto,
+                d->elegido->nombre.c_str(), intentos);
+  d->aviso = texto;
+  err_ = texto;
+  d->avisoColocacion = true;
+  const std::string titulo = d->titulo, cuerpo = d->cuerpo;
+  d->quitaEscuchaLayer();
+  showAsk(titulo, cuerpo);
+  d->intentosColocacion = intentos;
+  return true;
+}
+
+bool Overlay::hayAvisoColocacion() {
+  if (!d || !d->avisoColocacion) return false;
+  d->avisoColocacion = false;
+  return true;
 }
 
 std::string Overlay::outputName() const {

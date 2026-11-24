@@ -1533,6 +1533,7 @@ struct ServeCfg {
   std::vector<std::string> ignore;
   int esperaSeg = 40;
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
+  std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
@@ -1565,6 +1566,15 @@ static void splitList(const std::string &text, std::vector<std::string> &out) {
   if (!item.empty()) out.push_back(strLower(strTrim(item)));
 }
 
+/* "~" al principio de una ruta de modelo, para poder escribirlo a mano en la configuracion. */
+static std::string expansionRuta(std::string r) {
+  const char *h = std::getenv("HOME");
+  const std::string casa = h ? h : "";
+  if (!casa.empty() && (r == "~" || (r.size() > 1 && r.compare(0, 2, "~/") == 0)))
+    r = casa + r.substr(1);
+  return r;
+}
+
 /* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
@@ -1585,6 +1595,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "cada") cfg.cada = std::max(1, std::atoi(v.c_str()));
     else if (k == "modo") cfg.modo = strLower(v);
     else if (k == "pantalla") cfg.pantalla = v;
+    else if (k == "modelo") cfg.modelo = expansionRuta(v);
     else if (k == "auto") {
       /* auto = mpv:sbs, haruna:tb  -> esas ventanas pasan directas, sin preguntar */
       std::vector<std::string> pares;
@@ -1624,7 +1635,7 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
 }
 
 static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo, int red = 0,
-                        int cada = 3) {
+                        int cada = 3, const std::string &modelo = std::string()) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
@@ -1638,6 +1649,10 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     args.push_back(std::to_string(cada));
     args.push_back("--red");
     args.push_back(std::to_string(red));
+    if (!modelo.empty()) {
+      args.push_back("--modelo");
+      args.push_back(modelo);
+    }
   }
   std::vector<char *> av;
   for (std::string &a : args) av.push_back(const_cast<char *>(a.c_str()));
@@ -1863,6 +1878,8 @@ static int cmdOverlay(int argc, char **argv) {
   bool volcadoHecho = false;
   while (!g_stopServe && reloj() - inicio < (double)segundos) {
     ov.waitAndDispatch(100);
+    if (ov.corrigeColocacion() && ov.hayAvisoColocacion())
+      std::printf("[capa] %s\n", ov.lastError().c_str());
     if (std::string a = ov.takeAction(); !a.empty()) {
       std::printf("[capa] elegido: %s\n", a.c_str());
       std::fflush(stdout);
@@ -1897,6 +1914,7 @@ static int cmdServe(int argc, char **argv) {
   if (std::string v = flag(argc, argv, "--cada"); !v.empty()) cfg.cada = std::max(1, std::atoi(v.c_str()));
   if (std::string v = flag(argc, argv, "--modo"); !v.empty()) cfg.modo = strLower(v);
   if (std::string v = flag(argc, argv, "--pantalla"); !v.empty()) cfg.pantalla = v;
+  if (std::string v = flag(argc, argv, "--modelo"); !v.empty()) cfg.modelo = expansionRuta(v);
   if (std::string v = flag(argc, argv, "--ignore"); !v.empty()) splitList(v, cfg.ignore);
   if (cfg.modo == "preguntar") cfg.modo = "ask";
 
@@ -1951,6 +1969,8 @@ static int cmdServe(int argc, char **argv) {
     std::fflush(stdout);
   });
 
+  std::printf("[serve] red de profundidad: %s\n",
+              cfg.modelo.empty() ? "la nuestra (Depth Anything V2 pequena)" : cfg.modelo.c_str());
   std::printf("[serve] vigilando ventanas a pantalla completa (%s) · modo=%s · espera=%d s\n",
               dry ? "sin ejecutar, --dry" : "ejecutando", cfg.modo.c_str(), cfg.esperaSeg);
   std::fflush(stdout);
@@ -1962,6 +1982,12 @@ static int cmdServe(int argc, char **argv) {
       ::poll(ojea, 2, 200);
       wm.waitAndDispatch(0);
       ov.waitAndDispatch(0);
+      /* el compositor a veces coloca la capa en otra pantalla: se comprueba y se rehace */
+      if (ov.corrigeColocacion() && ov.hayAvisoColocacion()) {
+        std::printf("[serve] %s\n", ov.lastError().c_str());
+        std::printf("[serve] la tarjeta vuelve a intentarse en %s\n", ov.outputName().c_str());
+        std::fflush(stdout);
+      }
     } else {
       wm.waitAndDispatch(500);
     }
@@ -2071,7 +2097,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, cfg.modelo);
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
@@ -2107,7 +2133,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, cfg.modelo);
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
             std::fflush(stdout);
@@ -2155,7 +2181,7 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, cfg.modelo);
           hijoUuid = w.uuid;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
           std::fflush(stdout);
