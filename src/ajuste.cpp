@@ -50,6 +50,11 @@ const Clave *buscarClave(const std::string &nombre) {
 std::string rutaAjuste() { return rutaEstadoOdyssey("ajuste"); }
 std::string rutaEstado() { return rutaEstadoOdyssey("estado"); }
 std::string rutaHistorial() { return rutaEstadoOdyssey("preferencias.log"); }
+std::string rutaHub() { return rutaEstadoOdyssey("hub"); }
+
+bool esOrden(const std::string &nombre) {
+  return nombre == "overlay";
+}
 
 static std::string recortar(std::string s) {
   while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' || s.back() == '\t')) s.pop_back();
@@ -181,10 +186,22 @@ void registrar(const std::string &clave, const std::string &antes, const std::st
   std::fclose(f);
 }
 
-std::map<std::string, std::string> leerEstado() {
+void escribirEstadoHub(const std::string &texto) {
+  const std::string destino = rutaHub();
+  const std::string temporal = destino + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) return;
+  std::fputs(texto.c_str(), f);
+  std::fputc('\n', f);
+  std::fclose(f);
+  std::rename(temporal.c_str(), destino.c_str());   /* que nadie lo lea a medias */
+}
+
+/* Pares `clave = valor` de un fichero de estado. */
+static std::map<std::string, std::string> paresDe(const std::string &ruta) {
   std::map<std::string, std::string> pares;
   std::string contenido;
-  if (!readSmallFile(rutaEstado(), contenido)) return pares;
+  if (!readSmallFile(ruta, contenido)) return pares;
   size_t inicio = 0;
   while (inicio <= contenido.size()) {
     size_t fin = contenido.find('\n', inicio);
@@ -198,6 +215,9 @@ std::map<std::string, std::string> leerEstado() {
   }
   return pares;
 }
+
+std::map<std::string, std::string> leerEstado() { return paresDe(rutaEstado()); }
+std::map<std::string, std::string> leerEstadoHub() { return paresDe(rutaHub()); }
 
 std::string textoAjuste() {
   std::string s;

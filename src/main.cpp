@@ -46,6 +46,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -92,6 +93,8 @@ static const char *kUsage =
     "  odyssey3d ctl video  [status|pause|play|toggle]   pausar y reanudar el video sin quitar la capa\n"
     "  odyssey3d ctl overlay [--segundos 12] [--dump F.png] [--titulo T] [--cuerpo T]\n"
     "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
+    "  odyssey3d ctl escritorio [poner|quitar|estado]   el overlay FORZADO en el escritorio del monitor:\n"
+    "                                        trama y lente encendidas con patron de prueba, sin video (lo mismo que el boton de la ventana de ajustes)\n"
     "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
     "  odyssey3d test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
     "  odyssey3d serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
@@ -2085,6 +2088,16 @@ static int cmdAjuste(int argc, char **argv) {
       dicho += "  modelo = " + modelo + "\n";
       continue;
     }
+    if (ajuste::esOrden(k)) {
+      /* no es un numero del visor: es una orden para el vigilante (`overlay = 1` pone el overlay del
+         escritorio, `overlay = 0` lo quita). Tambien esta `ctl escritorio poner|quitar`, que es lo mismo */
+      const double num = leerNumero(valor.c_str());
+      numeros[k] = num >= 0.5 ? 1.0 : 0.0;
+      dicho += std::string("  ") + k + " = " + (numeros[k] >= 0.5 ? "1" : "0") +
+               "   /* overlay del escritorio " + std::string(numeros[k] >= 0.5 ? "PUESTO" : "QUITADO") +
+               ": lo atiende el hub, no el visor */\n";
+      continue;
+    }
     const ajuste::Clave *c = ajuste::buscarClave(k);
     if (!c) {
       std::fprintf(stderr, "no conozco ese numero: %s\n", k.c_str());
@@ -2126,6 +2139,52 @@ static int cmdPreferencias(int argc, char **argv) {
   }
   std::printf("ultimos %d cambios guardados en %s:\n", (int)lineas.size(), ajuste::rutaHistorial().c_str());
   for (const std::string &l : lineas) std::printf("  %s\n", l.c_str());
+  return 0;
+}
+
+/* El overlay FORZADO en el escritorio del monitor: lo mismo que hace el boton de la ventana de
+   ajustes. `poner` escribe `overlay = 1` en el fichero de ajuste y el hub monta el visor con su
+   patron de trama sobre el escritorio (panel a 3D, lente, pastilla y rastreo); `quitar` escribe
+   `overlay = 0` y el hub lo despide por la puerta de adelante. `estado` cuenta lo que esta haciendo
+   el hub. Ojo: el fichero de ajuste es una ORDEN y se reescribe ENTERO, asi que esta orden se lleva
+   los numeros sueltos que estuvieran escritos (el visor ya los aplico, no los echa de menos). */
+static int cmdEscritorio(int argc, char **argv) {
+  const std::string uno = argc > 0 ? strLower(argv[0]) : "estado";
+  if (uno == "estado" || uno == "status" || uno == "info") {
+    const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
+    if (hub.empty()) {
+      std::printf("el vigilante no ha escrito nada en %s: no hay `odyssey3d serve` corriendo, o es una\n"
+                  "version vieja que aun no cuenta lo suyo (instala la nueva con `make install`)\n",
+                  ajuste::rutaHub().c_str());
+      return 1;
+    }
+    for (const auto &kv : hub) std::printf("  %-10s %s\n", kv.first.c_str(), kv.second.c_str());
+    /* el hub escribe ahi una vez por segundo: si el fichero viene viejo, el servicio ya no esta y lo
+       que cuenta es un recuerdo */
+    std::error_code ec;
+    const auto mt = std::filesystem::last_write_time(ajuste::rutaHub(), ec);
+    if (!ec) {
+      const long long viejos = (long long)std::chrono::duration_cast<std::chrono::seconds>(
+                                   std::filesystem::file_time_type::clock::now() - mt).count();
+      std::printf("  %-10s %lld segundos\n", "hace", viejos);
+      if (viejos > 5)
+        std::printf("  (viene viejo: el servicio se paro; lo arrancas con `systemctl --user restart odyssey3d-serve`)\n");
+    }
+    return 0;
+  }
+  double valor = -1.0;
+  if (uno == "poner" || uno == "montar" || uno == "1" || uno == "si") valor = 1.0;
+  else if (uno == "quitar" || uno == "bajar" || uno == "0" || uno == "no") valor = 0.0;
+  else {
+    std::printf("uso: odyssey3d ctl escritorio [poner|quitar|estado]\n");
+    return 2;
+  }
+  std::string err;
+  if (!ajuste::escribir({{"overlay", valor}}, std::string(), &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("orden enviada al vigilante: overlay del escritorio %s\n", valor >= 0.5 ? "PUESTO" : "QUITADO");
   return 0;
 }
 
@@ -2546,10 +2605,16 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
                         const std::string &alterno = std::string(), bool rastreo = false,
-                        float suavizado = 0.0f, const ServeCfg *pila = nullptr) {
+                        float suavizado = 0.0f, const ServeCfg *pila = nullptr, bool escritorio = false) {
   pid_t pid = ::fork();
   if (pid != 0) return pid;
-  std::vector<std::string> args = {exe, "capture3d", "--uuid", uuid};
+  /* `escritorio = true` es el overlay FORZADO sobre el escritorio del monitor: no hay ventana de
+     video que capturar (capturar la salida del monitor se morderia la cola: tejeria su propia trama),
+     asi que el visor teje su patron de trama de siempre. Es el mismo camino de `odyssey3d test`:
+     panel a 3D, lente, pastilla y rastreo incluidos, solo que sin imagen de video detras. */
+  std::vector<std::string> args =
+      escritorio ? std::vector<std::string>{exe, "test", "--siempre"}
+                 : std::vector<std::string>{exe, "capture3d", "--uuid", uuid};
   if (!pantalla.empty()) { args.push_back("--output"); args.push_back(pantalla); }
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
@@ -3270,6 +3335,17 @@ static int cmdServe(int argc, char **argv) {
   int fullQuitadas = 0;           /* intentos hechos: no pelear con el navegador para siempre */
   bool fullAvisado = false;       /* el aviso de "el navegador la vuelve a poner" va una sola vez */
 
+  /* El overlay FORZADO en el escritorio del monitor. Lo pide la ventana de ajustes (el boton escribe
+     `overlay = 1` en el fichero de ajuste) o `odyssey3d ctl escritorio poner`: el panel pasa a 3D y el
+     visor teje su patron de trama, sin video detras. Sirve para mirar y afinar la trama, las franjas y
+     las rampas con el escritorio por delante, sin tener que abrir ningun video. Es una ORDEN, no la
+     verdad: solo hacemos algo cuando el numero CAMBIA en el fichero y cuando lo que pide no esta hecho
+     ya, asi que el mismo boton la quita (`overlay = 0`) y un clic de mas no vuelve a montarla. */
+  bool forzado = false;             /* la sesion en curso es la forzada del escritorio */
+  ajuste::Lector lectorOrden;       /* el fichero de ajuste, mirado solo cuando cambia */
+  bool primerOrden = true;          /* la primera lectura no es una orden: puede venir vieja */
+  double hubEstadoDesde = 0.0;      /* cada cuanto contamos en el fichero `hub` que sesion tenemos */
+
   /* Bajar a las demas ventanas mientras dura la sesion. El video va con KeepBelow para que un click en
      su barra de tiempos no suba el navegador por encima de la trama, pero KeepBelow lo manda al fondo
      del apilamiento ENTERO: si ademas hay otra ventana normal, el click que el visor deja pasar se lo
@@ -3394,7 +3470,10 @@ static int cmdServe(int argc, char **argv) {
       int st = 0;
       pid_t r = ::waitpid(hijo, &st, WNOHANG);
       if (r == hijo) {
-        std::printf("[serve] sesion 3D terminada (%s)\n", hijoUuid.c_str());
+        const bool eraForzada = forzado;   /* la del escritorio la quito uno a proposito */
+        forzado = false;
+        std::printf("[serve] sesion 3D terminada (%s)\n",
+                    hijoUuid.empty() ? "el overlay del escritorio" : hijoUuid.c_str());
         std::fflush(stdout);
         /* Si la sesion se cerro porque el video se fue, esa ventana queda apuntada unos segundos:
            es la que hay que devolver a estado normal (abajo se explica por que). */
@@ -3442,21 +3521,84 @@ static int cmdServe(int argc, char **argv) {
         /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
            que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
            al instante, entramos en un bucle de lanzar/cerrar que deja el monitor parpadeando. */
-        if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
-        else muertesSeguidas = 0;
-        enfriadoHasta = now + 8.0;
-        if (muertesSeguidas >= 2) {
+        if (eraForzada) {
+          /* El overlay del escritorio lo quitamos nosotros con el boton: no es una muerte rara, no hay
+             por que enfriar nada y el boton puede volver a montarlo al momento. */
           muertesSeguidas = 0;
-          enfriadoHasta = now + 60.0;
-          std::printf("[serve] la sesion se cerro apenas empezo: esperamos un minuto antes de volver"
-                      " a ofrecer 3D\n");
-          std::fflush(stdout);
+          enfriadoHasta = now;
+        } else {
+          if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
+          else muertesSeguidas = 0;
+          enfriadoHasta = now + 8.0;
+          if (muertesSeguidas >= 2) {
+            muertesSeguidas = 0;
+            enfriadoHasta = now + 60.0;
+            std::printf("[serve] la sesion se cerro apenas empezo: esperamos un minuto antes de volver"
+                        " a ofrecer 3D\n");
+            std::fflush(stdout);
+          }
         }
         hijoDesde = 0.0;
         /* Red de seguridad: el visor, al irse por su pie, restaura el panel y borra la instantanea.
            Si la instantanea sigue ahi es que el visor se fue de golpe (SIGKILL, cuelgue) y el monitor
            se quedo en modo 3D con la lente encendida. */
         devolverPanelHuerfano("la sesion 3D se termino");
+      }
+    }
+
+    /* La ventana de ajustes (o `odyssey3d ctl escritorio poner`) puede pedir el overlay montado EN EL
+       ESCRITORIO del monitor, sin esperar a que nadie se ponga a pantalla completa: el panel pasa a 3D
+       y el visor teje su patron de trama (el mismo camino de `odyssey3d test`), asi se ven y se afinan
+       la trama, las franjas y las rampas con el escritorio por delante. NO capturamos la salida del
+       monitor: ahi estaria nuestra propia ventana y la trama se tejeria a si misma. Un segundo clic en
+       el boton escribe `overlay = 0` y lo quita; si ya esta como lo pide, no hacemos nada mas. */
+    {
+      std::map<std::string, double> ordenes;
+      std::string modeloCanal;
+      if (lectorOrden.cambio(ordenes, modeloCanal)) {
+        const auto it = ordenes.find("overlay");
+        /* La PRIMERA vez que miramos el fichero al arrancar el servicio no es un cambio: puede venir
+           con una orden vieja de cuando el equipo se apago o de un servicio que ya no esta. Montar el
+           overlay del escritorio sin que nadie lo haya pedido en este arranque seria una sorpresa (le
+           cambia el panel a 3D en plena mesa), asi que la primera lectura se pasa de largo. Los numeros
+           del visor si se dejan pasar: esos se aplican cuando el visor se abre, y ahi si tiene sentido. */
+        if (it != ordenes.end() && !primerOrden) {
+          const bool quiere = it->second >= 0.5;
+          if (quiere && !forzado) {
+            if (hijo > 0) {
+              std::printf("[serve] el overlay del escritorio espera: ya hay una sesion 3D abierta (%s)\n",
+                          hijoUuid.empty() ? "sin ventana de video" : hijoUuid.c_str());
+              std::fflush(stdout);
+            } else if (dry) {
+              std::printf("[serve] (dry) habria puesto el overlay del escritorio (patron de trama sin"
+                          " video)\n");
+              std::fflush(stdout);
+            } else {
+              /* sin modo y sin uuid: el patron de trama no necesita formato y no hay ventana de video
+                 que vigilar; el resto (panel, lente, pastilla, rastreo) es el de siempre */
+              hijo = spawnViewer(exe, std::string(), std::string(), cfg.red, cfg.cada, redActiva,
+                                 cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg, true);
+              if (hijo > 0) {
+                forzado = true;
+                ajuste::registrar("overlay", "0", "1", redActiva, "el boton del overlay (o ctl escritorio)");
+                hijoDesde = now;
+                std::printf("[serve] overlay puesto en el escritorio de %s: patron de trama sin video."
+                            " Se quita con el mismo boton, con ESC en la ventana o con `ctl escritorio"
+                            " quitar`\n", cfg.pantalla.empty() ? "la pantalla del panel" : cfg.pantalla.c_str());
+                std::fflush(stdout);
+              } else {
+                std::fprintf(stderr, "[serve] no se pudo lanzar el overlay del escritorio\n");
+                std::fflush(stderr);
+              }
+            }
+          } else if (!quiere && forzado && hijo > 0) {
+            ajuste::registrar("overlay", "1", "0", redActiva, "el boton del overlay (o ctl escritorio)");
+            std::printf("[serve] quitamos el overlay del escritorio (lo pidio la ventana de ajustes)\n");
+            std::fflush(stdout);
+            ::kill(hijo, SIGTERM);
+          }
+        }
+        primerOrden = false;
       }
     }
 
@@ -4021,6 +4163,28 @@ static int cmdServe(int argc, char **argv) {
         }
       }
     }
+
+    /* El vigilante cuenta lo suyo —que sesion tiene abierta, en que pantalla y con que red— en su
+       propio fichero, para que la ventana de ajustes sepa si su boton del overlay esta puesto o
+       quitado. El visor cuenta los suyos en `estado`; aqui va lo que solo sabe el hub. */
+    if (now - hubEstadoDesde >= 1.0) {
+      hubEstadoDesde = now;
+      char hora[32] = {0};
+      const std::time_t t = std::time(nullptr);
+      std::tm tmLocal{};
+      localtime_r(&t, &tmLocal);
+      std::strftime(hora, sizeof hora, "%Y-%m-%d %H:%M:%S", &tmLocal);
+      std::string txt = "# Lo que esta haciendo el vigilante (lo escribe el hub, no el visor).\n";
+      txt += std::string("hora = ") + hora + "\n";
+      txt += "servicio = corriendo\n";
+      txt += std::string("sesion = ") + (hijo > 0 ? (forzado ? "escritorio" : "video") : "ninguna") + "\n";
+      txt += "ventana = " + (hijoUuid.empty() ? std::string("-") : hijoUuid) + "\n";
+      txt += "pantalla = " + (cfg.pantalla.empty() ? std::string("(la del panel)") : cfg.pantalla) + "\n";
+      txt += "modo = " + cfg.modo + "\n";
+      txt += "red = " + std::to_string(redElegida) + "\n";   /* 1 o 2, las mismas palabras que la pastilla y que el visor */
+      txt += "modelo = " + (redActiva.empty() ? std::string("(la de la pastilla)") : redActiva) + "\n";
+      ajuste::escribirEstadoHub(txt);
+    }
   }
 
   if (!avisoId.empty()) nt.remove(avisoId);
@@ -4045,6 +4209,13 @@ static int cmdServe(int argc, char **argv) {
   devolverDemas();              /* y las demas ventanas que bajamos, todas de vuelta a su lugar */
   /* Al parar el servicio el visor se va con nosotros y restaura el panel el solo; si no llego a
      hacerlo (lo mato systemd, o revento antes), el monitor quedaba en modo 3D hasta el reinicio. */
+  /* Y quitamos nuestro chivato del disco: mientras el servicio vive escribimos en `hub` una vez por
+     segundo, y si el fichero se quedara tras parar, la ventana de ajustes creeriamos que sigue habiendo
+     un vigilante con alguna sesion abierta. */
+  {
+    std::error_code ec;
+    std::filesystem::remove(ajuste::rutaHub(), ec);
+  }
   devolverPanelHuerfano("el servicio se detuvo");
   std::printf("[serve] detenido\n");
   std::fflush(stdout);
@@ -4100,6 +4271,7 @@ int main(int argc, char **argv) {
     if (sub == "estado") return cmdEstado();
     if (sub == "modelos") return cmdModelos();
     if (sub == "preferencias") return cmdPreferencias(argc - 3, argv + 3);
+    if (sub == "escritorio") return cmdEscritorio(argc - 3, argv + 3);
     if (sub == "mapa") return cmdMapa(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;

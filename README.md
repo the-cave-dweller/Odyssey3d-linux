@@ -331,13 +331,14 @@ las dos (sale de la trama), y de cuántos píxeles son las mesetas del mapa.
 El visor se queda el teclado de la pantalla del panel, así que hasta v0.50 los números solo se movían
 con las teclas de esa ventana o tocando `serve.conf` y reiniciando el servicio. Ahora hay una ventana
 aparte, `odyssey3d-ajustes`, que **no comparte nada con el visor**: no enlaza sus librerías, no tiene
-socket, no puede tocar la trama. Habla con él por tres ficheros en `~/.local/state/odyssey3d`:
+socket, no puede tocar la trama. Habla con él por ficheros en `~/.local/state/odyssey3d`:
 
 | fichero | qué es |
 | --- | --- |
 | `ajuste` | la **orden**: números sueltos y una línea `modelo = /ruta.onnx`. El visor lo mira cada 0,1 s y solo actúa si el fichero cambió |
 | `estado` | la **verdad del visor**, reescrito cada 0,5 s: versión, trama y conversor puestos o no, qué red y en qué tarjeta, y los 20 números |
 | `preferencias.log` | la **cuenta de lo cambiado**: hora, valor antes → después, red puesta y quién lo pidió |
+| `hub` | la **verdad del vigilante** (`odyssey3d serve`), reescrito cada 1 s: si hay sesión, si es de `video` o de `escritorio`, en qué pantalla, con qué modo y qué red. Lo escribe el hub y lo borra al pararse |
 
 ```sh
 odyssey3d-ajustes                       # la ventana (la puedes tener en el otro monitor)
@@ -348,6 +349,9 @@ odyssey3d ctl ajuste limpiar            # quita la orden: vuelven a mandar las t
 odyssey3d ctl estado                    # lo que el visor está usando ahora
 odyssey3d ctl modelos                   # los .onnx que hay en el disco, con la puesta marcada
 odyssey3d ctl preferencias --ultimos 20 # lo que se fue cambiando
+odyssey3d ctl escritorio poner          # la trama ENCIMA DEL ESCRITORIO, sin vídeo (mismo botón de la ventana)
+odyssey3d ctl escritorio quitar         # y abajo: el visor se despide devolviendo el panel
+odyssey3d ctl escritorio estado         # qué sesión tiene abierta el vigilante ahora mismo
 ```
 
 Números que admite el canal (con topes, los mismos que ajustan las teclas): `fase`, `paso`, `filtro`,
@@ -355,7 +359,30 @@ Números que admite el canal (con topes, los mismos que ajustan las teclas): `fa
 `empuje_fondo`, `empuje_frente`, `planos`, `muestras`, `temblor`, `canto`, `fase_temblor`, `relieve`,
 `apoyo`. Las comas se aceptan (`planos 0,6`).
 
-Dos cosas que conviene saber:
+Además de números, el canal admite **una orden**: `overlay = 1` pide que la trama se monte **encima del
+escritorio del monitor**, sin esperar a que nadie se ponga a pantalla completa, y `overlay = 0` la quita. No
+la atiende el visor sino el hub (es el único que puede lanzar y despachar una sesión), y el botón de la
+ventana la pone y la quita con un clic cada uno:
+
+- Un clic lanza `odyssey3d test --siempre`: panel a 3D, escala, lente, pastilla, rastreo y rampas como en
+  una sesión normal, pero tejiendo su **patrón de trama** en vez de un vídeo. Sirve para mirar y afinar la
+  trama, las franjas y las rampas sin abrir nada, y para dejar el 3D puesto mientras trabajas.
+- Otro clic (o `ctl escritorio quitar`, o ESC/Tab sobre el visor) manda SIGTERM al visor, que devuelve el
+  panel por la puerta de adelante. Mientras está puesto, el hub **no** ofrece el 3D de vídeo: hay sesión
+  abierta.
+- No capturamos la salida del monitor para meter el escritorio dentro del 3D: en esa imagen estaría nuestra
+  propia ventana y la trama se tejería a sí misma. El patrón de trama es lo que se teje.
+- La orden solo actúa cuando el número **cambia** en el fichero; la primera lectura al arrancar el servicio
+  se ignora, para que un `overlay = 1` olvidado de cuando el equipo se apagó no monte la trama solo.
+
+Las redes de la lista desplegable vienen separadas en **NATIVAS** (las instaladas en la máquina:
+`~/.local/share/odyssey3d/modelos` y el `modelos/` del programa: `mde_large`, `mde_large_fp32`,
+`depth_anything_v2_small`, la de la cara…) y **OTROS** (la memoria USB, carpetas sueltas y lo que diga
+`ODYSSEY3D_MODELOS`: `Disp_Disp_1008_ver1`, `mde_small`, `mde_tiny`…). Las dos líneas de título son
+separadores y no se pueden elegir, y cada red lleva detrás lo que sabemos de ella —`mde_tiny` avisa de que
+aquí no abrió, y `face_detection_yunet` de que no es de profundidad sino la cara del rastreo—.
+
+Tres cosas que conviene saber:
 
 - **La orden es de una sola vez.** Cada escritura reemplaza el fichero entero, así que un número que
   luego moviste con las teclas dentro del visor no vuelve atrás cuando mandes otro distinto. Para ver
@@ -808,6 +835,8 @@ odyssey3d ctl hud --w 1920 --h 1080   # prueba la interfaz sin abrir ventana ( a
 odyssey3d ctl estado                  # qué red, qué tarjeta y qué números está usando el visor vivo
 odyssey3d ctl ajuste fase 0,004       # mandarle un número al visor sin tocar el panel
 odyssey3d ctl preferencias            # la cuenta de lo que se fue cambiando (preferencias.log)
+odyssey3d ctl escritorio estado       # qué sesión tiene el vigilante: ninguna, de vídeo o del escritorio
+odyssey3d-ajustes --prueba            # la ventana de ajustes sin pantalla: redes (nativas/otras), estado y vigilante
 odyssey3d ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
 odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
                                       # guarda chk-trama.png y chk-origen.png y sale

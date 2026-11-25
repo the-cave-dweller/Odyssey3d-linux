@@ -2,6 +2,50 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El botón que pone la trama encima del escritorio, y las redes separadas en nativas y otras (v0.52)
+- Pedido de Rodolfo: «añade un botón para cargar el overlay en el escritorio del monitor, el click lo
+  fuerza y un segundo click lo quita; también, referente a los modelos, separa los nativos como modelos
+  nativos y los otros márcalos como otros».
+- Cómo viaja la orden: la ventana de ajustes escribe `overlay = 1` (o `0`) en el fichero de siempre
+  (`~/.local/state/odyssey3d/ajuste`), y manda lo mismo `odyssey3d ctl escritorio poner|quitar|estado`. El
+  visor pasa de esas líneas en silencio (`ajuste::esOrden`), porque no son un número suyo: quien la atiende
+  es el **hub**, que es el único que puede lanzar y despachar una sesión. Para que el botón sepa si ya está
+  puesto, el hub cuenta lo suyo en un fichero nuevo, `~/.local/state/odyssey3d/hub`: `hora`, `servicio`,
+  `sesion = ninguna|video|escritorio`, `ventana`, `pantalla`, `modo`, `red`, `modelo`. Lo escribe una vez
+  por segundo y lo **borra al pararse**; si viene con más de 5 segundos de retraso la ventana dice «el
+  servicio se fue» en vez de quedarse creyendo el recuerdo.
+- Qué monta: `test --siempre`, o sea el patrón de trama de siempre, por el mismo camino del visor (panel a
+  3D, escala, lente, pastilla, rastreo y rampas incluidos), sin `--uuid` y sin conversor. **No** capturamos
+  la salida del monitor: ahí estaría nuestra propia ventana tejiéndose a sí misma, así que el escritorio
+  forzado enseña la trama y su relieve, no el escritorio de fondo. El protocolo de captura de KWin sí
+  ofrece `stream_output`; lo descartamos por eso.
+- Es un flanco, no un nivel: solo hacemos algo cuando el número **cambia** en el fichero y cuando lo que
+  pide no está ya hecho. Un clic de más no monta nada dos veces, y el mismo botón lo quita (SIGTERM al
+  visor, que devuelve el panel por la puerta de adelante). La primera lectura del fichero al arrancar el
+  servicio **no** cuenta como orden: si el equipo se apagó con `overlay = 1` escrito, al encender no aparece
+  la trama sola en el escritorio. Mientras el overlay forzado está puesto el hub no ofrece el 3D de vídeo
+  (hay sesión abierta); se quita con el botón, con `ctl escritorio quitar` o con ESC/Tab sobre el visor.
+- Comprobado hoy sin tocar el panel: `serve --dry` con la orden escrita a los 2 s →
+  `[serve] (dry) habría puesto el overlay del escritorio (patrón de trama sin video)`, y al pararse el
+  fichero `hub` desaparece (`ls: no se puede acceder a «/home/rodolfo/.local/state/odyssey3d/hub»: No existe
+  el fichero o el directorio`). La sesión de patrón lanzada a mano en ventana
+  (`test --siempre --windowed --no-panel … --dump /tmp/ofd --volcado-seguir`) deja `/tmp/ofd-trama-vulkan.png`
+  (3840x2160 leído de Vulkan), `/tmp/ofd-trama-cruda.png` y `/tmp/ofd-origen.png`, y al SIGTERM sale con
+  `[sesión] llegó una señal de cierre: se sale devolviendo el panel, la lente y el scaler`. Con
+  `volcado = /tmp/rampa` en `serve.conf`, el overlay del escritorio también deja sus volcados: sirven para
+  medir las franjas con `tools/mide_franjas.py` sin abrir ningún vídeo.
+  **Queda por tu parte: la prueba en el panel de verdad**, que es la que cambia la escala y la frecuencia.
+- Las redes de la lista salen en dos bloques, y los títulos no se pueden elegir: **NATIVAS** = las
+  instaladas en la máquina (`~/.local/share/odyssey3d/modelos` y el `modelos/` del programa), **OTROS** = la
+  memoria USB, carpetas sueltas y lo que diga `ODYSSEY3D_MODELOS`. Cada fichero lleva su aviso cuando
+  sabemos algo: `mde_tiny` → «aquí no abrió: pide otras dimensiones de entrada» (medido: ONNX Runtime la
+  rechaza con `Got invalid dimensions for input: input`) y `face_detection_yunet_2023mar` → «no es de
+  profundidad: es la cara para el rastreo». `Otro archivo…` ya no añade duplicados: si la ruta estaba en la
+  lista la selecciona, y si no la añade marcada como `otros (a mano)`.
+- Lo que cuenta `odyssey3d-ajustes --prueba` hoy: 10 redes, **5 nativas** (`depth_anything_v2_small`,
+  `face_detection_yunet`, `mde_large`, `mde_large_fp32`, y otra copia de la cara en el repo) y **5 otras**
+  en la USB (`Disp_Disp_1008_ver1`, `mde_large`, `mde_large_fp32`, `mde_small`, `mde_tiny`).
+
 ## Medido: la meseta del medio fabrica cantos nuevos (`muestras` vuelve a 0)
 - Pedido de Rodolfo tras probar v0.50: «volvió el raspado».
 - Medido sin pantalla, con numpy sobre los dos mapas reales que escribe `odyssey3d planos --out`

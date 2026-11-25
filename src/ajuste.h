@@ -53,8 +53,22 @@ class Lector {
   long long marca_ = -1;
 };
 
-/* Fusiona estos valores en el fichero de ajuste (lo que no se menciona queda como estaba) y lo deja
-   atomicamente en su sitio. Lo usan `ctl ajuste` y la ventana de desarrollo. */
+/* Hay lineas del fichero que no son un numero sino una ORDEN, y las atiende el vigilante (el hub),
+   no el visor: `overlay = 1` pide el overlay montado EN EL ESCRITORIO del monitor, sin esperar a que
+   nadie se ponga a pantalla completa, y `overlay = 0` lo quita. El visor pasa de esas lineas en
+   silencio (si no, las reportaria como un numero que no conoce). */
+bool esOrden(const std::string &nombre);
+
+/* El vigilante cuenta que sesion tiene abierta (ninguna / video / escritorio), en que pantalla y con
+   que modo, en su propio fichero. La ventana de ajustes lo lee para saber si su boton esta puesto. */
+void escribirEstadoHub(const std::string &texto);
+std::string rutaHub();
+std::map<std::string, std::string> leerEstadoHub();
+
+/* Escribe el fichero de ajuste ENTERO con estos valores: lo que no se manda esta vez, se va. Es una
+   ORDEN para el visor, no la memoria de lo mandado (si se arrastraran los mandatos anteriores, un numero
+   que alguien movio despues con las teclas volveria atras solo). Se deja atomicamente en su sitio. Lo
+   usan `ctl ajuste`, `ctl escritorio` y la ventana de ajustes. */
 bool escribir(const std::map<std::string, double> &numeros, const std::string &modelo,
               std::string *err);
 

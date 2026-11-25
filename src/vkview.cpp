@@ -1462,7 +1462,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         std::map<std::string, double> pedidos;
         std::string modeloPedido;
         if (lector.cambio(pedidos, modeloPedido)) {
-          for (const auto &kv : pedidos) aplicarAjuste(ui, wv, kv.first, kv.second);
+          for (const auto &kv : pedidos) {
+            if (ajuste::esOrden(kv.first)) continue;   /* `overlay` lo atiende el vigilante, no nosotros */
+            aplicarAjuste(ui, wv, kv.first, kv.second);
+          }
           if (!modeloPedido.empty()) {
             ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
             ui.avisoRedLejos = false;
