@@ -1012,6 +1012,50 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
     peso[q] = 1.0f;
   }
 
+  /* Forma (v0.60). Celda por celda, la cara (lentes, nariz, boca) y la rejilla de un microfono pasan
+     todos los filtros de arriba: detalle fino y de mucho contraste con fondo liso al lado. Medido en un
+     cuadro real (`texto-detect` sobre /tmp/rampa-chico.ppm, 25-nov): la cara salia marcada en una
+     columna de 3-4 celdas de ancho por 18 de alto y el microfono en un bloque de ~9 x 16, y los dos se
+     aplastaban contra la pantalla, con escalones de celda (8 puntos del mapa = 33 px de pantalla) en
+     sus bordes. Un rotulo, en cambio, es una franja ancha y baja: aun con dos o tres lineas no pasa de
+     ~10 celdas de alto (80 puntos del mapa, el 15 % del cuadro). Se queda la celda cuya racha
+     horizontal (marcadas seguidas en su fila, perdonando un hueco) mide al menos kRachaMin y que,
+     ademas, es el doble de ancha que su racha vertical o no pasa de kAltoMax de alto. (Solo con "el
+     doble de ancha" se perdian los tramos cortos de un subtitulo de dos lineas: medido en
+     pruebas-texto/t1.) ODYSSEYVK_TEXTO_RACHA cambia kRachaMin (0 = sin filtro de forma). */
+  const int kAltoMax = 10;
+  static const int kRachaMin = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_TEXTO_RACHA");
+    return e ? std::atoi(e) : 4;   /* 4: barrido 3..6 con el cuadro real y pruebas-texto (ver CAMBIOS v0.60) */
+  }();
+  if (kRachaMin > 0) {
+    auto marcada = [&](int x, int y) {
+      return x >= 0 && x < cw && y >= 0 && y < ch && peso[(size_t)y * cw + x] > 0.0f;
+    };
+    /* largo de la racha que pasa por (x, y) en la direccion (dx, dy), perdonando huecos de una celda */
+    auto racha = [&](int x, int y, int dx, int dy) {
+      int n = 1;
+      for (int s = -1; s <= 1; s += 2) {
+        int cx = x, cy = y;
+        for (;;) {
+          const int nx = cx + s * dx, ny = cy + s * dy;
+          if (marcada(nx, ny)) { cx = nx; cy = ny; n++; continue; }
+          if (marcada(nx + s * dx, ny + s * dy)) { cx = nx + s * dx; cy = ny + s * dy; n += 2; continue; }
+          break;
+        }
+      }
+      return n;
+    };
+    std::vector<float> forma(celdas, 0.0f);
+    for (int cy = 0; cy < ch; cy++)
+      for (int cx = 0; cx < cw; cx++) {
+        if (!marcada(cx, cy)) continue;
+        const int h = racha(cx, cy, 1, 0), v = racha(cx, cy, 0, 1);
+        if (h >= kRachaMin && (h >= 2 * v || v <= kAltoMax)) forma[(size_t)cy * cw + cx] = 1.0f;
+      }
+    peso.swap(forma);
+  }
+
   /* dilatar una celda (un glifo suele cacer de una celda a otra) y despues difuminar, para que el
      apoyo entre despacio y no deje un canto duro en el relieve */
   std::vector<float> dil((size_t)cw * ch, 0.0f);
@@ -1043,13 +1087,26 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
       suave[(size_t)cy * cw + cx] = s / (float)n;
     }
 
-  /* y el mapa, hacia el plano de apoyo con el peso de la mascara */
+  /* y el mapa, hacia el plano de apoyo con el peso de la mascara. El peso se interpola entre los
+     centros de las celdas (v0.60): leido a celda entera dejaba escalones de 8 puntos del mapa en el
+     relieve, que en pantalla son bloques de 33 px con el canto en sierra. */
   const float destino = plano * 255.0f;
   float tocadas = 0.0f;
+  auto pesoEn = [&](int cx, int cy) {
+    cx = cx < 0 ? 0 : (cx >= cw ? cw - 1 : cx);
+    cy = cy < 0 ? 0 : (cy >= ch ? ch - 1 : cy);
+    return suave[(size_t)cy * cw + cx];
+  };
   for (int y = 0; y < h; y++) {
-    const int cy = y / celda;
+    const float fy = ((float)y + 0.5f) / (float)celda - 0.5f;
+    const int cy0 = (int)std::floor(fy);
+    const float ty = fy - (float)cy0;
     for (int x = 0; x < w; x++) {
-      const float p = suave[(size_t)cy * cw + x / celda];
+      const float fx = ((float)x + 0.5f) / (float)celda - 0.5f;
+      const int cx0 = (int)std::floor(fx);
+      const float tx = fx - (float)cx0;
+      const float p = (pesoEn(cx0, cy0) * (1.0f - tx) + pesoEn(cx0 + 1, cy0) * tx) * (1.0f - ty) +
+                      (pesoEn(cx0, cy0 + 1) * (1.0f - tx) + pesoEn(cx0 + 1, cy0 + 1) * tx) * ty;
       if (p <= 0.002f)
         continue;
       const size_t i = (size_t)y * w + x;

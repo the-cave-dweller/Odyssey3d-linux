@@ -3,6 +3,40 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El detector de rótulos deja de aplastar la cara y el micrófono (v0.61)
+
+- Pedido de Rodolfo, con captura: video de YouTube con el conversor, «bordes asquerosos», sobre todo en el
+  micrófono; en Windows no le pasa.
+- MEDIDO con los volcados de esa sesión (`/tmp/rampa-chico.ppm` y `-profundidad.pgm`) y `odysseyvk
+  texto-detect`: el mapa tenía **cuadros de 8×8 puntos** (33 px de pantalla). Salían de `anclarTexto`
+  (`src/depth.cpp`), que marcaba como «texto» **la cara** (columna de 3-4 celdas × 18 de alto: lentes,
+  nariz, boca) y **el micrófono** (bloque de ~9 × 16), y los aplastaba contra el plano de la pantalla:
+  se perdía el relieve de la cara y quedaban escalones en sus bordes. Además el peso se aplicaba por
+  celda entera, sin interpolar.
+- Arreglo:
+  - **Forma**: una celda solo es rótulo si su racha horizontal mide ≥ 4 celdas y, además, es el doble de
+    ancha que alta o no pasa de 10 celdas de alto. `ODYSSEYVK_TEXTO_RACHA` cambia el 4 (0 = sin filtro).
+  - **Peso interpolado** entre centros de celda en vez de leído por celda.
+
+| | video real | t1 subtítulo | t2 fina | t3 gruesa | t4 sin texto | t5 cintillo |
+|---|---|---|---|---|---|---|
+| antes | 11,1 % (cara, micro, subtítulo) | 10,0 % | 0,0 % | 0,2 % | 0,0 % | 2,9 % |
+| racha 6 | 6,3 % | 6,7 % | 0 | 0 | 0 | 2,4 % |
+| racha 5 | 6,6 % | 7,0 % | 0 | 0 | 0 | 2,4 % |
+| **racha 4 (puesto)** | **6,6 % (solo subtítulo)** | **8,5 %** | **0** | **0** | **0** | **2,4 %** |
+| racha 3 | 6,8 % | 9,0 % | 0 | 0 | 0 | 2,7 % |
+
+- Escalones, con un mapa plano y el cuadro real: salto máximo entre vecinos **39 → 5** niveles; saltos de
+  más de 8 niveles **8080 → 0**; mapa tocado 17,6 % → 8,3 %.
+
+### Comprobado / no probado
+
+- Compila; las tablas de arriba (sin panel).
+- No probado en el panel. Queda **otra** fuente de bordes feos que esto no toca: el mapa de 518 puntos se
+  estira a 3840×2160 sin mirar la imagen (cúbico), y en el canto del micrófono queda en escalera de ~4
+  filas de pantalla; ahí el shader estira el color en horizontal y sale el peine fino. Lo que lo arregla es
+  un agrandado guiado por la imagen (`jbu` de Windows). Siguiente paso.
+
 ## El rastreo deja de sacudir la trama: filtro One-Euro (v0.60)
 
 - Pedido de Rodolfo, tras calibrar con el patrón de un ojo: la mezcla roja/azul del ojo que debe ver negro
