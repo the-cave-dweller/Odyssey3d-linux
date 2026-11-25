@@ -2861,7 +2861,19 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
                         const std::string &alterno = std::string(), bool rastreo = false,
-                        float suavizado = 0.0f, const ServeCfg *pila = nullptr, bool escritorio = false) {
+                        float suavizado = 0.0f, ServeCfg *pila = nullptr, bool escritorio = false) {
+  /* El modo de legado se cambia desde la ventana de ajustes sin reiniciar el servicio, y el
+     vigilante leia serve.conf una sola vez al arrancar: lo volvemos a mirar justo antes de lanzar el
+     visor, para que el modo que se ve marcado en la ventana sea el que sale en pantalla. Solo se
+     refresca este valor; los demas siguen con los de arranque (y con las banderas de la linea de
+     orden), que es lo que dice el README: esos numeros piden reiniciar el servicio. */
+  if (pila) {
+    const std::map<std::string, std::string> conf = ajuste::leerServeConf();
+    if (const auto it = conf.find("legado"); it != conf.end()) {
+      const std::string v = strLower(it->second);
+      pila->legado = (v == "si" || v == "on" || v == "1" || v == "encendido" || v == "puesto");
+    }
+  }
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   /* `escritorio = true` es el overlay FORZADO sobre el escritorio del monitor: no hay ventana de

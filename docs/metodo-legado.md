@@ -25,7 +25,10 @@ se queda solo con lo que ahí se usa.
 La casilla de la ventana y `ctl legado` escriben **las dos cosas a la vez**: la orden por el canal
 (`~/.local/state/odysseyvk/ajuste`, clave `legado`) para el visor que esté abierto, y `serve.conf`
 para el siguiente arranque. Por eso el cambio se nota al instante sin reiniciar nada
-(`src/main.cpp`, `cmdLegado`; `src/vkview.cpp:1639-1654`).
+(`src/main.cpp`, `cmdLegado`; `src/vkview.cpp:1639-1654`). Si el visor lo lanza el vigilante
+(`odysseyvk-serve`), este vuelve a leer esa línea de `serve.conf` justo antes de lanzarlo
+(`src/main.cpp:2864-2875`): hasta la v0.57 el servicio leía el archivo una sola vez al arrancar, así que
+el modo cambiado desde la ventana no llegaba a la sesión siguiente.
 
 ## 2. Qué toca por dentro (con el sitio exacto del código)
 

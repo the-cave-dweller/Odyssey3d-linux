@@ -369,7 +369,12 @@ bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::s
   std::error_code ec;
   std::filesystem::create_directories(std::filesystem::path(ruta).parent_path(), ec);
   if (existia) {
-    std::filesystem::copy_file(ruta, ruta + ".anterior",
+    /* El nombre del respaldo lleva "u" (auterior) desde que existe y asi lo anuncian el README y la
+       ventana de ajustes; aqui estaba escrito ".anterior", asi que desde v0.57 en adelante habia dos
+       ficheros en ~/.config/odysseyvk: el respaldito nuevo y el viejo que prometia la documentacion.
+       Se escribe el nombre de siempre. (El `preferencias.log` si rota a `.anterior`: son cosas
+       distintas y ahi no se promise otro nombre.) */
+    std::filesystem::copy_file(ruta, ruta + ".auterior",
                                std::filesystem::copy_options::overwrite_existing, ec);
   }
   const std::string temporal = ruta + ".tmp";

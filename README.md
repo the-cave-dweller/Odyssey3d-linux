@@ -416,6 +416,11 @@ suelta la trama a los 0,5 s y se apaga la lente a los 0,75 s. La pastilla se rec
 *La interfaz*). Se pone también con `odysseyvk play --legado`, con `ctl legado` o con `legado = si` en
 `serve.conf`. **En la ruta `--gl` no está implementado** (se acepta la bandera y no hace nada).
 
+La casilla de la ventana y `ctl legado` mandan la orden viva al visor abierto **y** escriben `legado` en
+`serve.conf` (lo de antes queda en `serve.conf.auterior`). Desde v0.57 el vigilante vuelve a leer esa
+línea justo antes de lanzar un visor, así que el modo nuevo se nota en la siguiente sesión sin
+reiniciar el servicio; los demás números de `serve.conf` siguen necesitando reinicio.
+
 Desde v0.54 la ventana enseñaba el rastreo de cara en su propia hoja:
 
 - un sello de color con la verdad del momento: `FACETRACKING ACTIVO · Stereo (3D Studio, camara integrada

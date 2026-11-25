@@ -152,9 +152,20 @@ medidas dentro de su hueco (usado / hueco): `Plano de apoyo` 96,9 / 120 · `3D S
   `~/.local/share/odysseyvk/modelos/mde_large.onnx`; los dos `mde_large.onnx` miden 49.477.899 bytes, así
   que cambiar la ruta es inocuo y deja de usarse la copia vieja. Tras `systemctl --user restart
   odysseyvk-serve` el log dice `boton 1 = /home/rodolfo/.local/share/odysseyvk/modelos/mde_large.onnx`.
-- Sin probar: que los dos filtros (lista y título) se noten con una ventana a pantalla completa delante;
-  aquí no hay inyector de clics y poner una ventana a pantalla completa agarra el panel. Y el binario
-  instalado es el de antes de este arreglo: entra con `sudo cmake --install build`.
+- Probado en la máquina con el binario de `build/`: `ctl legado encender` y `ctl legado apagar` dejan
+  `legado = si` y `legado = no` en la línea 141 de un `serve.conf` de 146 líneas (9.680 bytes), y
+  `ctl legado estado` responde `modo de legado pedido en serve.conf: si/no` más
+  `no hay visor leyendo el canal (o es de otra versión)` cuando no hay sesión.
+- Dos cosas más que salieron al probar: el vigilante leía `serve.conf` **una sola vez al arrancar**, así
+  que el modo cambiado desde la ventana no llegaba al visor que se lanzara después; ahora `spawnViewer`
+  vuelve a mirar `legado` justo antes del `fork` (`src/main.cpp:2864-2875`, solo ese valor: los demás
+  números siguen necesitando reinicio). Y el respaldo se escribía en `serve.conf.anterior` mientras el
+  README y la ventana prometen `serve.conf.auterior`, así que en la máquina quedaron los dos ficheros
+  (9.680 y 9.681 bytes, `src/ajuste.cpp:371-379`); se escribe el nombre de siempre y el sobrante se borró.
+- Sin probar: que los dos filtros (lista y título) se notan con una ventana a pantalla completa delante,
+  y que el modo refrescado llegue a una sesión real. Las dos cosas piden poner una ventana a pantalla
+  completa, y eso agarra el panel; además aquí no hay inyector de clics. Y el binario instalado es el de
+  antes de estos arreglos: entran con `sudo cmake --install build`.
 
 ## La pastilla deja de ser redonda y el 3D se apaga con un interruptor (v0.56)
 - Pedido de Rodolfo: «quita el botón de apagar 3D y el de ocultar capa, cambia el de apagar por un botón
