@@ -29,7 +29,8 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun7;     /* capas: x/y escala de lo de atras / lo de delante (0 o 1 = sin escalar) ·
                       z/w desplazamiento fijo de esa banda, en puntos de panel (0 = nada) */
     vec4 tun8;     /* agrandado guiado del mapa (v0.62): x activo · y parecido de color (RGB 0..1) ·
-                      z ancho del peso por distancia en puntos del mapa */
+                      z ancho del peso por distancia en puntos del mapa · w compresion suave en los
+                      topes (v0.64, 1 = puesta) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -93,11 +94,31 @@ vec4 mapaCubico(vec2 uv) {
    desplazamiento) al color que va a mostrar el pixel (con el desplazamiento grueso de la cubica). Asi
    el canto del mapa cae justo en el canto de la imagen. Simulado antes con el cuadro real 3840 x 2160 y
    su mapa (scratchpad sim_jbu.py): el borde del microfono deja de salir escalonado. */
+/* --- compresion suave en los topes (v0.64, el dspr.compress de Windows) ------------------
+   Leido del ensamblador NV de la cache del Hub (glfx/binary/dspr.compress.bin): fuera del centro,
+   s' = c + (s - c) / (1 + |s - c| k), con k por lado. Aqui el centro es el plano de apoyo (s = 0,
+   pendiente 1: el sujeto no se deforma) y k sale de pedir que el punto mas lejano posible de cada lado
+   caiga justo en el tope. Antes era un clamp: con "3D Salida" en 50 aplastaba contra el tope el 23,8 %
+   de la imagen de media (56 % en el peor de 22 cuadros reales), y todo eso quedaba en UN plano: se
+   perdia la diferencia entre fondo y mas fondo, o entre frente y mas frente. Comprimida, cada
+   profundidad conserva su sitio. `smaxF`/`smaxB` = desplazamiento mas grande posible delante/detras. */
+float compSuave(float s, float arriba, float abajo, float smaxF, float smaxB) {
+    if (P.tun8.w != 1.0)
+        return s;
+    if (s > 0.0) {
+        float k = smaxF > arriba ? (1.0 / arriba - 1.0 / smaxF) : 0.0;
+        return s / (1.0 + s * k);
+    }
+    float k = smaxB > abajo ? (1.0 / abajo - 1.0 / smaxB) : 0.0;
+    return s / (1.0 - s * k);
+}
 float desplazGuia(float d, float gF, float gN) {
     float s = (d - P.tun4.z) * P.tun4.y * (d < P.tun4.z ? gF : gN);
     float arriba = P.tun5.y > 0.0 ? P.tun5.y / P.res.x : 1.0;
     float abajo = P.tun5.z > 0.0 ? P.tun5.z / P.res.x : 1.0;
-    return clamp(s, -abajo, arriba);
+    float smaxF = max(0.0, 1.0 - P.tun4.z) * P.tun4.y * gN;
+    float smaxB = max(0.0, P.tun4.z) * P.tun4.y * gF;
+    return clamp(compSuave(s, arriba, abajo, smaxF, smaxB), -abajo, arriba);
 }
 vec3 colorVisto(vec2 uvPantalla, float s, bool izq) {
     vec2 q = uvPantalla;
@@ -272,8 +293,12 @@ void main()
         if (P.tun5.y > 0.0 || P.tun5.z > 0.0) {
             float arriba = P.tun5.y > 0.0 ? P.tun5.y / P.res.x : 1.0;
             float abajo = P.tun5.z > 0.0 ? P.tun5.z / P.res.x : 1.0;
-            sI = clamp(sI, -abajo, arriba);
-            sD = clamp(sD, -abajo, arriba);
+            /* primero la compresion suave (si esta puesta), y el clamp queda solo de red de seguridad
+               para lo que sume el empuje fijo por capa o el temblor */
+            float smaxF = max(0.0, 1.0 - P.tun4.z) * P.tun4.y * gFrente;
+            float smaxB = max(0.0, P.tun4.z) * P.tun4.y * gFondo;
+            sI = clamp(compSuave(sI, arriba, abajo, smaxF, smaxB), -abajo, arriba);
+            sD = clamp(compSuave(sD, arriba, abajo, smaxF, smaxB), -abajo, arriba);
         }
         vec2 q4 = fuv;
         if (P.tun3.z == 1.0)

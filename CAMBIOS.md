@@ -3,6 +3,51 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los planos dejan de aplastarse contra el tope: la compresión suave de Windows (v0.64)
+
+- Pedido de Rodolfo: en Windows se distinguen planos (fondo, centro, frente, «como parallax») y aquí no.
+- Leído el pipeline de profundidad de Windows **en su ensamblador NV** (caché del controlador del Hub:
+  `Users/Dual/AppData/Local/odyssey3dplayer/local/c.programfiles.odyssey3dhub.conversion/glfx/binary/`,
+  ficheros `!!NVfp5.0`/`!!NVcp5.0` en texto con los nombres de los parámetros; el análisis de Windows
+  buscaba GLSL y por eso los dio por ilegibles). MEDIDO en el código:
+  - `normalize_dspr`: D = (red − mín) / (máx − mín). `dspr_to_depth`: Z = 0,1 / (D + 0,1).
+    `depth_to_dspr`: disparidad = ipd · verg · (Z − F) / (Z · F) · `depth_scale` + `depth_shift`, que
+    con ese Z es **10 · (D_foco − D)**: una recta en la salida de la red, centrada en el foco, como aquí.
+  - `build_remap_func` + `remap_depth`: tabla de 1024 entradas que deja igual el tramo del sujeto
+    (`staend`), comprime lo de detrás (`comp`) y estira lo de delante (`expnd`), con los huecos entre
+    grupos aparte (`comp0`/`expnd0`). Con la config de fábrica (`depth_remap` todo en 1,0) **es la
+    identidad**: en Windows no hace nada.
+  - La saliencia (`salc_*`) pesa el histograma con el que `find_main_focus` elige el sujeto, y el relleno
+    de bordes del warp (`hole_edge`, `b_apply_salc`); **no** escala el relieve.
+  - `dspr.compress`: **s' = c + (s − c) / (1 + |s − c| · k)** a cada lado, con k de una textura que se
+    calcula del máximo del cuadro. Compresión suave: nada se aplasta.
+- La diferencia que sí había: Linux recortaba con `clamp` en los topes por ojo (+12,67 / −9,98 px). Con
+  22 mapas reales de `mde_large` y el apoyo que calcula Linux para cada uno:
+
+| relieve | puntos aplastados contra el tope (a < 0,2 px), clamp → suave | niveles de profundidad distinguibles (> 0,05 px), clamp → suave |
+|---|---|---|
+| 30 | 7,6 % → 1,1 % | 226,6 → 209,0 |
+| **50** (el de Rodolfo) | **24,4 % → 2,0 %** (peor cuadro: 56 % con clamp) | 180,1 → 168,9 |
+| 70 | 31,7 % → 2,8 % | 148,7 → 153,7 |
+| 100 | 40,3 % → 3,7 % | 121,0 → 141,3 |
+
+- Arreglo: `compSuave` en `shaders/weave.frag`, centrado en el plano de apoyo (pendiente 1 ahí: el sujeto
+  no se deforma) y con k por lado para que el punto más lejano posible caiga justo en el tope; el clamp
+  queda solo de red de seguridad (empuje fijo, temblor). También en la guía del agrandado guiado.
+  `tun8.w` (hueco libre del bloque). `ODYSSEYVK_COMPRESION=0` vuelve al clamp.
+
+### Comprobado (sin panel)
+
+- La tabla de arriba.
+- El sombreador real con el cuadro real, el mapa real, relieve 50, sonda 1: sin avisos de NaN, cambia el
+  0,17 % de los píxeles en ese cuadro (casi todo queda detrás del plano), 119-120 fps con y sin compresión.
+
+### No probado / lo que queda de Windows
+
+- En el panel: si se nota la separación en planos.
+- Sin portar: la saliencia de Windows para elegir el sujeto (contraste de profundidad centro-entorno 0,6 +
+  disparidad 0,2 + Lab 0,1 + bordes 0,1; Linux pesa por bordes y centro) y su IIR del foco 0,02 (aquí 0,06).
+
 ## El cierre tarda 0,8 s menos, y comparación de las redes (v0.63)
 
 ### Abrir y cerrar

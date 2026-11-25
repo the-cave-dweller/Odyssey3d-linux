@@ -817,7 +817,13 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t8[0] = kJbu ? 1.0f : 0.0f;
   t8[1] = kJbuColor;
   t8[2] = 0.8f;   /* ancho del peso por distancia, en puntos del mapa */
-  t8[3] = 0.0f;
+  /* Compresion suave en los topes (v0.64, compSuave en weave.frag). ODYSSEYVK_COMPRESION=0 vuelve al
+     clamp de siempre. */
+  static const bool kCompresion = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_COMPRESION");
+    return !e || e[0] != '0';
+  }();
+  t8[3] = kCompresion ? 1.0f : 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
