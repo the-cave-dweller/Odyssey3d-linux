@@ -62,9 +62,19 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - Comprobado: compila; las dos tomas grabadas repetidas por la vía de antes y por la fina; el rastreo en
   vivo con `ctl track` (4 a 5 ms por cuadro); el visor fuera del panel con el conversor (119,5 fps, ningún
   cuadro lento); las secuencias del apoyo de rótulos.
-- No probado: en el panel. No tengo cuadros del video de Nueva York: lo de los rótulos está medido con
-  otros videos. En las dos tomas Rodolfo miraba al otro monitor, con la cabeza girada: la mejora de frente
-  debería ser igual o mayor, pero no está medida.
+- **Comprobado en el panel** (Rodolfo, 25-nov, sesiones de las 10:01 y 10:02 con dos videos): el vaivén
+  de lado a lado «sí, se fue». MEDIDO en esas dos sesiones, ya de frente: la z filtrada cambia 0,15 y
+  0,24 cm de un segundo al siguiente (1,41 en la sesión de las 09:54 con la 0.73), la distancia entre
+  ojos tiene 1,2 y 4,7 mm de desviación (19,4), el rastreo fino llevó cerca del 98 % de los cuadros y el
+  visor dio 120,0 y 119,3 fps.
+- No probado: cada cambio por separado. No se sabe si el vaivén lo quitó el rastreo, la memoria de los
+  rótulos o los dos. No tengo cuadros del video de Nueva York: lo de los rótulos está medido con otros
+  videos. En las dos tomas grabadas Rodolfo miraba al otro monitor, con la cabeza girada.
+- Queda a la vista: con «El PEOR Error en la Historia de Hollywood» el apoyo de rótulos siguió cambiando
+  mucho (44 cambios de más de 3 puntos en 26 s, 11,9 % apoyado de mediana); con el segundo video, 26 en
+  105 s (6,6 %). Rodolfo: «en el primer video sí, hay subtítulos». O sea que ahí el apoyo estaba
+  haciendo su trabajo y los cambios son los de los propios subtítulos; no hay falsos positivos que
+  perseguir con ese video.
 - A tener en cuenta: la z nueva sale en promedio ~1 cm más lejos que la de antes (que además iba y venía
   ±4 cm). Si quedara imagen doble fija en los bordes, se retoca `rampa_x` con el patrón de un ojo.
 - Las dos tomas de la cámara eran fotos de la cara de Rodolfo: estaban en la carpeta temporal de la
