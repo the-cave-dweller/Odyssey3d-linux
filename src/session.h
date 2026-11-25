@@ -39,8 +39,9 @@ GLFWmonitor *pickMonitor(const std::string &output);
 int refreshOf(GLFWmonitor *mon, double wantHz);
 
 /* Teclas de ajuste de la trama (los dos visores responden igual). Devuelve la etiqueta de la
-   acción en *tag si la tecla se consumió. */
-bool tuningKey(WeaveTuning &t, int key, const char **tag);
+   acción en *tag si la tecla se consumió. `mods` son los modificadores de GLFW: con Mayus las
+   rampas van a paso fino (v0.59); el visor GL no los pasa y se queda con el paso grueso. */
+bool tuningKey(WeaveTuning &t, int key, const char **tag, int mods = 0);
 
 /* Patrón de prueba side-by-side en RGBA por CPU (fila de arriba primero). Cada ojo ve el mismo
    dibujo desplazado `parallax` píxeles: con la lente puesta eso sí da profundidad real. */

@@ -71,6 +71,12 @@ struct WeaveTuning {
   bool weave = true;
   bool topBottom = false;      /* video arriba/abajo en lugar de lado a lado */
   bool swapLR = false;         /* profundidad invertida -> alternar */
+  /* Patron de un solo ojo (v0.59): 0 = imagen normal, 1 = vista izquierda blanca y derecha
+     negra, 2 = al reves. Sirve para medir el paso contra la LENTE, no contra una foto de Windows:
+     con un ojo cerrado, si el paso escrito es el de la lente el ojo abierto ve la pantalla entera
+     de un solo tono; si no, ve bandas diagonales blanco/negro, y cuanto mas anchas, mas cerca.
+     Tecla `b` (da la vuelta 0 -> 1 -> 2 -> 0); `8` lo apaga. Solo en el visor Vulkan. */
+  int unOjo = 0;
 };
 
 /* Esquina del campo: lo mismo que Weave::fill pero sin tocar el contexto GL, para que

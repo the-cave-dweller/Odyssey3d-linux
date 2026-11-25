@@ -133,7 +133,7 @@ static void onTermSignal(int) { gTerm = 1; }
 
 void printTuning(const VkUi &ui, const char *what) {
   std::printf("[%-11s] weave=%d swap=%d fs=%5.2f align=%+.4f pitch=%.5f xtdyn=%+.4f conv=%+.5f"
-              " rampa %+.5f %+.5f prof=%d rel=%d\n",
+              " rampa %+.6f %+.6f prof=%d rel=%d\n",
               what, (int)ui.tune.weave, (int)ui.tune.swapLR, ui.tune.filterSlope, ui.tune.align, ui.tune.pitch,
               ui.tune.xtalkDyn, ui.tune.conv, ui.tune.rampaDX, ui.tune.rampaDY,
               ui.hud.state().depth, ui.hud.state().popout);
@@ -613,7 +613,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     /* las teclas finas de la trama (fase, paso, crosstalk, conv, muestras...) no van en el modo de
        legado: alli la trama trabaja con los numeros de fabrica. Se avisa una sola vez por sesion. */
     static bool avisado = false;
-    if (tuningKey(ui->tune, key, &tag) && tag && !avisado) {
+    if (tuningKey(ui->tune, key, &tag, mods) && tag && !avisado) {
       avisado = true;
       std::printf("[legado] la tecla de `%s` no se usa en modo de legado: ahi la trama lleva los numeros"
                   " de fabrica (se apaga el modo en la ventana de ajustes, pestana General)\n", tag);
@@ -621,7 +621,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     }
     return;
   }
-  if (tuningKey(ui->tune, key, &tag)) {
+  if (tuningKey(ui->tune, key, &tag, mods)) {
     if (key == GLFW_KEY_0 || key == GLFW_KEY_9) ui->convBase = ui->tune.conv; /* la tecla gana sobre el deslizador */
     if (tag) printTuning(*ui, tag);
   }

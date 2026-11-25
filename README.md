@@ -259,8 +259,9 @@ panel y la red metan ruido.
 | `R` | **pegar / soltar los rótulos y subtítulos** del plano de la pantalla (con el conversor puesto; abajo) |
 | `←` `→` | fase de la trama (±0.002 ciclos) |
 | `RePag` `SavPg` | paso de lente (±0.0002); se usa si el paso real difiere del nominal |
-| `[` `]` | **rampa_x** de la rejilla escrita (±0.0004 ciclos por pixel), encima de `rampa_x` de `serve.conf`. Es la llave fina del batido horizontal: si el paso que escribimos no es el de la lente, salen franjas verticales gruesas por toda la imagen (v0.43) |
-| `;` `'` | **rampa_y**, lo mismo en vertical: inclina la rejilla escrita y quita las franjas casi horizontales (v0.43) |
+| `[` `]` | **rampa_x** de la rejilla escrita (±0.0004 ciclos por pixel), encima de `rampa_x` de `serve.conf`. Es la llave fina del batido horizontal: si el paso que escribimos no es el de la lente, salen franjas verticales gruesas por toda la imagen (v0.43). **Con Mayús, paso fino de ±0.00002** (v0.59, solo Vulkan): el grueso corre la fase 1,5 ciclos de borde a borde y se salta el punto bueno |
+| `;` `'` | **rampa_y**, lo mismo en vertical: inclina la rejilla escrita y quita las franjas casi horizontales (v0.43). Con Mayús, el mismo paso fino |
+| `b` | **patrón de un solo ojo** (v0.59, solo Vulkan): blanco a la vista izquierda y negro a la derecha → al revés → imagen normal. Con un ojo cerrado, si el paso escrito es el de la lente se ve la pantalla entera de un tono; si no, bandas diagonales. Ver «Calibrar el paso contra la lente» |
 | `↑` `↓` | crosstalk dinámico (±0.002) |
 | `,` `.` | pendiente del filtro de traza (±0.5) |
 | `9` `0` | convergencia horizontal (∓0.0005) |
@@ -279,9 +280,38 @@ panel y la red metan ruido.
 | `--ui-escala X` | arrancar la pastilla ya con ese tamaño (`1` pequeña, `2` grande; por defecto 2 en 4K) |
 | `espacio`, `-`, `=`, `[`, `]` | pausa, ±5 s, cuadro a cuadro (en `play`) |
 
+Las teclas son **por posición**, con los nombres del teclado de EE. UU. (así las da GLFW): en un
+teclado latinoamericano `[` `]` son las dos de la derecha de la `P` y `;` `'` las dos de la derecha de
+la `L` (la `ñ` y la de al lado). `odysseyvk play` va por OpenGL y ahí no hay ni paso fino ni `b`: para
+calibrar se usa `odysseyvk test` o una sesión del vigilante, que van por Vulkan.
+
 Cada cambio imprime una línea con los valores actuales; puedes arrancar desde ellos con
 `--align`, `--pitch` y `--eye-x/--eye-y/--eye-z`, o dejarlos escritos en `serve.conf`
 (`fase`, `paso`, `filtro`; abajo, en «Servicio que arranca con la sesión»).
+
+### Calibrar el paso contra la lente (v0.59)
+
+Las franjas gruesas que cruzan la pantalla sin seguir lo que hay en la imagen son la trama batiendo
+contra la lente, no la red de profundidad: un error de **paso** las da inclinadas como la lente (unos 20° de
+la vertical) y uno de **inclinación** casi horizontales. Un error de la red se ve distinto: cantos de
+objetos que se estiran o se despegan, siempre pegados al contenido. Para que no quede ni una banda en la pantalla la fase tiene que derivar menos de 0,1 ciclo
+de un borde al otro, o sea un error de paso por debajo de 0,1/3840 ≈ 2,6·10⁻⁵ ciclos por pixel. La foto de
+Windows con la que se afinaron `rampa_x`/`rampa_y` da 0,450 ± 0,006: unas 200 veces más gruesa que eso.
+La única referencia con esa precisión es la propia lente, y se mide así:
+
+1. `odysseyvk test` (o el botón de la ventana de ajustes, que lo lanza con rastreo). Sentarse centrado
+   bajo la cámara y comprobar en la pastilla que diga «cara a la vista»: la fase sigue al ojo.
+2. `b`: un ojo recibe todo blanco y el otro todo negro. Cerrar un ojo.
+3. Si se ven bandas diagonales, `Mayús+]` o `Mayús+[` hacia donde las bandas **se ensanchan**, hasta que la
+   pantalla quede de un solo tono (o con la banda más ancha posible). Después `Mayús+'` / `Mayús+;` para la
+   inclinación. Cada pulsación imprime `rampa_x +0.000380 sobre la config (fino)`.
+4. Cambiar de ojo: el otro tiene que ver el tono contrario en toda la pantalla. Si un ojo ve el tono
+   equivocado **parejo**, eso es fase (`←` `→`) o el orden de ojos (`F`), no paso.
+5. Apuntar en `serve.conf` la suma: `rampa_x` de la config + lo de las teclas (en `estado` salen
+   `rampa_x` y `rampa_x_teclas`). `b` otra vez vuelve a la imagen; `8` lo apaga todo.
+
+Merece la pena hacerlo también **desde cero**: comentar `rampa_x`/`rampa_y` en `serve.conf` y ver si con la
+trama del modelo de fábrica (rampa 0) las bandas son más anchas o más estrechas que con las de ahora.
 
 ### Cómo alinear
 

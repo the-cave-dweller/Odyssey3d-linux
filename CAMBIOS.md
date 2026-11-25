@@ -3,6 +3,56 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Paso fino de la rampa y patrón de un solo ojo, para calibrar contra la lente y no contra Windows (v0.59)
+
+- Pedido de Rodolfo: evaluar si el port está bien o si hay que volver a Windows a medir, porque «la
+  profundidad no está siendo eficiente» y se ven **diagonales** en la imagen.
+- Diagnóstico (DERIVADO, no medido en el panel): las bandas que cruzan la pantalla sin seguir el contenido
+  son el batido de la trama contra la lente, no la red. Con las rampas de ahora (`rampa_x −0,0040`,
+  `rampa_y +0,0016`) el batido que queda contra lo que escribe Windows es de **833 mm** (ronda C), más que
+  los 597 mm de ancho del panel: ~0,7 ciclos de deriva de fase de borde a borde, o sea una banda donde los
+  ojos se cruzan. Para que no haya ninguna hace falta un error de paso por debajo de 0,1/3840 ≈ **2,6·10⁻⁵**
+  ciclos por pixel.
+- Por qué no sirve volver a Windows (DERIVADO): el objetivo con el que se afinaron las rampas es 0,450 ±
+  **0,006** (foto de Windows, ronda 2), unas 200 veces más grueso que esa tolerancia, y la trama sin rampa
+  (0,4473) ya cae dentro de ese margen. Además la trama depende de dónde está el ojo, y en la sesión de la
+  ronda C el rastreo dio `sin cara` en los 4261 cuadros: se compararon posturas distintas.
+- HIPÓTESIS sin comprobar: las rampas de ahora podrían estar persiguiendo el ruido de esa foto. Se sale de
+  dudas mirando la lente, que es la única referencia con la precisión que hace falta.
+
+### Lo que se añade
+
+- **Paso fino con Mayús** en `[` `]` (x) y `;` `'` (y): **0,00002** ciclos por pixel por pulsación, 0,077
+  ciclos de deriva de borde a borde (el grueso, 0,0004, son 1,5 ciclos y se salta el punto bueno). La
+  etiqueta pasa a seis decimales y dice `(fino)`; `printTuning` también saca seis. El visor GL no pasa
+  modificadores (`tuningKey(..., mods = 0)`) y se queda en grueso, como estaba.
+- **Patrón de un solo ojo**, tecla **`b`** (0 → 1 → 2 → 0; `8` lo apaga): `WeaveTuning::unOjo` viaja por el
+  hueco de la sonda (`tun6.w`, códigos 12 y 13; la sonda de `ODYSSEYVK_PRUEBA` manda sobre él). En
+  `weave.frag` pisa las dos vistas después de elegirlas y antes del contraste, el crosstalk y el filtro:
+  un ojo recibe todo blanco y el otro todo negro, con la trama de siempre. `F` también le da la vuelta.
+- La ventana de ajustes mueve `rampa_x`/`rampa_y` con paso 0,00001 (antes 0,0001).
+- README: las teclas nuevas, que las teclas van por posición (en el teclado latinoamericano `[` `]` son las
+  dos de la derecha de la `P`), y la sección «Calibrar el paso contra la lente» con el procedimiento.
+- `tools/prueba_teclas.cpp`: las teclas sin ventana.
+
+### Comprobado
+
+- Compila limpio en `build/` (solo los avisos de inicializadores de Vulkan que ya había).
+- Trama Vulkan volcada sin tocar panel, lente, scaler ni cámara (`ODYSSEYVK_PRUEBA=N odysseyvk test
+  --windowed --no-panel --no-lens --no-scaler --sin-interfaz --dump`, 3840x2160 recortado 40 px por el
+  indicador): **12 + 13 = 255 en cada punto** (error máximo 1 nivel, redondeo); el 12 sigue al peso del
+  filtro (sonda 4) con desvío medio **0,16** y máximo **4** niveles, que es la precompensación de crosstalk
+  (0,0128 × 255 ≈ 3,3); el 13 es su negativo; el cuadro normal no se parece a ninguno (desvío medio 126).
+- Ojo con el volcado: `odysseyvk play` y `odysseyvk weave` van por **OpenGL** y ahí la sonda no hace nada;
+  la primera tanda de pruebas salió igual con 0, 4, 12 y 13 por eso. El volcado bueno es el de `test`.
+- `tools/prueba_teclas.cpp`: **9 de 9** (grueso, fino, veinte finos deshacen un grueso y quedan en cero
+  exacto, `y` sin tocar `x`, grueso sin modificadores, la vuelta de `b` y `8`).
+
+### No probado
+
+- **Nada en el panel**: ni el patrón visto con un ojo, ni que Mayús llegue como modificador por Wayland,
+  ni el procedimiento de calibración. Tampoco los binarios instalados: siguen siendo la 0.58.
+
 ## La casilla «Previsualización»: la cámara en vivo y **quedándose** en la ventana de ajustes (v0.58)
 
 - Pedido de Rodolfo: «hay forma de que el visor de la camara si muestre el preview y se quede mostrandola si

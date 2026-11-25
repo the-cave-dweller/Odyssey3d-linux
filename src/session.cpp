@@ -208,7 +208,7 @@ int refreshOf(GLFWmonitor *mon, double wantHz) {
 
 /* ---------------- teclas ---------------- */
 
-bool tuningKey(WeaveTuning &t, int key, const char **tag) {
+bool tuningKey(WeaveTuning &t, int key, const char **tag, int mods) {
   *tag = nullptr;
   static char etiqueta[48];   /* para las etiquetas con numero (las rampas) */
   switch (key) {
@@ -263,26 +263,34 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
     /* Paso de la rejilla escrita. Si no coincide con el paso real de la lente del panel, la
        nuestra y la de la lente baten y salen franjas gruesas cruzando toda la imagen; estas dos
        parejas de teclas mueven la rampa de fase limpia (la misma para los tres canales) encima de
-      `rampa_x`/`rampa_y` de la configuracion, asi que se puede afinar a ojo mirando el panel. */
+      `rampa_x`/`rampa_y` de la configuracion, asi que se puede afinar a ojo mirando el panel.
+       Paso fino con Mayus (v0.59). El grueso (0,0004 ciclos por pixel) corre la fase 1,5 ciclos de
+       un borde al otro de los 3840 px: entre una pulsacion y la siguiente se salta el punto bueno.
+       Para que no quede ninguna banda en la pantalla la fase tiene que derivar menos de 0,1 ciclo
+       de borde a borde, o sea un error de paso por debajo de 0,1/3840 = 2,6e-5. El fino es 2e-5:
+       0,077 ciclos de deriva por pulsacion, por debajo de esa tolerancia. */
     case GLFW_KEY_LEFT_BRACKET:
-      t.rampaDX -= 0.0004f;
-      std::snprintf(etiqueta, sizeof etiqueta, "rampa_x %+.5f sobre la config", t.rampaDX);
-      *tag = etiqueta;
-      break;
     case GLFW_KEY_RIGHT_BRACKET:
-      t.rampaDX += 0.0004f;
-      std::snprintf(etiqueta, sizeof etiqueta, "rampa_x %+.5f sobre la config", t.rampaDX);
-      *tag = etiqueta;
-      break;
     case GLFW_KEY_SEMICOLON:
-      t.rampaDY -= 0.0004f;
-      std::snprintf(etiqueta, sizeof etiqueta, "rampa_y %+.5f sobre la config", t.rampaDY);
+    case GLFW_KEY_APOSTROPHE: {
+      const bool fino = (mods & GLFW_MOD_SHIFT) != 0;
+      const float paso = fino ? 0.00002f : 0.0004f;
+      const bool enX = key == GLFW_KEY_LEFT_BRACKET || key == GLFW_KEY_RIGHT_BRACKET;
+      const float signo = (key == GLFW_KEY_LEFT_BRACKET || key == GLFW_KEY_SEMICOLON) ? -1.0f : 1.0f;
+      float &r = enX ? t.rampaDX : t.rampaDY;
+      r += signo * paso;
+      if (std::fabs(r) < 1e-7f) r = 0.0f;   /* que la vuelta a cero no deje un -0,000000 */
+      std::snprintf(etiqueta, sizeof etiqueta, "rampa_%s %+.6f sobre la config%s", enX ? "x" : "y", r,
+                    fino ? " (fino)" : "");
       *tag = etiqueta;
       break;
-    case GLFW_KEY_APOSTROPHE:
-      t.rampaDY += 0.0004f;
-      std::snprintf(etiqueta, sizeof etiqueta, "rampa_y %+.5f sobre la config", t.rampaDY);
-      *tag = etiqueta;
+    }
+    /* Patron de un solo ojo: ver `unOjo` en weave.h. */
+    case GLFW_KEY_B:
+      t.unOjo = (t.unOjo + 1) % 3;
+      *tag = t.unOjo == 0 ? "patron de un ojo apagado: imagen normal"
+           : t.unOjo == 1 ? "un ojo: blanco a la vista izquierda (cierra un ojo)"
+                          : "un ojo: blanco a la vista derecha (cierra un ojo)";
       break;
     /* Capas por profundidad. Una sola llave (el relieve) obliga a elegir entre un fondo atrasado
        y unos primeros planos fuertes; aqui se separan los dos lados del plano de apoyo, que es
@@ -369,6 +377,7 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
       t.xtalkDyn = 0.0f;
       t.rampaDX = 0.0f;
       t.rampaDY = 0.0f;
+      t.unOjo = 0;
       *tag = "reiniciar";
       break;
     default:

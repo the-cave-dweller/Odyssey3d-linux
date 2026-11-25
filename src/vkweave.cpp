@@ -761,7 +761,10 @@ void VkWeave::fillUbo(uint8_t *dst) {
     const char *e = entornoOdyssey("ODYSSEYVK_PRUEBA");
     return e ? (float)std::atof(e) : 0.0f;
   }();
-  t6[3] = kPruebaSombra;
+  /* El patron de un solo ojo (tecla `b`, v0.59) va por el mismo hueco con los codigos 12 y 13;
+     la sonda de taller, si se pidio por el entorno, manda sobre el. */
+  t6[3] = kPruebaSombra != 0.0f ? kPruebaSombra
+        : (tune_.unOjo == 1 ? 12.0f : (tune_.unOjo == 2 ? 13.0f : 0.0f));
   /* Capas por profundidad. `tun7.x` cuanto se estira lo que queda DETRAS del plano de apoyo y
      `tun7.y` lo que sale DELANTE; 0 en el hueco = sin escalar (lo de siempre). El visor arranca
      estos valores de ODYSSEYVK_GAN_FONDO / ODYSSEYVK_GAN_FRENTE (que vienen de `fondo` y

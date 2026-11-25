@@ -234,6 +234,17 @@ void main()
         L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);
         R = srcHalf(fuv + vec2(cnv - dep, 0.0), rx);
     }
+    /* Patron de un solo ojo (tecla `b`, v0.59; 12 = blanco a la vista izquierda, 13 = a la
+       derecha). Se pisan las dos vistas DESPUES de elegirlas y ANTES del contraste, el crosstalk y
+       el filtro, asi que la trama que sale es la de siempre con el contenido mas duro posible: un
+       ojo recibe todo blanco y el otro todo negro. Mirando con un solo ojo, cualquier error del
+       paso escrito contra la lente fisica se ve como bandas diagonales blanco/negro; cuando el paso
+       cuadra, la pantalla entera sale de un solo tono. `F` (invertir) tambien da la vuelta aqui. */
+    if (P.tun6.w == 12.0 || P.tun6.w == 13.0) {
+        bool blancoIzq = (P.tun6.w == 12.0) != (P.tun2.w == 1.0);
+        L = vec3(blancoIzq ? 1.0 : 0.0);
+        R = vec3(blancoIzq ? 0.0 : 1.0);
+    }
     if (P.tun6.w == 1.0) { o = vec4(L, 1.0); return; }
     if (P.tun6.w == 2.0) { o = vec4(R, 1.0); return; }
     L = (L - 0.5) * P.tun1.y + 0.5;
