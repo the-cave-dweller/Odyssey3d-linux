@@ -3,6 +3,47 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## En el vídeo dividido, la barra del reproductor de una pieza (v0.81)
+
+- Rodolfo, con la 0.80: «¿hay forma de que el sbs tenga una barra de progreso consistente? La función
+  se parte como el vídeo en dos».
+- `src/barra.h`, `src/barra.cpp` (nuevos): el detector. Sobre la copia chica del cuadro (518 × 518, la
+  del conversor), por fila, la diferencia de luminancia entre la mitad izquierda y la derecha después
+  de casarlas por trozos (un octavo de la mitad cada uno, corrimiento de hasta el 3 %) y suavizadas con
+  una caja de 11 puntos. Umbral: max(12, 3 × la mediana de las filas del centro + 3). Zonas: el 26 %
+  de abajo y el 16 % de arriba. Hacen falta 4 filas, dos análisis seguidos para poner la banda y
+  0,45 s sin verla para quitarla; mientras dura se queda con la mayor extensión. Margen de 3 % sobre
+  la primera fila de abajo (la barra de progreso va justo encima de los botones).
+- `shaders/weave.frag`, `src/vkweave.*`: en lado a lado, las filas de arriba y de abajo que diga el
+  visor (`tun9.w`, `tun3.x`) se pintan con el cuadro entero para los dos ojos, sin partir ni correr.
+- `src/vkview.cpp`: cada cuatro cuadros nuevos, con el vídeo dividido puesto, baja la copia chica y
+  pasa el detector; lo dice en el registro (`[barra] …`). `src/main.cpp`: `barra_2d = no` en
+  serve.conf lo apaga; orden nueva `odysseyvk barra-detect`.
+- Dos criterios se descartaron MIDIENDO, con 22 escenas reales pasadas a lado a lado con su mapa de
+  profundidad: (1) un solo corrimiento por fila y umbral 9 daba una falsa alarma (un primer plano con
+  subtítulos: 18 filas a 19 niveles); (2) casar por trozos con caja de 5 seguía dándola (14 niveles):
+  la copia chica toma un punto de cada siete sin promediar y el detalle fino sale distinto en cada
+  mitad. Con la caja de 11: 0 falsas alarmas.
+- MEDIDO sin panel, 64 cuadros de 3840x2160 (barra de reproductor dibujada por mí, con botones más
+  chicos que los de YouTube):
+  - 22 escenas limpias + 6 con franjas negras: ninguna banda (residuo máximo abajo 11, arriba 5);
+  - 6 cuadros que no son vídeo dividido: «no dividido» (centro 93..115), ninguna banda;
+  - 30 con barra (progreso a 0, 31, 55 y 97 %; con y sin título arriba; con franjas): las 30
+    detectadas, residuo 26..32 abajo y 58..84 arriba; banda de 6,7..8,4 % abajo y 5,7 % arriba. La
+    barra de progreso queda a 5,5 % del borde: dentro en todos los casos;
+  - secuencia a 0,1 s por cuadro: la banda sale al segundo cuadro con barra y se quita 0,5 s después
+    del último; cada análisis tarda 0,43 ms.
+- MEDIDO por Vulkan fuera del panel (`ODYSSEYVK_FUENTE_PNG` con un cuadro con barra, `--sbs`,
+  volcado en el cuadro 80, con y sin `ODYSSEYVK_BARRA_2D=0`): cambian las filas 0..121 (5,6 %) y
+  1978..2159 (8,4 %); el centro, 0,0000 % de píxeles distintos; la banda de abajo queda idéntica al
+  cuadro original (0,0 niveles de diferencia; sin el detector, 45,2). Con un cuadro limpio no sale
+  ninguna banda.
+- **No probado**: nada en el panel ni con el reproductor de YouTube de verdad (su barra la imité; no
+  tengo un cuadro real suyo en lado a lado). El coste de bajar la copia chica dentro de una sesión.
+- Error mío durante la prueba: lancé tres ventanas de prueba con una sesión 3D de Rodolfo abierta
+  (comprobé que había sesión y encadené la orden igual). El registro del servicio muestra el vídeo
+  perdiendo el foco tres veces y el visor devuelto una vez.
+
 ## El botón de vídeo dividido pasa de verdad a lado a lado (v0.80)
 
 - Rodolfo, con la 0.79: «los botones están perfectos, pero el derecho no cambia al modo doble».

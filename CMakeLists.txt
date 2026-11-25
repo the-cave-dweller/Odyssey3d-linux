@@ -163,6 +163,7 @@ add_executable(odysseyvk
   src/vkview.cpp
   src/mpris.cpp
   src/atajos.cpp
+  src/barra.cpp
   src/depth.cpp
   src/hoyos.cpp
 )

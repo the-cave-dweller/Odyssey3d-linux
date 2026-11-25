@@ -22,7 +22,7 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 res;      /* x, y de la ventana · z pendiente del filtro · w crosstalk estático */
     vec4 tun1;     /* x crosstalk dinámico · y contraste · z escala de corrA · w convergencia */
     vec4 tun2;     /* x desfase de fase · y paso de lente · z tramado activo · w invertir ojos */
-    vec4 tun3;     /* x estado del indicador · y disposición (0 lado a lado, 1 arriba/abajo) · z invertir Y · w profundidad */
+    vec4 tun3;     /* x filas de abajo en 2D (fraccion del alto, video dividido) · y disposición (0 lado a lado, 1 arriba/abajo) · z invertir Y · w profundidad */
     vec4 tun4;     /* conversor 2D/3D: x activo · y cuanto se desplaza cada ojo · z plano de referencia · w copia pura */
     vec4 tun5;     /* conversor fino: x temblor del desplazamiento en pixeles · y/z topes por ojo en pixeles (0 = sin tope) */
     vec4 tun6;     /* medición: x temblor de la propia fase de la trama, en ciclos (0 = apagado) */
@@ -34,7 +34,7 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun9;     /* paralaje de movimiento (v0.67): x cuanto se ha movido la cabeza, en medias
                       distancias entre ojos (0 = quieta; ya trae su ganancia y su tope de +-1) ·
                       realce del sujeto (v0.68): y profundidad del sujeto en el mapa (< 0 = usar el
-                      plano de apoyo) · z fuerza (0 = apagado) */
+                      plano de apoyo) · z fuerza (0 = apagado) · w filas de arriba en 2D (como tun3.x) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -353,6 +353,15 @@ void main()
         if (P.tun3.z == 1.0)
             q3.y = 1.0 - q3.y;
         L = texture(uSrc, q3 + vec2(cnv, 0.0)).rgb;
+        R = L;
+    } else if (P.tun3.y == 0.0 && (fuv.y > 1.0 - P.tun3.x || fuv.y < P.tun9.w)) {
+        /* Video dividido, filas donde el reproductor pinto su barra a lo ancho de la ventana (las
+           encuentra el visor, ver src/barra.h): ahi los dos ojos ven el cuadro ENTERO, sin partir y
+           sin correr, para que la barra salga de una pieza y este donde se pica con el raton. */
+        vec2 q5 = fuv;
+        if (P.tun3.z == 1.0)
+            q5.y = 1.0 - q5.y;
+        L = texture(uSrc, q5).rgb;
         R = L;
     } else {
         L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);

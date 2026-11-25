@@ -10,6 +10,7 @@
 #include "panel.h"
 #include "mpris.h"
 #include "ajuste.h"
+#include "barra.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
 #include "overlay.h"
@@ -68,6 +69,7 @@ static const char *kUsage =
     "  odysseyvk weave               escribe un PNG con la trama calculada (sin tocar el panel)\n"
     "  odysseyvk attrs               atributos de trama calculados (para validar el modelo)\n"
     "  odysseyvk texto-detect PPM    que considera texto el apoyo de los rotulos (foto del --volcado)\n"
+    "  odysseyvk barra-detect PNG..  en un video dividido, que filas tapa la barra del reproductor\n"
     "  odysseyvk ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odysseyvk ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
@@ -1854,6 +1856,67 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
 
 /* ---------------- atributos de la trama (para validar el modelo) ---------------- */
 
+/* ---------------- barra-detect: la barra del reproductor en un video dividido -----------------
+   Lo mismo que hace el visor cada cuatro cuadros, pero con capturas en archivo: cada PNG se reduce
+   a 518 x 518 como lo reduce la tarjeta (un punto por celda, interpolado: sin promediar) y pasa por
+   el detector, en orden y con un decimo de segundo entre uno y otro, para ver tambien la memoria
+   (dos analisis para poner la banda, medio segundo para quitarla). `--filas` ensena el residuo de
+   cada fila de las zonas de arriba y de abajo. */
+static int cmdBarra(int argc, char **argv) {
+  bool filas = false;
+  std::vector<std::string> fotos;
+  for (int i = 0; i < argc; i++) {
+    const std::string a = argv[i];
+    if (a == "--filas") filas = true;
+    else if (!a.empty() && a[0] != '-') fotos.push_back(a);
+  }
+  if (fotos.empty()) {
+    std::fprintf(stderr, "uso: odysseyvk barra-detect [--filas] CUADRO.png [OTRO.png ...]\n");
+    return 2;
+  }
+  DetectorBarra detector;
+  const int lado = 518;
+  std::vector<uint8_t> chica((size_t)lado * lado * 4u);
+  double t = 0.0;
+  for (const std::string &f : fotos) {
+    int w = 0, h = 0;
+    std::vector<uint8_t> px;
+    if (!pngLoadRGBA(f, w, h, px) || w < 64 || h < 64) {
+      std::fprintf(stderr, "no se pudo leer %s\n", f.c_str());
+      return 1;
+    }
+    for (int y = 0; y < lado; y++)
+      for (int x = 0; x < lado; x++) {
+        const float fx = ((float)x + 0.5f) / (float)lado * (float)w - 0.5f, fy = ((float)y + 0.5f) / (float)lado * (float)h - 0.5f;
+        const int x0 = std::max(0, std::min(w - 1, (int)std::floor(fx))), y0 = std::max(0, std::min(h - 1, (int)std::floor(fy)));
+        const int x1 = std::min(w - 1, x0 + 1), y1 = std::min(h - 1, y0 + 1);
+        const float tx = std::max(0.0f, fx - (float)x0), ty = std::max(0.0f, fy - (float)y0);
+        for (int c = 0; c < 4; c++) {
+          const float a = (float)px[((size_t)y0 * w + x0) * 4u + c] * (1.0f - tx) + (float)px[((size_t)y0 * w + x1) * 4u + c] * tx;
+          const float b = (float)px[((size_t)y1 * w + x0) * 4u + c] * (1.0f - tx) + (float)px[((size_t)y1 * w + x1) * 4u + c] * tx;
+          chica[((size_t)y * lado + x) * 4u + c] = (uint8_t)std::lround(a * (1.0f - ty) + b * ty);
+        }
+      }
+    DetectorBarra::Medida med;
+    const auto antes = std::chrono::steady_clock::now();
+    const Filas2D r = detector.analizar(chica.data(), lado, lado, t, &med);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - antes).count();
+    t += 0.1;
+    std::printf("%s (%dx%d): %.2f ms · centro %.1f · umbral %.1f · %s · abajo %d filas (max %.0f) · arriba %d filas (max %.0f)"
+                "  ->  en 2D: abajo %.1f %% · arriba %.1f %%\n", f.c_str(), w, h, ms, med.centro, med.umbral,
+                med.dividido ? "dividido" : "NO dividido", med.filasAbajo, med.maxAbajo, med.filasArriba, med.maxArriba,
+                100.0 * r.abajo, 100.0 * r.arriba);
+    if (filas) {
+      const std::vector<float> res = residuoPorFila(chica.data(), lado, lado, 4);
+      for (int y = 0; y < lado; y++)
+        if (res[(size_t)y] >= 0.0f && (y < lado * 16 / 100 || y >= lado * 74 / 100))
+          std::printf("  fila %3d (%.1f %%)  %6.1f %s\n", y, 100.0 * y / lado, res[(size_t)y],
+                      res[(size_t)y] > med.umbral ? "<--" : "");
+    }
+  }
+  return 0;
+}
+
 /* ---------------- texto-detect: ajustar el apoyo de los rotulos sin sentarse delante -----------
    El visor detecta las zonas que son texto para apoyarlas en el plano de la pantalla (asi los
    subtitulos no se deslizan al mover la cabeza). Para ver que esta detectando, se le pasa la foto
@@ -3080,6 +3143,7 @@ struct ServeCfg {
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
   std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
   std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
+  std::string barra2d;      /* no = en el video dividido no tejer en 2D las filas de la barra del reproductor (v0.81) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
@@ -3208,6 +3272,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "saliencia") cfg.saliencia = v;
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
     else if (k == "rastreo_fino") cfg.rastreoFino = v;
+    else if (k == "barra_2d") cfg.barra2d = v;
     else if (k == "atajos_globales") cfg.atajosGlobales = v;
     else if (k == "escala_3d") cfg.escala3d = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
@@ -3495,6 +3560,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
     if (!pila->vrrEn3d.empty())
       ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
+    if (!pila->barra2d.empty())
+      ::setenv("ODYSSEYVK_BARRA_2D", (pila->barra2d == "no" || pila->barra2d == "0") ? "0" : "1", 1);
     if (!pila->rastreoFino.empty())
       ::setenv("ODYSSEYVK_RASTREO_FINO", (pila->rastreoFino == "no" || pila->rastreoFino == "0") ? "0" : "1", 1);
     if (!pila->escala3d.empty())
@@ -5270,6 +5337,8 @@ int main(int argc, char **argv) {
   }
   if (cmd == "texto-detect")
     return cmdTexto(argc - 2, argv + 2);
+  if (cmd == "barra-detect")
+    return cmdBarra(argc - 2, argv + 2);
   if (cmd == "planos")
     return cmdPlanos(argc - 2, argv + 2);
   if (cmd == "mapa")

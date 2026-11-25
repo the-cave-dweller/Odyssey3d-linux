@@ -565,6 +565,17 @@ derecha, un `?` que explica las dos opciones al pasar el ratón y el aspa, que c
 (lo que antes era la tesela «2D plano»). El estéreo de arriba y abajo sigue solo por línea de orden
 (`--tb`).
 
+**La barra del reproductor en un vídeo dividido** (v0.81). Con el vídeo dividido cada ojo recibe
+una mitad del cuadro, y lo que el reproductor pinta encima a lo ancho de la ventana (barra de
+progreso, botones, título) también se partía en dos. Ahora el visor mira el cuadro una vez cada
+cuatro cuadros nuevos: en las filas de vídeo las dos mitades casan (son la misma imagen, corrida
+por el relieve); donde el reproductor pintó su barra, no. Esas filas —arriba y abajo de la pantalla—
+se tejen en 2D con el cuadro entero: la barra sale de una pieza y se pica donde se ve; el resto sigue
+en 3D. Aparece a los dos análisis seguidos y se quita medio segundo después de que el reproductor
+esconde sus mandos. En esa franja el vídeo de debajo se ve como viene (las dos mitades, una al lado
+de la otra) mientras dura. Se apaga con `barra_2d = no` en `serve.conf`. Para probar el detector con
+capturas: `odysseyvk barra-detect [--filas] CUADRO.png …`.
+
 Para mirar la interfaz sin el panel: `ODYSSEYVK_HUD_PNG=/ruta/salida.png odysseyvk ctl hud --w 3840
 --h 2160 [--legado]` la deja pintada en un archivo de fondo transparente (el mismo pintado de CPU que
 usa la tarjeta), además de medir que cada rótulo quepa en su caja. `ODYSSEYVK_HUD_RATON=x,y` deja el

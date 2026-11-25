@@ -724,7 +724,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t2[1] = tune_.pitch;
   t2[2] = tune_.weave ? 1.0f : 0.0f;
   t2[3] = tune_.swapLR ? 1.0f : 0.0f;
-  t3[0] = (float)hudState_;
+  t3[0] = filasAbajo_;   /* era el estado del indicador de la esquina, que ya no se pinta (v0.78) */
   t3[1] = tune_.topBottom ? 1.0f : 0.0f;
   t3[2] = srcFlipY_ ? 1.0f : 0.0f;
   t3[3] = depthShift_;
@@ -873,7 +873,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   }();
   t9[1] = sujeto_;
   t9[2] = kDetalle;
-  t9[3] = 0.0f;
+  t9[3] = filasArriba_;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro

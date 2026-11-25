@@ -16,6 +16,7 @@
 #endif
 #include "session.h"
 #include "ajuste.h"
+#include "barra.h"
 #include "mpris.h"
 #include "atajos.h"
 #include "util.h"
@@ -1988,7 +1989,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (!red.ready() && !arrancarRed(convGpu, &cerr0)) {
           std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
           ui.extraInfo = "el conversor de vídeo normal no abrió", ui.extraHasta = glfwGetTime() + 8.0;
-        } else if (!wv.converterReady() && !wv.prepareConverter(red.size(), &cerr0)) {
+        } else if ((!wv.converterReady() || wv.converterSize() != red.size()) && !wv.prepareConverter(red.size(), &cerr0)) {
           std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
           ui.extraInfo = "el conversor de vídeo normal no abrió", ui.extraHasta = glfwGetTime() + 8.0;
         } else {
@@ -2581,6 +2582,62 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     t.conv = ui.convBase + (float)st.popout / 50.0f * 0.004f;
     vezAnterior = t;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);
+    /* ---- video dividido: la barra del reproductor, de una pieza (v0.81; ver barra.h) ----
+       Cada cuatro cuadros nuevos se baja la copia chica del cuadro (la misma del conversor) y se
+       buscan las filas donde las dos mitades no casan: ahi el reproductor pinto su barra a lo ancho
+       y esas filas se tejen en 2D con el cuadro entero. `barra_2d = no` en serve.conf lo apaga. */
+    {
+      static const bool kBarra = [] {
+        const char *e = entornoOdyssey("ODYSSEYVK_BARRA_2D");
+        return !(e && (e[0] == '0' || e[0] == 'n' || e[0] == 'N'));
+      }();
+      static DetectorBarra detector;
+      static std::vector<uint8_t> chica;
+      static int cuentaBarra = 0;
+      static bool barraFallo = false, avisoNoDividido = false, habiaBarra = false;
+      const bool dividido = kBarra && st.weaveOn && !st.ask && !ui.convInfo && !wv.converterOn() &&
+                            !ui.tune.topBottom && opts.mapaFijo.empty();
+      if (!dividido) {
+        if (habiaBarra) {
+          habiaBarra = false;
+          std::printf("[barra] ya no es video dividido: se quitan las filas en 2D\n");
+          std::fflush(stdout);
+        }
+        detector.olvidar();
+        cuentaBarra = 0;
+        wv.setFilas2D(0.0f, 0.0f);
+      } else if (newSource && !barraFallo && ++cuentaBarra >= 4) {
+        cuentaBarra = 0;
+        std::string eb;
+        if ((wv.converterReady() || wv.prepareConverter(518, &eb)) && wv.readSmall(chica, &eb)) {
+          const int lado = wv.converterSize();
+          DetectorBarra::Medida med;
+          const Filas2D f = detector.analizar(chica.data(), lado, lado, now, &med);
+          wv.setFilas2D(f.arriba, f.abajo);
+          const bool hay = f.arriba > 0.0f || f.abajo > 0.0f;
+          if (hay != habiaBarra) {
+            habiaBarra = hay;
+            if (hay)
+              std::printf("[barra] el reproductor pinto encima del video dividido: en 2D el %.1f %% de abajo y el "
+                          "%.1f %% de arriba (filas %d / %d, residuo %.0f / %.0f, umbral %.0f, centro %.1f)\n",
+                          100.0 * f.abajo, 100.0 * f.arriba, med.filasAbajo, med.filasArriba, med.maxAbajo,
+                          med.maxArriba, med.umbral, med.centro);
+            else
+              std::printf("[barra] se fue: todo el cuadro vuelve a 3D\n");
+            std::fflush(stdout);
+          }
+          if (!med.dividido && !avisoNoDividido) {
+            avisoNoDividido = true;
+            std::printf("[barra] las dos mitades no casan ni en el centro del cuadro (residuo %.0f): este video no "
+                        "parece dividido, no se toca ninguna fila\n", med.centro);
+            std::fflush(stdout);
+          }
+        } else {
+          barraFallo = true;   /* decirlo una vez y no insistir cuadro tras cuadro */
+          std::fprintf(stderr, "[barra] no se pudo leer la copia chica del cuadro: %s\n", eb.c_str());
+        }
+      }
+    }
 #ifdef HAVE_ORT
     /* conversor de video normal a 3D: reducir la imagen en la tarjeta, bajarla (1 MB), pasar la
        red y volver a subir el mapa. Se hace cada opts.convEach cuadros y solo cuando el
