@@ -763,6 +763,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                  "pixel. Deja la escala del panel en 1 y la rotacion normal.\n",
                  fbW, fbH, sx, W, H);
 
+  if (opts.windowed && !(opts.w > 0) && fbW > W && sx > 1.01f) {
+    /* En el escritorio el panel esta a escala de contenido 1,5 mientras no lo tomemos, y la ventana
+       del tamano del modo sale 1,5 veces MAS GRANDE que la pantalla: solo se ve una esquina y de la
+       escalera de disparidad del patron desaparecen los cuadros de la derecha (eso es lo que se veia
+       como «se ven solo los ultimos cuadros»). Pedimos el tamano del modo en puntos LOGICOS, que al
+       multiplicarse por la escala vuelven a dar pixel a pixel. Solo en la ventana de taller: en la
+       sesion de verdad el panel queda a escala 1 y aqui no se entra. */
+    const int lw = (int)std::lround((float)W / sx), lh = (int)std::lround((float)H / sy);
+    glfwSetWindowSize(win, lw, lh);
+    glfwPollEvents();
+    glfwGetFramebufferSize(win, &fbW, &fbH);
+    std::printf("[ventana] ventana de taller ajustada a %dx%d logicos: el lienzo ahora %dx%d (escala %.2f)\n",
+                lw, lh, fbW, fbH, sx);
+  }
+
   VkUi ui;
   ui.fbW = fbW;
   ui.fbH = fbH;
