@@ -1623,6 +1623,43 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 
     /* la interfaz se rehace en CPU cada cuadro (son pocos triángulos) y se sube su geometría */
     WeaveTuning &t = wv.tuning();
+    /* Vigía de los numeros de la trama. En v0.45 el almacen en CPU del bloque de la trama se quedo
+       a 288 bytes mientras el bloque paso a 320: cada cuadro se escribian 32 bytes fuera, dentro de
+       la pila, y esos 32 bytes cayeron encima de los numeros de la trama del visor. El contraste se
+       fue a 0 y el sombreador con contraste 0 pinta medio gris en todos los pixeles: pantalla GRIS
+       pareja sin imagen, con la red trabajando y la captura bien. El aviso era mudo.
+       Aqui miramos de cuadro a cuadro los unicos numeros que ninguna tecla toca (contraste, escala
+       de la correccion A y crosstalk dinamico): si cambian solos, algo los esta pisando. Los demas
+       (paso, filtro, fase, crosstalk fijo, conversor, rampas) los mueven las teclas a proposito, asi
+       que aqui no se comparan; en su lugar se vigila que ninguno se vuelva un numero loco. */
+    static WeaveTuning vezAnterior{};
+    static bool avisoPisoton = false;
+    static bool primeraVez = true;
+    if (!primeraVez && !avisoPisoton) {
+      const struct { const char *nombre; float a, b; } fijos[] = {
+          {"el contraste", vezAnterior.contrast, ui.tune.contrast},
+          {"la escala de la correccion A", vezAnterior.corrAScale, ui.tune.corrAScale},
+          {"el crosstalk que sigue a la pantalla", vezAnterior.xtalkDyn, ui.tune.xtalkDyn}};
+      for (const auto &c : fijos) {
+        if (c.a == c.b) continue;
+        avisoPisoton = true;
+        std::fprintf(stderr, "[aviso] algo pise los numeros de la trama entre cuadros: %s valia %.6f y ahora vale %.6f "
+                             "(con el contraste o el filtro a 0 el cuadro sale gris o sin trama)\n",
+                     c.nombre, c.a, c.b);
+        break;
+      }
+      const float todos[] = {ui.tune.filterSlope, ui.tune.xtalkFac, ui.tune.contrast, ui.tune.corrAScale,
+                             ui.tune.pitch, ui.tune.align, ui.tune.conv, ui.tune.rampaDX, ui.tune.rampaDY,
+                             ui.tune.ganFondo, ui.tune.ganFrente, ui.tune.empFondo, ui.tune.empFrente};
+      for (float v : todos) {
+        if (std::isfinite(v)) continue;
+        avisoPisoton = true;
+        std::fprintf(stderr, "[aviso] un numero de la trama se volvio loco (%g): el sombreador con eso no dibuja nada "
+                             "util y el cuadro sale gris\n", v);
+        break;
+      }
+    }
+    primeraVez = false;
     t.weave = ui.tune.weave && ui.hud.state().weaveOn;
     t.swapLR = ui.tune.swapLR;
     t.topBottom = ui.tune.topBottom;
@@ -1641,6 +1678,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     t.capaTocada = ui.tune.capaTocada;
     const Hud::State &st = ui.hud.state();
     t.conv = ui.convBase + (float)st.popout / 50.0f * 0.004f;
+    vezAnterior = t;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);
 #ifdef HAVE_ORT
     /* conversor de video normal a 3D: reducir la imagen en la tarjeta, bajarla (1 MB), pasar la
@@ -1933,6 +1971,46 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::printf("[volcado] %s (%dx%d leido de Vulkan)\n", a.c_str(), fbW, fbH);
         else
           std::fprintf(stderr, "[volcado] no se pudo escribir %s\n", a.c_str());
+        /* Sonda del cuadro que sale de Vulkan: media y que fraction de puntos esta a +-1,5 de la
+           media. Si casi todo el cuadro esta en un solo color, el visor esta pintando una lama
+           pareja (el "fondo gris, nada de imagen") y con la copia SIN tramar del mismo cuadro se
+           ve si ese color venia de la imagen que entra o de los calculos de la trama. */
+        const auto sonda = [](const std::vector<uint8_t> &p) {
+          const long total = (long)p.size() / 4;
+          double s = 0.0;
+          long n = 0;
+          for (long q = 0; q < total; q += 7) {
+            s += ((double)p[(size_t)q * 4] + p[(size_t)q * 4 + 1] + p[(size_t)q * 4 + 2]) / 3.0;
+            n++;
+          }
+          const double m = n ? s / (double)n : 0.0;
+          long pareja = 0;
+          for (long q = 0; q < total; q += 7) {
+            const double l = ((double)p[(size_t)q * 4] + p[(size_t)q * 4 + 1] + p[(size_t)q * 4 + 2]) / 3.0;
+            if (std::fabs(l - m) <= 1.5) pareja++;
+          }
+          return std::make_pair(m, n ? 100.0 * (double)pareja / (double)n : 0.0);
+        };
+        const auto trama = sonda(rgba);
+        std::vector<uint8_t> cruda;
+        std::string errCruda;
+        if (wv.grab(cruda, &errCruda, true)) {
+          const std::string b = opts.dumpPath + "-trama-cruda.png";
+          if (glPngSave(b, fbW, fbH, cruda.data())) {
+            const auto copia = sonda(cruda);
+            std::printf("[volcado] %s (la misma imagen sin tramar, para comparar)\n", b.c_str());
+            std::printf("[sonda] trama media %.1f · parejo %.1f%%   copia media %.1f · parejo %.1f%%\n",
+                        trama.first, trama.second, copia.first, copia.second);
+          }
+        } else {
+          std::printf("[sonda] trama media %.1f · parejo %.1f%%   sin copia (%s)\n", trama.first,
+                      trama.second, errCruda.c_str());
+        }
+        if (trama.second > 90.0)
+          std::fprintf(stderr,
+                       "[aviso] el tramado pintó una imagen plana: %.0f%% de los puntos estan en "
+                       "%.1f (de 0 a 255) · cuadro %dx%d · miren %s y el volcado sin tramar\n",
+                       trama.second, trama.first, fbW, fbH, a.c_str());
         if (kind == SourceKind::Test && !testPx.empty())
           glPngSave(opts.dumpPath + "-origen.png", fbW, fbH, testPx.data());
 #ifdef HAVE_CAPTURE

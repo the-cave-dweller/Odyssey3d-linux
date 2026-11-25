@@ -10,9 +10,18 @@
 #include "vkui.h"
 #include "weave.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+/* Tamano del bloque std140 de weave.frag. Vive aqui para que el almacen en CPU
+   (`uboData_`) y las copias al buffer de Vulkan midan lo MISMO: en v0.45 se anadio el
+   octavo vec4 (las capas por profundidad) y el bloque paso de 288 a 320 bytes, pero el
+   almacen siguio a 288; cada cuadro se escribian 32 bytes fuera y el visor se pintaba
+   gris (los numeros de la trama y del contraste se pisaban). Los desfases de cada campo
+   estan en kOff... dentro del .cpp, con un static_assert que avisa si crece mas. */
+constexpr size_t kUboBytes = 320;
 
 class VkWeave {
 public:
@@ -44,8 +53,10 @@ public:
   void setSrcFlipY(bool f) { srcFlipY_ = f; }
 
   /* cuadro fuera de pantalla: dibuja trama + interfaz en una imagen propia y la baja a la CPU
-     (para --dump, sin tocar el panel). Devuelve RGBA con la primera fila arriba. */
-  bool grab(std::vector<uint8_t> &rgbaTopFirst, std::string *err);
+     (para --dump, sin tocar el panel). Devuelve RGBA con la primera fila arriba.
+     `copiaPura` dibuja la misma imagen SIN tramar (el pase de copia del sombreador): sirve para
+     comparar y saber si un cuadro plano viene de la fuente o de los calculos de la trama. */
+  bool grab(std::vector<uint8_t> &rgbaTopFirst, std::string *err, bool copiaPura = false);
 
   /* --- conversor de video normal a 3D -------------------------------------------------
      El modelo de profundidad necesita una copia pequena de la imagen (se reduce en el propio
@@ -164,7 +175,7 @@ private:
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   int pw_ = 3840, ph_ = 2160;
   bool cornersDirty_ = true;
-  uint8_t uboData_[288]{};  /* tamano del bloque std140 de weave.frag (ver kUboBytes en el .cpp) */
+  uint8_t uboData_[kUboBytes]{};  /* tamano del bloque std140 de weave.frag (kUboBytes arriba) */
 };
 
 #endif

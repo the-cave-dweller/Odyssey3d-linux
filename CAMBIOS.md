@@ -2,6 +2,50 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El visor gris: el bloque de la trama se salía de su caja y se pisaba sus propios números (v0.47)
+- Síntoma que dio Rodolfo: «veo el overlay con un fondo color gris, nada de imagen». Medido sobre el
+  cuadro del propio visor: **RGB(127,127,127) exacto, varianza 0** en toda la banda central. Con la
+  misma textura pero sin tramar sí salía imagen (media 18,7), y la red y la captura estaban sanas
+  (mapa de 518x518 con 47.461 colores, `[fps] 83/76`). O sea: el gris lo fabricaba el sombreador.
+- **Causa**: `uboData_`, el almacén en CPU del bloque de parámetros de `weave.frag`, seguía declarado
+  `uint8_t uboData_[288]` (desde v0.12) mientras el bloque pasó a **320 bytes en v0.45** al añadir el
+  octavo `vec4` de las capas. Cada cuadro `memset` + escrituras llegaban hasta el byte 319, es decir
+  **32 bytes fuera de la caja**, y en la pila esos 32 bytes eran exactamente los números de la trama
+  del visor. Comprobado con puntos de vigilancia sobre la variable: la escritura la hacía la propia
+  `VkWeave::fillUbo` sobre `ui.tune` (distancia `dst` → `&ui.tune` = 295 bytes).
+- **Por qué eso es gris y no otra cosa**: el contraste caía a 0 y el sombreador hace
+  `L = (L − 0,5) * contraste + 0,5`; con contraste 0 eso es **0,5 para todos los píxeles** → 127,5 →
+  gris parejo. De paso se iban a 0 la pendiente del filtro (trama sin separar) y la escala de la
+  corrección A, y `paso`/`crosstalk` recibían basura de la pila. El fallo era **mudo**: nada avisaba.
+- Arreglado: `kUboBytes` se declaró en `vkweave.h` y el almacén usa ese mismo número
+  (`uint8_t uboData_[kUboBytes]`), y en `vkweave.cpp` hay un `static_assert` de que el último desfase
+  (`kOffTun7 + 16`) no se sale del bloque. Así no puede volver a pasar: si alguien añade un `vec4` y
+  sube los desfases, salta la compilación.
+- Añadida **red contra números locos** en `fillUbo`: si algún parámetro del bloque no es un número
+  finito (NaN/infinito), se sustituye por el neutro y se avisa diciendo el primer nombre y su offset
+  (el sombreador con un NaN pinta gris y no deja rastro).
+- Añadido **vigía de los números de la trama** en el bucle por cuadro: compara de cuadro a cuadro los
+  únicos campos que ninguna tecla toca (contraste, escala de la corrección A, crosstalk dinámico) y
+  avisa una sola vez si cambian solos, más un chequeo de que ninguno se vuelva loco. Probado
+  volviendo a poner el almacén corto a propósito: salta
+  `[aviso] algo pise los números de la trama entre cuadros: el contraste valía 1,000000 y ahora vale −0,000000`
+  y ya no vuelve a aparecer el gris silencioso.
+- Añadida **sonda del tramado** en el visor (solo con `--dump`): mide el cuadro trameado y avisa
+  `[aviso] el tramado pintó una imagen plana: 98% de los puntos están en 125,5`, y guarda al lado
+  `-trama-cruda.png` (la misma textura sin tramar). Si un día sale gris, con mirar esos dos archivos
+  se sabe si el problema es la captura o los números, sin tocar el panel.
+- Sondas de taller en el sombreador (puerta `ODYSSEY3D_PRUEBA`, 0 = normal, no cuesta nada mientras no
+  se usen): 1 = muestra del ojo izquierdo, 2 = ojo derecho, 3 = textura con coordenada 2D, 4 = peso del
+  filtro, 5 = crosstalk empaquetado, 6 = fase base, 7 = coordenadas de la cuadrícula, 8 = `v4` de las
+  esquinas, 9 = correcciones y paso, 10/11 = lo que sale de la mezcla. Con ellas se vio que la mezcla ya
+  nacía gris (`Lp`/`Rp` = 127) y que el crosstalk llegaba bien (0,012854).
+- Seguro extra en el sombreador para el crosstalk: `xt` se topa a ±0,90 antes de la división
+  `xt/(1−xt)` y a ±12 después; sin eso, un parámetro fuera de rango podía invertir o disparar la mezcla.
+- **Falta revalidar con él**: con el filtro y el contraste vuelven a valer 10 y 1, así que el aspecto
+  cambia respecto a las últimas sesiones (que estaban en gris). Hay que volver a mirar `rampa_x = −0,0040`
+  y `rampa_y = 0,0016` y el aspecto de las franjas: es probable que parte de los defectos que venía
+  reportando fueran este pisotón y no el paso de la lente.
+
 ## Empuje por capa: llevar una banda entera a un plano (v0.46)
 - Con solo estirar la escala (`fondo`/`frente` de v0.45) un elemento **casi plano** no se entera: si
   su profundidad casi no se separa del plano de apoyo, su desplazamiento es casi cero y no hay forma

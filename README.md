@@ -666,6 +666,25 @@ odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
 se manda al panel; visto de cerca deben apreciarse las franjas diagonales (paso 1.8 px con la
 inclinación nominal de 0.29).
 
+### El visor sale gris parejo, sin imagen
+
+Con `--dump` el visor comprueba solo su cuadro trameado: si casi todo sale del mismo valor avisa
+`[aviso] el tramado pintó una imagen plana: 98% de los puntos estan en 125,5` y guarda al lado
+`chk-trama-cruda.png`, que es la MISMA textura sin tramar. Con la cruda bien y la trameada gris, el
+problema son los números de la trama (contraste, pendiente del filtro o un número loco), no la
+captura ni la red. Para verlo sin tocar el panel:
+
+```sh
+odyssey3d test --windowed --no-panel --no-lens --no-scaler --dump /tmp/prueba
+```
+
+Si aparece `[aviso] algo pise los numeros de la trama entre cuadros` hay una escritura fuera de su
+sitio: di qué campo dice el aviso y se busca ahí. Para seguir el paso del cálculo dentro del
+sombreador, `ODYSSEY3D_PRUEBA=1..11` saca en claro de pantalla una pieza concreta del cálculo (1 ojo
+izquierdo, 2 ojo derecho, 3 coordenada 2D, 4 peso del filtro, 5 crosstalk, 6 fase base, 7 cuadrícula,
+8 esquinas, 9 correcciones y paso, 10 y 11 la mezcla); `0` o sin la variable es lo normal. Para ver
+los números que salen hacia la tarjeta, `ODYSSEY_UBO=1` imprime una línea `[ubo …]` por cuadro.
+
 ### El monitor se queda vertical al cerrar el vídeo
 
 Causa: **kscreen-doctor numera la rotación con la enum de KScreen, no con la transformación de

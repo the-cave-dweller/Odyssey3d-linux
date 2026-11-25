@@ -1,0 +1,15 @@
+# Hashes of file build rules.
+7f5f1eec8030b9929b09c27cb02ffdd2 CMakeFiles/shaders
+40ee34f94d76f3b1cd3cbc965327345c proto/fractional-scale-v1-client-protocol.h
+960e2505678005961e940676fc1c5d3e proto/plasma-window-management-client-protocol.h
+3891e2092987ba1ff92d5854b360db1c proto/viewporter-client-protocol.h
+880839fe87031f13c96fb4d8625e0a23 proto/wlr-layer-shell-unstable-v1-client-protocol.h
+2b2a60e73403a8df5778fb2807aac9c6 proto/xdg-output-unstable-v1-client-protocol.h
+3252a831c40b19544fb17ead1b3f20a6 proto/xdg-shell-client-protocol.h
+735ab25cec671eace17d948aa592bfbd proto/zkde-screencast-unstable-v1-client-protocol.h
+14dcf4e835f60650f142275536fad98c shadersp/fs_vert_sp.h
+4005b0aecafed6ee2443edc5640544fa shadersp/hud_frag_sp.h
+e458fcd6c02617def7235fb8d91fccdf shadersp/hud_vert_sp.h
+a9901302c6e52bdbc94751f803e7a99d shadersp/probe_frag_sp.h
+26171cd8dfa3c8c165f9c2c32fbd7145 shadersp/weave_frag_sp.h
+3c01851e4d4dd90221620b0509b97d61 shadersp/weave_vert_sp.h

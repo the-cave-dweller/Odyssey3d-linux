@@ -132,6 +132,17 @@ void main()
     float rsq = inversesqrt(1.0 + dot(v3, v3));
     float base = v2.x * rsq - 2.0 * v2.y * (corrB - 0.5) + corrA;
 
+    /* Sonda de taller (ODYSSEY3D_PRUEBA, hueco tun6.w; 0 = normal, no cambia nada). Sirve para ver
+       en que punto del calculo una imagen con contenido se vuelve una lama de un solo color:
+       1 muestra del ojo izquierdo · 2 muestra del derecho · 3 la misma textura con la coordenada
+       del pase 2D · 4 peso del filtro · 6 fase base · 7 campo v2 y base · 8 rampa v4 · 9 corrA,
+       corrB y rsq. Cada sonda se mira con el volcado (--dump), sin tocar el panel. */
+    if (P.tun6.w == 6.0) { o = vec4(fract(base), 0.0, 0.0, 1.0); return; }
+    if (P.tun6.w == 7.0) { o = vec4(fract(v2.x), fract(v2.y), fract(base), 1.0); return; }
+    if (P.tun6.w == 8.0) { o = vec4(fract(v4), 1.0); return; }
+    if (P.tun6.w == 9.0) { o = vec4(corrA, corrB, rsq, 1.0); return; }
+    if (P.tun6.w == 3.0) { o = vec4(texture(uSrc, vec2(u, v)).rgb, 1.0); return; }
+
     float lx = (P.tun2.w == 1.0) ? 0.0 : 0.5;   /* orden de ojos validado en el Hub */
     float rx = (P.tun2.w == 1.0) ? 0.5 : 0.0;
     /* "3D Depth" separa las dos vistas en sentidos opuestos (más paralaje);
@@ -223,13 +234,25 @@ void main()
         L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);
         R = srcHalf(fuv + vec2(cnv - dep, 0.0), rx);
     }
+    if (P.tun6.w == 1.0) { o = vec4(L, 1.0); return; }
+    if (P.tun6.w == 2.0) { o = vec4(R, 1.0); return; }
     L = (L - 0.5) * P.tun1.y + 0.5;
     R = (R - 0.5) * P.tun1.y + 0.5;
     vec3 dRL = R - L;
     float xt = ((1.0 + dot(v3, v3)) * v2.y * v2.y) * P.tun1.x + P.res.w;
+    /* Seguro: el divisor se anula si xt llega a 1 y eso suelta un infinito que se propaga a los
+       dos ojos (cuadro plano, sin imagen). Con los numeros de fabrica xt ronda 0,013 y las teclas
+       de crosstalk lo mueven de 0,002 en 0,002, asi que este tope no se roza nunca. */
+    xt = clamp(xt, -4.0, 0.90);
     xt = xt / (1.0 - xt);
+    xt = clamp(xt, -12.0, 12.0);
     vec3 Lp = L - xt * dRL;
     vec3 Rp = R + xt * dRL;
+    /* sondas de taller: 5 = el factor de crosstalk (con +1 para poder ver el signo) ·
+       10 = la vista izquierda ya corregida · 11 = la derecha corregida */
+    if (P.tun6.w == 5.0) { o = vec4(clamp(xt * 0.5 + 0.5, 0.0, 1.0), clamp(xt, 0.0, 1.0), clamp(-xt, 0.0, 1.0), 1.0); return; }
+    if (P.tun6.w == 10.0) { o = vec4(Lp, 1.0); return; }
+    if (P.tun6.w == 11.0) { o = vec4(Rp, 1.0); return; }
 
     vec3 outc;
     /* Temblor de la propia fase (ODYSSEY3D_FASE_TEMBLOR, en ciclos; 0 = como antes).
@@ -263,6 +286,7 @@ void main()
         float phase = fract(base + v4[c] * P.tun2.y + P.tun2.x - 0.25 + jr + rampa);
         float t = 2.0 * phase - 1.0;
         float w = clamp(-abs(t) * P.res.z + P.res.z * 0.5 + 0.5, 0.0, 1.0);
+        if (P.tun6.w == 4.0) { outc[c] = w; continue; }
         outc[c] = mix(Rp[c], Lp[c], w);
     }
     o = vec4(outc, 1.0);

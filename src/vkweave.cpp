@@ -24,9 +24,12 @@ constexpr size_t kMaxHudVerts = 65536;
    arreglo se redondea a 16) y despues vienen ocho vec4: el quinto es el del conversor 2D/3D, el
    sexto los ajustes finos del mismo (temblor y topes por ojo), el septimo la medicion de la trama
    y el octavo las capas por profundidad (cuanto se estira el fondo y cuanto el frente). */
-constexpr size_t kUboBytes = 320;
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
                  kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304;
+/* kUboBytes esta declarado en vkweave.h para que el almacen en CPU use el mismo numero. Si se
+   anade otro vec4 al sombreador, hay que subir kUboBytes de 16 en 16 Y anadir su kOff... aqui:
+   este aviso salta en la compilacion si los desfases se salen del bloque. */
+static_assert(kOffTun7 + 16 <= kUboBytes, "el ultimo bloque del UBO se sale de kUboBytes");
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -776,7 +779,15 @@ void VkWeave::fillUbo(uint8_t *dst) {
   const float rrY = topaRampa(rampaY + tune_.rampaDY);
   t6[1] = rrX;
   t6[2] = rrY;
-  t6[3] = 0.0f;
+  /* Sonda de taller (ODYSSEY3D_PRUEBA): hueco libre del bloque, 0 = normal. El sombreador con
+     1 saca la muestra del ojo izquierdo, con 3 la misma textura pero con la coordenada del pase
+     2D, con 4 el peso del filtro y con 6 la fase base. Sirve para ver en que punto del calculo
+     una imagen con contenido se vuelve una lama de un solo color. */
+  static const float kPruebaSombra = [] {
+    const char *e = std::getenv("ODYSSEY3D_PRUEBA");
+    return e ? (float)std::atof(e) : 0.0f;
+  }();
+  t6[3] = kPruebaSombra;
   /* Capas por profundidad. `tun7.x` cuanto se estira lo que queda DETRAS del plano de apoyo y
      `tun7.y` lo que sale DELANTE; 0 en el hueco = sin escalar (lo de siempre). El visor arranca
      estos valores de ODYSSEY3D_GAN_FONDO / ODYSSEY3D_GAN_FRENTE (que vienen de `fondo` y
@@ -812,9 +823,40 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t7[1] = (capa || tune_.ganFrente > 0.0f) ? tune_.ganFrente : ganBaseFrente;
   t7[2] = capa ? tune_.empFondo : empBaseFondo;
   t7[3] = capa ? tune_.empFrente : empBaseFrente;
+  /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
+     parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
+     NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
+     del muestreador) en lugar de imagen, que es justo el "veo el visor gris, nada de imagen".
+     Aqui no deberia producirse ninguno (el campo de la lente, las teclas y la red entregan
+     numeros finitos), pero si alguna vez se cuela, lo cambiamos por el neutro y avisamos: sin esta
+     red el fallo es mudo y despues no hay forma de saber de donde vino. */
+  {
+    static const char *kMiembro[] = {"campo v2", "campo v3", "rampa v4", "res",      "tun1",
+                                     "tun2",      "tun3",       "tun4",       "tun5", "tun6",
+                                     "tun7"};
+    const float *fl = (float *)dst;
+    int malos = 0, primero = -1;
+    for (int i = 0; i < kUboBytes / 4; i++)
+      if (!std::isfinite((double)fl[i])) {
+        if (primero < 0) primero = i;
+        *(float *)(dst + i * 4) = 0.0f;
+        malos++;
+      }
+    static int avisos = 0;
+    if (malos && avisos < 4) {
+      avisos++;
+      const int off = primero * 4;
+      const char *cual = kMiembro[off < 192 ? off / 64 : (off < 208 ? 3 : 4 + (off - 208) / 16)];
+      std::fprintf(stderr,
+                   "[trama vk] %d parametros de la trama no eran un numero (el primero en %s, "
+                   "offset %d): se pusieron en 0 · cuadro %dx%d · conversor %.1f %.1f\n",
+                   malos, cual, off, pw_, ph_, t4[0], t4[3]);
+    }
+  }
   if (std::getenv("ODYSSEY_UBO")) {
-    std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · rampa %.5f %.5f · capas %.2f %.2f · empuje %+.1f %+.1f · v4 TL %.2f %.2f %.2f\n",
-                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], rrX, rrY, t7[0], t7[1], t7[2], t7[3], v4[0], v4[1], v4[2]);
+    std::fprintf(stderr, "[ubo %p] res %.0fx%.0f slope %.6f xt %.6f xtD %.6f cons %.4f · paso %.6f tramado %.1f · ind %.1f · rampa %.5f %.5f · capas %.2f %.2f · empuje %+.1f %+.1f · v4 TL %.2f %.2f %.2f · conv %.4f plano %.4f dep %.4f · v2 %.4f %.4f corrA %.4f\n",
+                 this, res[0], res[1], res[2], res[3], t1[0], t1[1], t2[1], t2[2], t3[0], rrX, rrY, t7[0], t7[1], t7[2], t7[3], v4[0], v4[1], v4[2],
+                 t1[3], t4[2], t3[3], v2[0], v2[1], t1[2]);
   }
 }
 
@@ -990,7 +1032,7 @@ bool VkWeave::frame(std::string *err) {
 /* Cuadro fuera de pantalla. Dibuja la trama y la interfaz en una imagen del tamaño del panel y
    la copia a la CPU. No presenta nada: sirve para --dump y para comparar el trazado de Vulkan
    con el de OpenGL cuadro a cuadro. */
-bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err) {
+bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) {
   if (!dev_ || pw_ <= 0 || ph_ <= 0) {
     if (err) *err = "el trazador no está listo";
     return false;
@@ -1001,6 +1043,11 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err) {
     uploadR8(blanco, 1, 1, atlas_, nullptr);
   }
   fillUbo(uboData_);
+  if (copiaPura) {
+    /* el pase de copia del sombreador saca la fuente tal cual, sin campo de la lente ni trama:
+       asi se ve si un cuadro plano viene de la imagen que entra o de los calculos de la trama */
+    ((float *)(uboData_ + kOffTun4))[3] = 1.0f;
+  }
   cornersDirty_ = false;
 
   VkExtent2D ext{(uint32_t)pw_, (uint32_t)ph_};
