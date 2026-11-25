@@ -707,7 +707,9 @@ trama y la pantalla se veía otra vez en 2D (`ctl apilamiento` lo comprueba: el 
 abajo). Al terminar la sesión le quita esa marca y el vídeo vuelve a su sitio. Si el visor se muere de
 golpe (o se detiene el servicio), el servicio recupera el panel con la copia que quedó guardada.
 
-Se configura en `~/.config/odysseyvk/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
+Se configura en `~/.config/odysseyvk/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen; nuestra
+propia ventana entra siempre en la lista, con el nombre nuevo y con el viejo, para que el vigilante no
+se ofrezca 3D a sí mismo),
 `espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué
 GPU corre la red del conversor), `cada` (cada cuántos fotogramas se calcula la profundidad),
 `rastreo` (`si` para que la cámara IR del monitor siga tus ojos y la trama se recalcule; `no` para la

@@ -2825,6 +2825,15 @@ static void loadServeCfg(ServeCfg &cfg) {
     else line += c;
   }
   eat(true);
+  /* La lista `ignore` del archivo trae el nombre viejo (odyssey3d) y desde v0.57 la app se llama
+     odysseyvk: si solo se mira lo escrito, nuestro propio visor quedaria sin ignorar y el
+     vigilante se lanzaria un 3D encima de si mismo. Los dos nombres van siempre. */
+  for (const char *propia : {"odysseyvk", "odyssey3d"}) {
+    bool puesta = false;
+    for (const std::string &ig : cfg.ignore)
+      if (ig == propia) puesta = true;
+    if (!puesta) cfg.ignore.push_back(propia);
+  }
 }
 
 static std::string selfPath() {
@@ -2837,7 +2846,10 @@ static std::string selfPath() {
 
 static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list) {
   std::string app = strLower(w.appId), title = strLower(w.title);
-  if (title.find("odyssey 3d") != std::string::npos) return true;
+  /* El titulo de nuestras ventanas lo ponemos nosotros: "OdysseyVK" desde v0.57 y el nombre largo
+     antes. Se comprueban los dos para no quedarse ciego con el nombre viejo. */
+  if (title.find("odysseyvk") != std::string::npos || title.find("odyssey 3d") != std::string::npos)
+    return true;
   for (const std::string &ig : list) {
     if (ig.empty()) continue;
     if (app == ig || app.find(ig) != std::string::npos) return true;

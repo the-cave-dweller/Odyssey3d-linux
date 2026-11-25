@@ -132,6 +132,30 @@ medidas dentro de su hueco (usado / hueco): `Plano de apoyo` 96,9 / 120 · `3D S
   `odysseyvk.desktop`, `systemd/`, `udev/`, `assets/` y `config/`, leyendo la config y el estado de la
   carpeta nueva **y** de la vieja.
 
+### Instalando la v0.57: dos cosas que el renombrado dejó cojas
+
+- `install.sh` corrida el 25-11 a las 03:34: `/usr/local/bin/odysseyvk` y `odysseyvk-ajustes` a 0.57,
+  unidad `odysseyvk-serve` activa y activada para la sesión, regla `/etc/udev/rules.d/70-odysseyvk.rules`
+  (la vieja `70-odyssey-3d.rules` ya no está), lanzador `~/.local/share/applications/odysseyvk.desktop`
+  y el icono en las ocho tallas de `~/.local/share/icons/hicolor`. Los binarios del nombre viejo se
+  guardaron en `/usr/local/bin/viejo-odyssey3d/` y `odyssey3d-serve` quedó apagado y sin fichero de
+  unidad. `odysseyvk doctor` con la regla nueva: lente en `/dev/ttyACM0` (accesible, `auth: si`,
+  firmware 3.16.68), scaler en `/dev/sg1` y `/dev/video0` y `/dev/video1` accesibles — sin tocar el USB.
+- El `serve.conf` que copió la migración seguía diciendo `ignore = odyssey3d, …` y
+  `modelo = ~/.local/share/odyssey3d/modelos/mde_large.onnx`. Con el `app_id` nuevo la primera línea ya
+  no tapaba nuestra propia ventana, y el filtro por título buscaba `odyssey 3d`, que tampoco coincide
+  con el título `OdysseyVK`: el vigilante podía ofrecer 3D a su propio visor si este se arranca a mano
+  (`odysseyvk play …`) mientras el servicio mira las ventanas.
+- Arreglo en el código: `loadServeCfg` añade siempre `odysseyvk` y `odyssey3d` a la lista de ignoradas
+  (`src/main.cpp:2828-2836`) y `ignoredApp` acepta los dos títulos (`src/main.cpp:2849-2852`). En la
+  config viva se escribió `ignore = odysseyvk, odyssey3d, …` y la red de Samsung apunta ahora a
+  `~/.local/share/odysseyvk/modelos/mde_large.onnx`; los dos `mde_large.onnx` miden 49.477.899 bytes, así
+  que cambiar la ruta es inocuo y deja de usarse la copia vieja. Tras `systemctl --user restart
+  odysseyvk-serve` el log dice `boton 1 = /home/rodolfo/.local/share/odysseyvk/modelos/mde_large.onnx`.
+- Sin probar: que los dos filtros (lista y título) se noten con una ventana a pantalla completa delante;
+  aquí no hay inyector de clics y poner una ventana a pantalla completa agarra el panel. Y el binario
+  instalado es el de antes de este arreglo: entra con `sudo cmake --install build`.
+
 ## La pastilla deja de ser redonda y el 3D se apaga con un interruptor (v0.56)
 - Pedido de Rodolfo: «quita el botón de apagar 3D y el de ocultar capa, cambia el de apagar por un botón
   más o menos así» (foto: pista oscura con bola blanca y la letra `ON` / `OFF`), «el overlay se oculta y
