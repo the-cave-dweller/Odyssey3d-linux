@@ -23,6 +23,7 @@ pkg_check_modules(FREETYPE freetype2)  # opcional: atlas de fuentes para la inte
 pkg_check_modules(WAYLAND_CLIENT wayland-client)   # vigilancia de ventanas / captura
 pkg_check_modules(PIPEWIRE libpipewire-0.3)        # opcional: fotogramas de la captura
 pkg_check_modules(LIBSYSTEMD libsystemd)           # opcional: aviso por portal (sd-bus)
+pkg_check_modules(XKBCOMMON xkbcommon)             # opcional: que simbolo da Mayus+numero (atajos globales)
 pkg_check_modules(VULKAN REQUIRED vulkan)          # todo el dibujado va por Vulkan
 pkg_check_modules(OPENCV opencv5)   # opcional: rastreo de cabeza (cara, ojos, triangulacion)
 
@@ -161,6 +162,7 @@ add_executable(odysseyvk
   src/session.cpp
   src/vkview.cpp
   src/mpris.cpp
+  src/atajos.cpp
   src/depth.cpp
   src/hoyos.cpp
 )
@@ -198,6 +200,11 @@ if(LIBSYSTEMD_FOUND)
   target_include_directories(odysseyvk PRIVATE ${LIBSYSTEMD_INCLUDE_DIRS})
   target_link_libraries(odysseyvk PRIVATE ${LIBSYSTEMD_LIBRARIES})
   target_compile_definitions(odysseyvk PRIVATE HAVE_SDBUS=1)
+endif()
+if(XKBCOMMON_FOUND)
+  target_include_directories(odysseyvk PRIVATE ${XKBCOMMON_INCLUDE_DIRS})
+  target_link_libraries(odysseyvk PRIVATE ${XKBCOMMON_LIBRARIES})
+  target_compile_definitions(odysseyvk PRIVATE HAVE_XKBCOMMON=1)
 endif()
 
 if(MPV_FOUND)

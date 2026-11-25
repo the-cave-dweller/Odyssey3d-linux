@@ -275,7 +275,7 @@ panel y la red metan ruido.
 | `g` `v` | **dureza de los dos planos** (0…1, de 0,1 en 0,1): 0 deja el relieve continuo de siempre; al subirlo el cuadro se queda en dos láminas planas, una detrás y otra delante, como la Nintendo 3DS (v0.48). Solo tiene efecto con el conversor de vídeo normal puesto |
 | `n` `x` | **muestras intermedias** entre las dos láminas (v0.50): `n` agrega un nivel clavado a mitad de camino, con su meseta, para que el centro se vea sólido en vez de degradado (hasta 3); `x` lo quita y a 0 vuelve la rampa continua. Pide primero la dureza subida con `g` |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
-| `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
+| `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial). **Desde la v0.75 los `Ctrl+Shift+1…8` y `Ctrl+Shift+F1` son atajos globales del escritorio** (KDE): valen aunque el teclado lo tenga el vídeo o un juego. Solo están activos mientras hay una sesión 3D; se cambian en Ajustes del sistema → Atajos → «OdysseyVK»; `atajos_globales = no` en `serve.conf` los quita; `odysseyvk ctl atajos probar` los comprueba sin teclado |
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre. Sigue valiendo `Ctrl+Shift+2`; si el teclado lo tiene otra ventana a pantalla completa, `odysseyvk ctl capa ocultar` hace lo mismo por fichero |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
 | `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |

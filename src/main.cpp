@@ -6,6 +6,7 @@
 #include "calib.h"
 #include "camera.h"
 #include "track.h"
+#include "atajos.h"
 #include "panel.h"
 #include "mpris.h"
 #include "ajuste.h"
@@ -109,6 +110,7 @@ static const char *kUsage =
     "                                        interruptor de la ventana de ajustes; se recuerda en serve.conf)\n"
     "  odysseyvk ctl ajuste [clave valor ...]  mandar numeros vivos al visor (fase, paso, conv, planos, ...)\n"
     "  odysseyvk ctl ajuste limpiar | fabrica  vaciar el canal | mandar los numeros DE FABRICA (revertir)\n"
+    "  odysseyvk ctl atajos [probar|quitar]    los atajos del hub como globales del escritorio (KDE): probarlos sin teclado\n"
     "  odysseyvk-ajustes                la ventana de ajustes: redes disponibles/seleccionadas, guardados y sus numeros\n"
     "  odysseyvk capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
     "  odysseyvk test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
@@ -2564,6 +2566,42 @@ static int cmdAjuste(int argc, char **argv) {
   return 0;
 }
 
+/* `ctl atajos probar`: registra los atajos globales del hub, le pide al escritorio que dispare cada
+   uno (sin teclado) y comprueba que llegan; al acabar los deja inactivos. Asi se sabe si el
+   escritorio los acepta sin montar una sesion 3D. `ctl atajos quitar` los deja inactivos sin mas. */
+static int cmdAtajos(int argc, char **argv) {
+  const std::string uno = argc > 0 ? strLower(argv[0]) : "probar";
+  if (uno == "quitar" || uno == "soltar") {
+    AtajosGlobales::desactivar();
+    std::printf("atajos globales del hub: inactivos (las teclas vuelven a las aplicaciones)\n");
+    return 0;
+  }
+  AtajosGlobales at;
+  std::string err;
+  if (!at.abrir(&err)) {
+    std::printf("no se pudieron registrar: %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("registrados: %s\n", at.resumen().c_str());
+  int bien = 0;
+  for (const std::string &n : AtajosGlobales::nombres()) {
+    const bool mandado = at.invocar(n);
+    bool llego = false;
+    for (int i = 0; i < 40 && !llego; i++) {   /* hasta 400 ms */
+      for (const std::string &p : at.pulsados())
+        if (p == n) llego = true;
+      if (!llego) usleep(10000);
+    }
+    std::printf("  %-10s %s\n", n.c_str(), !mandado ? "el escritorio no acepto la orden de prueba"
+                                           : (llego ? "llega" : "NO llega"));
+    if (llego) bien++;
+  }
+  at.cerrar();
+  std::printf("%d de %zu atajos llegan; quedan inactivos hasta la proxima sesion 3D\n", bien,
+              AtajosGlobales::nombres().size());
+  return bien == (int)AtajosGlobales::nombres().size() ? 0 : 1;
+}
+
 static int cmdPreferencias(int argc, char **argv) {
   int n = 40;
   for (int i = 0; i + 1 < argc; i++)
@@ -3004,6 +3042,7 @@ struct ServeCfg {
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
   std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
   std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
+  std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
@@ -3143,6 +3182,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "saliencia") cfg.saliencia = v;
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
     else if (k == "rastreo_fino") cfg.rastreoFino = v;
+    else if (k == "atajos_globales") cfg.atajosGlobales = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
     else if (k == "hz") {
       const double d = std::atof(v.c_str());
@@ -3417,6 +3457,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
     if (!pila->rastreoFino.empty())
       ::setenv("ODYSSEYVK_RASTREO_FINO", (pila->rastreoFino == "no" || pila->rastreoFino == "0") ? "0" : "1", 1);
+    if (!pila->atajosGlobales.empty())
+      ::setenv("ODYSSEYVK_ATAJOS", (pila->atajosGlobales == "no" || pila->atajosGlobales == "0") ? "0" : "1", 1);
     if (pila->pivote >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->pivote);
       ::setenv("ODYSSEYVK_PIVOTE", valor, 1);
@@ -4050,6 +4092,10 @@ static int cmdServe(int argc, char **argv) {
      la pantalla completa al navegador (no cuando uno elige 2D plano, entrega la pantalla con Tab o
      saca el visor con ESC: en esos casos el video sigue sonando y la pantalla completa es suya). */
   bool videoSeFue = false;
+  int reposoW = 0, reposoH = 0;   /* tamano logico del panel SIN sesion 3D (para saber si el 3D lo cambia) */
+  bool vueltaPendiente = false;   /* se dejo la ventana a pantalla completa al cerrar: quitarsela al volver el monitor */
+  std::string caidaUuid;          /* ventana de navegador a la que KWin saco de pantalla completa al empezar */
+  double caidaHora = -1e9;        /* y cuando: si repite pronto, se le repone como antes */
   std::string seFueUuid;          /* la ventana a la que hay que devolverle el estado */
   double seFueDesde = 0.0;        /* cuando cerro la sesion */
   double fullDesde = 0.0;         /* cuando le quitamos la pantalla completa por ultima vez */
@@ -4199,13 +4245,17 @@ static int cmdServe(int argc, char **argv) {
         /* Si la sesion se cerro porque el video se fue, esa ventana queda apuntada unos segundos:
            es la que hay que devolver a estado normal (abajo se explica por que). */
         if (videoSeFue && !hijoUuid.empty()) {
-          seFueUuid = hijoUuid;
-          seFueDesde = now;
-          fullDesde = 0.0;
-          fullQuitadas = 0;
-          fullAvisado = false;
+          if (seFueUuid != hijoUuid) {   /* si la vigilia ya empezo al volver el monitor, no se reinicia la cuenta */
+            seFueUuid = hijoUuid;
+            fullDesde = 0.0;
+            fullQuitadas = 0;
+            fullAvisado = false;
+          }
+          seFueDesde = now;              /* los 6 s cuentan desde que el visor ya no esta */
         }
         videoSeFue = false;
+        vueltaPendiente = false;
+        AtajosGlobales::desactivar();    /* por si el visor murio sin soltar los atajos globales */
         /* El video estuvo debajo de todo para que un click no tapara la trama: al terminar la sesion
            vuelve a su lugar, si no el usuario se queda con el video escondido detras de las ventanas. */
         {
@@ -4372,6 +4422,12 @@ static int cmdServe(int argc, char **argv) {
        Tampoco peleamos con el navegador: tres intentos separados 1,2 s dentro de los 6 segundos
        siguientes; si la vuelve a poner despues de eso, se avisa una sola vez y se lo deja a el.
        Se apaga con `devolver_fullscreen = no` en serve.conf. */
+    if (hijo <= 0) {
+      const std::string nombrePanel =
+          !cfg.pantalla.empty() ? cfg.pantalla : (hayTarjeta && ov ? ov->outputName() : std::string());
+      for (const WindowMonitor::Salida &sal : wm.outputs())
+        if (sal.name == nombrePanel && sal.w > 0 && sal.h > 0) { reposoW = sal.w; reposoH = sal.h; }
+    }
     if (cfg.devolverFull && !seFueUuid.empty()) {
       WindowInfo v{};
       const bool viva = wm.find(seFueUuid, v) && v.mapped;
@@ -4599,6 +4655,17 @@ static int cmdServe(int argc, char **argv) {
           sx = s.x; sy = s.y; sw = s.w; sh = s.h; salidaVista = true;
           break;
         }
+        if (vueltaPendiente && cerrandoSesion && salidaVista && sw == reposoW && sh == reposoH) {
+          /* el monitor ya esta como siempre: la pantalla completa que dejamos puesta al cerrar sobra.
+             No se espera a que el visor termine de morir (medio segundo mas de ventana a pantalla
+             completa a la vista). */
+          vueltaPendiente = false;
+          seFueUuid = hijoUuid;
+          seFueDesde = now;
+          fullDesde = 0.0;
+          fullQuitadas = 0;
+          fullAvisado = false;
+        }
         if (!wm.find(hijoUuid, video) || !video.mapped) motivo = "la ventana del video ya no esta";
         else if (video.minimized()) motivo = "la ventana del video esta minimizada";
         else {
@@ -4629,7 +4696,39 @@ static int cmdServe(int argc, char **argv) {
              nuestro cambio de modo, el tamano nuevo llega solo (medido: el flujo del navegador paso de
              2560x1440 a 3840x2160 a los siete segundos de la sesion). Mientras tanto la trama se
              estira: se ve algo menos nitido, pero no roto y no rompe el video. */
-          if (enCambioDeModo && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
+          /* Con un NAVEGADOR no se le repone la pantalla completa (v0.75). Cuando KWin se la quita
+             al cambiar el monitor, el navegador ya solto el video (volvio a su hueco en la pagina),
+             y si se la ponemos nosotros queda en SU pantalla completa, la de F11: la trama se teje
+             sobre la pagina, hay que volver a pulsar el boton del video y luego ESC ya no saca de
+             ahi (lo que conto Rodolfo el 25-nov: «al salir del video se quedaba la ventana en el
+             modo 3D»). Se cierra la sesion limpia, se avisa y al volver a poner el video a pantalla
+             completa arranca bien, porque al cerrar dejamos la ventana como KWin tiene que
+             recordarla (ver mas abajo). Si a los tres minutos vuelve a pasar con la misma ventana,
+             es que eso no basto: ahi si se repone, como antes, para no dejar al usuario sin 3D. */
+          static const char *kNavegadores[] = {"firefox", "zen", "chrom", "brave", "epiphany", "midori",
+                                               "edge", "vivaldi", "opera", "librewolf", "floorp"};
+          bool esNavegadorVideo = false;
+          for (const char *nav : kNavegadores)
+            if (strLower(video.appId).find(nav) != std::string::npos) esNavegadorVideo = true;
+          const bool yaPaso = caidaUuid == hijoUuid && now - caidaHora < 180.0;
+          if (enCambioDeModo && !cerrandoSesion && sinEstado && esNavegadorVideo && !yaPaso && reafirmadas == 0) {
+            caidaUuid = hijoUuid;
+            caidaHora = now;
+            motivo = "el escritorio saco al video de pantalla completa al cambiar el monitor";
+            videoSeFue = true;
+            paciencia = 0.0;
+            std::printf("[ventana] %s: con un navegador no se la reponemos (quedaria en la pantalla completa"
+                        " de F11, con la trama sobre la pagina). Cerramos y avisamos: al volver a poner el"
+                        " video a pantalla completa arranca bien\n", motivo);
+            std::fflush(stdout);
+            static Notifier avisoCaida;
+            static bool avisoCaidaAbierto = false;
+            if (!avisoCaidaAbierto) avisoCaidaAbierto = avisoCaida.open(nullptr);
+            if (avisoCaidaAbierto)
+              avisoCaida.send("odysseyvk-caida", "El 3D no llegó a empezar",
+                              "Al cambiar el monitor, el escritorio sacó el video de pantalla completa."
+                              " Vuelve a ponerlo a pantalla completa y ya entra.", {}, nullptr);
+          } else if (enCambioDeModo && !cerrandoSesion && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
             reacomodoDesde = now;
             ++reafirmadas;
             std::string e4;
@@ -4681,6 +4780,37 @@ static int cmdServe(int argc, char **argv) {
             std::printf("[ventana] %s (%s): cerramos la sesion 3D y devolvemos el panel a 2D\n",
                         motivo, hijoUuid.c_str());
             std::fflush(stdout);
+            /* KWin guarda, para cada configuracion de pantallas, como estaba cada ventana, y al
+               volver a esa configuracion se lo repone (v0.75). Medido el 25-nov: a las 11:25:32,
+               en el mismo segundo en que el visor devolvio el monitor a su escala, la ventana del
+               video paso sola de «maximizada» a «pantalla completa» (lo que tenia al empezar la
+               sesion); y las tres sesiones siguientes EMPEZARON con el video sacado de pantalla
+               completa (11:14:49, 11:17:28, 11:29:32), porque la ultima vez que el monitor estuvo
+               en la configuracion de 3D la ventana ya no lo estaba: el usuario acababa de salir.
+               Con el navegador eso es grave: al quitarle la pantalla completa suelta el video, y
+               si se la volvemos a poner nosotros queda en SU pantalla completa (la de F11), de la
+               que ESC ya no sale, con la trama encima.
+               Por eso, antes de devolver el monitor, la ventana vuelve a quedar a pantalla completa
+               un instante: asi es como KWin la recuerda para la configuracion de 3D y la proxima
+               sesion no arranca sacando al video. Al llegar a la configuracion de siempre se le
+               quita (la vigilia de abajo). Solo si el 3D cambio de verdad el tamano logico del
+               panel: con el escritorio ya a escala 1 no hay cambio de configuracion ni nada que
+               recordar. */
+            if (videoSeFue && cfg.devolverFull && reposoW > 0 && salidaVista && (sw != reposoW || sh != reposoH)) {
+              std::string e7;
+              if (wm.setState(hijoUuid, WindowInfo::Fullscreen, true, &e7)) {
+                wm.flush();
+                wm.waitAndDispatch(80);
+                vueltaPendiente = true;
+                std::printf("[ventana] antes de devolver el monitor la ventana del video queda a pantalla"
+                            " completa un instante (asi la recuerda el escritorio para la proxima sesion);"
+                            " se le quita al volver\n");
+              } else {
+                std::printf("[ventana] no se pudo dejar la ventana a pantalla completa antes de devolver el"
+                            " monitor: %s\n", e7.c_str());
+              }
+              std::fflush(stdout);
+            }
             ::kill(hijo, SIGTERM);
           }
         } else {
@@ -5052,6 +5182,7 @@ int main(int argc, char **argv) {
     if (sub == "hud") return cmdHudSelfTest(argc - 3, argv + 3);
     if (sub == "planos") return cmdPlanos(argc - 3, argv + 3);
     if (sub == "ajuste") return cmdAjuste(argc - 3, argv + 3);
+    if (sub == "atajos") return cmdAtajos(argc - 3, argv + 3);
     if (sub == "estado") return cmdEstado();
     if (sub == "modelos") return cmdModelos();
     if (sub == "preferencias") return cmdPreferencias(argc - 3, argv + 3);

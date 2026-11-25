@@ -3,6 +3,65 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Atajos del hub globales, la pausa se respeta y la salida del vídeo no deja la ventana atrapada (v0.75)
+
+- Rodolfo, tras ver vídeos en el navegador (Zen) y jugar a Stray: (1) «al salir del vídeo otra vez se
+  quedaba la ventana activa en el modo 3D»; (2) «cada que ponía pausa al vídeo se despausaba»; (3) «los
+  atajos de teclado del hub no funcionaban, ni en vídeo ni en el juego».
+
+### La pausa
+
+- MEDIDO en el registro: 19 veces entre las 10:47 y las 11:29 sale «el navegador había parado el vídeo
+  (Paused): se reanuda solo», entre 0 y 3 s después de cada «dice Paused». El visor reanudaba el
+  reproductor cada vez que lo veía parado, hasta seis veces por sesión; estaba pensado para el arranque,
+  cuando el cambio de modo deja el vídeo en pausa, pero valía toda la sesión.
+- MEDIDO: en la sesión del juego (Stray, 10:52:58) el visor cogió el reproductor del navegador, que
+  estaba en pausa detrás, y lo reanudó.
+- Cambia (`src/vkview.cpp`): la reanudación sola vale los primeros 8 s de la sesión y 8 s al volver de
+  `Tab`; y el reproductor solo se toca si la ventana capturada es de un navegador o de un reproductor
+  (si no, «no se toca ningún reproductor»), con la aplicación de la ventana como pista.
+
+### Los atajos
+
+- Causa (leída en el código): `Ctrl+Mayús+1…8` y `F1` solo se atendían en la retrollamada de teclas del
+  visor, o sea con el visor enfocado. En cuanto se hace clic en el vídeo, o con un juego delante, el
+  teclado es de esa ventana y al visor no le llega nada.
+- Cambia: `src/atajos.cpp` los registra como atajos globales de KDE (`org.kde.kglobalaccel`, que sirve
+  KWin) al abrir el visor y los deja inactivos al cerrar; el vigilante los desactiva también al morir el
+  visor. Cada uno va con tres formas, porque para KWin `Mayús+1` es el símbolo de la distribución («!» en
+  la española, «·» con el 3…): se le pregunta a xkbcommon. `atajos_globales = no` los quita.
+- Comprobado sin teclado (`ctl atajos probar`, que pide al escritorio que dispare cada acción): 9 de 9
+  llegan; con el visor abierto fuera del panel, `relieve+`, `prof-`, `3d`, `capa` y `pastilla+` hacen lo
+  mismo que la tecla; al cerrar, el componente queda inactivo (`isActive = false`).
+- No probado: con el teclado de verdad, en el panel, ni con un juego.
+
+### La salida del vídeo
+
+- MEDIDO (11:25:32): en el mismo segundo en que el visor devuelve el monitor a su escala, la ventana del
+  vídeo pasa sola de «maximizada» a «pantalla completa». Nadie nuestro lo pide: KWin guarda cómo estaba
+  cada ventana en cada configuración de pantallas y se lo repone al volver a ella. Y por lo mismo las tres
+  sesiones siguientes EMPEZARON con «el cambio de modo dejó al vídeo sin pantalla completa» (11:14:49,
+  11:17:28, 11:29:32): la última vez que el monitor estuvo en la configuración de 3D, la ventana ya no
+  estaba a pantalla completa, porque el usuario acababa de salir. Antes de las 10:48 no pasaba (cinco
+  sesiones sin reposición); no sé qué lo dispara.
+- DERIVADO (del código de Firefox, no medido): cuando el gestor de ventanas le quita la pantalla completa,
+  el navegador suelta el vídeo; y si se la volvemos a poner nosotros, queda en SU pantalla completa (la de
+  F11), con la trama tejida sobre la página. Hay que volver a pulsar el botón del vídeo, y luego ESC solo
+  saca del vídeo, no de F11: la ventana sigue a pantalla completa y la sesión 3D no se entera.
+- Cambia (`src/main.cpp`, el vigilante):
+  - al cerrar porque el vídeo salió de pantalla completa, antes de devolver el monitor la ventana vuelve
+    a quedar a pantalla completa un instante, para que KWin la recuerde así en la configuración de 3D; se
+    le quita en cuanto el monitor vuelve a su tamaño lógico (sin esperar a que muera el visor). Solo si
+    el 3D cambia de verdad ese tamaño (con el escritorio a escala 1 no hay nada que recordar);
+  - si aun así KWin saca al vídeo de pantalla completa al empezar y la ventana es de un navegador, no se
+    le repone: se cierra la sesión, sale un aviso («vuelve a ponerlo a pantalla completa») y el segundo
+    intento ya entra. Si en tres minutos se repite con la misma ventana, se repone como antes.
+- No probado: nada de esto en el panel. La primera sesión tras instalar puede caer en el segundo caso,
+  porque KWin todavía recuerda la ventana como la dejó la última sesión.
+- Contrapartida conocida: al salir del vídeo el navegador se ve a pantalla completa una fracción de
+  segundo antes de volver a su ventana. La solución de fondo es no cambiar la escala del monitor al
+  entrar en 3D (el visor a la escala del escritorio), que quita todo esto de raíz; no está hecha.
+
 ## Nota del 25-nov, sin versión nueva: el paso retocado con el rastreo fino (`serve.conf`)
 
 - Rodolfo, con la 0.74 y el patrón de los nueve cuadros: los de la izquierda del naranja se mueven bien

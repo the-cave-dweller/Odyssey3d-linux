@@ -17,6 +17,7 @@
 #include "session.h"
 #include "ajuste.h"
 #include "mpris.h"
+#include "atajos.h"
 #include "util.h"
 #ifdef HAVE_ORT
 #include "depth.h"
@@ -466,6 +467,39 @@ void borrarEntregada() {
   std::filesystem::remove(rutaEstadoOdyssey("entregada"), ec);
 }
 
+/* Los atajos del hub: Ctrl+Mayus+1 3D · 3/4 plano de apoyo · 5/6 relieve · 7/8 tamano de la pastilla
+   · F1 (y 2, por costumbre) ocultar o mostrar la pastilla. Llegan por dos caminos: la tecla, cuando
+   el visor tiene el teclado, y el atajo global del escritorio (v0.75, atajos.h), cuando lo tiene el
+   video o el juego. `key` es el codigo de GLFW de la tecla sin modificadores. */
+static void atajoHub(VkUi &ui, int key, const char *origen) {
+  const char *tag = nullptr;
+  switch (key) {
+    case GLFW_KEY_1: ui.hud.toggle3D(); tag = "3D/2D"; break;
+    case GLFW_KEY_F1:
+    case GLFW_KEY_2:
+      cambioCapa(ui, !ui.hud.overlayVisible(), key == GLFW_KEY_F1 ? "Ctrl+Shift+F1" : "Ctrl+Shift+2");
+      break;
+    case GLFW_KEY_3: ui.hud.nudgeDepth(-5); tag = "profundidad -"; break;
+    case GLFW_KEY_4: ui.hud.nudgeDepth(+5); tag = "profundidad +"; break;
+    case GLFW_KEY_5: ui.hud.nudgePopout(-5); tag = "relieve -"; break;
+    case GLFW_KEY_6: ui.hud.nudgePopout(+5); tag = "relieve +"; break;
+    /* 7 / 8: tamano de la pastilla. El panel cambia de escala al pasar al modo 3D (se queda en
+       1) y a cada quien le viene bien un tamano distinto, asi que se puede mover en marcha. */
+    case GLFW_KEY_7:
+    case GLFW_KEY_8: {
+      const float s = ui.hud.scale() + (key == GLFW_KEY_8 ? 0.25f : -0.25f);
+      const float fija = s < 0.5f ? 0.5f : (s > 3.0f ? 3.0f : s);
+      ui.hud.setScale(fija);
+      std::printf("[pastilla] tamano x%.2f (%s)\n", (double)fija, origen);
+      break;
+    }
+    default: return;
+  }
+  ui.inputChanged = true;
+  if (tag) printTuning(ui, tag);
+  std::fflush(stdout);
+}
+
 void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
@@ -505,30 +539,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      Ninguna de las dos choca con el escritorio: lo que tiene KWin asignado es Ctrl+F1 (cambiar de
      escritorio) y Meta+F1, no Ctrl+Shift+F1. F1 con Ctrl+Shift tampoco la pide el navegador. */
   if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT)) {
-    const char *tag = nullptr;
-    switch (key) {
-      case GLFW_KEY_1: ui->hud.toggle3D(); tag = "3D/2D"; break;
-      case GLFW_KEY_F1:
-      case GLFW_KEY_2:
-        cambioCapa(*ui, !ui->hud.overlayVisible(), key == GLFW_KEY_F1 ? "Ctrl+Shift+F1" : "Ctrl+Shift+2");
-        break;
-      case GLFW_KEY_3: ui->hud.nudgeDepth(-5); tag = "profundidad -"; break;
-      case GLFW_KEY_4: ui->hud.nudgeDepth(+5); tag = "profundidad +"; break;
-      case GLFW_KEY_5: ui->hud.nudgePopout(-5); tag = "relieve -"; break;
-      case GLFW_KEY_6: ui->hud.nudgePopout(+5); tag = "relieve +"; break;
-      /* 7 / 8: tamano de la pastilla. El panel cambia de escala al pasar al modo 3D (se queda en
-         1) y a cada quien le viene bien un tamano distinto, asi que se puede mover en marcha. */
-      case GLFW_KEY_7:
-      case GLFW_KEY_8: {
-        const float s = ui->hud.scale() + (key == GLFW_KEY_8 ? 0.25f : -0.25f);
-        const float fija = s < 0.5f ? 0.5f : (s > 3.0f ? 3.0f : s);
-        ui->hud.setScale(fija);
-        std::printf("[pastilla] tamano x%.2f\n", (double)fija);
-        break;
-      }
-      default: break;
-    }
-    if (tag) printTuning(*ui, tag);
+    atajoHub(*ui, key, "tecla");
     return;
   }
   /* P o la tecla de reproduccion: pausar y reanudar el video del navegador sin quitar la
@@ -930,6 +941,14 @@ bool leerPgm(const std::string &ruta, int &w, int &h, std::vector<uint8_t> &gr, 
    de ese aviso, asi que solo tiene sentido avisar para navegadores. */
 static bool pareceNavegador(const std::string &estado) {
   static const char *nombres[] = {"firefox", "zen", "chrom", "brave", "opera", "edge", "vivaldi", "thunderbird"};
+  for (const char *n : nombres)
+    if (estado.find(n) != std::string::npos) return true;
+  return false;
+}
+
+static bool pareceReproductor(const std::string &estado) {
+  static const char *nombres[] = {"mpv", "vlc", "haruna", "celluloid", "totem", "smplayer", "kodi", "clapper",
+                                  "dragon", "elisa", "mplayer", "stremio", "jellyfin", "plex"};
   for (const char *n : nombres)
     if (estado.find(n) != std::string::npos) return true;
   return false;
@@ -1563,6 +1582,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   bool avisoMemoriaHecho = false;
   Mpris media;                       /* pausar/reanudar el video del navegador sin quitar la capa */
   double nextMediaCheck = 0.0;
+  double reanudaHasta = -1.0;        /* hasta cuando se reanuda solo un video parado (al volver de Tab) */
   int reanudados = 0;
   if (kind == SourceKind::Capture) {
     if (!cap.start(opts.captureUuid, &err)) {
@@ -1594,10 +1614,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.fmtInfo = std::string(" · ") + (opts.topBottom ? "arriba y abajo" : "lado a lado");
     }
     std::string merr;
-    if (media.open(&merr))
-      std::printf("[video] mando el video por MPRIS (%s): P lo pausa y lo reanuda\n", media.playerName().c_str());
-    else
-      std::printf("[video] sin reproductor MPRIS (%s): el video habra que pausarlo a mano\n", merr.c_str());
+    /* El reproductor solo se toca si la ventana capturada es de un navegador o de un reproductor
+       (v0.75). Medido el 25-nov 10:52: con un juego delante (Stray) el visor cogio el reproductor
+       del navegador, que estaba en pausa detras, y lo puso a sonar. Y se le da la pista de la
+       aplicacion de la ventana, para que con dos navegadores abiertos gane el del video. */
+    bool vivaIni = true;
+    const std::string estIni = estadoVentana(opts.captureUuid, &vivaIni);
+    const std::string appIni = estIni.substr(0, estIni.find(" "));
+    const bool sinSaber = estIni.rfind("sin acceso", 0) == 0;   /* no se pudo preguntar: como antes */
+    if (!sinSaber && !pareceNavegador(estIni) && !pareceReproductor(estIni)) {
+      std::printf("[video] la ventana es de %s, que no es un navegador ni un reproductor: no se toca"
+                  " ningun reproductor (MPRIS)\n", appIni.empty() ? "otra aplicacion" : appIni.c_str());
+    } else {
+      if (!sinSaber) media.pista(appIni);
+      if (media.open(&merr))
+        std::printf("[video] mando el video por MPRIS (%s): P lo pausa y lo reanuda\n", media.playerName().c_str());
+      else
+        std::printf("[video] sin reproductor MPRIS (%s): el video habra que pausarlo a mano\n", merr.c_str());
+    }
     ui.media = &media;
     std::fflush(stdout);
   }
@@ -1622,6 +1656,25 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::fflush(stdout);
 
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
+  /* Atajos globales del hub (v0.75, atajos.h): para que Ctrl+Mayus+1..8 y F1 lleguen aunque el
+     teclado lo tenga el video o el juego. Solo en sesiones de verdad (no en el taller sin panel),
+     y se sueltan al salir. ODYSSEYVK_ATAJOS=0 (`atajos_globales = no`) no los registra. */
+  AtajosGlobales atajos;
+  {
+    const char *e = entornoOdyssey("ODYSSEYVK_ATAJOS");
+    const bool quiere = !(e && (e[0] == '0' || e[0] == 'n'));
+    const bool aLaFuerza = e && e[0] == '1';   /* en el taller sin panel, solo si se pide: para probarlos */
+    if (quiere && (!opts.noPanel || aLaFuerza)) {
+      std::string eA;
+      if (atajos.abrir(&eA))
+        std::printf("[atajos] globales del escritorio puestos (valen con el teclado en el video o en el juego): %s\n",
+                    atajos.resumen().c_str());
+      else
+        std::printf("[atajos] sin atajos globales (%s): Ctrl+Mayus+1..8 solo valen con el visor enfocado\n",
+                    eA.c_str());
+      std::fflush(stdout);
+    }
+  }
   double ultimoCuadroVisto = 0.0;   /* cuando volcamos por ultima vez la vista de la camara */
   /* modo de legado: ahi la camara manda. Si deja de ver la cara se suelta la trama (el video se ve
      tal cual, sin relieve) y medio segundo despues se apaga la lente; al recuperar la cara vuelven
@@ -1695,6 +1748,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
     }
     glfwPollEvents();
+    /* los atajos globales que haya pulsado el usuario desde el cuadro anterior */
+    if (atajos.abierto()) {
+      static const int kTeclaDe[] = {GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_5,
+                                     GLFW_KEY_6, GLFW_KEY_7, GLFW_KEY_8, GLFW_KEY_F1};
+      for (const std::string &cual : atajos.pulsados()) {
+        const std::vector<std::string> &todos = AtajosGlobales::nombres();
+        for (size_t i = 0; i < todos.size() && i < sizeof kTeclaDe / sizeof kTeclaDe[0]; i++)
+          if (todos[i] == cual) atajoHub(ui, kTeclaDe[i], "atajo global");
+      }
+    }
     /* ---- el canal de ajuste vivo: la ventana de ajustes (proceso aparte) y `ctl ajuste` ----
        Una vez cada decima de segundo se mira el fichero ~/.local/state/odysseyvk/ajuste y, solo si
        CAMBIO, se aplican los numeros pedidos. Es importante el "solo si cambio": los numeros escritos
@@ -2082,6 +2145,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           reintentos = 0;
           std::string e2;
           if (!cap.start(opts.captureUuid, &e2)) std::fprintf(stderr, "[captura] al volver: %s\n", e2.c_str());
+          reanudaHasta = glfwGetTime() + 8.0;   /* el cambio de modo de la vuelta tambien lo puede parar */
         }
 #endif
         if (panelApagado) {
@@ -2217,7 +2281,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          cuando la ventana queda tapada por la nuestra. Como el flujo sigue llegando, el visor
          no se da cuenta: miramos el estado MPRIS y lo reanudamos, salvo que el usuario lo
          pausara el con P. */
-      if (media.playerFound() && now >= nextMediaCheck) {
+      /* v0.75: solo en los primeros segundos de la sesion (y al volver de Tab), que es cuando el
+         cambio de modo lo deja parado. Antes valia toda la sesion: medido el 25-nov, cada pausa que
+         ponia Rodolfo en el navegador se deshacia a los 1-3 s («se reanuda solo», hasta seis veces). */
+      if (media.playerFound() && now >= nextMediaCheck && (now - t0 < 8.0 || now < reanudaHasta)) {
         nextMediaCheck = now + 3.0;
         std::string mst, merr;
         if (media.status(&mst, &merr) && mst != "Playing" && !ui.mediaPausaManual && reanudados < 6) {
