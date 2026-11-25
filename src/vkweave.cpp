@@ -717,39 +717,23 @@ void VkWeave::fillUbo(uint8_t *dst) {
                        oficial: virt.max_disparity 0,0033 / min_disparity -0,0026). Con
                        ODYSSEY3D_TOPE=0 se quita el tope. */
   float *t5 = (float *)(dst + kOffTun5);
-  static const float ditherPx = [] {
-    const char *e = std::getenv("ODYSSEY3D_DITHER");
-    return e ? (float)std::atof(e) : 0.25f;   /* 0,01 de dither_strength sobre los 25 px de recorrido */
-  }();
-  static const bool conTope = [] {
-    const char *e = std::getenv("ODYSSEY3D_TOPE");
-    return !e || e[0] != '0';
-  }();
+  /* Desde v0.51 estos dos numeros son miembros del visor, no constantes leidas una vez: la ventana
+     de desarrollo (`odyssey3d-ajustes`, o `ctl ajuste`) los mueve con la trama en marcha. */
   /* ODYSSEY3D_CANTO  ancho del puente del canto (0,004 de fabrica). Cuanto mas chico, menos se le
      quita desplazamiento a un canto donde el mapa cambia mucho: con el relleno de huecos el mapa
      pone mas filo, asi que este numero es el que manda cuanto relieve conserva el borde de un
      objeto. 0 en el shader significa "el de fabrica", por eso se manda siempre positivo. */
-  static const float cantoS = [] {
-    const char *e = std::getenv("ODYSSEY3D_CANTO");
-    const float v = e ? (float)std::atof(e) : 0.004f;
-    return v > 0.0f ? v : 0.004f;
-  }();
-  t5[0] = ditherPx;
-  t5[1] = conTope ? 12.67f : 0.0f;
-  t5[2] = conTope ? 9.98f : 0.0f;
-  t5[3] = cantoS;
+  t5[0] = temblorPx_;
+  t5[1] = conTope_ ? 12.67f : 0.0f;
+  t5[2] = conTope_ ? 9.98f : 0.0f;
+  t5[3] = cantoS_;
   /* ODYSSEY3D_FASE_TEMBLOR  temblor de la propia fase de la trama, en ciclos de la lente.
      Por defecto 0 (como venia). Con 0,1 la franja de 4,3 px de la trama baja unas cinco veces
      (medido en tools/mide_franjas.py sobre la propia formula del shader) y el 3D casi no se
      mueve, porque la fundamental pierde solo un 7%. Sirve para ver si las franjas finas que
      quedan con el releve apagado salen del corte brusco del filtro. */
   float *t6 = (float *)(dst + kOffTun6);
-  static const float faseTemblor = [] {
-    const char *e = std::getenv("ODYSSEY3D_FASE_TEMBLOR");
-    const float v = e ? (float)std::atof(e) : 0.0f;
-    return v > 0.0f && v < 1.0f ? v : 0.0f;
-  }();
-  t6[0] = faseTemblor;
+  t6[0] = faseTemblor_;
   /* ODYSSEY3D_RAMPA_X y ODYSSEY3D_RAMPA_Y  rampa limpia de fase en ciclos por pixel de panel,
      la misma para los tres canales. Mueve el paso de la rejilla escrita sin tocar nada mas.
      Medido sobre el cuadro escrito (tools/paso_rejilla.py, `weave --solid`, cuadro solido
@@ -761,22 +745,12 @@ void VkWeave::fillUbo(uint8_t *dst) {
      entera, y ahi van metidos los desfases entre canales rojo/verde/azul: afloja la inclinacion
      (ky -0,1589 en vez de -0,1598). La rampa deja la inclinacion exacta, asi que esa es la llave.
      Tope +/-0,05 ciclos por pixel: mas de ahi ya no es un ajuste fino, es otra rejilla. */
-  static const float rampaX = [] {
-    const char *e = std::getenv("ODYSSEY3D_RAMPA_X");
-    const float v = e ? (float)std::atof(e) : 0.0f;
-    return (v > -0.05f && v < 0.05f) ? v : 0.0f;
-  }();
-  static const float rampaY = [] {
-    const char *e = std::getenv("ODYSSEY3D_RAMPA_Y");
-    const float v = e ? (float)std::atof(e) : 0.0f;
-    return (v > -0.05f && v < 0.05f) ? v : 0.0f;
-  }();
   /* Las teclas `[` `]` (x) y `;` `'` (y) suman rampaDX/rampaDY encima de lo que dice la
      configuracion, para poder afinar el paso mirando la pantalla sin reiniciar nada. El total
      sigue topado a +/-0,05. */
   const auto topaRampa = [](float v) { return (v > -0.05f && v < 0.05f) ? v : (v >= 0.05f ? 0.05f : -0.05f); };
-  const float rrX = topaRampa(rampaX + tune_.rampaDX);
-  const float rrY = topaRampa(rampaY + tune_.rampaDY);
+  const float rrX = topaRampa(rampaBaseX_ + tune_.rampaDX);
+  const float rrY = topaRampa(rampaBaseY_ + tune_.rampaDY);
   t6[1] = rrX;
   t6[2] = rrY;
   /* Sonda de taller (ODYSSEY3D_PRUEBA): hueco libre del bloque, 0 = normal. El sombreador con

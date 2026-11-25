@@ -72,6 +72,11 @@ public:
      devuelve la memoria de la grafica) y despues se abre la nueva. Si la nueva no abre, se
      vuelve a abrir la vieja y el conversor sigue como estaba. */
   bool cambiar(const std::string &model, std::string *err);
+
+  /* Cierta si ONNX Runtime ya revinto una sesion dentro de este proceso (un .onnx que no abrio con
+     CUDA). Despues de eso no se puede volver a abrir ninguna red sin arriesgarse a un abort: hay que
+     cerrar el visor y abrirlo otra vez. */
+  bool quemada() const { return quemada_; }
   const std::string &modelPath() const { return ruta_; }   /* la .onnx que esta abierta ahora */
   bool ready() const { return ready_; }
   int size() const { return sz_; }                    /* el modelo trabaja a sz_ x sz_ */

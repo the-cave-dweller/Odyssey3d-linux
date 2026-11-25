@@ -15,6 +15,7 @@
 #include "trackfeed.h"
 #endif
 #include "session.h"
+#include "ajuste.h"
 #include "mpris.h"
 #include "util.h"
 #ifdef HAVE_ORT
@@ -39,6 +40,8 @@ struct wl_region;
 #include <cmath>
 #include <csignal>
 #include <cstdio>
+#include <ctime>
+#include <map>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -114,6 +117,12 @@ struct VkUi {
   int redPedida = 0;
   std::string rutaRed[3];    /* [1] y [2]: ruta .onnx de cada red; vacia = esa red no esta disponible */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
+  /* La ventana de ajustes (un proceso APARTE) y `odyssey3d ctl ajuste` escriben numeros y una ruta
+     .onnx en ~/.local/state/odyssey3d/ajuste; el bucle los lee de ahi. redRutaPedida es el cambio de
+     modelo encargado, que se atiende con la red parada, igual que las teclas 1 y 2, y se queda
+     encargado hasta que el conversor este encendido. */
+  std::string redRutaPedida;
+  bool avisoRedLejos = false;   /* dar cuenta una sola vez de "el conversor esta apagado" */
 };
 
 /* senal de cierre (systemctl stop, kill, o el propio serve): la sesion tiene que salir por la
@@ -129,6 +138,124 @@ void printTuning(const VkUi &ui, const char *what) {
               ui.tune.xtalkDyn, ui.tune.conv, ui.tune.rampaDX, ui.tune.rampaDY,
               ui.hud.state().depth, ui.hud.state().popout);
   std::fflush(stdout);
+}
+
+/* ---- el canal de ajuste vivo -------------------------------------------------------------
+   El visor se queda el teclado de la pantalla del panel, asi que los numeros solo se podian mover
+   con las teclas de esa ventana. La ventana de ajustes (otro proceso) y `odyssey3d ctl ajuste` los
+   mueven por ficheros: ver src/ajuste.h. Aqui esta la otra mitad: la foto de lo que el visor usa de
+   verdad (el fichero `estado`) y la cuenta de lo que va cambiando (`preferencias.log`). */
+static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
+static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
+
+static std::string nombreCorto(const std::string &ruta) {
+  const size_t b = ruta.find_last_of('/');
+  return b == std::string::npos ? ruta : ruta.substr(b + 1);
+}
+
+static std::string fmtNumero(double v) {
+  char b[40];
+  std::snprintf(b, sizeof b, "%.6f", v);
+  std::string s(b);
+  while (s.size() > 1 && s.back() == '0') s.pop_back();
+  if (!s.empty() && s.back() == '.') s.pop_back();
+  for (char &c : s)
+    if (c == '.') c = ',';
+  return s;
+}
+
+/* Los mismos nombres que usan serve.conf y la ventana de ajustes: una sola palabra para cada
+   numero, aqui y alli. `rampa_x` / `rampa_y` son la base que trae la configuracion, y
+   `rampa_x_teclas` / `rampa_y_teclas` lo que le sumaron las teclas [ ] y ; ' encima. */
+static std::map<std::string, double> ajusteActual(const VkUi &ui, const VkWeave &wv) {
+  const Hud::State &st = ui.hud.state();
+  const WeaveTuning &t = ui.tune;
+  std::map<std::string, double> v;
+  v["fase"] = t.align;
+  v["paso"] = t.pitch;
+  v["filtro"] = t.filterSlope;
+  v["crosstalk"] = t.xtalkDyn;
+  v["conv"] = t.conv;
+  v["rampa_x"] = wv.rampaBase(true);
+  v["rampa_y"] = wv.rampaBase(false);
+  v["rampa_x_teclas"] = t.rampaDX;
+  v["rampa_y_teclas"] = t.rampaDY;
+  v["fondo"] = t.ganFondo;
+  v["frente"] = t.ganFrente;
+  v["empuje_fondo"] = t.empFondo;
+  v["empuje_frente"] = t.empFrente;
+  v["planos"] = t.planos;
+  v["muestras"] = t.muestras;
+  v["temblor"] = wv.temblor();
+  v["canto"] = wv.canto();
+  v["fase_temblor"] = wv.faseTemblor();
+  v["relieve"] = st.popout;
+  v["apoyo"] = st.depth;
+  return v;
+}
+
+/* Aplica UN numero pedido desde fuera. Pasa por los mismos campos que las teclas, asi que no hay
+   dos versiones de la verdad, y deja linea en el registro y en preferencias.log. */
+static void aplicarAjuste(VkUi &ui, VkWeave &wv, const std::string &k, double v) {
+  WeaveTuning &t = ui.tune;
+  Hud::State &st = ui.hud.state();
+  std::string antes;
+  if (k == "fase") { antes = fmtNumero(t.align); t.align = (float)v; }
+  else if (k == "paso") { antes = fmtNumero(t.pitch); t.pitch = (float)v; }
+  else if (k == "filtro") { antes = fmtNumero(t.filterSlope); t.filterSlope = (float)v; }
+  else if (k == "crosstalk") { antes = fmtNumero(t.xtalkDyn); t.xtalkDyn = (float)v; }
+  else if (k == "conv") { antes = fmtNumero(t.conv); t.conv = (float)v; }
+  else if (k == "rampa_x") { antes = fmtNumero(wv.rampaBase(true)); wv.setRampaBase(true, (float)v); }
+  else if (k == "rampa_y") { antes = fmtNumero(wv.rampaBase(false)); wv.setRampaBase(false, (float)v); }
+  else if (k == "rampa_x_teclas") { antes = fmtNumero(t.rampaDX); t.rampaDX = (float)v; }
+  else if (k == "rampa_y_teclas") { antes = fmtNumero(t.rampaDY); t.rampaDY = (float)v; }
+  else if (k == "fondo") { antes = fmtNumero(t.ganFondo); t.ganFondo = (float)v; }
+  else if (k == "frente") { antes = fmtNumero(t.ganFrente); t.ganFrente = (float)v; }
+  else if (k == "empuje_fondo") { antes = fmtNumero(t.empFondo); t.empFondo = (float)v; }
+  else if (k == "empuje_frente") { antes = fmtNumero(t.empFrente); t.empFrente = (float)v; }
+  else if (k == "planos") { antes = fmtNumero(t.planos); t.planos = (float)v; }
+  else if (k == "muestras") { antes = fmtNumero(t.muestras); t.muestras = (int)(v + 0.5); }
+  else if (k == "temblor") { antes = fmtNumero(wv.temblor()); wv.setTemblor((float)v); }
+  else if (k == "canto") { antes = fmtNumero(wv.canto()); wv.setCanto((float)v); }
+  else if (k == "fase_temblor") { antes = fmtNumero(wv.faseTemblor()); wv.setFaseTemblor((float)v); }
+  else if (k == "relieve") { antes = fmtNumero(st.popout); st.popout = (int)(v + 0.5); }
+  else if (k == "apoyo") { antes = fmtNumero(st.depth); st.depth = (int)(v + 0.5); }
+  else {
+    std::fprintf(stderr, "[ajuste] no conocemos ese numero: %s\n", k.c_str());
+    std::fflush(stderr);
+    return;
+  }
+  const std::string ahora = fmtNumero(ajusteActual(ui, wv)[k]);
+  if (ahora == antes) return;   /* el fichero arrastra los demas numeros: no los volvemos a contar */
+  std::printf("[ajuste] %s %s -> %s (lo pidio la ventana de ajustes)\n", k.c_str(), antes.c_str(), ahora.c_str());
+  std::fflush(stdout);
+  ajuste::registrar(k, antes, ahora, nombreCorto(g_modeloEnUso), "la ventana de ajustes");
+  printTuning(ui, "ajuste");
+}
+
+/* Lo que el visor esta usando de verdad, escrito cada medio segundo: la ventana de ajustes lee de
+   ahi para no tener que adivinar. Son claves `clave = valor`, con coma decimal como en serve.conf. */
+static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
+  char hora[32] = {0};
+  const std::time_t qt = std::time(nullptr);
+  std::tm tm{};
+  localtime_r(&qt, &tm);
+  std::strftime(hora, sizeof hora, "%Y-%m-%d %H:%M:%S", &tm);
+  std::string s;
+  s += "# estado real del visor: lo escribe el propio visor, lo lee la ventana de ajustes\n";
+  s += std::string("hora = ") + hora + "\n";
+  s += std::string("visor = ") + ODYSSEY3D_VERSION + "\n";
+  s += std::string("trama = ") + (ui.tune.weave && ui.hud.state().weaveOn ? "activa" : "apagada") + "\n";
+#ifdef HAVE_ORT
+  s += std::string("conversor = ") + (wv.converterOn() ? "puesto" : "apagado") + "\n";
+  s += std::string("modelo = ") + (g_modeloEnUso.empty() ? "(ninguno)" : g_modeloEnUso) + "\n";
+  s += std::string("red = ") + std::to_string(ui.hud.state().red) + "\n";
+  s += std::string("tarjeta = ") + (g_tarjetaEnUso.empty() ? "-" : g_tarjetaEnUso) + "\n";
+#else
+  s += "conversor = no compilado\n";
+#endif
+  for (const auto &kv : ajusteActual(ui, wv)) s += kv.first + " = " + fmtNumero(kv.second) + "\n";
+  return s;
 }
 
 /* frase breve bajo la pastilla: qué se está viendo y en qué estado está el hardware */
@@ -1303,6 +1430,51 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
     }
     glfwPollEvents();
+    /* ---- el canal de ajuste vivo: la ventana de ajustes (proceso aparte) y `ctl ajuste` ----
+       Una vez cada decima de segundo se mira el fichero ~/.local/state/odyssey3d/ajuste y, solo si
+       CAMBIO, se aplican los numeros pedidos. Es importante el "solo si cambio": los numeros escritos
+       son una ORDEN, no la verdad, y si se volvieran a aplicar cuadro tras cuadro una tecla pulsada
+       despues se anularia sola. Ademas el visor deja en `estado` lo que esta usando de verdad (la
+       ventana pinta de ahi, no de lo que ella cree) y en `preferencias.log` cada numero que se movio,
+       venga de la tecla, de la pastilla o de la ventana, con la red que estaba puesta: asi se puede
+       repasar despues que se probo y con que. */
+    {
+      static ajuste::Lector lector;
+      static std::map<std::string, double> foto;   /* los numeros del vistazo anterior */
+      static bool fotoPuesta = false;
+      static double ultimoVistazo = 0.0, ultimoEstado = 0.0;
+      const double momento = glfwGetTime();
+      if (momento - ultimoVistazo >= 0.1) {
+        ultimoVistazo = momento;
+#ifdef HAVE_ORT
+        if (red.ready()) { g_modeloEnUso = red.modelPath(); g_tarjetaEnUso = red.device(); }
+#endif
+        const std::map<std::string, double> actual = ajusteActual(ui, wv);
+        if (fotoPuesta)
+          for (const auto &kv : actual) {
+            const auto antes = foto.find(kv.first);
+            if (antes == foto.end() || antes->second == kv.second) continue;
+            ajuste::registrar(kv.first, fmtNumero(antes->second), fmtNumero(kv.second),
+                              nombreCorto(g_modeloEnUso), "la tecla o la pastilla");
+          }
+        foto = actual;
+        fotoPuesta = true;
+        std::map<std::string, double> pedidos;
+        std::string modeloPedido;
+        if (lector.cambio(pedidos, modeloPedido)) {
+          for (const auto &kv : pedidos) aplicarAjuste(ui, wv, kv.first, kv.second);
+          if (!modeloPedido.empty()) {
+            ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
+            ui.avisoRedLejos = false;
+          }
+          foto = ajusteActual(ui, wv);         /* lo de fuera ya quedo contado al aplicarlo */
+        }
+        if (momento - ultimoEstado >= 0.5) {
+          ultimoEstado = momento;
+          ajuste::escribirEstado(textoEstado(ui, wv));
+        }
+      }
+    }
 #ifdef HAVE_ORT
     /* la tecla C: encender o apagar el conversor de video normal a 3D */
     if (ui.textoToggle) {
@@ -1396,6 +1568,73 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fflush(stderr);
           ui.extraInfo = "la otra red no abrio: seguimos con la anterior";
           ui.extraHasta = glfwGetTime() + 9.0;
+        }
+      }
+    }
+    /* La ventana de ajustes (o `ctl ajuste modelo=RUTA`) pide una red concreta por su ruta, no solo
+       el boton 1 o 2 de la pastilla: asi se pueden probar los .onnx que el visor no ofrece, que es
+       para lo que esta esa ventana. Se atiende aqui, con el hilo de la estimacion parado, igual que
+       las teclas 1 y 2. Si el conversor esta apagado el encargo SE QUEDA pendiente: al encenderlo con
+       C se abre la red pedida, en la misma vuelta del bucle. */
+    if (!ui.redRutaPedida.empty()) {
+      if (red.quemada()) {
+        /* Un .onnx que no abrio deja ONNX Runtime inservible en este proceso (v0.33). No insistimos:
+           el encargo sigue escrito en ~/.local/state/odyssey3d/ajuste y la proxima sesion arranca con
+           esa red, que es lo que se puede hacer sin arriesgarse a que el visor reviente sin devolver
+           el panel. */
+        std::printf("[conversor] en esta sesion ya no se puede abrir otra red (%s): la pedida %s queda "
+                    "apuntada en el fichero de ajuste y se abrira al reabrir el visor\n",
+                    ui.redRutaPedida.c_str(), nombreCorto(ui.redRutaPedida).c_str());
+        std::fflush(stdout);
+        ui.extraInfo = "cambiar de red toca cerrar y abrir el visor";
+        ui.extraHasta = glfwGetTime() + 9.0;
+        ui.redRutaPedida.clear();
+      } else if (!red.ready()) {
+        if (!ui.avisoRedLejos) {
+          ui.avisoRedLejos = true;
+          std::printf("[conversor] pediste la red %s pero el conversor esta apagado: queda apuntada, "
+                      "enciendelo con C\n", ui.redRutaPedida.c_str());
+          std::fflush(stdout);
+        }
+      } else if (hiloRed.ocupado) {
+        /* espera unos milisegundos a que termine el mapa que esta en el aire */
+      } else if (ui.redRutaPedida == red.modelPath()) {
+        ui.redRutaPedida.clear();                 /* ya estaba puesta: nada que hacer */
+      } else {
+        const std::string pedida = ui.redRutaPedida;
+        const std::string anterior = red.modelPath();
+        ui.redRutaPedida.clear();
+        if (!fileExists(pedida)) {
+          std::fprintf(stderr, "[conversor] la red pedida no existe: %s\n", pedida.c_str());
+          std::fflush(stderr);
+          ui.extraInfo = "esa red no existe: " + nombreCorto(pedida);
+          ui.extraHasta = glfwGetTime() + 9.0;
+        } else {
+          hiloRed.esperar();
+          std::string cerr2;
+          if (red.cambiar(pedida, &cerr2)) {
+            if (wv.converterSize() != red.size() && !wv.prepareConverter(red.size(), &cerr2))
+              std::fprintf(stderr, "[conversor] %s\n", cerr2.c_str());
+            ui.hud.state().red = slotRed(pedida);
+            grabarRedPreferida(slotRed(pedida));
+            g_modeloEnUso = red.modelPath();
+            g_tarjetaEnUso = red.device();
+            ajuste::registrar("modelo", nombreCorto(anterior), nombreCorto(pedida), nombreCorto(pedida),
+                              "la ventana de ajustes");
+            std::printf("[conversor] red cambiada a %s en %s · mapa %d x %d\n", pedida.c_str(),
+                        red.device().c_str(), red.size(), red.size());
+            std::fflush(stdout);
+            ui.extraInfo = "red " + nombreCorto(pedida) + " · " + red.device();
+            ui.extraHasta = glfwGetTime() + 6.0;
+          } else {
+            std::fprintf(stderr, "[conversor] la red %s no abrio: %s\n", pedida.c_str(), cerr2.c_str());
+            std::fflush(stderr);
+            ui.hud.state().red = slotRed(red.modelPath());
+            ajuste::registrar("modelo", nombreCorto(anterior), nombreCorto(pedida) + " (no abrio)",
+                              nombreCorto(red.modelPath()), "la ventana de ajustes");
+            ui.extraInfo = "la red pedida no abrio: seguimos con la anterior";
+            ui.extraHasta = glfwGetTime() + 9.0;
+          }
         }
       }
     }

@@ -326,6 +326,48 @@ las dos (sale de la trama), y de cuántos píxeles son las mesetas del mapa.
 
 
 
+## La ventana de ajustes: otro proceso que manda números al visor (desde v0.51)
+
+El visor se queda el teclado de la pantalla del panel, así que hasta v0.50 los números solo se movían
+con las teclas de esa ventana o tocando `serve.conf` y reiniciando el servicio. Ahora hay una ventana
+aparte, `odyssey3d-ajustes`, que **no comparte nada con el visor**: no enlaza sus librerías, no tiene
+socket, no puede tocar la trama. Habla con él por tres ficheros en `~/.local/state/odyssey3d`:
+
+| fichero | qué es |
+| --- | --- |
+| `ajuste` | la **orden**: números sueltos y una línea `modelo = /ruta.onnx`. El visor lo mira cada 0,1 s y solo actúa si el fichero cambió |
+| `estado` | la **verdad del visor**, reescrito cada 0,5 s: versión, trama y conversor puestos o no, qué red y en qué tarjeta, y los 20 números |
+| `preferencias.log` | la **cuenta de lo cambiado**: hora, valor antes → después, red puesta y quién lo pidió |
+
+```sh
+odyssey3d-ajustes                       # la ventana (la puedes tener en el otro monitor)
+odyssey3d ctl ajuste                    # ver el canal y el estado del visor
+odyssey3d ctl ajuste planos 0,6 fase 0,004     # mandar números a mano (también sirve fase=0,004)
+odyssey3d ctl ajuste modelo=/ruta/mde_large_fp32.onnx   # cambiar de red en vivo
+odyssey3d ctl ajuste limpiar            # quita la orden: vuelven a mandar las teclas
+odyssey3d ctl estado                    # lo que el visor está usando ahora
+odyssey3d ctl modelos                   # los .onnx que hay en el disco, con la puesta marcada
+odyssey3d ctl preferencias --ultimos 20 # lo que se fue cambiando
+```
+
+Números que admite el canal (con topes, los mismos que ajustan las teclas): `fase`, `paso`, `filtro`,
+`crosstalk`, `conv`, `rampa_x`, `rampa_y`, `rampa_x_teclas`, `rampa_y_teclas`, `fondo`, `frente`,
+`empuje_fondo`, `empuje_frente`, `planos`, `muestras`, `temblor`, `canto`, `fase_temblor`, `relieve`,
+`apoyo`. Las comas se aceptan (`planos 0,6`).
+
+Dos cosas que conviene saber:
+
+- **La orden es de una sola vez.** Cada escritura reemplaza el fichero entero, así que un número que
+  luego moviste con las teclas dentro del visor no vuelve atrás cuando mandes otro distinto. Para ver
+  qué tiene el visor de verdad, mira `ctl estado`, no el fichero `ajuste`.
+- **Cambiar de red puede tocar cerrar y abrir el visor.** Si un `.onnx` no abre, ONNX Runtime queda
+  inservible en ese proceso (es el arreglo de v0.33 para que el visor no reviente sin devolver el panel):
+  el encargo se queda escrito en `ajuste` y la red se abre sola en la siguiente sesión. El visor lo dice
+  por registro y en la pastilla.
+
+Sin Qt instalado la ventana simplemente no se compila (`cmake -DODYSSEY3D_UI=OFF` o sin `Qt6Widgets`) y
+todo lo demás —visor, hub, verbos `ctl`— queda igual.
+
 ## Cuál es el indicador de la esquina
 
 En modo 3D se dibuja un pequeño cuadrado arriba a la izquierda: **verde** = lente y scaler
@@ -615,6 +657,16 @@ tiempo, así que no hace falta afinar ningún umbral; subiendo o bajando la dure
 escribe igual que los demás números de la config, con coma o con punto (`planos = 0,3`), y en marcha es
 lo mismo con `g`/`v`.
 
+Y en v0.51, **`devolver_fullscreen`**: `si` (así) o `no`. Con `si`, cuando la sesión 3D se cerró
+**porque el vídeo se fue** —la ventana del vídeo salió de pantalla completa, o el navegador dijo
+«Parado» / «sin reproductor» por MPRIS— se le quita la pantalla completa a **esa ventana** del navegador,
+para que el escritorio no se quede ocupado por una página a pantalla completa sin nada que ver. Son
+`3` intentos separados 1,2 s dentro de los 12 segundos siguientes; si la página se la vuelve a poner
+después de eso (medido: Firefox se la repone un segundo después), se avisa una vez en el registro y se
+deja al navegador en paz. **Durante una sesión no se toca nada**, y tampoco cuando la sesión se cerró por
+elección (`2D plano`, `Tab`, `ESC`): ahí el vídeo sigue sonando y la pantalla completa es tuya. Vale para
+cualquier navegador que se ponga a pantalla completa (Firefox, Chrome, Zen, Brave, mpv).
+
 Y en v0.50, **`muestras`**: cuántas **muestras intermedias** se ponen entre las dos láminas (`0` … `3`; sin
 escribir la línea, o `0`, es la rampa continua de v0.48). Con `muestras = 1` el centro del cuadro tiene su
 propio nivel, clavado a mitad de camino entre el fondo y los primeros planos, con meseta: la porción del medio
@@ -751,6 +803,9 @@ odyssey3d doctor                      # qué ve, qué toca, qué falta
 odyssey3d weave [--solid] [--out f.png]  # escribe un PNG con la trama (no toca el panel)
 odyssey3d attrs                       # atributos de la trama (para depurar el modelo)
 odyssey3d ctl hud --w 1920 --h 1080   # prueba la interfaz sin abrir ventana ( atlas, raton )
+odyssey3d ctl estado                  # qué red, qué tarjeta y qué números está usando el visor vivo
+odyssey3d ctl ajuste fase 0,004       # mandarle un número al visor sin tocar el panel
+odyssey3d ctl preferencias            # la cuenta de lo que se fue cambiando (preferencias.log)
 odyssey3d ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
 odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
                                       # guarda chk-trama.png y chk-origen.png y sale

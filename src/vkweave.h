@@ -11,6 +11,7 @@
 #include "weave.h"
 
 #include <cstddef>
+#include <cstdlib>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -73,6 +74,24 @@ public:
   bool converterOn() const { return convOn_; }
   float converterGain() const { return convGain_; }
   float converterRef() const { return convRef_; }
+  /* El temblor del desplazamiento, el ancho del puente del canto y el temblor de la fase venian de
+     una variable de entorno leida UNA sola vez al arrancar (ODYSSEY3D_DITHER / _CANTO /
+     _FASE_TEMBLOR). Ahora son miembros, para que la ventana de desarrollo pueda moverlos con el
+     visor abierto; el valor de arranque es exactamente el de siempre. */
+  void setTemblor(float px) { temblorPx_ = px; }
+  void setCanto(float v) { cantoS_ = v > 0.0f ? v : 0.004f; }
+  void setFaseTemblor(float v) { faseTemblor_ = v > 0.0f && v < 1.0f ? v : 0.0f; }
+  float temblor() const { return temblorPx_; }
+  float canto() const { return cantoS_; }
+  float faseTemblor() const { return faseTemblor_; }
+  /* Lo mismo con el paso de la rejilla escrita: `rampa_x`/`rampa_y` de la configuracion eran una
+     variable de entorno leida una vez, y ahora se pueden mover con la ventana abierta. Se suman a
+     lo que llevan las teclas `[` `]` y `;` ' (tune_.rampaDX/rampaDY), y el total sigue topado. */
+  void setRampaBase(bool ejeX, float v) {
+    const float t = (v > -0.05f && v < 0.05f) ? v : (v >= 0.05f ? 0.05f : -0.05f);
+    if (ejeX) rampaBaseX_ = t; else rampaBaseY_ = t;
+  }
+  float rampaBase(bool ejeX) const { return ejeX ? rampaBaseX_ : rampaBaseY_; }
 
   /* un cuadro completo: adquirir, dibujar trama + interfaz, presentar */
   bool frame(std::string *err);
@@ -161,6 +180,37 @@ private:
   int depthW_ = 0, depthH_ = 0;
   float convGain_ = 0.0f, convRef_ = 0.5f;
   bool convOn_ = false;
+  /* Leidos del entorno una sola vez, al armar el objeto: son los valores de siempre y siguen
+     pudiendo forzarse con ODYSSEY3D_DITHER / _CANTO / _FASE_TEMBLOR. Ahora son miembros porque la
+     ventana de desarrollo los mueve con el visor abierto (ver setTemblor mas arriba). */
+  float temblorPx_ = [] {
+    const char *e = std::getenv("ODYSSEY3D_DITHER");
+    return e ? (float)std::atof(e) : 0.25f;   /* 0,01 de dither_strength sobre los 25 px de recorrido */
+  }();
+  float cantoS_ = [] {
+    const char *e = std::getenv("ODYSSEY3D_CANTO");
+    const float v = e ? (float)std::atof(e) : 0.004f;
+    return v > 0.0f ? v : 0.004f;
+  }();
+  float faseTemblor_ = [] {
+    const char *e = std::getenv("ODYSSEY3D_FASE_TEMBLOR");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return v > 0.0f && v < 1.0f ? v : 0.0f;
+  }();
+  float rampaBaseX_ = [] {
+    const char *e = std::getenv("ODYSSEY3D_RAMPA_X");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return (v > -0.05f && v < 0.05f) ? v : 0.0f;
+  }();
+  float rampaBaseY_ = [] {
+    const char *e = std::getenv("ODYSSEY3D_RAMPA_Y");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return (v > -0.05f && v < 0.05f) ? v : 0.0f;
+  }();
+  bool conTope_ = [] {
+    const char *e = std::getenv("ODYSSEY3D_TOPE");
+    return !e || e[0] != '0';
+  }();
   std::vector<HudVertex> hud_;
   bool atlasDirty_ = false;
 

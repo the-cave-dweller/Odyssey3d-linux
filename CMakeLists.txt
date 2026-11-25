@@ -140,6 +140,7 @@ find_package(OpenMP)
 add_executable(odyssey3d
   src/main.cpp
   src/util.cpp
+  src/ajuste.cpp
   src/sha3.c
   src/lens.cpp
   src/scaler.cpp
@@ -231,6 +232,27 @@ if(ORT_DIR AND ORT_LIB)
   message(STATUS "ONNX Runtime encontrado (${ORT_LIB}): el conversor 2D a 3D se compilara")
 else()
   message(STATUS "Sin ONNX Runtime: el conversor 2D a 3D no estara disponible (paquete onnxruntime-cuda)")
+endif()
+
+# --- la ventana de ajustes (opcional): Qt6, proceso APARTE --------------------------------
+# Sirve para elegir la red de profundidad (.onnx) y mover los numeros de la trama con la
+# superposicion en marcha: el visor se queda el teclado de la pantalla del panel y ahi no se
+# puede escribir nada. No enlaza con el visor: habla con el por los tres ficheros de
+# src/ajuste.h (~/.local/state/odyssey3d/ajuste, estado y preferencias.log), asi que no puede
+# romper la trama ni colgar el 3D. Sin Qt6 el proyecto se configura y compila igual.
+option(ODYSSEY3D_UI "Ventana de ajustes por Qt (proceso aparte, habla con el visor por ficheros)" ON)
+if(ODYSSEY3D_UI)
+  find_package(Qt6 COMPONENTS Widgets QUIET)
+  if(Qt6_FOUND)
+    add_executable(odyssey3d-ajustes src/ui_ajustes.cpp src/ajuste.cpp src/util.cpp)
+    target_include_directories(odyssey3d-ajustes PRIVATE src)
+    target_link_libraries(odyssey3d-ajustes PRIVATE Qt6::Widgets)
+    add_dependencies(odyssey3d-ajustes odyssey3d)   # primero el visor: la ventana sin visor no tiene nada que manejar
+    message(STATUS "Ventana de ajustes: con Qt6 ${Qt6_VERSION} -> odyssey3d-ajustes")
+    install(TARGETS odyssey3d-ajustes RUNTIME DESTINATION bin)   # la ventana tambien va a /usr/local/bin
+  else()
+    message(STATUS "Ventana de ajustes: sin Qt6, se omite (el visor y el hub se construyen igual)")
+  endif()
 endif()
 
 install(TARGETS odyssey3d RUNTIME DESTINATION bin)

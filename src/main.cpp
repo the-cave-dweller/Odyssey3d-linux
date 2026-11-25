@@ -8,6 +8,7 @@
 #include "track.h"
 #include "panel.h"
 #include "mpris.h"
+#include "ajuste.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
 #include "overlay.h"
@@ -1970,6 +1971,164 @@ static int cmdWeavePng(const ViewerOpts &o) {
 
 /* ---------------- prueba sin pantalla de la interfaz ---------------- */
 
+/* ---- el canal de ajuste vivo (ver src/ajuste.h) ---------------------------------------------
+   El visor se queda el teclado de la pantalla del panel, y la ventana de ajustes (otro proceso)
+   habla con el por ficheros. Estos verbos son la misma puerta desde la terminal: sirven para mandar
+   un numero o una red sin abrir la ventana, y para leer lo que el visor esta usando y lo que se fue
+   cambiando (que es lo que despues se puede repasar en voz alta). No hay socket: son tres ficheros
+   en ~/.local/state/odyssey3d, y el visor los mira una vez cada decima de segundo. */
+static void imprimirAjusteYEstado() {
+  const std::string ajuste = ajuste::textoAjuste();
+  if (ajuste.empty())
+    std::printf("no hay canal de ajuste escrito (%s)\n", ajuste::rutaAjuste().c_str());
+  else
+    std::fputs(ajuste.c_str(), stdout);
+  std::string est;
+  if (readSmallFile(ajuste::rutaEstado(), est)) {
+    std::printf("--- lo que el visor esta usando ahora mismo (%s) ---\n", ajuste::rutaEstado().c_str());
+    std::fputs(est.c_str(), stdout);
+  } else {
+    std::printf("--- el visor no ha escrito estado: no hay sesion 3D abierta ---\n");
+  }
+}
+
+static void imprimirModelos() {
+  std::vector<std::string> dirs;
+  const char *home = std::getenv("HOME");
+  const std::string h(home ? home : "/home");
+  dirs.push_back(h + "/.local/share/odyssey3d/modelos");
+  dirs.push_back("/run/media/rodolfo/067ABD417ABD2DF5/AnalisisOdyssey/modelos");
+  if (const char *e = std::getenv("ODYSSEY3D_MODELOS")) {
+    std::string d;
+    for (char c : std::string(e)) {
+      if (c == ':') { if (!d.empty()) dirs.push_back(d); d.clear(); } else d += c;
+    }
+    if (!d.empty()) dirs.push_back(d);
+  }
+  std::string puesto;
+  for (const auto &kv : ajuste::leerEstado())
+    if (kv.first == "modelo") puesto = kv.second;
+  std::printf("redes que hay en el disco (para `ctl ajuste modelo=RUTA` o la ventana de ajustes):\n");
+  int cont = 0;
+  for (const std::string &d : dirs) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(d, ec)) continue;
+    for (const auto &ent : std::filesystem::directory_iterator(d, ec)) {
+      if (ent.path().extension() != ".onnx") continue;
+      const std::string ruta = ent.path().string();
+      std::printf("  %s  %lld KB%s\n", ruta.c_str(), (long long)(ent.file_size(ec) / 1024),
+                  ruta == puesto ? "   <- puesta ahora mismo" : "");
+      cont++;
+    }
+  }
+  if (!cont) std::printf("  (ninguna: baja alguna con tools/descargar-modelo.sh)\n");
+}
+
+static int cmdEstado() {
+  std::string est;
+  if (!readSmallFile(ajuste::rutaEstado(), est)) {
+    std::printf("el visor no ha escrito estado: no hay sesion 3D abierta (%s)\n", ajuste::rutaEstado().c_str());
+    return 1;
+  }
+  std::fputs(est.c_str(), stdout);
+  return 0;
+}
+
+static int cmdModelos() {
+  imprimirModelos();
+  return 0;
+}
+
+static int cmdAjuste(int argc, char **argv) {
+  if (argc == 0) { imprimirAjusteYEstado(); return 0; }
+  const std::string uno = strLower(argv[0]);
+  if (uno == "limpiar" || uno == "borrar") {
+    std::string err;
+    if (!ajuste::escribir(std::map<std::string, double>(), std::string(), &err)) {
+      std::fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    std::printf("canal de ajuste vaciado: vuelven a mandar las teclas y la linea de mando\n");
+    return 0;
+  }
+  if (uno == "estado") {
+    std::string est;
+    if (!readSmallFile(ajuste::rutaEstado(), est)) {
+      std::printf("el visor no ha escrito estado: no hay sesion 3D abierta\n");
+      return 1;
+    }
+    std::fputs(est.c_str(), stdout);
+    return 0;
+  }
+  if (uno == "modelos" || uno == "redes") { imprimirModelos(); return 0; }
+  std::map<std::string, double> numeros;
+  std::string modelo;
+  std::string dicho;
+  for (int i = 0; i < argc;) {
+    /* se puede escribir de las dos maneras: `fase 0,004` o `fase=0,004` (como va en el fichero) */
+    std::string k = strLower(argv[i]), valor;
+    const size_t eq = k.find('=');
+    if (eq != std::string::npos) {
+      valor = std::string(argv[i]).substr(eq + 1);
+      k = k.substr(0, eq);
+      i++;
+    } else {
+      if (i + 1 >= argc) {
+        std::fprintf(stderr, "a %s le falta el valor\n", k.c_str());
+        return 2;
+      }
+      valor = argv[i + 1];
+      i += 2;
+    }
+    if (k == "modelo" || k == "red") {
+      modelo = valor;
+      dicho += "  modelo = " + modelo + "\n";
+      continue;
+    }
+    const ajuste::Clave *c = ajuste::buscarClave(k);
+    if (!c) {
+      std::fprintf(stderr, "no conozco ese numero: %s\n", k.c_str());
+      std::fprintf(stderr, "se pueden:");
+      for (const ajuste::Clave &cc : ajuste::claves()) std::fprintf(stderr, " %s", cc.nombre);
+      std::fprintf(stderr, " (y `modelo RUTA.onnx`, o todo con `=`: `fase=0,004`)\n");
+      return 2;
+    }
+    const double num = leerNumero(valor.c_str());
+    double v = num;
+    if (v < c->minimo) v = c->minimo;
+    if (v > c->maximo) v = c->maximo;
+    if (c->entero) v = std::floor(v + 0.5);
+    numeros[k] = v;
+    char b[32];
+    std::snprintf(b, sizeof b, c->entero ? "%.0f" : "%.5f", v);
+    if (v != num) dicho += "  (" + k + " topado a " + c->nombre + ": estaba fuera de " + std::to_string(c->minimo) + ".." + std::to_string(c->maximo) + "  )\n";
+    dicho += std::string("  ") + c->nombre + " = " + b + "   /* " + c->etiqueta + " */\n";
+  }
+  std::string err;
+  if (!ajuste::escribir(numeros, modelo, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("escrito en %s:\n%s", ajuste::rutaAjuste().c_str(), dicho.c_str());
+  std::printf("el visor lo lee en una decima de segundo si esta abierto; si esta cerrado, queda "
+              "esperando a la siguiente sesion\n");
+  return 0;
+}
+
+static int cmdPreferencias(int argc, char **argv) {
+  int n = 40;
+  for (int i = 0; i + 1 < argc; i++)
+    if (strLower(argv[i]) == "--ultimos") n = std::atoi(argv[++i]);
+  const std::vector<std::string> lineas = ajuste::historial(n);
+  if (lineas.empty()) {
+    std::printf("todavia no se apunto ningun cambio (%s)\n", ajuste::rutaHistorial().c_str());
+    return 0;
+  }
+  std::printf("ultimos %d cambios guardados en %s:\n", (int)lineas.size(), ajuste::rutaHistorial().c_str());
+  for (const std::string &l : lineas) std::printf("  %s\n", l.c_str());
+  return 0;
+}
+
 static int cmdHudSelfTest(int argc, char **argv) {
   ViewerOpts o{};
   if (!parseViewerFlags(argc, argv, o)) return 2;
@@ -2211,6 +2370,11 @@ struct ServeCfg {
      suele seguir a pantalla completa: por la ventana no se entera uno de que el video se fue, y
      la trama se queda tejida sobre el navegador. */
   int paradoSeg = 4;
+  /* Al irse el video, la ventana del navegador NO se queda a pantalla completa. Medido el 24/11 a
+     las 20:53: cerramos la sesion porque la ventana del video salio de pantalla completa y UN segundo
+     despues Firefox se la volvio a poner el solo (no eramos nosotros: nuestro aviso de "se la
+     devolvemos" solo habia salido al arrancar). Se apaga con `devolver_fullscreen = no`. */
+  bool devolverFull = true;
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2282,6 +2446,10 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "texto") {
       const std::string t = strLower(v);
       cfg.texto = (t == "si" || t == "no" || t == "auto") ? t : "auto";
+    }
+    else if (k == "devolver_fullscreen") {
+      const std::string s = strLower(v);
+      cfg.devolverFull = !(s == "no" || s == "off" || s == "0" || s == "apagado");
     }
     else if (k == "campo") {
       std::string numero = v;
@@ -3092,6 +3260,15 @@ static int cmdServe(int argc, char **argv) {
   bool otrosAvisado = false;      /* el aviso de por que las bajamos va una sola vez */
   double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
   int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
+  /* La ventana del video de una sesion que se cerro PORQUE EL VIDEO SE FUE. Ahi es justo quitarle
+     la pantalla completa al navegador (no cuando uno elige 2D plano, entrega la pantalla con Tab o
+     saca el visor con ESC: en esos casos el video sigue sonando y la pantalla completa es suya). */
+  bool videoSeFue = false;
+  std::string seFueUuid;          /* la ventana a la que hay que devolverle el estado */
+  double seFueDesde = 0.0;        /* cuando cerro la sesion */
+  double fullDesde = 0.0;         /* cuando le quitamos la pantalla completa por ultima vez */
+  int fullQuitadas = 0;           /* intentos hechos: no pelear con el navegador para siempre */
+  bool fullAvisado = false;       /* el aviso de "el navegador la vuelve a poner" va una sola vez */
 
   /* Bajar a las demas ventanas mientras dura la sesion. El video va con KeepBelow para que un click en
      su barra de tiempos no suba el navegador por encima de la trama, pero KeepBelow lo manda al fondo
@@ -3219,6 +3396,16 @@ static int cmdServe(int argc, char **argv) {
       if (r == hijo) {
         std::printf("[serve] sesion 3D terminada (%s)\n", hijoUuid.c_str());
         std::fflush(stdout);
+        /* Si la sesion se cerro porque el video se fue, esa ventana queda apuntada unos segundos:
+           es la que hay que devolver a estado normal (abajo se explica por que). */
+        if (videoSeFue && !hijoUuid.empty()) {
+          seFueUuid = hijoUuid;
+          seFueDesde = now;
+          fullDesde = 0.0;
+          fullQuitadas = 0;
+          fullAvisado = false;
+        }
+        videoSeFue = false;
         /* El video estuvo debajo de todo para que un click no tapara la trama: al terminar la sesion
            vuelve a su lugar, si no el usuario se queda con el video escondido detras de las ventanas. */
         {
@@ -3270,6 +3457,42 @@ static int cmdServe(int argc, char **argv) {
            Si la instantanea sigue ahi es que el visor se fue de golpe (SIGKILL, cuelgue) y el monitor
            se quedo en modo 3D con la lente encendida. */
         devolverPanelHuerfano("la sesion 3D se termino");
+      }
+    }
+
+    /* Ningun navegador se queda a pantalla completa sin video. Medido el 24/11 a las 20:53: la
+       sesion se cerro porque la ventana del video salio de pantalla completa y UN segundo despues
+       Firefox se la volvio a poner el solo, de modo que el escritorio quedaba ocupado por una
+       pagina a pantalla completa sin nada que ver. Solo lo hacemos con la ventana de una sesion que
+       cerro PORQUE EL VIDEO SE FUE: cuando uno elige 2D plano, entrega la pantalla con Tab o saca el
+       visor con ESC, el video sigue sonando y la pantalla completa es suya, ahi no se toca.
+       Tampoco peleamos con el navegador: tres intentos separados 1,2 s dentro de los 12 segundos
+       siguientes; si la vuelve a poner despues de eso, se avisa una sola vez y se lo deja a el.
+       Se apaga con `devolver_fullscreen = no` en serve.conf. */
+    if (cfg.devolverFull && !seFueUuid.empty()) {
+      WindowInfo v{};
+      const bool viva = wm.find(seFueUuid, v) && v.mapped;
+      const bool yaFuera = now - seFueDesde > 12.0 || fullQuitadas >= 3;
+      if (!viva || !v.fullscreen()) {
+        seFueUuid.clear();     /* la ventana cerro o ya esta en su tamano normal: no insistimos */
+      } else if (yaFuera) {
+        if (!fullAvisado) {
+          fullAvisado = true;
+          std::printf("[ventana] %s sigue a pantalla completa despues de %d intento(s) y no insistimos"
+                      " mas: la pagina se la sigue poniendo ella. En serve.conf puede apagarse con"
+                      " devolver_fullscreen = no.\n", seFueUuid.c_str(), fullQuitadas);
+          std::fflush(stdout);
+        }
+        seFueUuid.clear();
+      } else if (now - fullDesde >= 1.2) {
+        fullDesde = now;
+        ++fullQuitadas;
+        std::string e9;
+        const bool pudo = wm.setState(seFueUuid, WindowInfo::Fullscreen, false, &e9);
+        std::printf("[ventana] el video se fue y la ventana del navegador sigue a pantalla completa:"
+                    " se la quitamos (%d/3)%s\n", fullQuitadas,
+                    pudo ? "" : ("  El compositor dijo: " + e9).c_str());
+        std::fflush(stdout);
       }
     }
 
@@ -3506,6 +3729,7 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
           } else if (asentada && sinEstado) {
             motivo = "la ventana del video salio de pantalla completa";
+            videoSeFue = true;   /* el video se fue el solo: la ventana no tiene por que seguir a pantalla completa */
             /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y
                mientras la sesion sigue abierta el panel esta en modo 3D sobre un escritorio 2D. */
             paciencia = 1.2;
@@ -3597,6 +3821,7 @@ static int cmdServe(int argc, char **argv) {
             }
             if (now - paradoDesde >= (double)cfg.paradoSeg) {
               cerrandoSesion = true;
+              videoSeFue = true;   /* el navegador dice que no hay video: la pantalla completa le sobra */
               std::printf("[ventana] el navegador dice %s: el video se fue, cerramos la sesion 3D y"
                           " devolvemos el panel a 2D (%s)\n", estado.c_str(), hijoUuid.c_str());
               std::fflush(stdout);
@@ -3864,6 +4089,10 @@ int main(int argc, char **argv) {
     if (sub == "vkprobe") return cmdVkProbe(argc - 3, argv + 3);
     if (sub == "hud") return cmdHudSelfTest(argc - 3, argv + 3);
     if (sub == "planos") return cmdPlanos(argc - 3, argv + 3);
+    if (sub == "ajuste") return cmdAjuste(argc - 3, argv + 3);
+    if (sub == "estado") return cmdEstado();
+    if (sub == "modelos") return cmdModelos();
+    if (sub == "preferencias") return cmdPreferencias(argc - 3, argv + 3);
     if (sub == "mapa") return cmdMapa(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;

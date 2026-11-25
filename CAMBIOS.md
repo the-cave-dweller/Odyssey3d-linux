@@ -2,6 +2,74 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Medido: la meseta del medio fabrica cantos nuevos (`muestras` vuelve a 0)
+- Pedido de Rodolfo tras probar v0.50: «volvió el raspado».
+- Medido sin pantalla, con numpy sobre los dos mapas reales que escribe `odyssey3d planos --out`
+  (`/tmp/bancos/cuadro003-mapa.pgm` y `cuadro007-mapa.pgm`, dureza 0,6), contando los saltos bruscos
+  entre píxeles vecinos:
+  - **sin muestra intermedia**: saltos de más de 8 niveles = **0,00 %**, más de 20 = **0,00 %**, salto
+    máximo entre vecinos = **9** niveles.
+  - **con 1 muestra**: saltos de más de 8 niveles = **0,48 %**, más de 20 = **0,22 %**, salto máximo =
+    **37** niveles (unos 3 px de disparidad de golpe).
+- Conclusión: la meseta crea un canto nuevo donde antes había rampa, y ese canto es lo que él veía
+  raspar. Tenía razón, y se revierte el valor: `muestras = 0` en `serve.conf` con la medición escrita
+  en el comentario. El código de la muestra sigue ahí (`n` / `x`, `--muestras`, `ctl planos`) porque
+  sirve para comparar, pero **no es el valor por defecto en la máquina**.
+- Verificado byte a byte: con `muestras = 0` la salida del conversor es idéntica a la de v0.49 (`cmp`).
+
+## La ventana de ajustes es un proceso aparte, y manda el modelo al visor vivo (v0.51)
+- Pedido de Rodolfo: «quiero que la ventana de Qt sea **independiente por completo**, pero que los
+  cambios de **modelo** en ella se apliquen al overlay, que esto permita que analices la última
+  preferencia y ya contigo hablar sobre ella y corregir».
+- Canal nuevo (`src/ajuste.h` / `src/ajuste.cpp`): tres ficheros en `~/.local/state/odyssey3d`, sin
+  socket ni librería compartida, así que la ventana no puede romper la trama ni colgar el 3D:
+  - `ajuste` es la **orden**: números sueltos con las mismas palabras que `serve.conf` y una línea
+    `modelo = /ruta.onnx`. El visor lo mira cada 0,1 s y **solo lo aplica si el fichero cambió**
+    (compara mtime y tamaño). Es una orden de una sola vez: cada escritura reemplaza el fichero
+    entero, para que un número que luego se movió con las teclas no vuelva atrás al mandar otro.
+  - `estado` es la **verdad del visor**: lo escribe él cada 0,5 s (versión, si la trama y el conversor
+    están puestos, qué `.onnx` y en qué tarjeta, y los 20 números con su nombre). Si el visor no está,
+    el fichero deja de actualizarse y la ventana lo dice.
+  - `preferencias.log` es la **cuenta de lo que se cambió**, con hora, valor antes → valor después, red
+    puesta y quién lo pidió (`la tecla o la pastilla` / `la ventana de ajustes`). Rota a
+    `preferencias.log.anterior` al pasar 256 KB. Esto es lo que se puede repasar después en voz alta.
+- Ventana (`src/ui_ajustes.cpp`, target opcional `odyssey3d-ajustes`): solo Qt Widgets, sin enlazar
+  nada del visor. Lista los `.onnx` que hay en el disco (incluidos los de la copia de Windows),
+  deslizador + caja por número con sus topes, recetas para guardar/cargar y el historial a la vista.
+- El cambio de **modelo** en vivo ya existía para las teclas `1`/`2` (`DepthNet::cambiar`); ahora la
+  ventana encarga la ruta por el fichero y el visor la atiende con el hilo de la red parado, como con
+  las teclas. Si el conversor está apagado el encargo **queda pendiente** y se aplica al encenderlo con
+  `C`. Si la red no abre, ONNX Runtime queda inservible en ese proceso (`quemada_`, v0.33) y no se
+  insiste: el encargo se queda escrito y abre en la siguiente sesión.
+- Números que hasta hoy se leían **una sola vez** del entorno al arrancar ya son miembros del visor y
+  se pueden mover en vivo: `temblor` (0,25 px), `canto` (0,004), `fase_temblor` (0), `rampa_x`/`rampa_y`
+  de la configuración. Se rellenan en cada cuadro en `VkWeave::fillUbo`, así que surten al instante.
+- Prueba sin tocar el panel (`test --windowed --no-panel --no-lens --no-scaler --conver`): números
+  aplicados al cuadro siguiente, y dos cambios de red seguidos en la misma sesión
+  (`depth_anything_v2_small` → `mde_large_fp32` → `depth_anything_v2_small`, los dos con
+  `[conversor] red cambiada … mapa 518 x 518`) sin que el visor se cayera. Una red que no abre
+  (`mde_tiny.onnx`, dimensiones de entrada distintas) avisa y deja el relieve apagado, como siempre.
+- Nuevos verbos: `ctl ajuste [clave valor … | clave=valor | modelo=RUTA | limpiar]`, `ctl estado`,
+  `ctl modelos`, `ctl preferencias [--ultimos N]`.
+
+## El navegador ya no se queda a pantalla completa sin vídeo (v0.51)
+- Pedido de Rodolfo: «quiero que **cualquier vídeo en cualquier navegador** haga esto; el navegador no
+  tiene por qué quedarse en fullscreen sin vídeo».
+- Medido el 24/11 a las 20:53 con el registro del servicio: 20:53:16 «la ventana del video salió de
+  pantalla completa … cerramos la sesión 3D» y **un segundo después** Firefox se la volvió a poner él
+  solo. O sea: la pantalla completa la sostiene la página y el navegador se la reponía.
+- Qué se hace ahora (en el hub, `src/main.cpp`): solo cuando la sesión se cerró **porque el vídeo se
+  fue** (la ventana salió de pantalla completa, o el navegador dijo «Parado» o «sin reproductor» por
+  MPRIS) se le quita la pantalla completa a ESA ventana, con pausas de 1,2 s y **tope de 3 intentos**
+  dentro de los 12 segundos siguientes; si después de eso la página la vuelve a poner, se avisa una vez
+  y se deja en paz al navegador.
+- Regla dura que se respetó: **nunca** se toca la pantalla completa durante una sesión (probado antes:
+  el va-y-ven saca al vídeo de su propio fullscreen y corta el 3D) ni cuando la sesión se cerró por
+  elección — `2D plano`, `Tab` o `ESC`—, porque ahí el vídeo sigue sonando y la pantalla completa es
+  suya. Se apaga con `devolver_fullscreen = no` en `serve.conf`.
+- Pendiente: confirmar delante del panel con YouTube y con un vídeo local, en Firefox y en otro
+  navegador (hace falta otra sesión al panel, con su permiso).
+
 ## La muestra intermedia entre las dos láminas (v0.50)
 - Pedido de Rodolfo: «el modelo nativo ya no tiene bordes rotos como el de samsung, se ve mucho más fluido
   el tramo entre ambas capas, ahora quiero que, si es posible haya **una muestra intermedia** para que se vea
