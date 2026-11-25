@@ -60,6 +60,13 @@ struct WeaveTuning {
      se aplica en el mapa, en la CPU, y por eso no entra en el bloque de la trama ni gasta ancho de
      banda. Teclas: `g` sube la dureza y `v` la baja, de 0,1 en 0,1. */
   float planos = 0.0f;
+  /* Muestras intermedias entre las dos laminas (v0.50). Con las dos laminas y dureza baja el tramo
+     del centro es una rampa: se nota el degradado entre una capa y la otra. Cada muestra agrega un
+     nivel a mitad de camino con su propia meseta, asi el centro se ve solido y el paso entre niveles
+     sigue siendo suave (por eso el canto no se corta ni parpadea). 0 = la rampa continua de siempre,
+     1 = atras / medio / delante, hasta 3. Tampoco es un numero de la trama: vive en el mapa.
+     Teclas: `n` agrega una muestra y `m` la quita. */
+  int muestras = 0;
   bool capaTocada = false;   /* al menos una tecla de capas pulsada: manda lo del visor */
   bool weave = true;
   bool topBottom = false;      /* video arriba/abajo en lugar de lado a lado */

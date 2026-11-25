@@ -341,6 +341,27 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
       *tag = etiqueta;
       break;
     }
+    /* Muestras intermedias entre las dos laminas. Con la dureza baja el tramo del centro es una
+       rampa y se nota el degradado de una capa a la otra; `n` agrega un nivel intermedio con su
+       propia meseta (ahi el centro se ve solido) y `x` lo quita. El paso entre niveles sigue siendo
+       un suave angosto, asi que el canto no se corta ni parpadea. Sin dureza no hay laminas. */
+    case GLFW_KEY_N:
+    case GLFW_KEY_X: {
+      if (t.planos <= 0.0f) {
+        *tag = "sin dureza no hay laminas: subela con `g`";
+        break;
+      }
+      if (key == GLFW_KEY_N) t.muestras = t.muestras < 3 ? t.muestras + 1 : 3;
+      else t.muestras = t.muestras > 0 ? t.muestras - 1 : 0;
+      if (t.muestras == 0) {
+        *tag = "sin muestras: la rampa continua de siempre";
+        break;
+      }
+      std::snprintf(etiqueta, sizeof etiqueta, "%d muestra%s intermedia%s", t.muestras,
+                    t.muestras > 1 ? "s" : "", t.muestras > 1 ? "s" : "");
+      *tag = etiqueta;
+      break;
+    }
     case GLFW_KEY_8:
       t.conv = 0.0f;
       t.align = 0.0f;

@@ -190,6 +190,17 @@ odyssey3d capture3d --uuid '<id>' --conver --planos 0,6    # dos planos desde ar
 * En la costura hay una **franja suave** de ancho `min(0,33 · separación, 0,05)` con `smoothstep`, no un
   tajo seco; aun así, en un plano fijo mal segmentado el tajo se va a notar: por eso la dureza empieza en
   0 y se sube a gusto de cada uno.
+* **Una muestra intermedia entre las dos láminas (desde v0.50)**: con la franja suave anterior, la porción
+  del medio del cuadro sale como una **rampa continua** — cada punto con su desplazamiento — y eso se lee
+  como un degradado entre capa y capa. Con `--muestras 1` (o `muestras = 1` en `serve.conf`) el tramo del
+  centro recibe **su propio nivel**, clavado a mitad de camino exacta entre las dos láminas, con su meseta:
+  se ve sólido. El paso de un nivel al siguiente sigue siendo el `smoothstep` de siempre, solo que
+  comprimido en una franja angosta, así que el canto no se corta ni parpadea. `--muestras 2` o `3` añaden
+  dos o tres niveles (hasta cinco en total); `0` es la rampa continua de siempre. Medido sobre ocho cuadros
+  reales: el parpadeo de la costura **no sube** (0,21 % con y sin muestra) y el cuadro por delante se mueve
+  un punto. En marcha: **`n`** agrega una muestra y **`x`** la quita. Como la muestra se aplica antes de la
+  mezcla por dureza, con `planos = 0,3` solo se recorre un 30 % del camino a la meseta: para verla sólida
+  hay que subir la dureza con `g`.
 * Todo esto pasa **en el conversor, sobre el mapa de 518 × 518**, no en el sombreador: no toca los números
   de la trama ni los topes por ojo, que siguen mandando (+12,67 hacia afuera y 9,98 hacia adentro sobre
   3840). Un cuadro con las dos láminas puede verse más brusco en el relieve, nunca más caro.
@@ -234,6 +245,7 @@ panel y la red metan ruido.
 | `h` `l` | **empuje del fondo** (−12…+12 puntos de panel, de 0,5 en 0,5): desplaza toda la capa de detrás a un plano concreto, sea cual sea su profundidad (v0.46) |
 | `y` `o` | **empuje del frente**: lo mismo con la capa de delante; es la forma de traer al frente subtítulos, banderines y ventanas (positivo = sale más de la pantalla) |
 | `g` `v` | **dureza de los dos planos** (0…1, de 0,1 en 0,1): 0 deja el relieve continuo de siempre; al subirlo el cuadro se queda en dos láminas planas, una detrás y otra delante, como la Nintendo 3DS (v0.48). Solo tiene efecto con el conversor de vídeo normal puesto |
+| `n` `x` | **muestras intermedias** entre las dos láminas (v0.50): `n` agrega un nivel clavado a mitad de camino, con su meseta, para que el centro se vea sólido en vez de degradado (hasta 3); `x` lo quita y a 0 vuelve la rampa continua. Pide primero la dureza subida con `g` |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
@@ -602,6 +614,14 @@ son dos láminas perfectamente planas. El lugar del corte lo saca el propio cuad
 tiempo, así que no hace falta afinar ningún umbral; subiendo o bajando la dureza (`g`/`v`) basta. Se
 escribe igual que los demás números de la config, con coma o con punto (`planos = 0,3`), y en marcha es
 lo mismo con `g`/`v`.
+
+Y en v0.50, **`muestras`**: cuántas **muestras intermedias** se ponen entre las dos láminas (`0` … `3`; sin
+escribir la línea, o `0`, es la rampa continua de v0.48). Con `muestras = 1` el centro del cuadro tiene su
+propio nivel, clavado a mitad de camino entre el fondo y los primeros planos, con meseta: la porción del medio
+se ve **sólida** en vez de degradada, y el paso entre niveles sigue siendo suave para que el canto no se corte.
+Con `2` o `3` hay dos o tres niveles intermedios. En marcha se prueba al momento con `n` (agregar) y `x`
+(quitar), y se combina con la dureza: con `planos = 0,3` la meseta solo se insinúa, con `planos = 0,6` o más ya
+se planta. Se escribe con coma o con punto, como los demás números (`muestras = 1`).
 
 Y en v0.49, **`video_parado`**: cuántos segundos tiene que decir el navegador «Parado» para que se quite
 la trama (segundos; `4` sin escribir la línea, `0` lo apaga). Es la salida de un vídeo de YouTube: la

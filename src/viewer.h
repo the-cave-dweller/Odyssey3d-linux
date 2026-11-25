@@ -63,6 +63,9 @@ struct ViewerOpts {
      cuadro (fondo y primeros planos): la imagen queda en dos laminas con su propio desplazamiento,
      como en el Nintendo 3DS. 0 = el relieve continuo de siempre, y es lo que arranca. */
   double planos = 0.0;
+  /* Muestras intermedias entre las dos laminas (--muestras 1): el tramo del centro deja de ser una
+     rampa y recibe un nivel propio, que se ve solido en vez de degradado. 0 = como siempre. */
+  int muestras = 0;
   /* rastreo de cabeza con la camara infrarroja del monitor (necesita OpenCV) */
   bool track = false;
   std::string trackDevice, trackModel, trackCalibDir;

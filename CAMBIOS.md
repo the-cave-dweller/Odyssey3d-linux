@@ -2,6 +2,36 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La muestra intermedia entre las dos láminas (v0.50)
+- Pedido de Rodolfo: «el modelo nativo ya no tiene bordes rotos como el de samsung, se ve mucho más fluido
+  el tramo entre ambas capas, ahora quiero que, si es posible haya **una muestra intermedia** para que se vea
+  aún más fluido el borde, **no como degradado** sino que ya se vea **más sólida la porción del medio** de
+  ambas capas».
+- Dónde estaba el problema: con `aplicarPlanos` el mapa se llevaba a las dos láminas con un `smoothstep`
+  continuo entre `a` y `b`. Como la banda `[a,b]` abarca casi todo el intervalo, la porción del medio salía
+  como **una rampa**: cada punto con su propio desplazamiento, que es el degradado que él notaba.
+- Como se arregló (en el conversor, sobre el mapa de 518 × 518; el sombreador y sus topes por ojo no se
+  tocaron): `aplicarPlanos(…, muestras)`. Con `muestras >= 1` el suave continuo se cuantiza en escalones —
+  `nv = muestras + 2` niveles (máximo 5) — y cada nivel tiene su **meseta**: el cruce entre niveles se hace
+  con el mismo `smoothstep` de siempre pero comprimido en una franja angosta (`ancho = 0,18` de cada salto),
+  así que por debajo de `f = 0,32` y por encima de `f = 0,68` el valor ya está clavado en la meseta. Con
+  `muestras = 1` salen tres niveles exactos: fondo, **medio a mitad de camino exacta**, y frente. Con `0`
+  queda la rampa de antes, byte por byte.
+- Medido con el mapa rampa sintético (`/tmp/rampa-profundidad.pgm`, dureza 1): sin muestras el mapa de
+  salida tiene **51 valores distintos** (la rampa); con **1 muestra** tiene **9**, y los tres niveles son
+  84 · **125** · 166 — el del medio clavado justo a mitad de camino, y el 6,2 % del cuadro cayendo en él.
+- Medido en ocho cuadros reales del banco, dureza 0,3: el **parpadeo de la costura no sube** (0,21 % con y
+  sin muestras), y el porcentaje del cuadro por delante se mueve 1 punto (31,0 % → 30,0 %), así que la
+  geometría del relieve no se desplaza.
+- Regresión verificada: `--muestras 0` produce un mapa de salida **idéntico byte a byte** al del binario
+  instalado de v0.49 (`cmp` limpio).
+- Mandos nuevos: teclas **`n`** (agrega una muestra intermedia, hasta 3) y **`x`** (la quita, y a 0 vuelve a
+  la rampa continua); `--muestras 1` en la línea de mando y **`muestras = 1`** en `serve.conf`. El propio
+  `odyssey3d planos` acepta `--muestras N` y con `--hist` imprime el histograma **después** de aplastar, que
+  es donde se ven las mesetas.
+- Ojo con la dureza: la muestra intermedia se aplica **antes** de la mezcla por dureza, así que con `planos =
+  0,3` solo se nota un 30 % del camino hacia la meseta. Para verla sólida hay que subir la dureza con `g`.
+
 ## Tres arreglo del navegador: la franja duplicada, el sitio de las salidas y la trama que no se quita (v0.49)
 - Pedido de Rodolfo, tres cosas: (1) al pulsar **convertir** el vídeo «pasa a formar parte de un navegador
   en pantalla completa» y hay que dar click en sus controles para traerlo; (2) **al salir del vídeo no se

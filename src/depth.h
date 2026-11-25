@@ -46,7 +46,12 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
 
    `aplicarPlanos` acerca cada punto al valor de su lamina con la fuerza `dureza` (0 = no
    tocar nada, 1 = laminas planas). En el borde entre las dos no se corta de golpe: se
-   cruza en una franja suave, porque un corte duro se ve como un tajo y ademas parpadea. */
+   cruza en una franja suave, porque un corte duro se ve como un tajo y ademas parpadea.
+
+   Con `muestras` >= 1 el tramo del centro deja de ser una rampa y recibe sus propias
+   muestras intermedias (1 = fondo, medio, frente). Cada muestra tiene su meseta, que es lo
+   que se ve solido, y el paso entre muestras sigue siendo un suave angosto, que es lo que
+   mantiene el canto sin tajo y sin parpadeo. Con 0 es la rampa continua de siempre. */
 struct Planos {
   bool valido = false;
   float fondo = 0.0f;      /* valor del plano de atras (0 fondo .. 1 cerca de la pantalla) */
@@ -55,7 +60,7 @@ struct Planos {
 };
 
 Planos buscarPlanos(const float *mapa, int n);
-float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza);
+float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza, int muestras = 0);
 
 class DepthNet {
 public:
@@ -112,6 +117,10 @@ public:
     dureza_ = dureza > 0.0f ? (dureza > 1.0f ? 1.0f : dureza) : 0.0f;
   }
   float planosDureza() const { return dureza_; }
+  /* Muestras intermedias entre las dos laminas (0 = rampa continua, 1 = fondo/medio/frente).
+     No cambia donde estan las laminas: solo como se cruza el tramo del centro. */
+  void setMuestras(int n) { muestras_ = n >= 1 ? (n > 3 ? 3 : n) : 0; }
+  int muestras() const { return muestras_; }
   float planoAtras() const { return pFondo_; }    /* -1 = todavia no se han visto dos planos */
   float planoDelante() const { return pFrente_; }
   float planoFraccion() const { return fracFrente_; }   /* parte del cuadro en la lamina delantera */
@@ -140,6 +149,7 @@ private:
   bool limpieza_ = true;                /* filtro guiado + dilatar activados */
   bool quemada_ = false;                /* ONNX Runtime ya reviento aqui: no intentar otra sesion */
   float dureza_ = 0.0f;                 /* fuerza de la separacion en dos planos (0 = apagado) */
+  int muestras_ = 0;                    /* muestras intermedias entre las laminas (0 = rampa) */
   float pFondo_ = -1.0f, pFrente_ = -1.0f;   /* posiciones de las dos laminas, seguidas en el tiempo */
   float fracFrente_ = 0.0f;             /* parte del cuadro en la lamina delantera */
 };

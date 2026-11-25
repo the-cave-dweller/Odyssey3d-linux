@@ -260,13 +260,24 @@ Planos buscarPlanos(const float *mapa, int n) {
 /* Acercar cada punto al valor de su lamina con la fuerza `dureza` (0 = dejar el mapa tal cual,
    1 = laminas planas). Entre una y otra no se corta de golpe: se cruza en una franja suave,
    porque un tajo en el canto del recorte se ve y, encima, ese borde es el que parpadea cuando el
-   mapa de la red tiembla. Devuelve la parte del cuadro que cae en la lamina delantera. */
-float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza) {
+   mapa de la red tiembla. Devuelve la parte del cuadro que cae en la lamina delantera.
+
+   `muestras` >= 1 cambia solo el cruce: en lugar de una rampa continua entre las dos laminas hay
+   escalones, con una muestra intermedia por cada «muestras» pedido (1 = atras, medio, delante).
+   Cada muestra tiene su MESETA, que es lo que se ve solido en el centro de la imagen, y el paso de
+   una a otra se sigue haciendo con el suave de siempre pero en una franja angosta (`ancho`), que es
+   lo que mantiene el canto sin tajo y sin parpadeo cuando el mapa de la red respira. Con 0 queda
+   exactamente la rampa continua de antes. */
+float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza, int muestras) {
   if (!mapa || !p.valido || dureza <= 0.0f || p.frente <= p.fondo || n <= 0) return 0.0f;
   float margen = (p.frente - p.fondo) * 0.33f;
   if (margen > 0.05f) margen = 0.05f;
   const float a = p.fondo + margen, b = p.frente - margen;
   const float medio = 0.5f * (p.fondo + p.frente);
+  /* niveles = las dos laminas mas las muestras intermedias (3 con una muestra, 5 con tres) */
+  const int niveles = muestras >= 1 ? (muestras > 3 ? 5 : muestras + 2) : 0;
+  const float ancho = 0.18f;   /* medio ancho del cruce entre muestras, en unidades de salto */
+  const float escala = (float)(niveles - 1);
   int delante = 0;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) reduction(+:delante)
@@ -279,6 +290,17 @@ float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza) {
       t = (mapa[i] - a) / (b - a);
       t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
       t = t * t * (3.0f - 2.0f * t);       /* el suave de siempre, sin saltos en el borde */
+    }
+    if (niveles >= 3) {
+      /* del suave continuo al escalon: en que tramo estoy y cuanto llevo recorrido */
+      const float q = t * escala;
+      float j = std::floor(q);
+      if (j > escala - 1.0f) j = escala - 1.0f;   /* el ultimo nivel se alcanza con t = 1 */
+      const float f = q - j;
+      float s = (f - 0.5f) / ancho + 0.5f;
+      s = s < 0.0f ? 0.0f : (s > 1.0f ? 1.0f : s);
+      s = s * s * (3.0f - 2.0f * s);
+      t = (j + s) / escala;
     }
     if (t > 0.5f) delante++;
     const float lamina = p.fondo + (p.frente - p.fondo) * t;
@@ -771,6 +793,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
      asi que el sombreador y sus topes por ojo (+12,67 hacia fuera / -9,98 hacia dentro) no cambian. */
   if (dureza_ > 0.0f) {
     static char bufPl[96];
+    char bufMd[40];
     const Planos visto = buscarPlanos(salida.data(), sz_ * sz_);
     if (visto.valido) {
       if (pFondo_ < 0.0f || corte_) {
@@ -788,7 +811,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       seguidas.valido = true;
       seguidas.fondo = pFondo_;
       seguidas.frente = pFrente_;
-      fracFrente_ = aplicarPlanos(salida.data(), sz_ * sz_, seguidas, dureza_);
+      fracFrente_ = aplicarPlanos(salida.data(), sz_ * sz_, seguidas, dureza_, muestras_);
     } else {
       pFondo_ = -1.0f;
       pFrente_ = -1.0f;
@@ -796,12 +819,18 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     }
     static const bool medirPl = std::getenv("ODYSSEY3D_MEDIR") != nullptr;
     static long npl = 0;
-    if (medirPl && ++npl % 30 == 1)
-      std::printf("[planos] dureza %.2f · %s\n", dureza_,
+    if (medirPl && ++npl % 30 == 1) {
+      if (muestras_ >= 1)
+        std::snprintf(bufMd, sizeof bufMd, " · %d muestra%s intermedia%s", muestras_,
+                      muestras_ > 1 ? "s" : "", muestras_ > 1 ? "s" : "");
+      else
+        bufMd[0] = '\0';
+      std::printf("[planos] dureza %.2f%s · %s\n", dureza_, bufMd,
                   visto.valido ? (std::snprintf(bufPl, sizeof bufPl, "atras %.2f · delante %.2f · "
                                                                "%.1f%% del cuadro por delante",
                                                 pFondo_, pFrente_, 100.0f * fracFrente_), bufPl)
                                : "un solo plano claro (no se toca nada)");
+    }
   }
 
   const auto tPlano1 = std::chrono::steady_clock::now();

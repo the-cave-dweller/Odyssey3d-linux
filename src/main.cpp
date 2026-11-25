@@ -1434,6 +1434,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
     else if (a == "--filtro") { if (!need("filtro")) return false; o.filtro = atof(argv[++i]); }
     else if (a == "--planos") { if (!need("planos")) return false; o.planos = (float)leerNumero(argv[++i]); }
+    else if (a == "--muestras") { if (!need("muestras")) return false; o.muestras = (int)leerNumero(argv[++i]); }
     else if (a == "--mapa-fijo") { if (!need("mapa-fijo")) return false; o.mapaFijo = argv[++i]; }
     else if (a == "--apoyo") { if (!need("apoyo")) return false; o.apoyo = leerNumero(argv[++i]); }
     else if (a == "--relieve") { if (!need("relieve")) return false; o.relieve = (int)leerNumero(argv[++i]); }
@@ -1542,25 +1543,29 @@ static void escribirPgm(const std::string &ruta, int w, int h, const std::vector
    verdad en la pelicula. */
 static int cmdPlanos(int argc, char **argv) {
   float dureza = 0.6f;
+  int muestras = 0;
   bool hist = false;
   std::string out;
   std::vector<std::string> ficheros;
   for (int i = 0; i < argc; i++) {
     const std::string a = argv[i];
     if (a == "--dureza" && i + 1 < argc) dureza = (float)leerNumero(argv[++i]);
+    else if (a == "--muestras" && i + 1 < argc) muestras = (int)leerNumero(argv[++i]);
     else if (a == "--out" && i + 1 < argc) out = argv[++i];
     else if (a == "--hist") hist = true;
     else if (a == "--ayuda" || a == "-h") {
-      std::printf("odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--out lamina.pgm] [--hist]\n");
+      std::printf("odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--muestras 1] "
+                  "[--out lamina.pgm] [--hist]\n");
       return 0;
     } else ficheros.push_back(a);
   }
   if (ficheros.empty()) {
-    std::fprintf(stderr, "uso: odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] "
+    std::fprintf(stderr, "uso: odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--muestras 1] "
                          "[--out lamina.pgm] [--hist]\n");
     return 2;
   }
   float pAtras = -1.0f, pDelante = -1.0f;   /* posiciones seguidas, como en DepthNet */
+  char bufTmp[64];
   std::vector<uint8_t> bandaAnterior;
   int wAnt = 0, hAnt = 0;
   double sumaCambio = 0.0;
@@ -1622,11 +1627,33 @@ static int cmdPlanos(int argc, char **argv) {
     seguidas.valido = true;
     seguidas.fondo = pAtras;
     seguidas.frente = pDelante;
-    const float fraccion = aplicarPlanos(m.data(), n, seguidas, dureza);
+    const float fraccion = aplicarPlanos(m.data(), n, seguidas, dureza, muestras);
     std::printf("[planos] %d de %d · %d x %d · atras %.3f · delante %.3f · separacion %.3f · "
-                "%.1f%% del cuadro por delante · cambio de bando %.1f%%\n",
+                "%.1f%% del cuadro por delante · cambio de bando %.1f%%%s\n",
                 (int)f + 1, (int)ficheros.size(), w, h, pAtras, pDelante, pDelante - pAtras,
-                100.0f * fraccion, 100.0f * cambio);
+                100.0f * fraccion, 100.0f * cambio,
+                muestras >= 1 ? (char *)(std::snprintf(bufTmp, sizeof bufTmp, " · %d muestra%s "
+                                                       "intermedia%s", muestras, muestras > 1 ? "s" : "",
+                                        muestras > 1 ? "s" : ""), bufTmp) : "");
+    if (hist) {
+      /* el histograma DESPUES de aplastar: ahi se ven las mesetas (los picos del escalon) frente a
+         la rampa continua, que es lo que se pregunta con `--muestras` */
+      int hist2[32] = {0};
+      for (int i = 0; i < n; i++) {
+        const float v = m[(size_t)i] < 0.0f ? 0.0f : (m[(size_t)i] > 1.0f ? 1.0f : m[(size_t)i]);
+        hist2[(int)(v * 31.99f)]++;
+      }
+      int maximo = 1;
+      for (int i = 0; i < 32; i++) maximo = std::max(maximo, hist2[i]);
+      std::printf("  despues de aplastar (dureza %.2f, %d muestra%s):\n", dureza, muestras,
+                  muestras > 1 ? "s" : "");
+      for (int i = 0; i < 32; i++) {
+        if (hist2[i] == 0) continue;
+        const int barras = (int)(40.0 * (double)hist2[i] / (double)maximo);
+        std::printf("  %.2f-%.2f |%.*s %d\n", (float)i / 32.0f, (float)(i + 1) / 32.0f, barras,
+                    std::string((size_t)barras, '#').c_str(), hist2[i]);
+      }
+    }
     if (!out.empty() && f + 1 == ficheros.size()) {
       std::vector<uint8_t> gris((size_t)n);
       for (int i = 0; i < n; i++) {
@@ -2176,6 +2203,9 @@ struct ServeCfg {
      planos del cuadro. -1 = sin ajustar (apagado, el relieve continuo de siempre); de 0,0 a 1,0.
      Es lo mismo que sube y baja la tecla `g`, pero dejado por escrito. */
   double planos = -1.0;
+  /* Muestras intermedias entre las dos laminas. -1 = sin ajustar (0 = la rampa continua de siempre);
+     de 0 a 3. Con 1 el centro del cuadro tiene su propia meseta en vez de un degradado. */
+  int muestras = -1;
   /* Cuanto tiene que decir el navegador "Parado" para cerrar la sesion (segundos). 0 apaga el
      vigia por MPRIS. Hace falta porque al salir de un video de YouTube la pagina del navegador
      suele seguir a pantalla completa: por la ventana no se entera uno de que el video se fue, y
@@ -2278,7 +2308,8 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
              k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente" ||
-             k == "empuje_fondo" || k == "empuje_frente" || k == "planos" || k == "video_parado") {
+             k == "empuje_fondo" || k == "empuje_frente" || k == "planos" || k == "muestras" ||
+             k == "video_parado") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2299,6 +2330,8 @@ static void loadServeCfg(ServeCfg &cfg) {
       else if (k == "empuje_frente") cfg.empFrente = (d >= -15.0 && d <= 15.0) ? d : 999.0;
       /* dureza de los dos planos: 0 = apagado, 1 = laminas planas; fuera de ese rango no se usa */
       else if (k == "planos") cfg.planos = (d >= 0.0 && d <= 1.0) ? d : -1.0;
+      /* muestras intermedias: 0 = rampa continua, 1..3 niveles extra entre las laminas */
+      else if (k == "muestras") cfg.muestras = (d >= 0.0 && d <= 3.0) ? (int)d : -1;
       /* segundos que el navegador tiene que decir "Parado" para cerrar la sesion; 0 = apagado */
       else if (k == "video_parado") cfg.paradoSeg = (d >= 0.0 && d <= 600.0) ? (int)d : 4;
       else cfg.faseTemblor = d;
@@ -2378,6 +2411,14 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       args.push_back("--planos");
       args.push_back(valor);
       std::fprintf(stderr, "[serve] dos planos = %s (0 = relieve continuo, 1 = laminas planas)\n", valor);
+    }
+    if (pila->muestras >= 0) {
+      /* `muestras = 1` en serve.conf: el tramo del centro recibe su propia muestra, asi se ve
+         solido en lugar de degradado; 0 es la rampa continua de siempre */
+      const std::string vm = std::to_string(pila->muestras);
+      args.push_back("--muestras");
+      args.push_back(vm);
+      std::fprintf(stderr, "[serve] muestras intermedias = %s (0 = rampa continua)\n", vm.c_str());
     }
     if (!pila->calib.empty()) { args.push_back("--calib-dir"); args.push_back(pila->calib); }
     if (!pila->volcado.empty()) {
@@ -2944,13 +2985,14 @@ static int cmdServe(int argc, char **argv) {
   /* Que numeros de trama ha leido el servicio, para no tener que adivinar si la ultima linea de
      serve.conf entro o se la comio un tope de rango. -1 en los crudos significa sin ajustar. */
   {
-    char rx[32], ry[32], pl[32];
+    char rx[32], ry[32], pl[32], mu[32];
     if (cfg.rampaX < 900.0) std::snprintf(rx, sizeof rx, "%.6f", cfg.rampaX); else std::snprintf(rx, sizeof rx, "sin ajustar");
     if (cfg.rampaY < 900.0) std::snprintf(ry, sizeof ry, "%.6f", cfg.rampaY); else std::snprintf(ry, sizeof ry, "sin ajustar");
     if (cfg.planos >= 0.0) std::snprintf(pl, sizeof pl, "%.2f", cfg.planos); else std::snprintf(pl, sizeof pl, "apagado");
+    if (cfg.muestras >= 0) std::snprintf(mu, sizeof mu, "%d", cfg.muestras); else std::snprintf(mu, sizeof mu, "sin ajustar");
     std::printf("[serve] trama cruda (-1 = sin ajustar): fase %.4f paso %.4f filtro %.4f temblor %.4f"
-                " canto %.4f fase_temblor %.4f · rampa_x %s rampa_y %s · dos planos %s\n",
-                cfg.fase, cfg.paso, cfg.filtro, cfg.temblor, cfg.canto, cfg.faseTemblor, rx, ry, pl);
+                " canto %.4f fase_temblor %.4f · rampa_x %s rampa_y %s · dos planos %s muestras %s\n",
+                cfg.fase, cfg.paso, cfg.filtro, cfg.temblor, cfg.canto, cfg.faseTemblor, rx, ry, pl, mu);
     std::fflush(stdout);
   }
 

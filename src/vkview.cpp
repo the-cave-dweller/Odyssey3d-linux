@@ -804,6 +804,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.tune.pitch = (float)opts.pitch;
   ui.tune.filterSlope = (float)opts.filtro;
   ui.tune.planos = (float)opts.planos;   /* dos planos: 0 = el relieve continuo de siempre */
+  ui.tune.muestras = opts.muestras;      /* muestras intermedias entre las dos laminas */
   if (opts.apoyo >= 0.0) {
     /* el apoyo escrito en la linea de mando (--apoyo 0..1) se pone en la palanca del panel: ahi el
        propio bucle lo ve cambiado, avisa una vez y lo usa como plano de referencia */
@@ -1086,9 +1087,15 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   topesPorOjoActivos() ? "tope por ojo +12,67 / -9,98 px" : "sin tope por ojo");
       std::printf("[conversor] limpieza del mapa: filtro guiado (radio 8) + dilate 3 + corte de plano "
                   "(umbral 0,12, descanso 15 cuadros); apoyo por saliencia\n");
-      if (ui.tune.planos > 0.0f)
-        std::printf("[conversor] dos planos: dureza %.1f (las laminas las decide el propio cuadro; "
-                    "`g`/`v` las endurecen o las suavizan, 0 = relieve continuo)\n", ui.tune.planos);
+      if (ui.tune.planos > 0.0f) {
+        char bufLam[80];
+        std::printf("[conversor] dos planos: dureza %.1f%s (las laminas las decide el propio cuadro; "
+                    "`g`/`v` las endurecen o las suavizan, 0 = relieve continuo)\n", ui.tune.planos,
+                    ui.tune.muestras >= 1 ? (std::snprintf(bufLam, sizeof bufLam, " · %d muestra%s "
+                                                           "intermedia%s (`n`/`m`)", ui.tune.muestras,
+                                            ui.tune.muestras > 1 ? "s" : "", ui.tune.muestras > 1 ? "s" : ""),
+                                             bufLam) : "");
+      }
       ui.convInfo = true;
       ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
       ui.extraHasta = glfwGetTime() + 9.0;
@@ -1826,6 +1833,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              se pasa a la red justo antes de lanzar la pasada, que es el unico momento en que su hilo
              esta libre y no hay dos sitios tocando el mismo numero. */
           red.setPlanos(ui.tune.planos);
+          red.setMuestras(ui.tune.muestras);
           hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla);
         } else if (++convFallos == 1 || convFallos % 100 == 0) {
           std::fprintf(stderr, "[conversor] no se pudo leer el cuadro pequeno (%d): %s\n", (int)convFallos,
