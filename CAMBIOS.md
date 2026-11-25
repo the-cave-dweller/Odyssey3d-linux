@@ -63,7 +63,23 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sí funcionaban (entran por el entorno), y el volcado con `ODYSSEYVK_PRUEBA` tampoco lo vio por lo mismo.
 - Se copian las tres. Lo que viste en esa prueba (halos degradados a un lado u otro de cada bloque, que
   cambian con la profundidad y no con la cabeza) es fantasma en los cantos con disparidad, no el batido.
-- No probado aún: que con el arreglo `b` y las rampas se vean en el panel.
+- Comprobado después en el panel: `b` alterna el patrón y las rampas mueven la trama (Rodolfo ve bandas
+  grandes que se ensanchan con Mayús + `]`; el punto de más ancho quedó cerca de `rampa_x = +0,0094` sobre
+  cero, todavía sin confirmar si es el bueno o un falso por armónicos).
+
+### La mancha de la izquierda: el mapa A dado la vuelta
+
+- Con el patrón de un ojo se ve una mancha fija en el borde izquierdo, abajo. Es el mapa
+  `3DStackCorrection_A.png` de esta unidad: **311 puntos en 254-255 pegados a 0-1** (x 0..135, y 1552..1903
+  del panel), mientras el resto del mapa no pasa de **55**. El mapa A es una fase (255 = una vuelta), así que
+  son valores apenas negativos que se dieron la vuelta. El sampler interpola y en el borde entre 0 y 255 saca
+  ~0,5 vueltas: media fase al revés.
+- `loadCorrections` (`vkview.cpp`) lee como 0 todo lo que esté en ≥ 192 del mapa A y lo dice al arrancar
+  (`[correccion] mapa A: 311 puntos dados la vuelta (>= 192) leidos como 0`; luego `mapa A: 0..55`). El
+  fichero de calibración no se toca. Error que queda: 2/255 de vuelta como mucho. Solo en el visor Vulkan.
+- Visto de paso en el registro del rastreo, sin arreglar: la distancia medida salta entre 53 y 68 cm y la
+  distancia entre ojos entre 58 y 105 mm de un segundo a otro sin moverse; eso cambia el paso escrito y
+  puede hacer que las bandas respiren.
 
 ## La casilla «Previsualización»: la cámara en vivo y **quedándose** en la ventana de ajustes (v0.58)
 

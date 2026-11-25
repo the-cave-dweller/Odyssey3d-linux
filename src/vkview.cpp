@@ -843,6 +843,19 @@ bool loadCorrections(const ViewerOpts &opts, std::vector<uint8_t> &a, int &aw, i
   b.assign((size_t)bw * (size_t)bh, 0);
   for (size_t i = 0; i < a.size(); i++) a[i] = ra[i * 4];    /* canal rojo de un PNG en escala de grises */
   for (size_t i = 0; i < b.size(); i++) b[i] = rb[i * 4];
+  /* El mapa A es una FASE (255 = una vuelta entera de la lente, el shader hace fract), y en la
+     fabrica los valores apenas por debajo de 0 se dieron la vuelta: la unidad de Rodolfo trae 311
+     puntos en 254-255 pegados a 0-1 en el borde izquierdo (x 0..135, y 1552..1903 del panel). Con
+     lectura nearest eso daria igual (255 = 0 tras fract), pero el sampler interpola: en el borde
+     entre 0 y 255 sale ~0,5 vueltas, media fase al reves, y se ve una mancha de bordes raros con el
+     patron de un ojo (v0.59). Fuera de ahi el mapa no pasa de ~60, asi que todo lo que este en la
+     mitad de arriba (>= 192) es un negativo dado la vuelta y se lee como 0: el error es de 2/255
+     de vuelta como mucho. El mapa B no se toca: ese esta centrado en 127 y no es una fase. */
+  size_t vueltas = 0;
+  for (uint8_t &v : a)
+    if (v >= 192) { v = 0; vueltas++; }
+  if (vueltas)
+    std::printf("[correccion] mapa A: %zu puntos dados la vuelta (>= 192) leidos como 0\n", vueltas);
   return true;
 #else
   (void)opts; (void)a; (void)aw; (void)ah; (void)b; (void)bw; (void)bh;
