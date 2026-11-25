@@ -103,7 +103,21 @@ public:
      Sale del histograma del mapa ya limpio, ponderando el centro del cuadro y los cantos, para que
      el sujeto quede apoyado en la pantalla y el relieve se abra detras. Se mueve despacio para que
      el apoyo no baile, y de golpe en cada cambio de plano. */
-  float focusPlane() const { return focus_; }
+  /* El plano que se queda en la pantalla. Con `pivote` 0 es el del sujeto; con pivote p queda p de
+     camino entre el sujeto y el fondo, asi que el sujeto SALE de la pantalla y el fondo se hunde (v0.66). */
+  float focusPlane() const { return focus_ * (1.0f - pivote_); }
+  float sujeto() const { return focus_; }
+  /* Olvida lo que arrastra de un cuadro al siguiente (mapa anterior, escala, plano de apoyo, laminas):
+     el cuadro que venga se trata como el primero. Para medir fotos sueltas con `mapa --sueltas`: sin
+     esto, pasar varias fotos sin relacion en una sola llamada mezcla cada mapa con el anterior (el
+     suavizado en el tiempo) y las medidas salen contaminadas (paso el 25-nov, ver CAMBIOS v0.66). */
+  void olvidar() {
+    prev_.clear();
+    haveScale_ = false;
+    focoListo_ = false;
+    cuadrosDesdeCorte_ = 1000;
+    pFondo_ = pFrente_ = -1.0f;
+  }
   bool lastCut() const { return corte_; }    /* hubo cambio de plano en la ultima estimacion */
   long cutCount() const { return cortes_; }  /* cambios de plano contados desde el arranque */
 
@@ -147,6 +161,8 @@ private:
   float loS_ = 0.0f, hiS_ = 1.0f;        /* escala en el tiempo (min/max suavizados) */
   bool haveScale_ = false;
   float focus_ = 0.5f;                  /* plano de enfoque seguido automaticamente */
+  bool focoListo_ = false;              /* ya hubo una estimacion: el plano se sigue, no se salta */
+  float pivote_ = 0.0f;                 /* cuanto se retrasa el plano de la pantalla respecto al sujeto (0..0,9) */
   bool corte_ = false;                  /* cambio de plano en la ultima estimacion */
   long cortes_ = 0;
   int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */

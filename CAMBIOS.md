@@ -3,6 +3,51 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Más profundidad: pivote, relieve local, saliencia por defecto, y las mediciones corregidas (v0.66)
+
+- Pedido de Rodolfo: «¿alguna otra idea que pueda resaltar profundidades?» → relieve local primero, y
+  después paralaje de movimiento y realce del sujeto (v0.67 y v0.68). Dijo que con `saliencia = si` mejora
+  mucho.
+
+### Un fallo de medición mío, y su arreglo
+
+- Las tablas de v0.63 (redes) y v0.64 (aplastamiento) se midieron pasando 22 cuadros sin relación en una
+  sola llamada a `odysseyvk mapa`. `DepthNet` suaviza en el tiempo (0,6) y sigue el plano con un IIR, así
+  que cada mapa salía mezclado con el anterior (se veía el fantasma de la nave detrás de una cara) y el
+  apoyo no era el del cuadro. Las dos entradas llevan ya su corrección.
+- Arreglo: `DepthNet::olvidar()` y **`odysseyvk mapa --sueltas`** (cada foto por separado). Comprobado: una
+  foto medida detrás de otra da el mismo mapa que sola (diferencia máxima 0). Y la primera estimación de
+  una sesión **salta** al plano del sujeto en vez de salir de 0,5 (tardaba 1-2 s en llegar).
+
+### Lo que se añade
+
+- **Saliencia puesta por defecto** (elegida en el panel). `saliencia = no` la quita.
+- **Pivote** (`pivote` en `serve.conf`, `ODYSSEYVK_PIVOTE`; 0 por defecto en el código, **0,3 en el
+  `serve.conf` de Rodolfo**): con el plano de la pantalla en el sujeto casi todo queda detrás y solo se
+  usa el presupuesto hacia dentro (9,98 px por ojo); el de hacia fuera (12,67) queda vacío. Con pivote p,
+  `focusPlane()` = sujeto · (1 − p): el sujeto sale y el fondo se hunde. MEDIDO (22 cuadros sueltos,
+  saliencia, relieve 1,2, salida 50, con la compresión suave):
+
+  | pivote | recorrido usado p1..p99 (px por ojo, de 22,65) | el sujeto sale | imagen por delante |
+  |---|---|---|---|
+  | 0 | 16,7 | 0 px | 25 % |
+  | 0,2 | 18,6 | 3,5 px | 39 % |
+  | **0,3** | **19,5** | **5,2 px** | 44 % |
+  | 0,5 | 19,8 | 7,8 px | 52 % |
+
+  Los rótulos siguen yendo al plano de la pantalla (usan el mismo `focusPlane()`).
+- **Relieve local** (`relieve_local`, alfa 1,0 por defecto, radio 48): D' = D + alfa (D − base), con la
+  base del filtro guiado del mapa consigo mismo. MEDIDO: **rinde poco**: +11 % de pendiente dentro de los
+  objetos, +6 % de salto en los cantos, 2,5 % de puntos pegados a 0 o 1; con alfa 2: +19 % / +12 % / 4,5 %.
+  Las redes dan mapas lisos por dentro. Sin coste medible (~16 ms por estimación con y sin él).
+- Leído y descartado: el `dspr.shift` del Hub (`shift = 0,5`) corrige la violación de ventana (objetos que
+  salen y los corta el borde) y viene apagado (`window_violation.b = False`).
+
+### No probado
+
+- Todo esto en el panel (falta instalar): si `pivote = 0,3` gusta o cansa; con el sujeto saliendo, los
+  hombros de una persona cortados por el borde de abajo son justo la «violación de ventana».
+
 ## La saliencia del Hub para el plano de apoyo, y la ganancia de Windows (v0.65)
 
 - Pedido de Rodolfo tras la v0.64: «se ve mejor pero aún le falta profundidad comparado con Windows;
@@ -66,6 +111,12 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - La diferencia que sí había: Linux recortaba con `clamp` en los topes por ojo (+12,67 / −9,98 px). Con
   22 mapas reales de `mde_large` y el apoyo que calcula Linux para cada uno:
 
+> **CORREGIDO en v0.66.** La tabla de abajo usó un plano de apoyo mal medido (mismo fallo: varios cuadros
+> en una llamada, y el plano salía de 0,5 con IIR). Con el apoyo de cada cuadro (`mapa --sueltas`), 22
+> cuadros, clamp → suave: salida 30: 0,4 % → 0,0 %; **salida 50: 11,6 % → 0,3 %** (peor cuadro 46 %);
+> salida 100: 34,8 % → 3,4 %. Con saliencia y `relieve = 1,2` (lo que usa Rodolfo), salida 50:
+> **38,5 % → 7,3 %** (peor cuadro 82 %). La dirección se mantiene; las cifras de abajo no valen.
+
 | relieve | puntos aplastados contra el tope (a < 0,2 px), clamp → suave | niveles de profundidad distinguibles (> 0,05 px), clamp → suave |
 |---|---|---|
 | 30 | 7,6 % → 1,1 % | 226,6 → 209,0 |
@@ -108,6 +159,14 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 
 22 cuadros (2 de YouTube con persona hablando, 8 de una nave, 6 de un globo animado, 6 de un clip con un
 papel) y 3 ráfagas de 10 cuadros seguidos, por `odysseyvk mapa` (el binario de verdad, con su limpieza).
+
+> **CORREGIDO en v0.66.** Esta tabla se midió pasando todos los cuadros en UNA llamada a `odysseyvk mapa`:
+> el suavizado en el tiempo mezcló cada mapa con el del cuadro anterior (sin relación) y las tres ráfagas
+> entre sí. Repetida con `mapa --sueltas` y cada ráfaga aparte: ms 13,3 / 19,1 / 14,3 / 9,2 (large / fp32 /
+> HF / small); parecido a mde_large 1 · 1,000 · 0,854 · 0,947; bordes 0,251 · 0,250 · 0,292 · 0,245;
+> 3 planos 0,929 · 0,929 · 0,897 · 0,923; parpadeo media/máx 0,0057/0,0132 · 0,0057/0,0132 ·
+> **0,0088/0,0275** · 0,0040/0,0125. La conclusión no cambia, pero un dato sí: la de HuggingFace es la que
+> **más** parpadea, no la que menos.
 
 | red | ms/cuadro (mediana) | parecido a mde_large (Pearson / rangos) | bordes sobre bordes (azar 0,20) | canto p99 | 3 planos (eta) | parpadeo media / máx |
 |---|---|---|---|---|---|---|

@@ -580,6 +580,7 @@ bool DepthNet::cambiar(const std::string &model, std::string *err) {
   cierra();
   prev_.clear();
   haveScale_ = false;
+  focoListo_ = false;              /* y el plano de apoyo de la otra red tampoco vale */
   cuadrosDesdeCorte_ = 0;          /* la otra red no comparte el suavizado anterior */
   std::string e;
   if (init(nueva, &e, gpu)) {
@@ -820,6 +821,44 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     salida = limpio;
   }
 
+  /* Relieve local (v0.66), contra el «efecto carton»: las redes dan mapas suaves y una cara o un animal
+     salen como un recorte plano a cierta distancia. Se separa el mapa en una BASE (la forma gruesa de
+     cada objeto) y el DETALLE (lo que varia dentro del objeto), y se le suma una parte del detalle:
+     D' = D + alfa (D - base). La base sale del filtro guiado del mapa CONSIGO MISMO (radio 48,
+     epsilon 0,002): los escalones grandes del mapa (mas de ~0,05, los cantos entre objetos) se quedan
+     en la base, asi que no se inflan; con un desenfoque normal se haria un foso alrededor de cada
+     objeto. Es la tecnica de «depth unsharp masking» (Luft, Colditz y Deussen, 2006) con el filtro que
+     respeta cantos. ODYSSEYVK_RELIEVE_LOCAL (o `relieve_local` en serve.conf) cambia alfa; 0 lo apaga.
+     MEDIDO (22 cuadros sueltos, alfa 1, radio 48): la pendiente dentro de los objetos sube un 11 %, el
+     salto en los cantos un 6 % y un 2,5 % de puntos se pega a 0 o 1. Es poco: estas redes dan mapas
+     lisos por dentro y no se puede realzar un relieve que no traen. Con alfa 2: 19 % / 12 % / 4,5 %. */
+  static const float kRelieveLocal = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_RELIEVE_LOCAL");
+    std::string s = e ? e : "";
+    for (char &c : s)
+      if (c == ',') c = '.';
+    const float v = s.empty() ? 1.0f : (float)std::atof(s.c_str());
+    return (v >= 0.0f && v <= 3.0f) ? v : 1.0f;
+  }();
+  /* radio y epsilon de la base, para el taller (ODYSSEYVK_RELIEVE_LOCAL_RADIO / _EPS) */
+  static const int kRlRadio = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_RELIEVE_LOCAL_RADIO");
+    const int v = e ? std::atoi(e) : 48;
+    return (v >= 2 && v <= 128) ? v : 48;
+  }();
+  static const float kRlEps = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_RELIEVE_LOCAL_EPS");
+    const float v = e ? (float)std::atof(e) : 0.002f;
+    return (v > 0.0f && v < 1.0f) ? v : 0.002f;
+  }();
+  if (kRelieveLocal > 0.0f) {
+    filtroGuiado(salida.data(), salida.data(), limpio.data(), sz_, kRlRadio, kRlEps, trabajo.data());
+    for (size_t i = 0; i < plane; i++) {
+      const float v = salida[i] + kRelieveLocal * (salida[i] - limpio[i]);
+      salida[i] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    }
+  }
+
   const auto tPlano0 = std::chrono::steady_clock::now();
   /* plano de apoyo: el pico del histograma ponderado (mas peso en el centro y en los cantos, que es
      donde suele estar el sujeto). Con el apoyo ahi el sujeto se queda en el plano de la pantalla y
@@ -828,14 +867,12 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   {
     float hist[32] = {0.0f};
     float total = 0.0f;
-    /* ODYSSEYVK_SALIENCIA=1 (o `saliencia = si` en serve.conf) usa la saliencia del Hub; sin ella, el
-       peso de siempre (bordes y un escalon al centro). APAGADA por defecto: con la saliencia el plano
-       cero cae en el sujeto (la cara se queda en la pantalla y todo lo demas va hacia dentro), y en la
-       config de Windows (`camera.virt.auto = False`) get_cam_param copia el foco de `dflt.*` en vez de
-       calcularlo: no esta probado que el Hub mueva el plano cero con esta saliencia. A/B en el panel. */
+    /* La saliencia del Hub elige el sujeto. PUESTA por defecto desde v0.66: Rodolfo comparo en el
+       panel `saliencia = no` contra `si` (25-nov) y se quedo con `si`. ODYSSEYVK_SALIENCIA=0 (o
+       `saliencia = no` en serve.conf) vuelve al peso de antes (bordes y un escalon al centro). */
     static const bool kSaliencia = [] {
       const char *e = entornoOdyssey("ODYSSEYVK_SALIENCIA");
-      return e && (e[0] == '1' || e[0] == 's');
+      return !e || !(e[0] == '0' || e[0] == 'n');
     }();
     if (kSaliencia) {
       /* rejilla de cada 8 puntos del mapa (64 x 64): el nivel 3 de la piramide ya mide 65, asi que mas
@@ -910,8 +947,25 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       const float v = s.empty() ? 0.06f : (float)std::atof(s.c_str());
       return (v > 0.0f && v <= 1.0f) ? v : 0.06f;
     }();
-    if (corte_ || std::fabs(nuevo - focus_) >= 0.01f)
-      focus_ += (nuevo - focus_) * (corte_ ? 1.0f : kFocoIir);
+    /* la primera estimacion salta directa al plano (v0.66): antes salia de 0,5 y tardaba uno o dos
+       segundos en llegar, y en una foto suelta el apoyo que se informaba no era el de la foto */
+    /* Pivote (v0.66): con el plano de la pantalla EN el sujeto, casi todo queda detras y solo se usa
+       el presupuesto de la lente hacia dentro (9,98 px por ojo); el de hacia fuera (12,67 px) queda
+       vacio. Con pivote p el plano se retrasa p de camino hacia el fondo: el sujeto sale y el fondo se
+       hunde, y se usan los dos lados. ODYSSEYVK_PIVOTE / `pivote` en serve.conf; 0 = como antes. */
+    static const float kPivote = [] {
+      const char *e = entornoOdyssey("ODYSSEYVK_PIVOTE");
+      std::string s = e ? e : "";
+      for (char &c : s)
+        if (c == ',') c = '.';
+      const float v = s.empty() ? 0.0f : (float)std::atof(s.c_str());
+      return (v >= 0.0f && v <= 0.9f) ? v : 0.0f;
+    }();
+    pivote_ = kPivote;
+    const bool salto = corte_ || !focoListo_;
+    focoListo_ = true;
+    if (salto || std::fabs(nuevo - focus_) >= 0.01f)
+      focus_ += (nuevo - focus_) * (salto ? 1.0f : kFocoIir);
   }
 
   /* Los dos planos. Con dureza 0 (lo de siempre, y lo que arranca el programa) este bloque no se

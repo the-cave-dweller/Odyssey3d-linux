@@ -1,5 +1,7 @@
 # medir_redes.py — compara los mapas de varias redes de profundidad (v0.63).
-# Uso: correr `odysseyvk mapa CUADROS... --modelo RED.onnx` para cada red dentro de
+# OJO: los cuadros sueltos van con `mapa --sueltas` y cada rafaga en SU llamada; si no, el suavizado en
+# el tiempo mezcla cuadros sin relacion y las medidas salen contaminadas (paso en v0.63, corregido en v0.66).
+# Uso: correr `odysseyvk mapa CUADROS... --sueltas --modelo RED.onnx` para cada red dentro de
 #   CARPETA/res/<red>/cuadros y CARPETA/res/<red>/rafagas (los -mapa.pgm que deja), con los cuadros
 #   originales en CARPETA/cuadros, y despues:  python3 tools/medir_redes.py CARPETA
 # Medidas: parecido con mde_large (la red de Windows), bordes del mapa sobre bordes de la imagen,

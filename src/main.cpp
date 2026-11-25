@@ -1963,13 +1963,17 @@ bool pngLoadRGBA(const std::string &path, int &w, int &h, std::vector<uint8_t> &
 static int cmdMapa(int argc, char **argv) {
   std::string modelo;
   int gpu = 0;
+  bool sueltas = false;   /* cada foto por separado: sin arrastrar nada de la anterior */
   std::vector<std::string> ficheros;
   for (int i = 0; i < argc; i++) {
     const std::string a = argv[i];
     if ((a == "--modelo" || a == "--model") && i + 1 < argc) modelo = argv[++i];
     else if (a == "--red" && i + 1 < argc) gpu = std::max(0, std::atoi(argv[++i]));
+    else if (a == "--sueltas") sueltas = true;
     else if (a == "--ayuda" || a == "-h") {
-      std::printf("odysseyvk mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
+      std::printf("odysseyvk mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0] [--sueltas]\n"
+                  "  sin --sueltas las fotos se tratan como cuadros SEGUIDOS de un video (el mapa se suaviza\n"
+                  "  en el tiempo); con --sueltas cada una se mide por separado\n");
       return 0;
     } else ficheros.push_back(a);
   }
@@ -2012,6 +2016,7 @@ static int cmdMapa(int argc, char **argv) {
       }
     }
     std::vector<uint8_t> m;
+    if (sueltas) net.olvidar();
     if (!net.estimate(rgba.data(), w, h, m, &err)) {
       std::fprintf(stderr, "%s: %s\n", ruta.c_str(), err.c_str());
       return 1;
@@ -2863,6 +2868,8 @@ struct ServeCfg {
      consigue con Ctrl+Shift+5 porque en 0 de "3D Salida" quedan 4 px de separacion entre ojos. */
   double relieve = -1.0;    /* escala de la ganancia del releve; 0 = sin releve ninguno */
   std::string saliencia;    /* si / no: elegir el plano de apoyo con la saliencia del Hub (v0.65) */
+  double pivote = -1.0;     /* 0..0,9: cuanto se retrasa el plano de la pantalla respecto al sujeto (v0.66) */
+  double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
   double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
@@ -2997,6 +3004,14 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
+    else if (k == "pivote" || k == "relieve_local") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      if (k == "pivote") cfg.pivote = (d >= 0.0 && d <= 0.9) ? d : -1.0;
+      else cfg.relieveLocal = (d >= 0.0 && d <= 3.0) ? d : -1.0;
+    }
     else if (k == "foco_iir") {
       std::string numero = v;
       for (char &c : numero)
@@ -3240,6 +3255,14 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     }
     if (!pila->saliencia.empty())
       ::setenv("ODYSSEYVK_SALIENCIA", (pila->saliencia == "si" || pila->saliencia == "1") ? "1" : "0", 1);
+    if (pila->pivote >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->pivote);
+      ::setenv("ODYSSEYVK_PIVOTE", valor, 1);
+    }
+    if (pila->relieveLocal >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->relieveLocal);
+      ::setenv("ODYSSEYVK_RELIEVE_LOCAL", valor, 1);
+    }
     if (pila->focoIir > 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->focoIir);
       ::setenv("ODYSSEYVK_FOCO_IIR", valor, 1);
