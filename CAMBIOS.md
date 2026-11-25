@@ -3,6 +3,47 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El paralaje deja de mecerse con la cabeza quieta, y la sincronización adaptativa se queda como esté (v0.72)
+
+- Rodolfo, con la 0.71: «el framerate y el HDR sirvieron, pero el movimiento de lado a lado también
+  [volvió]; ¿será por el cambio de velocidad? No lo veía cuando estaba a 120». Y quiere dejar encendida la
+  sincronización adaptativa: ¿tiene que adaptarse ese lado a lado a las subidas y bajadas de cuadros?
+- MEDIDO en el registro: esa sesión (08:53:38) **no corrió a 165**: `# hz = 165` sigue comentado, el panel
+  fue al modo 20 (3840x2160 a 119,88) y el visor dio 119,8. Lo único distinto de la sesión sin vaivén
+  (08:44, v0.70) es `hdr_en_3d` (HDR encendido) … y que la cabeza medida se movió más: mediana de 0,31 cm
+  entre muestras de un segundo contra 0,11. El rastreo no fue peor (error 1,39 px contra 1,13–2,25).
+- MEDIDO: la sincronización adaptativa **nunca se apagó**. `Panel::apply` mandaba `vrr.never` y
+  `vrr.disable`, que kscreen-doctor no conoce (la palabra es `vrrpolicy`, vista con `strings`); todas las
+  sesiones 3D, también las buenas, corrieron con `Vrr: Always`. No es la causa de nada.
+- HIPÓTESIS (por descarte, sin probar en el panel): lo único que convierte algo en movimiento lateral es
+  el **paralaje** (v0.67), y respondía a la deriva de milímetros de la cabeza quieta. DERIVADO (la misma
+  cuenta del visor, con una deriva de 0,25 cm a ~0,7 Hz más 0,05 cm de ruido): lo más cercano se mecía
+  ±0,42 px y recorría **3,2 px por segundo**, diez veces más que los vaivenes del mapa a 6 por segundo
+  (0,34 px/s).
+
+### Lo que cambia
+
+- **Zona muerta suave en el paralaje** (`src/vkview.cpp`): el desplazamiento d de la cabeza se multiplica
+  por d² / (d² + 0,6² cm) (0,3 cm → 20 %, 3 cm → 96 %), y el paso bajo sube de 60 a 120 ms.
+  DERIVADO: quieto, ±0,42 → **±0,12 px** y 3,2 → **0,58 px por segundo**; moviendo 3,25 cm en 0,3 s el
+  pico pasa de 6,0 a 5,6 px y llega a los 0,42 s en vez de 0,33.
+- **Sincronización adaptativa**: el visor ya no intenta apagarla (era lo que pasaba de hecho); el aviso
+  «apágala» se cambia por una línea que dice cómo está. `vrr_en_3d = no` en `serve.conf`
+  (`ODYSSEYVK_VRR_3D=0`) la apaga durante la sesión con la orden que sí existe (`vrrpolicy.never`), y el
+  restaurado usa `vrrpolicy.always` / `.automatic`.
+- Respuesta a la duda: nada del visor cuenta cuadros para moverse. El paralaje, el filtro del rastreo, el
+  plano de apoyo y la escala van por tiempo real, y los mapas tienen su tope por segundo: con la
+  frecuencia subiendo y bajando se comportan igual.
+
+### No probado
+
+- En el panel: si el vaivén se va. Si sigue, descartar por este orden en `serve.conf`, sin reinstalar:
+  `paralaje = 0`, luego `hdr_en_3d = no`.
+- `vrr_en_3d = no` (nadie lo ha pedido; la orden nueva no se ha ejecutado nunca).
+- `hz = 165` sigue sin probar. Ojo: 165 no es múltiplo de 24, 25, 30 ni 60, así que un video se repartiría
+  en refrescos desiguales (2-3-3…) y eso sí daría un vaivén de verdad en los travelings; 120 reparte parejo
+  el de 24, 30 y 60.
+
 ## HDR en 3D como opción, frecuencia configurable y cuánto margen tiene el dibujo (v0.71)
 
 - Rodolfo, con la 0.70: «mucho mejor, y HDR sí ayudó» (probó `kscreen-doctor output.DP-4.hdr.enable` en

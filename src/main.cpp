@@ -2880,6 +2880,7 @@ struct ServeCfg {
   double detalle = -1.0;    /* fuerza del realce de detalle en el sujeto, 0..3; -1 = la de fabrica (0,4) (v0.68) */
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
   std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
+  std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
@@ -3017,6 +3018,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
+    else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
     else if (k == "hz") {
       const double d = std::atof(v.c_str());
       cfg.hz = (d >= 50.0 && d <= 250.0) ? d : -1.0;
@@ -3286,6 +3288,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_SALIENCIA", (pila->saliencia == "si" || pila->saliencia == "1") ? "1" : "0", 1);
     if (!pila->hdrEn3d.empty())
       ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
+    if (!pila->vrrEn3d.empty())
+      ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
     if (pila->pivote >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->pivote);
       ::setenv("ODYSSEYVK_PIVOTE", valor, 1);

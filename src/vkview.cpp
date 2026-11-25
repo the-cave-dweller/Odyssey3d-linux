@@ -2782,11 +2782,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             const double x = ui.ojoBase.x;
             if (!paralajeListo) xReposo = x;
             xReposo += (x - xReposo) * (1.0 - std::exp(-dtp / 6.0));
-            objetivo = (x - xReposo) / 3.25 * kParalaje;
+            /* Zona muerta suave (v0.72). Sentado y quieto, la cabeza (y su medida) deriva de 1 a 4 mm
+               por segundo (medido en el registro de nueve sesiones: mediana de 0,08 a 0,44 cm entre
+               muestras de un segundo). Sin zona muerta eso movia lo cercano hasta medio pixel contra
+               el fondo, sin ritmo: «una sacudida leve de lado a lado, no pareja» (Rodolfo, 25-nov).
+               El factor d^2 / (d^2 + z^2) deja en nada lo de milimetros (0,3 cm -> 20 %) y casi entero
+               un movimiento de verdad (3 cm -> 96 %), sin escalon. */
+            const double d = x - xReposo, zona = 0.6;
+            objetivo = d * (d * d / (d * d + zona * zona)) / 3.25 * kParalaje;
             objetivo = objetivo < -1.0 ? -1.0 : (objetivo > 1.0 ? 1.0 : objetivo);
           }
           paralajeListo = true;
-          hSuave += (objetivo - hSuave) * (1.0 - std::exp(-dtp / 0.06));
+          /* paso bajo de 120 ms (antes 60): el paralaje es una ayuda, importa mas que vaya liso */
+          hSuave += (objetivo - hSuave) * (1.0 - std::exp(-dtp / 0.12));
           wv.setParalaje((float)hSuave);
         }
       }

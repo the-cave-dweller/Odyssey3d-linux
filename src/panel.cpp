@@ -240,8 +240,15 @@ bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotat
   }
   std::string r = ksd(args.str());
   /* VRR y HDR se intentan aparte: si la opción no existe en esta versión de KDE, no debe tumbar lo demás. */
-  ksd("output." + out + ".vrr.never");
-  ksd("output." + out + ".vrr.disable");
+  /* Sincronizacion adaptativa (v0.72). Estas dos ordenes viejas eran `vrr.never` y `vrr.disable`, que
+     kscreen-doctor no conoce (la palabra es `vrrpolicy`): nunca hicieron nada, y TODAS las sesiones 3D
+     han corrido con la que tuviera el escritorio (Always en el equipo de Rodolfo), tambien las que se
+     dieron por buenas. Asi que se deja como este, que es lo probado y lo que el pide; solo con
+     `vrr_en_3d = no` (ODYSSEYVK_VRR_3D=0) se apaga durante la sesion, ahora con la orden que si existe. */
+  {
+    const char *e = entornoOdyssey("ODYSSEYVK_VRR_3D");
+    if (e && (e[0] == '0' || e[0] == 'n')) ksd("output." + out + ".vrrpolicy.never");
+  }
   if (disableHdr) ksd("output." + out + ".hdr.disable");
   if (!r.empty() && r.find("Unable to parse") != std::string::npos) {
     if (err) *err = r;
@@ -262,9 +269,9 @@ bool Panel::restore(const PanelState &st, std::string *err, const std::vector<Pl
   std::string r = ksd(args.str());
   if (st.hdr) ksd("output." + st.name + ".hdr.enable");
   if (st.vrr == "Always")
-    ksd("output." + st.name + ".vrr.always");
+    ksd("output." + st.name + ".vrrpolicy.always");
   else if (st.vrr == "Automatic")
-    ksd("output." + st.name + ".vrr.automatic");
+    ksd("output." + st.name + ".vrrpolicy.automatic");
   return r.find("Unable to parse") == std::string::npos;
 }
 

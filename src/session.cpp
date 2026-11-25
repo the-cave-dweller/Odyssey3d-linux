@@ -118,8 +118,8 @@ void Rig::bringUp(const ViewerOpts &o) {
           }
         }
         if (!st.vrr.empty() && st.vrr != "Never")
-          std::fprintf(stderr, "[aviso] sincronizacion adaptativa en %s: apagala en Ajustustes > Pantalla si ves parpadeo\n",
-                       st.vrr.c_str());
+          std::printf("[panel] sincronizacion adaptativa: %s, como en el escritorio (se apaga solo durante el 3D con"
+                      " `vrr_en_3d = no` en serve.conf)\n", st.vrr.c_str());
       }
     }
   }
