@@ -67,6 +67,25 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   grandes que se ensanchan con Mayús + `]`; el punto de más ancho quedó cerca de `rampa_x = +0,0094` sobre
   cero, todavía sin confirmar si es el bueno o un falso por armónicos).
 
+### El rastreo se quedaba clavado en una pose mala para siempre
+
+- MEDIDO en el panel: con la cara al centro, la pose que usa la trama (`panel (...)` en el registro) se
+  quedó **fija en (−22,60, 0,83, 62,49) cm** durante minutos mientras la de la cámara cambiaba cuadro a cuadro.
+  La trama creía al espectador 22,6 cm a la izquierda: de ahí buena parte del rojo/azul que veía el ojo
+  que debía ver negro.
+- Causa (`HeadTracker::publish`, `src/track.cpp`): la guarda de saltos compara con la ÚLTIMA pose aceptada.
+  Una vez colada una mala, todas las buenas quedan «demasiado lejos» (> 12 cm) y se rechazan; `hold`
+  reenvía la vieja como aceptada, y como cada cuadro con cara pone `misses_` a 0, nunca se llega a los 40
+  de `holdFrames`. Bloqueo permanente. Además el primer enganche tomaba UNA muestra suelta.
+- Arreglo: **re-enganche** tras 15 cuadros seguidos rechazados por salto (~0,25 s): se adopta la
+  observación nueva (ya mediana de tres). Y el primer enganche espera a tener tres muestras.
+- MEDIDO después, con cinta a 60 cm de los ojos a la pantalla: `panel z` **58,7–60,9 cm, media ~59,8**.
+  La escala de distancia del rastreo está bien (error < 1 %); en el marco de la cámara la media sale ~575 mm
+  con ±30 mm de dispersión y la distancia entre ojos salta entre 48 y 109 mm cuadro a cuadro (ruido de la
+  detección, sin tocar).
+- Visto de paso: el visor bajó de 120 a 29 fps mientras otro programa (`strata`) ocupaba 18,5 GB de la
+  4090 y 10,6 GB de la 5080, con la RAM a 55/60 GB; y salen `Corrupt JPEG data` de la cámara.
+
 ### La mancha de la izquierda: el mapa A dado la vuelta
 
 - Con el patrón de un ojo se ve una mancha fija en el borde izquierdo, abajo. Es el mapa

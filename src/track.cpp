@@ -147,6 +147,7 @@ bool HeadTracker::init(const CameraCalibration &calib, const TrackerTransform &x
   ready_ = true;
   haveLast_ = false;
   misses_ = 0;
+  saltos_ = 0;
   err_.clear();
   return true;
 }
@@ -355,13 +356,27 @@ bool HeadTracker::publish(const double raw[3], TrackSample &out) {
     std::sort(orden.begin(), orden.end());
     observation[i] = orden[orden.size() / 2];
   }
-  const double distancia = std::hypot(std::hypot(observation[0] - last_[0], observation[1] - last_[1]),
-                                      observation[2] - last_[2]);
-  if (haveLast_ && distancia > set_.maxJumpCentimetres) {
-    out.reason = "salto demasiado grande, se descarta el cuadro";
+  /* Primer enganche: no con UNA muestra suelta, que es cuando mas facil se cuela una mala (al
+     arrancar, la cara entra a medias). Con tres la mediana ya trabaja. */
+  if (!haveLast_ && history_[0].size() < 3) {
+    out.reason = "enganchando: faltan muestras para la mediana";
     hold(out);
     return false;
   }
+  const double distancia = std::hypot(std::hypot(observation[0] - last_[0], observation[1] - last_[1]),
+                                      observation[2] - last_[2]);
+  if (haveLast_ && distancia > set_.maxJumpCentimetres) {
+    if (++saltos_ < set_.reengancheCuadros) {
+      out.reason = "salto demasiado grande, se descarta el cuadro";
+      hold(out);
+      return false;
+    }
+    /* Muchos saltos seguidos: la equivocada era la pose guardada, no las nuevas. Se adopta la
+       observacion (ya es mediana de tres) sin filtro, como un primer enganche. */
+    out.reason = "re-enganche: la pose guardada era la que estaba mal";
+    haveLast_ = false;
+  }
+  saltos_ = 0;
   const double alpha = set_.smoothing <= 0 ? 1.0 : set_.smoothing;
   for (int i = 0; i < 3; i++)
     last_[i] = haveLast_ ? last_[i] + (observation[i] - last_[i]) * alpha : observation[i];

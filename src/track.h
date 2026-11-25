@@ -20,6 +20,12 @@ struct TrackSettings {
   double maxJumpCentimetres = 12;   /* salto máximo entre cuadros aceptados */
   double smoothing = 0.35;          /* alfa del filtro exponencial (0 = sin filtro) */
   int holdFrames = 40;              /* cuadros que se aguanta sin cara */
+  /* Re-enganche (v0.59): cuadros SEGUIDOS rechazados por salto despues de los cuales se da por buena
+     la pose nueva. Sin esto, una pose mala que se colara una vez (medido en el panel: x -22,6 cm con la
+     cara al centro) dejaba todas las buenas "demasiado lejos" y el rastreo se quedaba clavado en ella
+     para siempre: la deteccion pone `misses_` a 0 en cada cuadro y `hold` reenvia la vieja como fresca.
+     15 cuadros son ~0,25 s a 60 fps. */
+  int reengancheCuadros = 15;
   int detectWidth = 448, detectHeight = 320;  /* como el hub: 0.7 de la vista 640x480 */
 
   /* Via de respaldo: una webcam normal, que es UNA sola vista y no esta
@@ -94,6 +100,7 @@ public:
   void reset() {
     haveLast_ = false;
     misses_ = 0;
+    saltos_ = 0;
     for (int i = 0; i < 3; i++) history_[i].clear();
   }
 
@@ -129,6 +136,7 @@ private:
   double last_[3] = {0, 0, 0};
   double lastTime_ = 0;
   int misses_ = 0;
+  int saltos_ = 0;   /* cuadros seguidos rechazados por salto (ver reengancheCuadros) */
   std::vector<double> history_[3];
   std::string err_;
 };
