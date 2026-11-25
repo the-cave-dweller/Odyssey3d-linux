@@ -53,6 +53,18 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Nada en el panel**: ni el patrón visto con un ojo, ni que Mayús llegue como modificador por Wayland,
   ni el procedimiento de calibración. Tampoco los binarios instalados: siguen siendo la 0.58.
 
+### Arreglo en el panel: las teclas no llegaban a la trama Vulkan
+
+- Primera prueba en el panel (Rodolfo, `build/odysseyvk test --track`): **`b` no hacía nada**, aunque las
+  teclas sí llegaban (`rampa_x_teclas = 0,002` en `estado` tras cinco `]`).
+- Causa: el bucle de `vkview.cpp` copia los ajustes a la trama **campo por campo** y no copiaba ni `unOjo`
+  ni **`rampaDX`/`rampaDY`**. Lo segundo viene de la v0.43: desde entonces `[` `]` `;` `'` solo cambiaban el
+  número de `estado` y la trama Vulkan seguía con la rampa de `serve.conf` sola. Las rampas de `serve.conf`
+  sí funcionaban (entran por el entorno), y el volcado con `ODYSSEYVK_PRUEBA` tampoco lo vio por lo mismo.
+- Se copian las tres. Lo que viste en esa prueba (halos degradados a un lado u otro de cada bloque, que
+  cambian con la profundidad y no con la cabeza) es fantasma en los cantos con disparidad, no el batido.
+- No probado aún: que con el arreglo `b` y las rampas se vean en el panel.
+
 ## La casilla «Previsualización»: la cámara en vivo y **quedándose** en la ventana de ajustes (v0.58)
 
 - Pedido de Rodolfo: «hay forma de que el visor de la camara si muestre el preview y se quede mostrandola si

@@ -2262,6 +2262,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     t.xtalkDyn = ui.tune.xtalkDyn;
     t.contrast = ui.tune.contrast;
     t.corrAScale = ui.tune.corrAScale;
+    /* rampas de las teclas `[` `]` `;` `'` y patron de un ojo (`b`). Hasta v0.59 estas tres no se
+       copiaban: las teclas cambiaban el numero de `estado` pero la trama Vulkan seguia con la rampa
+       de serve.conf sola, y `b` no hacia nada. (El volcado con ODYSSEYVK_PRUEBA no lo vio porque la
+       sonda entra por el entorno, no por esta copia.) */
+    t.rampaDX = ui.tune.rampaDX;
+    t.rampaDY = ui.tune.rampaDY;
+    t.unOjo = ui.tune.unOjo;
     /* capas: cuanto se estira el relieve a cada lado del plano de apoyo (teclas j/k y u/i) y
        cuanto se desplaza esa banda entera de su plano (h/l y y/o) */
     t.ganFondo = ui.tune.ganFondo;
