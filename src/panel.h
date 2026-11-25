@@ -65,9 +65,11 @@ public:
      si no KWin queda un instante con las dos areas encima. */
   static bool apply(const std::string &out, int modeIndex, double scale, int rotation, bool disableHdr,
                     std::string *err = nullptr, bool dryRun = false,
-                    const std::vector<Placement> *movidas = nullptr);
+                    const std::vector<Placement> *movidas = nullptr, bool sinGeometria = false);
+  /* `sinGeometria` (v0.76): no se manda modo, escala, rotacion ni sitios (ya estan como hacen falta);
+     solo lo que no cambia el tamano del escritorio: HDR y sincronizacion adaptativa. */
   static bool restore(const PanelState &st, std::string *err = nullptr,
-                      const std::vector<Placement> *otras = nullptr);
+                      const std::vector<Placement> *otras = nullptr, bool sinGeometria = false);
   /* Palabra que acepta kscreen-doctor; nullptr si el valor no se reconoce. */
   static const char *rotationWord(int r);
   static bool isLandscape(int r) { return r == RotNone; }

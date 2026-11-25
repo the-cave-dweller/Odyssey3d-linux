@@ -226,7 +226,7 @@ int Panel::pickMode(const PanelState &st, double preferHz) {
 }
 
 bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotation, bool disableHdr,
-                  std::string *err, bool dryRun, const std::vector<Placement> *movidas) {
+                  std::string *err, bool dryRun, const std::vector<Placement> *movidas, bool sinGeometria) {
   std::ostringstream args;
   args << "output." << out << ".mode." << modeIndex << " output." << out << ".scale." << scale;
   if (const char *rot = rotationWord(rotation))
@@ -238,7 +238,7 @@ bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotat
     if (err) *err = "kscreen-doctor " + args.str();
     return true;
   }
-  std::string r = ksd(args.str());
+  std::string r = sinGeometria ? std::string() : ksd(args.str());
   /* VRR y HDR se intentan aparte: si la opción no existe en esta versión de KDE, no debe tumbar lo demás. */
   /* Sincronizacion adaptativa (v0.72). Estas dos ordenes viejas eran `vrr.never` y `vrr.disable`, que
      kscreen-doctor no conoce (la palabra es `vrrpolicy`): nunca hicieron nada, y TODAS las sesiones 3D
@@ -257,7 +257,7 @@ bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotat
   return true;
 }
 
-bool Panel::restore(const PanelState &st, std::string *err, const std::vector<Placement> *otras) {
+bool Panel::restore(const PanelState &st, std::string *err, const std::vector<Placement> *otras, bool sinGeometria) {
   if (st.name.empty()) return true;
   std::ostringstream args;
   args << "output." << st.name << ".mode." << st.modeIndex << " output." << st.name << ".scale." << st.scale;
@@ -266,7 +266,7 @@ bool Panel::restore(const PanelState &st, std::string *err, const std::vector<Pl
   if (otras)
     for (const Placement &q : *otras)
       args << " output." << q.name << ".position." << q.x << "," << q.y;
-  std::string r = ksd(args.str());
+  std::string r = sinGeometria ? std::string() : ksd(args.str());
   if (st.hdr) ksd("output." + st.name + ".hdr.enable");
   if (st.vrr == "Always")
     ksd("output." + st.name + ".vrrpolicy.always");

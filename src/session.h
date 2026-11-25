@@ -22,6 +22,7 @@ struct Rig {
   Scaler scaler;
   PanelState saved{};
   bool panelApplied = false;
+  bool panelSinGeometria = false;   /* el 3D no cambio modo, escala ni sitios: al salir tampoco se tocan (v0.76) */
   bool scalerOn = false;
   bool lensOk = false;
   /* Sitios de origen de las demas salidas que movimos al agrandar el panel: shutDown() las devuelve. */

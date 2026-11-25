@@ -64,6 +64,23 @@ void Rig::bringUp(const ViewerOpts &o) {
              KWin le cambia el tamano a la ventana del video a media sesion. Movemos el otro monitor
              en la MISMA orden atomica del modo y lo devolvemos al salir.
              Puerta: ODYSSEYVK_LAYOUT=0 o --sin-despejar dejan el escritorio intacto. */
+          /* Escala del panel en 3D (v0.76). De siempre se pasaba a escala 1, y eso cambia el tamano
+             logico del escritorio. KWin guarda como estaba cada ventana en cada configuracion de
+             pantallas y se lo repone al volver a ella: medido el 25-nov, al entrar en 3D sacaba al
+             video de pantalla completa (como habia quedado la vez anterior) y al salir se la volvia a
+             poner, y el navegador (Zen) no salia bien de ese vaiven. La escala 1 no hace falta: con el
+             escritorio a 1,5 la ventana del visor mide 2560x1440 logicos y su lienzo son los
+             3840x2160 puntos del panel (medido: «lienzo 3840x2160 fisicos, ventana logica
+             2560x1440»), y la ventana del video llega igual a 3840x2160 (medido con `ctl flujo`:
+             2014x868 logicos -> 3022x1303). Asi que el panel se queda con la escala del escritorio y
+             KWin no tiene nada que reponer. `escala_3d = 1` en serve.conf (ODYSSEYVK_ESCALA_3D=1)
+             vuelve a lo de antes. */
+          static const bool kEscalaUno = [] {
+            const char *e = entornoOdyssey("ODYSSEYVK_ESCALA_3D");
+            return e && std::atof(e) == 1.0;
+          }();
+          const double escalaEscritorio = residual ? stale.scale : st.scale;
+          const double escala3d = (kEscalaUno || escalaEscritorio <= 0.0) ? 1.0 : escalaEscritorio;
           std::vector<Placement> movidas, originales;
           const char *noLayout = entornoOdyssey("ODYSSEYVK_LAYOUT");
           const bool dejar = o.noLayout || (noLayout && !std::strcmp(noLayout, "0"));
@@ -71,7 +88,7 @@ void Rig::bringUp(const ViewerOpts &o) {
             std::vector<PanelState> todos;
             std::string err2;
             int nw = 0, nh = 0;
-            if (Panel::allOutputs(todos, &err2) && Panel::modeSize(st, idx, 1.0, nw, nh)) {
+            if (Panel::allOutputs(todos, &err2) && Panel::modeSize(st, idx, escala3d, nw, nh)) {
               movidas = Panel::despejar(todos, name, nw, nh);
               for (const Placement &q : movidas) {
                 for (const PanelState &s : todos)
@@ -101,17 +118,27 @@ void Rig::bringUp(const ViewerOpts &o) {
             const char *e = entornoOdyssey("ODYSSEYVK_HDR_3D");
             return e && (e[0] == '1' || e[0] == 's');
           }();
-          if (Panel::apply(name, idx, 1.0, RotNone, !kHdrEn3d, &err, false, movidas.empty() ? nullptr : &movidas)) {
+          /* si el panel ya esta en el modo, la escala y la rotacion que hacen falta, no se manda
+             ninguna orden de geometria: ni un parpadeo, ni un cambio de configuracion para KWin */
+          const bool yaEsta = st.modeIndex == idx && std::fabs(st.scale - escala3d) < 1e-6 &&
+                              st.rotation == RotNone && movidas.empty() && !residual;
+          if (Panel::apply(name, idx, escala3d, RotNone, !kHdrEn3d, &err, false, movidas.empty() ? nullptr : &movidas,
+                           yaEsta)) {
+            panelSinGeometria = yaEsta;
             saved = st;
             /* En el caso residual los sitios de origen validos son los de la instantanea: lo que se
                ve ahora en el escritorio ya es el escritorio movido de la sesion que se corto. */
             otras = (residual && !staleOtras.empty()) ? staleOtras : originales;
             panelApplied = true;
-            std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR %s\n", name.c_str(), idx,
-                        nombreModo.c_str(), kHdrEn3d ? "como en el escritorio (hdr_en_3d)" : "apagado");
-            std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
-                        saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
-            usleep(400000); /* que KWin asiente antes de crear la ventana */
+            std::printf("[panel] %s: modo %d %s, escala %g%s, rotacion normal, HDR %s\n", name.c_str(), idx,
+                        nombreModo.c_str(), escala3d,
+                        yaEsta ? " (la del escritorio: no se cambia nada)" : "",
+                        kHdrEn3d ? "como en el escritorio (hdr_en_3d)" : "apagado");
+            if (!yaEsta) {
+              std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
+                          saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
+              usleep(400000); /* que KWin asiente antes de crear la ventana */
+            }
           } else {
             std::fprintf(stderr, "[aviso] no se pudo cambiar el modo: %s\n", err.c_str());
             Panel::clearSnapshot();
@@ -169,7 +196,10 @@ void Rig::shutDown() {
   }
   if (panelApplied) {
     std::string err;
-    if (Panel::restore(saved, &err, otras.empty() ? nullptr : &otras)) {
+    if (Panel::restore(saved, &err, otras.empty() ? nullptr : &otras, panelSinGeometria)) {
+      if (panelSinGeometria)
+        std::printf("[panel] el modo y la escala no se tocaron: nada que devolver (solo HDR y sincronizacion, si cambiaron)\n");
+      else
       std::printf("[panel] restaurado: modo %d %s, escala %g, rotacion %s\n", saved.modeIndex, saved.modeRes.c_str(),
                   saved.scale, rotW(saved.rotation));
       for (const Placement &q : otras)

@@ -3,6 +3,44 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El 3D ya no cambia la escala del monitor (v0.76)
+
+- Rodolfo, con la 0.75: entrar, la pausa y los atajos bien; salir del vídeo con Esc, no («el punto 4 no
+  fue así»).
+- MEDIDO en el registro de la 0.75 (13:54–13:55): la pausa se respetó (dos pausas, ninguna «se reanuda
+  solo») y los atajos globales llegaron con el teclado en el vídeo (3D/2D, pastilla, relieve −4 y +4).
+  La primera sesión cayó en «el escritorio sacó al vídeo de pantalla completa» y se cerró sola; la
+  segunda, ocho segundos después, ya NO arrancó sacando al vídeo: lo de dejar la ventana a pantalla
+  completa antes de devolver el monitor funciona, y confirma que es KWin quien repone el estado.
+- MEDIDO: al salir (13:55:46) la ventana pasó por «maximizada → pantalla completa (puesta por nosotros)
+  → maximizada (quitada por nosotros)» en menos de un segundo, y para KWin quedó bien. HIPÓTESIS de lo
+  que vio Rodolfo: Zen no sale limpio de una pantalla completa que le ponen y le quitan desde fuera tan
+  seguido. En la 0.74 pasaba lo mismo con la que reponía KWin.
+- La causa de fondo es que el 3D cambia la configuración de pantallas (escala 1,5 → 1 y vuelta). MEDIDO
+  que no hace falta: con el escritorio a 1,5 el visor a pantalla completa da «lienzo 3840x2160 físicos,
+  ventana lógica 2560x1440», y `ctl flujo` sobre una ventana de 2014x868 lógicos entrega 3022x1303, o
+  sea que la del vídeo a pantalla completa llega a 3840x2160.
+
+### Lo que cambia
+
+- `src/session.cpp`: el panel se queda con la escala del escritorio. Si además ya está en el modo y la
+  rotación que hacen falta, no se manda ninguna orden de geometría (ni al entrar ni al salir); solo HDR
+  y sincronización adaptativa, que no cambian el tamaño del escritorio. El otro monitor ya no se mueve.
+- `escala_3d = 1` en serve.conf (ODYSSEYVK_ESCALA_3D=1) vuelve a pasar el panel a escala 1, con todo lo
+  de la v0.75 para el vaivén de KWin, que queda como estaba para ese caso.
+- El aviso «la trama necesita pixel a pixel» ya solo sale si el lienzo no mide lo que el modo.
+
+### Comprobado / no probado
+
+- Comprobado fuera de una sesión (visor a pantalla completa en DP-4, sin lente ni scaler, 4 s): las
+  salidas quedan igual antes, durante y después (DP-4 2560x1440 a escala 1,5; DP-7 en 2560,624); las
+  ventanas de Zen y Firefox no cambian de sitio, tamaño ni estado; 116,5 fps; al salir, «nada que
+  devolver».
+- No probado: que KWin presente el lienzo punto a punto con la escala 1,5 (una captura de pantalla no
+  sirve: sale reescalada a 2). Si no fuera así, la imagen 3D se vería con bandas o sin relieve, y para
+  eso está `escala_3d = 1`. Tampoco probado: la sesión real (entrar, salir con Esc) ni un juego, que con
+  el escritorio a 1,5 puede quedarse a la resolución que tuviera en vez de pasar a 4K.
+
 ## Atajos del hub globales, la pausa se respeta y la salida del vídeo no deja la ventana atrapada (v0.75)
 
 - Rodolfo, tras ver vídeos en el navegador (Zen) y jugar a Stray: (1) «al salir del vídeo otra vez se

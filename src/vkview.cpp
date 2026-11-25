@@ -1047,10 +1047,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   glfwGetFramebufferSize(win, &fbW, &fbH);
   float sx = 1.0f, sy = 1.0f;
   glfwGetWindowContentScale(win, &sx, &sy);
-  if (fbW != W || fbH != H || std::fabs(sx - 1.0f) > 0.01f)
+  /* lo que importa es que el LIENZO mida lo que el modo del panel; la escala del escritorio da igual
+     (v0.76): con 1,5 la ventana son 2560x1440 logicos y el lienzo los 3840x2160 puntos del panel */
+  if (fbW != W || fbH != H)
     std::fprintf(stderr,
-                 "[aviso] la ventana es %dx%d (escala de contenido %.2f) y el modo %dx%d: la trama necesita pixel a "
-                 "pixel. Deja la escala del panel en 1 y la rotacion normal.\n",
+                 "[aviso] el lienzo de la ventana es %dx%d (escala de contenido %.2f) y el modo %dx%d: la trama "
+                 "necesita pixel a pixel.\n",
                  fbW, fbH, sx, W, H);
 
   if (opts.windowed && !(opts.w > 0) && fbW > W && sx > 1.01f) {

@@ -913,6 +913,13 @@ salida y `ctl panel apply --dry` imprime el comando completo, con las posiciones
 se mueva nada: `--sin-despejar` en el visor o `ODYSSEYVK_LAYOUT=0`. En este equipo el panel ya quedó **a
 escala 1 de forma permanente** y el otro monitor a la derecha, así que en sesión normal no cambia nada.
 
+**Desde la v0.76 el 3D no cambia la escala del panel.** Antes lo pasaba a escala 1 y lo devolvía al
+salir; KWin guarda cómo estaba cada ventana en cada configuración de pantallas y se lo repone al volver
+a ella, así que al entrar sacaba al vídeo de pantalla completa y al salir se la volvía a poner. No hacía
+falta: con el escritorio a 1,5 la ventana del visor mide 2560×1440 lógicos y su lienzo son los 3840×2160
+puntos del panel, y la ventana del vídeo llega igual a 3840×2160. `escala_3d = 1` en `serve.conf` vuelve
+a lo de antes, por si la trama no saliera punto a punto con la escala del escritorio.
+
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía
 el instalador eran de otra unidad: midiendo, la media del mapa A coincidía más o menos (31 frente

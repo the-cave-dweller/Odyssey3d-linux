@@ -3043,6 +3043,7 @@ struct ServeCfg {
   std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
   std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
+  std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
@@ -3183,6 +3184,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
     else if (k == "rastreo_fino") cfg.rastreoFino = v;
     else if (k == "atajos_globales") cfg.atajosGlobales = v;
+    else if (k == "escala_3d") cfg.escala3d = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
     else if (k == "hz") {
       const double d = std::atof(v.c_str());
@@ -3457,6 +3459,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
     if (!pila->rastreoFino.empty())
       ::setenv("ODYSSEYVK_RASTREO_FINO", (pila->rastreoFino == "no" || pila->rastreoFino == "0") ? "0" : "1", 1);
+    if (!pila->escala3d.empty())
+      ::setenv("ODYSSEYVK_ESCALA_3D", (pila->escala3d == "1" || pila->escala3d == "1,0" || pila->escala3d == "1.0") ? "1" : "escritorio", 1);
     if (!pila->atajosGlobales.empty())
       ::setenv("ODYSSEYVK_ATAJOS", (pila->atajosGlobales == "no" || pila->atajosGlobales == "0") ? "0" : "1", 1);
     if (pila->pivote >= 0.0) {
