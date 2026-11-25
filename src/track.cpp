@@ -377,9 +377,21 @@ bool HeadTracker::publish(const double raw[3], TrackSample &out) {
     haveLast_ = false;
   }
   saltos_ = 0;
-  const double alpha = set_.smoothing <= 0 ? 1.0 : set_.smoothing;
-  for (int i = 0; i < 3; i++)
-    last_[i] = haveLast_ ? last_[i] + (observation[i] - last_[i]) * alpha : observation[i];
+  if (set_.euroMinCorte > 0.0) {
+    const double ahora = nowSeconds();
+    for (int i = 0; i < 3; i++) {
+      FiltroEuro &f = euro_[i];
+      f.minCorte = set_.euroMinCorte;
+      f.beta = set_.euroBeta;
+      f.corteDeriv = set_.euroCorteDeriv;
+      if (!haveLast_) f.olvidar();   /* primer enganche o re-enganche: sin historia que arrastrar */
+      last_[i] = f.paso(observation[i], ahora);
+    }
+  } else {
+    const double alpha = set_.smoothing <= 0 ? 1.0 : set_.smoothing;
+    for (int i = 0; i < 3; i++)
+      last_[i] = haveLast_ ? last_[i] + (observation[i] - last_[i]) * alpha : observation[i];
+  }
   haveLast_ = true;
   lastTime_ = nowSeconds();
   out.accepted = true;

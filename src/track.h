@@ -6,9 +6,45 @@
 
 #include "calib.h"
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+/* Filtro One-Euro (Casiez, Roussel y Vogel, CHI 2012) para UNA coordenada (v0.60).
+   Es un paso bajo de primer orden cuyo corte sube con la velocidad: quieto corta muy bajo y se come
+   el temblor; en marcha abre el corte y no se queda atras. Hace falta porque la trama es muy
+   sensible a la pose: a 60 cm un centimetro de x mueve la fase 5,239/60 = 0,087 ciclos, y el ojo
+   que debe ver negro solo tiene +-0,04 de margen antes de que se cuele el subpixel rojo o el azul
+   (zona negra +-0,225, subpixeles a +-0,185). Con el exponencial de antes (alfa 0,35 por cuadro,
+   constante de tiempo de ~2 cuadros) el temblor de la deteccion pasaba casi entero.
+   corte = minCorte + beta * |velocidad filtrada|; minCorte y corteDeriv en Hz, beta en 1/cm. */
+struct FiltroEuro {
+  double minCorte = 0.6, beta = 0.01, corteDeriv = 1.0;
+  bool listo = false;
+  double x = 0.0, dx = 0.0, t = 0.0;
+  static double alfa(double corte, double dt) {
+    const double tau = 1.0 / (2.0 * M_PI * corte);
+    return 1.0 / (1.0 + tau / dt);
+  }
+  double paso(double valor, double ahora) {
+    if (!listo) {
+      listo = true;
+      x = valor;
+      dx = 0.0;
+      t = ahora;
+      return x;
+    }
+    double dt = ahora - t;
+    if (dt < 1e-4) dt = 1e-4;   /* dos muestras en el mismo instante: que no divida por cero */
+    if (dt > 0.5) dt = 0.5;     /* tras un hueco largo no se fia de una velocidad enorme */
+    t = ahora;
+    dx += alfa(corteDeriv, dt) * ((valor - x) / dt - dx);
+    x += alfa(minCorte + beta * std::fabs(dx), dt) * (valor - x);
+    return x;
+  }
+  void olvidar() { listo = false; }
+};
 
 struct TrackSettings {
   std::string model;                /* .onnx de YuNet */
@@ -18,7 +54,15 @@ struct TrackSettings {
   bool realce = true;               /* reintentar con CLAHE cuando no sale ninguna cara */
   double minDepthMillimetres = 200; /* distancia minima a la camara */
   double maxJumpCentimetres = 12;   /* salto máximo entre cuadros aceptados */
-  double smoothing = 0.35;          /* alfa del filtro exponencial (0 = sin filtro) */
+  double smoothing = 0.35;          /* alfa del filtro exponencial (0 = sin filtro); solo cuenta
+                                       con el One-Euro apagado (euroMinCorte <= 0) */
+  /* One-Euro (v0.60, ver FiltroEuro): corte minimo en Hz (<= 0 vuelve al exponencial de antes),
+     cuanto abre por cm/s y corte de la velocidad. ODYSSEYVK_EURO=0 lo apaga; "0,6;0,01" los cambia.
+     Elegidos con tools/prueba_euro.cpp (ruido medido: z +-3 cm, x +-0,8 cm por cuadro): la fase tiembla
+     0,015 ciclos en el centro y 0,033 en el borde (antes 0,034 y 0,066), dentro del margen de +-0,04, a
+     cambio de 2,7 cm de retraso a 20 cm/s (antes 1,7). Con beta 0,25 el ruido de la deteccion
+     se lee como velocidad, abre el corte y no suaviza nada: por eso beta va tan bajo. */
+  double euroMinCorte = 0.6, euroBeta = 0.01, euroCorteDeriv = 1.0;
   int holdFrames = 40;              /* cuadros que se aguanta sin cara */
   /* Re-enganche (v0.59): cuadros SEGUIDOS rechazados por salto despues de los cuales se da por buena
      la pose nueva. Sin esto, una pose mala que se colara una vez (medido en el panel: x -22,6 cm con la
@@ -101,7 +145,10 @@ public:
     haveLast_ = false;
     misses_ = 0;
     saltos_ = 0;
-    for (int i = 0; i < 3; i++) history_[i].clear();
+    for (int i = 0; i < 3; i++) {
+      history_[i].clear();
+      euro_[i].olvidar();
+    }
   }
 
   /* Comprueba deteccion y geometria sobre un archivo (PNG/JPG) con las dos
@@ -137,6 +184,7 @@ private:
   double lastTime_ = 0;
   int misses_ = 0;
   int saltos_ = 0;   /* cuadros seguidos rechazados por salto (ver reengancheCuadros) */
+  FiltroEuro euro_[3];
   std::vector<double> history_[3];
   std::string err_;
 };

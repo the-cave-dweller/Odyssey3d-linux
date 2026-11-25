@@ -1400,6 +1400,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     fo.set.model = opts.trackModel;
     fo.set.score = opts.trackScore;
     fo.set.smoothing = opts.trackSmoothing;
+    /* ODYSSEYVK_EURO: "0" apaga el One-Euro (vuelve el exponencial de `suavizado`); "MIN;BETA" con
+       coma o punto decimal cambia el corte minimo (Hz) y cuanto abre por cm/s. */
+    if (const char *e = entornoOdyssey("ODYSSEYVK_EURO")) {
+      std::string s(e);
+      for (char &c : s)
+        if (c == ',') c = '.';
+      double a = 0.0, b = fo.set.euroBeta;
+      if (std::sscanf(s.c_str(), "%lf;%lf", &a, &b) >= 1) {
+        fo.set.euroMinCorte = a;
+        fo.set.euroBeta = b;
+      }
+      std::printf("[rastreo] One-Euro %s (corte minimo %.2f Hz, beta %.2f)\n",
+                  fo.set.euroMinCorte > 0.0 ? "puesto" : "apagado: exponencial de antes", fo.set.euroMinCorte,
+                  fo.set.euroBeta);
+    }
     fo.fuerzaMono = opts.trackMono;
     fo.set.hFovDegrees = opts.trackCampo;
     fo.set.faceWidthMillimetres = opts.trackCara;

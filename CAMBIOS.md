@@ -3,6 +3,49 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El rastreo deja de sacudir la trama: filtro One-Euro (v0.60)
+
+- Pedido de Rodolfo, tras calibrar con el patrón de un ojo: la mezcla roja/azul del ojo que debe ver negro
+  «se mueve mucho».
+- Por qué (DERIVADO de los números del modelo): a 60 cm un centímetro de `x` mueve la fase de la trama
+  5,239/60 = **0,087 ciclos**, y uno de `z` la mueve 0,044 en el borde de la pantalla. El ojo que debe ver
+  negro solo tiene **±0,04** de margen (zona negra ±0,225, subpíxeles rojo y azul a ±0,185). El filtro de
+  antes (mediana de 3 + exponencial α 0,35 por cuadro, ~2 cuadros de constante de tiempo) dejaba pasar
+  casi todo el temblor de la detección (MEDIDO: `z` de la cámara ±30 mm cuadro a cuadro con la cara quieta).
+- Lo que se añade: `FiltroEuro` en `src/track.h` (Casiez, Roussel y Vogel, CHI 2012), un paso bajo cuyo
+  corte sube con la velocidad. `HeadTracker::publish` lo usa en lugar del exponencial, después de la
+  mediana de 3 y de la guarda de saltos; el primer enganche y el re-enganche lo reinician.
+  `ODYSSEYVK_EURO=0` vuelve al exponencial (`suavizado`); `ODYSSEYVK_EURO="0,6;0,01"` cambia corte y β.
+- Elección de los números con `tools/prueba_euro.cpp` (ruido simulado x ±0,8 cm, z ±3 cm, 3 % de tirones):
+
+  | filtro | fase que tiembla, centro / borde | retraso a 20 cm/s |
+  |---|---|---|
+  | exponencial α 0,35 (antes) | 0,034 / 0,066 ciclos | 1,7 cm |
+  | One-Euro 0,6 Hz, β 0,25 | 0,031 / 0,074 | 1,5 cm |
+  | **One-Euro 0,6 Hz, β 0,01 (puesto)** | **0,015 / 0,033** | 2,7 cm |
+  | One-Euro 0,3 Hz, β 0,01 | 0,011 / 0,028 | 3,0 cm |
+
+  Con β alto el ruido de la detección se lee como velocidad y abre el corte: no suaviza nada.
+
+### Comprobado
+
+- Compila; `tools/prueba_euro.cpp` da la tabla de arriba.
+- En el panel (`build/odysseyvk test --track`, rampas −0,0012 / +0,0006): Rodolfo, con el patrón de un ojo:
+  «se sacude menos».
+- `serve.conf` del usuario: `rampa_x = −0,0012`, `rampa_y = 0,0006` (medidas contra la lente a 60 cm con el
+  rastreo ya arreglado); las de las rondas B/C quedan comentadas debajo. Respaldo:
+  `serve.conf.respaldo-2026-11-25-antes-v059`.
+
+### No probado / visto de paso
+
+- Al **cerrar un ojo** para la prueba, la detección pierde ese ojo y la distancia entre ojos salta a
+  100-131 mm: la propia prueba ensucia el rastreo. Con los dos ojos abiertos debería ir mejor; sin medir.
+- No hay predicción: con 2,7 cm de retraso a 20 cm/s, al mover la cabeza deprisa la trama va detrás
+  (~0,23 ciclos un instante). El oficial adelanta 15,6 ms.
+- El visor oscila entre 29 y 120 fps mientras `strata` ocupa casi toda la memoria de las dos tarjetas.
+- Nada instalado: `/usr/local/bin` sigue en 0.58, así que el vigilante y los vídeos todavía usan el rastreo
+  viejo (con el bloqueo) aunque ya lean las rampas nuevas de `serve.conf`.
+
 ## Paso fino de la rampa y patrón de un solo ojo, para calibrar contra la lente y no contra Windows (v0.59)
 
 - Pedido de Rodolfo: evaluar si el port está bien o si hay que volver a Windows a medir, porque «la

@@ -793,7 +793,7 @@ se ofrezca 3D a sí mismo),
 GPU corre la red del conversor), `cada` (cada cuántos fotogramas se calcula la profundidad),
 `rastreo` (`si` para que la cámara IR del monitor siga tus ojos y la trama se recalcule; `no` para la
 posición nominal de fábrica) y `suavizado` (`0,35`: cuánto se amortigua ese seguimiento; más pequeño
-responde antes y se mueve más). Para la cámara: `camara` (`/dev/video0`, vacío = elegir la mejor),
+responde antes y se mueve más; desde v0.60 solo cuenta con el One-Euro apagado, ver abajo). Para la cámara: `camara` (`/dev/video0`, vacío = elegir la mejor),
 `mono` (`auto`, `si`, `no`; abajo), `campo` (campo horizontal de la webcam en grados, por defecto 65)
 y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150); para el conversor también
 `texto` (`no` deja los rótulos con la profundidad que les dé la red en vez de apoyarlos en la pantalla). Las dos
@@ -1011,8 +1011,12 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
 * En Windows el lazo lo cierra el software de Samsung con otra cadencia: las cámaras IR a 60-90 fps
   y su rastreador publicando poses a hasta 240 Hz, con el entrechado **adelantado 15,6 ms** para
   compensar los 20,7 ms de retardo de la cámara (`configs/leiasr/tracker-ft_user.ini` en el análisis
-  de esa instalación). Aquí el rastreo va a unas decenas de Hz con mediana de 3 + media móvil
-  (`--track-suavizado`, por defecto 0,35) y sin adelantar nada, así que el ajuste se nota más tarde.
+  de esa instalación). Aquí el rastreo va a unas decenas de Hz con mediana de 3 + filtro **One-Euro**
+  (v0.60: corte mínimo 0,6 Hz, β 0,01; `ODYSSEYVK_EURO=0` vuelve a la media móvil de `--track-suavizado`,
+  `ODYSSEYVK_EURO="0,6;0,01"` cambia los dos) y sin adelantar nada, así que el ajuste se nota más tarde.
+  El One-Euro se eligió con `tools/prueba_euro.cpp`: a 60 cm la fase de la trama tiembla 0,015 ciclos en
+  el centro y 0,033 en el borde (antes 0,034 y 0,066), contra un margen de ±0,04 antes de que se cuele
+  el subpíxel rojo o el azul en el ojo que no toca.
   Cuando la cámara vuelva a funcionar se mide la cadencia real (`cameraFps`, `latencyMs`) y se ajusta.
 * El panel debe quedar a **escala 1 y rotación normal** durante el 3D (la trama necesita pixel a
   pixel); el programa lo cambia y lo devuelve. Si tu escritorio usa escala 1.5, al salir
