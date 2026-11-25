@@ -3,6 +3,18 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## ESC saca siempre del vídeo y del 3D a la vez (v0.77)
+
+- Rodolfo, con la 0.76: Esc sacaba del vídeo solo si antes había hecho clic en él; si no, el teclado lo
+  tenía el visor y Esc cerraba el 3D dejando el vídeo a pantalla completa. Pidió que saque de los dos.
+- `src/vkview.cpp`: Esc en el visor le quita antes la pantalla completa a la ventana capturada.
+- `src/main.cpp`: sin cambio de escala, perder la pantalla completa en los primeros 5 s es el usuario
+  saliendo; ya no sale el aviso de «el 3D no llegó a empezar» (medido a las 14:34:31, salió sin venir a
+  cuento).
+- MEDIDO en el registro de la 0.76: las sesiones arrancan con «escala 1.5 (la del escritorio: no se
+  cambia nada)». Rodolfo no dijo cómo se ve la imagen 3D así.
+- Comprobado: compila. No probado: en el panel.
+
 ## El 3D ya no cambia la escala del monitor (v0.76)
 
 - Rodolfo, con la 0.75: entrar, la pausa y los atajos bien; salir del vídeo con Esc, no («el punto 4 no

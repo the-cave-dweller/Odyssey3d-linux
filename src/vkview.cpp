@@ -500,12 +500,34 @@ static void atajoHub(VkUi &ui, int key, const char *origen) {
   std::fflush(stdout);
 }
 
+static void sacarDePantallaCompleta(const std::string &uuid) {
+#ifdef HAVE_WAYLAND_WM
+  WindowMonitor wm;
+  std::string err;
+  if (!wm.open(&err)) return;
+  wm.settle();
+  if (wm.setState(uuid, WindowInfo::Fullscreen, false, &err)) {
+    wm.flush();
+    wm.waitAndDispatch(60);
+    std::printf("[tecla] ESC: el video sale tambien de pantalla completa\n");
+  } else {
+    std::printf("[tecla] ESC: no se pudo sacar al video de pantalla completa: %s\n", err.c_str());
+  }
+  std::fflush(stdout);
+#else
+  (void)uuid;
+#endif
+}
+
 void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
   if (!ui) return;
   ui->inputChanged = true;
   if (key == GLFW_KEY_ESCAPE) {
+    /* ESC saca tambien al video de pantalla completa (v0.77, lo pidio Rodolfo): antes, con el
+       teclado en el visor, solo cerraba el 3D y el video seguia a pantalla completa. */
+    if (ui->opts && !ui->opts->captureUuid.empty()) sacarDePantallaCompleta(ui->opts->captureUuid);
     ui->quit = true;
     glfwSetWindowShouldClose(win, GLFW_TRUE);
     return;
