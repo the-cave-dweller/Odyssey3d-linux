@@ -16,7 +16,10 @@ El entrelazado usa el modelo analítico del oráculo de Dimenco (`FillAttributes
 validado en el repositorio `Linux_3D_SBS_Player`, reimplementado en C++ y verificado contra él
 (desviación < 2e-6 en los cuatro atributos de los esquinas, en la posición de ojo de trabajo y
 desplazada). Las constantes del panel (`kx`, `ky`, rampa de fase por canal, paso de lente,
-inclinación) son las nominales del G90XF, que son idénticas en todas las unidades.
+inclinación) son las capturadas de **otro** G90XF. Lo propio de cada unidad lo guarda el monitor en
+`3dstack.eini` (va dentro de lo que contesta a `SR+CAL3D`, un 7z cifrado, junto a los dos mapas de
+corrección), y ese archivo no se puede leer; por eso el paso de esta unidad se afina contra la
+lente con `rampa_x` y `rampa_y` (ver «Calibrar el paso contra la lente»).
 
 ## Requisitos
 

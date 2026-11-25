@@ -3,6 +3,33 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Nota del 25-nov, sin versión nueva: qué trae la calibración de fábrica de este panel y qué usa el visor
+
+- Rodolfo preguntó si las pruebas «en blanco» que hizo QWEN en Windows habían servido: en las dos salía
+  la imagen blanca y nunca se vio la línea negra.
+- MEDIDO: las 22 capturas de `AnalisisOdyssey/medidas-ronda-2/blanco/` (`c00-ON-*` y `c00-OFF-*`) son
+  blanco liso, todos los puntos a 255 y sin portadora. Con las dos vistas en blanco la trama no deja
+  ninguna línea, así que de ahí no sale el paso del programa oficial. No se usaron para calibrar: el
+  paso se midió contra la lente con el patrón de un ojo (v0.59).
+- MEDIDO: `calib/3DStackCorrection_A.png` y `_B.png` son, byte a byte, los de
+  `C:\ProgramData\Simulated Reality\Devices\VN022514ET0194\` (SHA-256 `5e14a614…` y `7b5074e4…`).
+  Abierto tal cual, el A se ve negro (0 a 55) y el B gris liso (117 a 136): son datos, no fotos.
+- MEDIDO sin panel (`ODYSSEYVK_PRUEBA=9` con `--dump`): el sombreador lee el A con media 22,90 y el B con
+  127,17, sin voltear, a 0,07 y 0,08 niveles del PNG. El patrón de un ojo (`b`) deja 45,7 % de
+  subpíxeles negros y 45,7 % blancos, y sus dos posiciones son complementarias (suman 255 ± 3,2).
+- MEDIDO: `calib/SR+CAL3D.bin`, lo que contesta el monitor a `SR+CAL3D`, son 4 bytes de longitud y un 7z
+  de 37 295 bytes (LZMA2 + AES) con tres archivos del 2-abr-2025: `temp/3dstack.eini` (252 bytes),
+  `temp/3DStackCorrection_A.png` y `temp/3DStackCorrection_B.png`. El contenido va cifrado, los
+  nombres no.
+- Lo que NO usa el visor: `3dstack.eini`, donde tiene que ir lo propio de la lente de esta unidad. Sigue
+  cifrado (QWEN probó 59 823 claves) y no se intenta abrir. Por eso `kx`, `ky` y la inclinación son los
+  capturados de otro G90XF y lo de esta unidad se corrige a ojo con `rampa_x` y `rampa_y`. El README
+  decía que esas constantes eran idénticas en todas las unidades: corregido.
+- HIPÓTESIS de por qué en la prueba de un ojo de la v0.59 nunca se vio negro: el rastreo medía la
+  distancia con ±4 cm de error (medido en la v0.74), ±0,15 ciclos de fase en los bordes, y al ojo que
+  debía ver negro le llegaba el subpíxel rojo o el azul. No probado: repetir esa prueba con la 0.74,
+  que además dejaría afinar `rampa_x` y `rampa_y` con el rastreo ya quieto.
+
 ## El rastreo mide la distancia comparando la imagen de los ojos, y los rótulos tienen memoria (v0.74)
 
 - Rodolfo, con la 0.73: «ahora volvió otra vez el lado a lado». El visor de la 0.73 es el de la 0.72 (solo
