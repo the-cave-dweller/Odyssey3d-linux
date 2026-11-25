@@ -5,6 +5,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/objdetect/face.hpp>
+#include <opencv2/photo.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -154,7 +155,7 @@ bool HeadTracker::init(const CameraCalibration &calib, const TrackerTransform &x
    izquierdo, en coordenadas de la imagen de entrada). */
 static bool detectEyes(const uint8_t *gray, int w, int h, const TrackSettings &set,
                        std::vector<cv::Point2f> &eyes, float &score, int &faces, std::string &why,
-                       cv::Rect *caja = nullptr) {
+                       cv::Rect *caja = nullptr, bool *realce = nullptr) {
   /* la red se carga una sola vez: crearla por cuadro costaria decenas de ms */
   static cv::Ptr<cv::FaceDetectorYN> detector;
   static std::string usedModel;
@@ -174,25 +175,54 @@ static bool detectEyes(const uint8_t *gray, int w, int h, const TrackSettings &s
     usedScore = set.score;
   }
   cv::Mat image(h, w, CV_8UC1, (void *)gray);
-  cv::Mat bgr, small;
-  cv::cvtColor(image, bgr, cv::COLOR_GRAY2BGR);
-  /* la red quiere exactamente su tamano fijo: se encoge la vista y luego se
-     devuelven las coordenadas al tamano original */
-  cv::resize(bgr, small, cv::Size(set.detectWidth, set.detectHeight));
+
+  /* letterbox: la vista se encoje conservando la proporcion y se rellena con 114 hasta el
+     tamano fijo que quiere la red, igual que hace el cliente de Mac (FaceProcessing.cpp).
+     Antes se aplastaba con un resize a secas: la cara quedaba deformada y cuando estaba
+     pegada a un borde YuNet simplemente no la veia. */
+  const double escala = std::min((double)set.detectWidth / (double)w,
+                                 (double)set.detectHeight / (double)h);
+  const int rw = (int)std::lround((double)w * escala), rh = (int)std::lround((double)h * escala);
+  const double factor = 1.0 / escala;
+
+  auto lienzoDe = [&](const cv::Mat &gris) {
+    cv::Mat bgr, lienzo(set.detectHeight, set.detectWidth, CV_8UC3, cv::Scalar(114, 114, 114));
+    cv::cvtColor(gris, bgr, cv::COLOR_GRAY2BGR);
+    cv::resize(bgr, lienzo(cv::Rect(0, 0, rw, rh)), cv::Size(rw, rh));
+    return lienzo;
+  };
+  auto correr = [&](const cv::Mat &lienzo, cv::Mat &salida) {
+    try {
+      detector->detect(lienzo, salida);
+      return true;
+    } catch (const cv::Exception &e) {
+      why = std::string("deteccion: ") + e.what();
+      return false;
+    }
+  };
+
   cv::Mat out;
-  try {
-    detector->detect(small, out);
-  } catch (const cv::Exception &e) {
-    why = std::string("deteccion: ") + e.what();
+  if (!correr(lienzoDe(image), out))
     return false;
+  if (out.rows == 0 && set.realce) {
+    /* las vistas vienen del sensor en infrarrojo del monitor con un contraste muy plano:
+       el cliente de Mac vuelve a buscar la cara con el contraste estirado cuando la
+       primera pasada no encontro nada (FaceProcessing.cpp: clipLimit 40, tile 8x8).
+       El reintento solo cuesta en los cuadros en los que no habia cara. */
+    static cv::Ptr<cv::CLAHE> realce_ = cv::createCLAHE(40.0, cv::Size(8, 8));
+    cv::Mat igualado;
+    realce_->apply(image, igualado);
+    if (!correr(lienzoDe(igualado), out))
+      return false;
+    if (out.rows > 0 && realce)
+      *realce = true;
   }
-  const double sx = (double)w / (double)set.detectWidth, sy = (double)h / (double)set.detectHeight;
   if (!out.empty()) {
     for (int row = 0; row < out.rows; row++) {
       float *v = out.ptr<float>(row);
       for (int col = 0; col < 11; col += 2) {
-        v[col] = (float)(v[col] * sx);
-        v[col + 1] = (float)(v[col + 1] * sy);
+        v[col] = (float)(v[col] * factor);
+        v[col + 1] = (float)(v[col + 1] * factor);
       }
     }
   }
@@ -243,9 +273,12 @@ bool HeadTracker::process(const uint8_t *left, const uint8_t *right, int w, int 
   std::vector<cv::Point2f> eyesL, eyesR;
   float scoreL = 0, scoreR = 0;
   std::string whyL, whyR;
-  const bool okL = detectEyes(left, w, h, set_, eyesL, scoreL, out.faces, whyL);
-  int facesR = 0;
-  const bool okR = detectEyes(right, w, h, set_, eyesR, scoreR, facesR, whyR);
+  bool realceL = false, realceR = false;
+  const bool okL = detectEyes(left, w, h, set_, eyesL, scoreL, out.facesLeft, whyL, nullptr, &realceL);
+  const bool okR = detectEyes(right, w, h, set_, eyesR, scoreR, out.facesRight, whyR, nullptr, &realceR);
+  out.faces = out.facesLeft + out.facesRight;
+  out.enhanced = realceL || realceR;
+  out.eyesRejected = whyL == "cara descartada por los ojos" || whyR == "cara descartada por los ojos";
   out.detected = okL && okR;
   if (!out.detected) {
     out.reason = okL ? whyR : whyL;
@@ -532,10 +565,13 @@ bool HeadTracker::decodeFrame(const uint8_t *data, size_t size, int width, int h
       return false;
     }
     const int half = frame.cols / 2;
-    cv::Mat left = frame(cv::Rect(0, 0, half, frame.rows));
-    cv::Mat right = frame(cv::Rect(frame.cols - half, 0, half, frame.rows));
-    grayLeft.assign(left.data, left.data + (size_t)left.total() * left.elemSize());
-    grayRight.assign(right.data, right.data + (size_t)right.total() * right.elemSize());
+    /* OJO: laRegion del cuadro NO es contigua (el cuadro mide el doble de ancho), asi que hay que
+       clonarla antes de coparla a byte plano. Sin el clone se copiaban filas de la otra vista y el
+       detector recibia un cuadro mezcla: nunca encontraba la cara. */
+    const cv::Mat left = frame(cv::Rect(0, 0, half, frame.rows)).clone();
+    const cv::Mat right = frame(cv::Rect(frame.cols - half, 0, half, frame.rows)).clone();
+    grayLeft.assign(left.data, left.data + left.total() * left.elemSize());
+    grayRight.assign(right.data, right.data + right.total() * right.elemSize());
     viewW = half;
     viewH = frame.rows;
     return true;
@@ -572,6 +608,13 @@ bool HeadTracker::decodeMono(const uint8_t *data, size_t size, int width, int he
     if (err) *err = std::string("OpenCV al decodificar: ") + e.what();
     return false;
   }
+}
+
+void HeadTracker::brilloDeVista(const uint8_t *gray, int w, int h, double *media, double *quemados) {
+  if (!gray || w <= 0 || h <= 0) { *media = 0; *quemados = 0; return; }
+  const cv::Mat vista(h, w, CV_8UC1, (void *)gray);
+  *media = cv::mean(vista)[0];
+  *quemados = 100.0 * (double)cv::countNonZero(vista > 250) / (double)vista.total();
 }
 
 bool HeadTracker::saveAnnotated(const uint8_t *left, const uint8_t *right, int w, int h,

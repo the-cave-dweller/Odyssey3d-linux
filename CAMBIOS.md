@@ -2,6 +2,41 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## El rastreo en vivo por fin ve la cara: las dos vistas se recortaban mal (v0.55)
+- Pedido de Rodolfo: «me siento ahora, sondea 8 s» y, después del informe, «sí: score 0,5, letterbox, CLAHE y
+  reproyección ~10 px». El sondeo daba **0 poses con una cara delante**, así que se fue a medir en vez de adivinar.
+- **La causa, encontrada midiendo**: `HeadTracker::decodeFrame` recortaba el cuadro de 1280x480 en dos vistas con
+  una región de OpenCV **sin `clone()`**, y la copiaba a bytes planos con `assign(left.data, left.data + total)`.
+  La región de un cuadro de 1280 de ancho no es contigua (sus filas están separadas 1280 bytes), así que la copia
+  lineal se llevaba las 240 primeras filas de **las dos vistas mezcladas** y datos de la vista vecina. El detector
+  recibía un cuadro remezclado: por eso nunca salía una cara en vivo, mientras que la vía de archivo
+  (`describeStill`, que sí usa `.clone()`) las encontraba en los mismos cuadros.
+- Cómo se vio, sin tocar la cámara: `ctl track --volcar-crudo RUTA` imprime el brillo del cuadro ya decodificado y
+  salva los bytes crudos. Los bytes eran **idénticos** (firma FNV igual antes de decodificar, después y en el
+  archivo), y al decodificarlos otra vez salía otra imagen: vivo 137,7 de brillo frente a 114,4 de los mismos
+  bytes. Con eso quedó descartado el decodificador, el `imdecode` en memoria y la exposición, y señalado el recorte.
+- Arreglo: las dos regiones se **clonan** antes de copiarlas (`track.cpp`, en `decodeFrame`). Es justo lo que hace el
+  cliente de Mac, que arma las vistas fila por fila respetando el paso (`StereoTracking.swift:150-156`).
+- Medido después del arreglo, sentado delante, sin overlay montado:
+  `ctl track --segundos 8` → **467 fotogramas leidos, 465 poses validas**, y la cuenta cierra con
+  `careos  sin cara 1, cara descartada por los ojos 0, geometria rechazada 0`. Pose típica:
+  panel (-3,5; 10,1; 54,0) cm, ipd 66-74 mm, **error de reproyección 0,48-2,11 px**, YuNet 3,6-4,6 ms por cuadro.
+  Con `--realce no` sale idéntico (465 de 467), así que el CLAHE no hace falta en sala iluminada: se queda como
+  red de seguridad para escena oscura, y solo paga cuando la primera pasada no ve nadie.
+- Comprobado a ojo también: los círculos de los ojos caen **sobre las pupilas** en las dos vistas, con una
+  disparidad horizontal de ~60 px, que es la que toca (focal ~554 px × 60 mm de separación / 0,55 m ≈ 60 px).
+- Los cambios de detección que pidió Rodolfo siguen puestos y son los del Mac —**letterbox** con relleno 114 en vez
+  de aplastar a 448x320, `score` de **0,5**, reintento **CLAHE** (`clipLimit 40`, `tile 8x8`), triangulación con
+  hasta **10 px** de error en vez de 3—, pero hay que decirlo claro: la tabla A/B que escribí primero (4 de 5
+  cuadros válidos frente a 1 de 5) se midió sobre cuadros ya remezclados, así que **ese número no vale**. El que
+  vale es el de arriba: 465 de 467.
+- Añadidos de diagnóstico que se quedan: la línea `careos ...` del sondeo (tres motivos que antes se escondían
+  detrás de «sin cara»), `--volcar-crudo RUTA` (cuadro crudo en JPEG + anotado en PNG + el mismo cuadro repasado
+  por la vía de archivo) y `--realce no`. El reintento CLAHE vive en `opencv_photo`, ya enlazado.
+- Sigue siendo cierto lo de la exposición: el **primer cuadro** después de `STREAMON` llega quemado (brillo medio
+  212 y **57,5 %** de píxeles por encima de 250) y al cuadro 30 (≈0,5 s) ya está bien (112, 2,9 %). Aun así la cara
+  se detecta en el cuadro 1; la exposición del monitor tarda medio segundo en asentarse.
+
 ## La pastilla dice Facetracking con 3D Studio y fallback, y la ventana tiene hoja de Cámara (v0.54)
 - Pedido de Rodolfo: «el comportamiento del software debe ser simple, ya no ofrecer activar o desactivar el
   rastreo, sino en el overlay decir Facetracking y junto 3D Studio o fallback, que esté marcado el activo y

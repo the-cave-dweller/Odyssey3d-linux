@@ -215,7 +215,7 @@ if(OPENCV_FOUND)
   target_sources(odyssey3d PRIVATE src/track.cpp src/trackfeed.cpp)
   target_include_directories(odyssey3d PRIVATE ${OPENCV_INCLUDE_DIRS})
   target_link_directories(odyssey3d PRIVATE ${OPENCV_LIBRARY_DIRS})
-  target_link_libraries(odyssey3d PRIVATE opencv_objdetect opencv_dnn opencv_geometry opencv_imgcodecs opencv_imgproc opencv_core)
+  target_link_libraries(odyssey3d PRIVATE opencv_objdetect opencv_dnn opencv_geometry opencv_imgcodecs opencv_imgproc opencv_photo opencv_core)
   target_compile_definitions(odyssey3d PRIVATE HAVE_OPENCV=1)
 endif()
 

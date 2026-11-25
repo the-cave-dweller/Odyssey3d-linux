@@ -443,6 +443,7 @@ static int cmdTrack(int argc, char **argv) {
   if (!flag(argc, argv, "--score").empty()) set.score = (float)atof(flag(argc, argv, "--score").c_str());
   if (!flag(argc, argv, "--suavizado").empty()) set.smoothing = atof(flag(argc, argv, "--suavizado").c_str());
   if (!flag(argc, argv, "--salto").empty()) set.maxJumpCentimetres = atof(flag(argc, argv, "--salto").c_str());
+  if (!flag(argc, argv, "--realce").empty()) set.realce = flag(argc, argv, "--realce") != "no";
 
   std::string err;
   CameraCalibration calib;
@@ -488,6 +489,7 @@ static int cmdTrack(int argc, char **argv) {
   std::printf("modelo       %s\n", set.model.c_str());
 
   const std::string dump = flag(argc, argv, "--dump");
+  const std::string volcar = flag(argc, argv, "--volcar-crudo");
   const std::string foto = flag(argc, argv, "--foto");
   if (pedidoFoto) {
     if (mono) {
@@ -585,6 +587,7 @@ static int cmdTrack(int argc, char **argv) {
   const int mostrarCada = std::max(1, atoi(flag(argc, argv, "--cada").c_str()) ? atoi(flag(argc, argv, "--cada").c_str()) : 15);
   auto t0 = std::chrono::steady_clock::now();
   int leidos = 0, aceptados = 0;
+  int sinCara = 0, ojosMal = 0, geoMal = 0, porRealce = 0;
   bool dumpHecho = false;
   double marcaCuadro = -10.0;   /* el ultimo cuadro crudo que se guardo para la vista */
   while (true) {
@@ -625,12 +628,44 @@ static int cmdTrack(int argc, char **argv) {
       continue;
     }
     const uint8_t *lp = left.data(), *rp = right.data();
+    /* --volcar-crudo: anota el PRIMER cuadro vivo aunque no haya cara, para comparar el
+       cuadro que llega por V4L2 con el mismo cuadro salvado a disco */
+    if (!volcar.empty() && (leidos == 1 || leidos == 30)) {
+      double brillo = 0, saturados = 0;
+      HeadTracker::brilloDeVista(left.data(), vw, vh, &brillo, &saturados);
+      std::printf("cuadro %-4zu %zu bytes, vista %dx%d, mjpeg=%d, brillo %.1f, saturados %.1f%%\n",
+                  leidos, size, vw, vh, cam.mjpeg() ? 1 : 0, brillo, saturados);
+      std::string d3;
+      const std::string png = volcar + "." + std::to_string(leidos) + ".png";
+      if (HeadTracker::saveAnnotated(lp, rp, vw, vh, set, png, &d3))
+        std::printf("anotado vivo %s\n", png.c_str());
+      else
+        std::fprintf(stderr, "volcar: %s\n", d3.c_str());
+      const std::string crudo = volcar + "." + std::to_string(leidos) + ".jpg";
+      std::ofstream flujo(crudo, std::ios::binary);
+      flujo.write((const char *)data, (std::streamsize)size);
+      std::printf("crudo vivo   %s\n", crudo.c_str());
+      /* A/B dentro del mismo proceso: el MISMO cuadro, por la via del archivo */
+      TrackSample muestra2;
+      std::string info2;
+      if (HeadTracker::describeStill(crudo, set, volcar + "." + std::to_string(leidos) + ".anot.jpg",
+                                     tracker, &muestra2, &info2))
+        std::printf("via archivo  %s\n", info2.c_str());
+      else
+        std::printf("via archivo  fallo: %s\n", info2.c_str());
+    }
     TrackSample sample;
     if (mono)
       tracker.processMono(lp, vw, vh, sample, &why);
     else
       tracker.process(lp, rp, vw, vh, sample, &why);
     if (sample.accepted && !sample.predicted) aceptados++;
+    if (!sample.detected) {
+      if (sample.reason == "sin cara") sinCara++;
+      else if (sample.eyesRejected) ojosMal++;
+      else geoMal++;
+    }
+    if (sample.enhanced) porRealce++;
     if (!dump.empty() && !dumpHecho && sample.detected && !mono) {
       std::string d2;
       if (HeadTracker::saveAnnotated(lp, rp, vw, vh, set, dump, &d2))
@@ -660,6 +695,9 @@ static int cmdTrack(int argc, char **argv) {
   }
   cam.stop();
   std::printf("%d fotogramas leidos, %d poses validas\n", leidos, aceptados);
+  std::printf("careos       sin cara %d, cara descartada por los ojos %d, geometria rechazada %d"
+              " (a las %d las saco el reintento con CLAHE)\n",
+              sinCara, ojosMal, geoMal, porRealce);
   return aceptados > 0 ? 0 : 1;
 }
 #endif

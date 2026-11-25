@@ -12,8 +12,10 @@
 
 struct TrackSettings {
   std::string model;                /* .onnx de YuNet */
-  float score = 0.6f;               /* umbral de deteccion de cara */
-  double maxReprojectionPx = 3.0;   /* error de reproyeccion admitido */
+  float score = 0.5f;               /* umbral de deteccion de cara; 0,5 como el cliente de Mac */
+  double maxReprojectionPx = 10.0;  /* error de reproyeccion admitido (antes 3 px: descartaba
+                                      triangulaciones buenas; el cliente de Mac admite 40 px) */
+  bool realce = true;               /* reintentar con CLAHE cuando no sale ninguna cara */
   double minDepthMillimetres = 200; /* distancia minima a la camara */
   double maxJumpCentimetres = 12;   /* salto máximo entre cuadros aceptados */
   double smoothing = 0.35;          /* alfa del filtro exponencial (0 = sin filtro) */
@@ -42,6 +44,9 @@ struct TrackSample {
   bool mono = false;          /* pose sacada de una sola vista (webcam normal) */
   double faceWidthPx = 0;     /* ancho de la caja de la cara, en la via mono */
   int faces = 0;
+  int facesLeft = 0, facesRight = 0;  /* caras que vio YuNet en cada vista */
+  bool eyesRejected = false;      /* hubo cara pero la tiro la comprobacion de los ojos */
+  bool enhanced = false;          /* el cuadro lo saco el reintento con CLAHE */
   int misses = 0;
   double latencyMs = 0;
   std::string reason;       /* por que no se acepto, si acaso */
@@ -99,6 +104,9 @@ public:
                             std::string *info, std::string *err = nullptr);
 
   /* Guarda un JPEG con las caras y los ojos marcados, para revisar la deteccion. */
+  /* brillo medio y porcentaje de pixels quemados de una vista en grises */
+  static void brilloDeVista(const uint8_t *gray, int w, int h, double *media, double *quemados);
+
   static bool saveAnnotated(const uint8_t *left, const uint8_t *right, int w, int h,
                             const TrackSettings &set, const std::string &path,
                             std::string *err = nullptr);

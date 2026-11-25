@@ -737,7 +737,7 @@ int main(int argc, char **argv) {
   /* ================= la hoja de la camara (v0.54) =========================================
      Con que camara se esta siguiendo la cara, y que esta viendo esa camara. Dos nombres fijos:
      `3D Studio` es la integrada del Odyssey (USB 04e8:20d7, "3D Stereo WebCam": dos vistas
-     calibradas de fabrica, 1280x480 = 2x240 para que cada mitad sea una vista) y `fallback` es
+     calibradas de fabrica, 1280x480 = dos vistas de 640x480 lado a lado) y `fallback` es
      cualquier webcam aparte, que mide la distancia por el ancho de la cara. No se ofrece
      encender ni apagar el rastreo: si la camara abre, manda la camara.
 

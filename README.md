@@ -448,9 +448,8 @@ siguen funcionando igual.
 
 La cámara buena es la **infrarroja estéreo del propio monitor** (`3D Stereo Webcam`, `04e8:20d7`): viene
 calibrada de fábrica, da dos vistas de lo mismo y de ahí sale la posición de los ojos con pocos
-milímetros de error. Si esa cámara no aparece —en esta máquina nunca llegó a enumerarse como
-`/dev/video*`— el visor **usa la primera webcam que encuentre** (`/dev/video0`, una HP 320 FHD, por
-ejemplo) y mide la cabeza por el tamaño de la cara en el cuadro:
+milímetros de error). Si esa cámara no aparece o está ocupada, el visor **usa la primera webcam que
+encuentre** (una HP 320 FHD, por ejemplo) y mide la cabeza por el tamaño de la cara en el cuadro:
 
 * focal estimada `f = (0,5·ancho) / tan(0,5·campo)` con el campo horizontal que anuncie la webcam
   (`--track-campo`, `campo =` en `serve.conf`);
@@ -458,8 +457,9 @@ ejemplo) y mide la cabeza por el tamaño de la cara en el cuadro:
 * `x` e `y` salen del centro de la caja de la cara, en centímetros del panel.
 
 Es aproximado: si alguien mide la mitad de la cara, la distancia sale el doble de lejos, y de ahí el
-error en `x`. Aun así sigue sirviendo para mover el relieve con la cabeza, y si te quedas quieto puedes
-apartarlo con el botón `T` y quedarse en la posición de fábrica. Se puede forzar el comportamiento
+error en `x`. Aun así sigue sirviendo para mover el relieve con la cabeza. El rastreo **no se ofrece a
+encender ni apagar**: la fila `Facetracking` de la pastilla dice qué cámara lo alimenta (`3D Studio` la
+integrada del monitor, `fallback` una webcam aparte). Se puede forzar el comportamiento
 con `--track-mono si|no|auto` (`auto` = mirar qué cámara es: si el nombre dice «stereo»/«3D» o el modo
 es 2× alto, se intenta la vía calibrada; si no, la de la cara).
 
@@ -468,7 +468,26 @@ Para comprobarlo sin sentarse delante:
 ```
 odyssey3d ctl track --mono-simulacro              # la cuenta, sin cámara: debe decir "la cuenta cuadra"
 odyssey3d ctl track --dev /dev/video0 --segundos 8  # en vivo: cara si · panel x y z en cm
+odyssey3d ctl track --foto cuadro.jpg --dump anotado.jpg   # un cuadro guardado, sin tocar la cámara
+odyssey3d ctl track --segundos 5 --volcar-crudo /tmp/ab     # vuelca cuadro crudo + anotado + A/B
 ```
+
+El sondeo en vivo cierra con la cuenta de por qué no salió la pose, que son tres cosas distintas:
+
+```
+careos       sin cara 512, cara descartada por los ojos 3, geometria rechazada 7 (a las 41 las saco el reintento con CLAHE)
+```
+
+La receta de detección es la del cliente de Mac: la vista entra a YuNet con **letterbox** (proporción
+conservada, relleno 114) en vez de aplastada, umbral de cara **0,5**, y si la primera pasada no ve a nadie
+se **reintenta con CLAHE** (`clipLimit 40`, `tile 8x8`) —se apaga con `--realce no`, solo paga en los cuadros
+sin cara—. La triangulación admite hasta **10 px** de error de reproyección (antes 3 px; el Mac admite 40).
+Sentado delante, el sondeo de 8 s con la cámara del monitor da **465 poses válidas de 467 fotogramas**, con
+0,5-2,1 px de error de reproyección y 3,6-4,6 ms de YuNet por cuadro. Dos cosas a saber: el cuadro llega como
+**dos vistas de 640x480 lado a lado**, y hay que recortarlas con `clone()` (una región de un cuadro de 1280
+de ancho no es contigua: copiarla a bytes planos sin clonar mezcla las dos vistas y el detector no ve nada);
+y el **primer cuadro** después de encender el streaming llega quemado por la exposición automática (57,5 % de
+píxeles por encima de 250), que se asienta hacia el cuadro 30, unos medio segundo.
 
 Si en cambio quieres la vía calibrada con la cámara del monitor, `--track-mono no` (exige `calib/`).
 
