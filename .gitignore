@@ -1,7 +1,22 @@
-build/
+# Compilacion (build/, build-dbg/, build-*)
+build*/
+*.o
+
+# Redes ONNX: no se suben (las de Samsung son suyas y pesan decenas de MB).
+# Solo va la de deteccion de cara, que es de OpenCV con licencia libre.
+*.onnx
+!modelos/face_detection_yunet_2023mar.onnx
+
+# Salidas de pruebas
 samples/chk*
 samples/pat*
-*.o
-*.png.bak
 samples/trama*
-build*/
+*.png.bak
+
+# Editores y sistema
+*.swp
+*~
+.vscode/
+.idea/
+.cache/
+compile_commands.json
