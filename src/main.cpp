@@ -1989,6 +1989,13 @@ static int cmdMapa(int argc, char **argv) {
     std::fprintf(stderr, "(las .onnx viven en ~/.local/share/odysseyvk/modelos/)\n");
     return 1;
   }
+  /* las fotos pasan a toda prisa: que el suavizado no lo note. ODYSSEYVK_PASO_FIJO (segundos) dice a
+     que ritmo se supone que llegan, para comprobar los suavizados por tiempo sin video. */
+  {
+    const char *pf = entornoOdyssey("ODYSSEYVK_PASO_FIJO");
+    const double v = pf ? std::atof(pf) : 0.0;
+    net.setPasoFijo(v > 0.0 ? v : DepthNet::kPasoRef);
+  }
   std::printf("[mapa] red %s por %s · salida %d x %d\n", net.modelPath().c_str(), net.device().c_str(),
               net.size(), net.size());
   for (size_t f = 0; f < ficheros.size(); f++) {

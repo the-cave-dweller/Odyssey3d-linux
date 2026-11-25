@@ -739,6 +739,25 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   if (hi - lo < 1e-4f) hi = lo + 1e-4f;
   const float invCrudo = 1.0f / (hi - lo);
 
+  /* Los tres seguimientos SUELTOS van por TIEMPO, no por estimacion (v0.69): la escala del mapa (0,25),
+     el plano de apoyo y las posiciones de las dos laminas (0,08). Sus pesos se pusieron mirando el panel
+     cuando salian ~6 estimaciones por segundo (el hilo que dibuja se paraba 75 ms en cada una, ver
+     crearBufferDeLectura en vkweave.cpp). Arreglado eso salen 20 o mas, y con los mismos pesos por
+     estimacion el plano y la escala correrian tres veces mas deprisa detras de cada cambio.
+     `porTiempo(w)` da el peso equivalente para el tiempo que de verdad paso: con una estimacion cada
+     1/6 s es w tal cual. Son numeros sueltos, sin el bucle del mapa de mas abajo. */
+  double pasoEst = kPasoRef;
+  {
+    const double ahoraS =
+        std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (pasoFijo_ > 0.0) pasoEst = pasoFijo_;
+    else if (tUltima_ >= 0.0) pasoEst = ahoraS - tUltima_;
+    tUltima_ = ahoraS;
+    pasoEst = pasoEst < 0.004 ? 0.004 : (pasoEst > 0.5 ? 0.5 : pasoEst);
+  }
+  const float expoT = (float)(pasoEst / kPasoRef);
+  auto porTiempo = [expoT](float w) { return 1.0f - std::pow(1.0f - w, expoT); };
+
   /* cambio de plano: si el mapa nuevo no se parece nada al anterior, la escala que llevamos
      acumulada ya no vale y hay que reiniciarla de golpe (si no, los pocos cuadros siguientes salen
      con el rango del plano viejo: el relieve se ve apagado o quemado). Las cifras son las del
@@ -765,7 +784,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     loS_ = lo, hiS_ = hi;
     haveScale_ = true;
   } else {
-    const float a = 0.25f;   /* la escala nueva entra poco a poco: el relieve no baila */
+    const float a = porTiempo(0.25f);   /* la escala nueva entra poco a poco: el relieve no baila */
     loS_ += (lo - loS_) * a;
     hiS_ += (hi - hiS_) * a;
     if (hiS_ - loS_ < 1e-4f) hiS_ = loS_ + 1e-4f;
@@ -802,6 +821,12 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   /* en el tiempo: el mapa nuevo entra con el peso que pide el usuario, salvo en un cambio de plano,
      que se toma tal cual para no arrastrar el cuadro anterior sobre el plano nuevo. */
   const bool suavizar = prev_.size() == plane && smooth_ > 0.0f && !corte_;
+  /* OJO: este peso se queda POR ESTIMACION a proposito (v0.69). El mapa anterior que se mezcla aqui es
+     la SALIDA ya procesada (filtro guiado, dilatado, relieve local, dos planos), y todo eso se vuelve a
+     aplicar encima en cada vuelta: lo que se ve es el punto de equilibrio de ese bucle, y depende de
+     este peso. Pasarlo a "por tiempo" cambia el equilibrio (medido: 10 niveles de media de diferencia a
+     18 estimaciones por segundo). Con el peso fijo, una imagen quieta da el mismo mapa a cualquier
+     ritmo; lo unico que cambia con mas estimaciones es que el mapa llega antes a su sitio. */
   const float q = 1.0f - smooth_;
   if (suavizar) {
     for (size_t i = 0; i < plane; i++)
@@ -965,7 +990,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     const bool salto = corte_ || !focoListo_;
     focoListo_ = true;
     if (salto || std::fabs(nuevo - focus_) >= 0.01f)
-      focus_ += (nuevo - focus_) * (salto ? 1.0f : kFocoIir);
+      focus_ += (nuevo - focus_) * (salto ? 1.0f : porTiempo(kFocoIir));
   }
 
   /* Los dos planos. Con dureza 0 (lo de siempre, y lo que arranca el programa) este bloque no se
@@ -983,8 +1008,8 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
         pFondo_ = visto.fondo;
         pFrente_ = visto.frente;
       } else if (std::fabs(visto.fondo - pFondo_) >= 0.004f || std::fabs(visto.frente - pFrente_) >= 0.004f) {
-        pFondo_ += (visto.fondo - pFondo_) * 0.08f;
-        pFrente_ += (visto.frente - pFrente_) * 0.08f;
+        pFondo_ += (visto.fondo - pFondo_) * porTiempo(0.08f);
+        pFrente_ += (visto.frente - pFrente_) * porTiempo(0.08f);
       }
       if (pFrente_ - pFondo_ < 0.10f) {
         pFondo_ = visto.fondo;      /* se pegaron: tomar tal cual antes de aplicar */

@@ -75,6 +75,8 @@ public:
   int converterSize() const { return smallW_; }
   bool readSmall(std::vector<uint8_t> &rgba, std::string *err);   /* fuente -> RGBA sz x sz */
   bool setDepthMap(const uint8_t *g, int w, int h, std::string *err);
+  /* lo mismo, con el mapa ya repartido por ojo (dos bytes por punto: izquierdo, derecho) */
+  bool setDepthMapRG(const uint8_t *rg, int w, int h, std::string *err);
   bool hasDepthMap() const { return depthUsable_; }
   void setConverter(float gain, float ref, bool on) { convGain_ = gain, convRef_ = ref, convOn_ = on; }
   /* para el volcado: poder apagar el releve un momento y volverlo a dejar como estaba */
@@ -177,6 +179,7 @@ private:
   VkDescriptorSet smallSet_ = VK_NULL_HANDLE;
   VkImg depth_{};          /* mapa de profundidad (R8G8: un canal por ojo) que lee el shader */
   std::vector<uint8_t> mapRG_;   /* el mapa ya partido por ojo, antes de subirlo */
+  bool subirMapaRG(const uint8_t *rg, int w, int h, std::string *err);   /* la subida a la tarjeta, sin mas */
   double msHoyos_ = 0.0;         /* lo que tarda rellenar los huecos (medible con ODYSSEYVK_MEDIR=1) */
   long mapasContados_ = 0;
   bool depthUsable_ = false;

@@ -107,11 +107,17 @@ public:
      camino entre el sujeto y el fondo, asi que el sujeto SALE de la pantalla y el fondo se hunde (v0.66). */
   float focusPlane() const { return focus_ * (1.0f - pivote_); }
   float sujeto() const { return focus_; }
+  /* Paso de tiempo entre estimaciones para los suavizados (v0.69). Con <= 0 (lo normal) se mide con el
+     reloj; las herramientas que pasan fotos a toda prisa (`odysseyvk mapa`) lo fijan en kPasoRef para
+     que una rafaga de cuadros se suavice como en un video y no como si durara milisegundos. */
+  static constexpr double kPasoRef = 1.0 / 6.0;
+  void setPasoFijo(double s) { pasoFijo_ = s; }
   /* Olvida lo que arrastra de un cuadro al siguiente (mapa anterior, escala, plano de apoyo, laminas):
      el cuadro que venga se trata como el primero. Para medir fotos sueltas con `mapa --sueltas`: sin
      esto, pasar varias fotos sin relacion en una sola llamada mezcla cada mapa con el anterior (el
      suavizado en el tiempo) y las medidas salen contaminadas (paso el 25-nov, ver CAMBIOS v0.66). */
   void olvidar() {
+    tUltima_ = -1.0;
     prev_.clear();
     haveScale_ = false;
     focoListo_ = false;
@@ -163,6 +169,8 @@ private:
   float focus_ = 0.5f;                  /* plano de enfoque seguido automaticamente */
   bool focoListo_ = false;              /* ya hubo una estimacion: el plano se sigue, no se salta */
   float pivote_ = 0.0f;                 /* cuanto se retrasa el plano de la pantalla respecto al sujeto (0..0,9) */
+  double tUltima_ = -1.0;               /* reloj de la estimacion anterior, en segundos (< 0 = no hubo) */
+  double pasoFijo_ = 0.0;               /* ver setPasoFijo */
   bool corte_ = false;                  /* cambio de plano en la ultima estimacion */
   long cortes_ = 0;
   int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */

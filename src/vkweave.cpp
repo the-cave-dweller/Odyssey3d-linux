@@ -451,6 +451,22 @@ void VkWeave::destroyFrames() {
   }
 }
 
+/* Un bufer que la CPU va a LEER (lo que baja de la tarjeta). Hay que pedirlo con HOST_CACHED: sin eso
+   NVIDIA da el primer tipo de memoria que cumple "visible y coherente", que es el de escritura
+   combinada, sin cache, y leerlo punto a punto es lentisimo. MEDIDO el 25-nov (v0.69): bajar la copia
+   de 518 x 518 (1 MB) para la red tardaba 75 ms por estimacion en el hilo que dibuja, nueve refrescos
+   del panel parados cada vez, y por eso el visor iba a ~80 cuadros por segundo con el conversor y solo
+   salian ~8 mapas por segundo. Si la tarjeta no tiene memoria con cache, se cae al tipo de antes. */
+static bool crearBufferDeLectura(VkDev *dev, VkDeviceSize bytes, VkBuffer &buf, VkDeviceMemory &mem,
+                                 std::string *err) {
+  const VkMemoryPropertyFlags base = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  std::string e1;
+  if (dev->createBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, base | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, buf,
+                        mem, &e1))
+    return true;
+  return dev->createBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, base, buf, mem, err);
+}
+
 void VkWeave::waitIdle() {
   if (dev_ && dev_->device()) vkDeviceWaitIdle(dev_->device());
 }
@@ -1084,9 +1100,7 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
   const VkDeviceSize pxBytes = (VkDeviceSize)pw_ * (VkDeviceSize)ph_ * 4u;
   VkBuffer stage = VK_NULL_HANDLE, ubo = VK_NULL_HANDLE, vbo = VK_NULL_HANDLE;
   VkDeviceMemory stageMem = VK_NULL_HANDLE, uboMem = VK_NULL_HANDLE, vboMem = VK_NULL_HANDLE;
-  bool ok = dev_->createBuffer(pxBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stage,
-                               stageMem, err);
+  bool ok = crearBufferDeLectura(dev_, pxBytes, stage, stageMem, err);
   ok = ok && dev_->uploadBytes(uboData_, kUboBytes, ubo, uboMem, err);
   HudVertex vacio{};
   const void *hv = hud_.empty() ? (const void *)&vacio : (const void *)hud_.data();
@@ -1221,9 +1235,7 @@ bool VkWeave::prepareConverter(int sz, std::string *err) {
     return false;
   }
   const VkDeviceSize pxBytes = (VkDeviceSize)sz * (VkDeviceSize)sz * 4u;
-  if (!dev_->createBuffer(pxBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, smallStage_,
-                          smallStageMem_, &e2)) {
+  if (!crearBufferDeLectura(dev_, pxBytes, smallStage_, smallStageMem_, &e2)) {
     if (err) *err = "buffer de paso del conversor: " + e2;
     return false;
   }
@@ -1370,6 +1382,23 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
   if (entornoOdyssey("ODYSSEYVK_MEDIR") && (++mapasContados_ % 30 == 1))
     std::fprintf(stderr, "[medir] huecos rellenados %d de %lld puntos (%.2f%%) en %.1f ms\n", huecos,
                  (long long)(2 * n), 100.0 * (double)huecos / (double)(2 * n), msHoyos_);
+  return subirMapaRG(mapRG_.data(), w, h, err);
+}
+
+/* El mapa ya repartido en sus dos canales (uno por ojo, con los huecos rellenos). Desde v0.69 el
+   visor lo trae hecho del hilo de la red: rellenar los huecos aqui, en el hilo que dibuja, tardaba
+   de 0,5 a 17 ms segun peleara por la CPU con la red, y cada vez que pasaba de 8 se perdia un refresco. */
+bool VkWeave::setDepthMapRG(const uint8_t *rg, int w, int h, std::string *err) {
+  if (!dev_ || !rg || w <= 0 || h <= 0) {
+    if (err) *err = "mapa de profundidad vacio";
+    return false;
+  }
+  waitIdle();   /* el mapa anterior puede estar en manos de un cuadro en vuelo */
+  return subirMapaRG(rg, w, h, err);
+}
+
+bool VkWeave::subirMapaRG(const uint8_t *rg, int w, int h, std::string *err) {
+  const VkDeviceSize nrg = (VkDeviceSize)w * (VkDeviceSize)h * 2;
   if (!depth_.valid() || depthW_ != w || depthH_ != h) {
     /* la primera vez, o si cambia el tamano del modelo: imagen nueva y buffer de paso a su medida */
     if (mapStage_) {
@@ -1378,7 +1407,7 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
       mapStage_ = VK_NULL_HANDLE;
       mapStageMem_ = VK_NULL_HANDLE;
     }
-    if (!uploadR8(mapRG_.data(), w, h, depth_, err, VK_FORMAT_R8G8_UNORM, 2)) return false;
+    if (!uploadR8(rg, w, h, depth_, err, VK_FORMAT_R8G8_UNORM, 2)) return false;
     if (!dev_->createBuffer(nrg, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mapStage_,
                             mapStageMem_, err))
@@ -1392,7 +1421,7 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
       if (err) *err = "no se pudo preparar el mapa de profundidad";
       return false;
     }
-    memcpy(p, mapRG_.data(), (size_t)nrg);
+    memcpy(p, rg, (size_t)nrg);
     vkUnmapMemory(dev_->device(), mapStageMem_);
     VkCommandBuffer cb = dev_->beginOneTime(err);
     if (!cb) return false;

@@ -3,6 +3,61 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El visor deja de pararse 75 ms en cada estimación: 120 cuadros por segundo con el conversor (v0.69)
+
+- Pedido de Rodolfo: investigar por qué el visor va a ~83 cuadros por segundo y no a los 120 del panel.
+- MEDIDO en el registro del vigilante: no es de hoy. Sesiones de conversor: 03:51 (v0.57) mediana 80,9;
+  07:04 (v0.60) 75,9; 07:20 a 08:18 (v0.62 a v0.68) entre 78 y 85.
+- Reproducido sin panel, sin captura y sin navegador: `ODYSSEYVK_FUENTE_VIVA=1` (taller nuevo: da la
+  fuente por nueva en cada cuadro) con `test --convert` cae a **78-82 fps**, y `ODYSSEYVK_MEDIR=1` (ahora
+  también en el visor) dice dónde: **`leer` 75 ms** por estimación (bajar la copia de 518 × 518 para la
+  red) y `subir` 11 ms (mandar el mapa). Las dos en el hilo que dibuja.
+
+### Las tres causas, por orden de peso
+
+1. **El búfer de lectura estaba en memoria sin caché.** Se pedía «visible y coherente» y en NVIDIA el
+   primer tipo que cumple eso (`memoryTypes[2]`, 0x6) es de escritura combinada; el de lectura es el
+   siguiente (`[3]`, 0xe, con `HOST_CACHED`). Leer 1 MB punto a punto de ahí costaba 75 ms: nueve
+   refrescos parados por estimación, y por eso además solo salían ~6-8 mapas por segundo.
+   `crearBufferDeLectura` (`src/vkweave.cpp`) pide `HOST_CACHED` y cae al de antes si no hay.
+   **`leer`: 75 → 1,5 ms.** Vale también para `grab` (los volcados).
+2. **El relleno de huecos corría en el hilo que dibuja** (dentro de `setDepthMap`) y tardaba de 0,5 a
+   17 ms según peleara por la CPU con la red. Ahora lo hace el hilo de la red y el visor solo sube el
+   resultado (`setDepthMapRG`). **`subir`: 11 → 1,1 ms.**
+3. **El hilo de la red se creaba de nuevo en cada estimación** (y con él su cuadrilla de OpenMP), y los
+   «3 cuadros» de `cada` se contaban después de terminar, no desde el lanzamiento. Ahora es un hilo
+   permanente y se cuenta desde el lanzamiento. La red pasa de 10-17 ms a ~4,3 ms por estimación.
+
+### Para que se vea igual que lo aprobado
+
+- Los tres seguimientos sueltos (escala del mapa 0,25, plano de apoyo, láminas 0,08) pasan a ser **por
+  tiempo** (`porTiempo`, referencia 1/6 s, el ritmo real de las sesiones aprobadas): con más
+  estimaciones por segundo el plano y la escala no corren más deprisa.
+- El suavizado del mapa (0,6) se queda **por estimación a propósito**: mezcla la salida ya procesada
+  (dilatado, relieve local, dos planos) y lo que se ve es el equilibrio de ese bucle. Probé pasarlo a por
+  tiempo y el mapa cambiaba 10 niveles de media a 18 estimaciones por segundo: descartado. Queda apuntado
+  como deuda: ese bucle debería suavizar antes de procesar, no después.
+
+### Comprobado (sin panel)
+
+| | antes | v0.69 |
+|---|---|---|
+| cuadros por segundo con el conversor a ritmo de video | 78-82 | **119,4-119,9** |
+| cuadros que pierden un refresco | 15 % | **0,0 %** (0 de 600, tres tandas) |
+| `leer` / `subir` por estimación | 75 ms / 11 ms | 1,5 ms / 1,1 ms |
+| mapas por segundo (fuente a 120) | ~8 | **40** |
+
+- `odysseyvk mapa` con una ráfaga de 10 cuadros y la misma red: **idéntico** a la v0.66 (diferencia 0).
+- Imagen quieta tras 8 estimaciones a 6/s contra 20/s: mismo equilibrio (media 1,04 niveles, máx 4); el
+  plano de apoyo se mueve −0,017/s en los dos casos.
+- El dibujo con mapa fijo es idéntico bit a bit al de la v0.68 (diferencia 0). Sin errores en el registro.
+
+### No probado
+
+- En el panel con un video real (falta instalar). Ahí el navegador decodifica 4K a la vez, y con video de
+  60 cuadros saldrán ~20 mapas por segundo en vez de ~6: el relieve seguirá mejor lo que se mueve, y es
+  lo único que puede verse distinto.
+
 ## Realce de detalle en el sujeto, como el Hub (v0.68)
 
 - Tercera de las tres ideas pedidas por Rodolfo. Un sujeto más nítido que el fondo se despega de él

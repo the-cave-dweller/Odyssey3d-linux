@@ -20,6 +20,8 @@
 #include "util.h"
 #ifdef HAVE_ORT
 #include "depth.h"
+#include "hoyos.h"
+#include <condition_variable>
 #endif
 #include "vkui.h"
 #include "vkweave.h"
@@ -1212,6 +1214,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int convSalto = 0;
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
+  /* medicion del bucle (ODYSSEYVK_MEDIR): tiempos de leer la copia pequena y de subir el mapa, y
+     cuadros que pierden un refresco */
+  double medLeeMs = 0.0, medSubeMs = 0.0, medUltimo = 0.0;
+  long long medLeeN = 0, medSubeN = 0, medLentos = 0;
   int cadaConv = opts.convEach;
   bool apoyoAuto = true;      /* el plano de apoyo lo sigue la red; Ctrl+Shift+3/4 lo vuelve manual */
   int profundidadVista = ui.hud.state().depth;
@@ -1219,55 +1225,119 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       Para no congelar el cuadro, la estimacion corre en su propio hilo: aqui solo se reduce la
       imagen en la tarjeta y se le manda la copia; el mapa vuelve cuando esta terminado y se sube
       en este hilo, que es el dueno de Vulkan. */
+   /* El hilo de la red. Desde v0.69 es UN hilo que vive toda la sesion y espera trabajo: antes se creaba
+      uno por estimacion, y con el su cuadrilla de OpenMP (el filtro guiado y el relleno de huecos van con
+      `omp parallel`), que se montaba y se tiraba veinte veces por segundo. */
    struct HiloRed {
      std::thread hilo;
      std::mutex candado;
+     std::condition_variable aviso, libre;
+     struct Trabajo {
+       DepthNet *red = nullptr;
+       std::vector<uint8_t> copia;
+       int sz = 0;
+       bool apoyar = false;
+       float ganancia = 0.0f, apoyoFijo = -1.0f;
+     } trabajo;
+     bool hayTrabajo = false, enCurso = false, salir = false;
      std::vector<uint8_t> mapa;   /* mapa terminado y esperando subirse */
+     std::vector<uint8_t> mapaRG; /* el mismo, ya repartido por ojo y con los huecos rellenos (v0.69) */
      std::vector<uint8_t> mascara; /* rejilla de rotulos detectados, para poder verla */
      int mw = 0, mh = 0;
-     float textoFrac = 0.0f;      /* parte del mapa que se apoy6 en la pantalla */
+     float textoFrac = 0.0f;      /* parte del mapa que se apoyo en la pantalla */
      std::string error;
      float ms = 0.0f;
      bool terminado = false;
      bool ocupado = false;        /* solo lo toca el hilo del visor */
      ~HiloRed() {
+       {
+         std::lock_guard<std::mutex> g(candado);
+         salir = true;
+       }
+       aviso.notify_all();
        if (hilo.joinable())
          hilo.join();
      }
      /* quedarse quieto hasta que termine el mapa en el aire: hace falta antes de cambiar de red */
      void esperar() {
-       if (hilo.joinable())
-         hilo.join();
+       std::unique_lock<std::mutex> g(candado);
+       libre.wait(g, [this] { return !hayTrabajo && !enCurso; });
+       terminado = false;
        ocupado = false;
      }
-     void arrancar(DepthNet *red, const uint8_t *chico, int sz, bool apoyar) {
-       if (hilo.joinable())
-         hilo.join();
-       std::vector<uint8_t> copia(chico, chico + (size_t)sz * (size_t)sz * 4);
-       ocupado = true, terminado = false, error.clear();
-       hilo = std::thread([this, red, copia = std::move(copia), sz, apoyar]() {
+     void bucle() {
+       for (;;) {
+         Trabajo t;
+         {
+           std::unique_lock<std::mutex> g(candado);
+           aviso.wait(g, [this] { return hayTrabajo || salir; });
+           if (salir) return;
+           t = std::move(trabajo);
+           hayTrabajo = false;
+           enCurso = true;
+         }
          std::vector<uint8_t> m;
          std::string e;
-         const bool ok = red->estimate(copia.data(), sz, sz, m, &e);
+         const bool ok = t.red->estimate(t.copia.data(), t.sz, t.sz, m, &e);
          float frac = 0.0f;
          std::vector<uint8_t> mk;
          int gw = 0, gh = 0;
-         if (ok && apoyar)
+         if (ok && t.apoyar)
            /* los subtitulos y cualquier texto: van al plano de la pantalla para que no se deslicen
-              con la cabeza. Se hace aqui, con la misma foto que gener6 este mapa. */
-           frac = anclarTexto(copia.data(), sz, sz, m, red->focusPlane(), 8, &mk, &gw, &gh);
+              con la cabeza. Se hace aqui, con la misma foto que genero este mapa. */
+           frac = anclarTexto(t.copia.data(), t.sz, t.sz, m, t.red->focusPlane(), 8, &mk, &gw, &gh);
+         /* y el reparto por ojo con los huecos rellenos (antes lo hacia el hilo que dibuja) */
+         std::vector<uint8_t> rg;
+         if (ok) {
+           const int n = t.red->size();
+           const size_t plano = (size_t)n * (size_t)n;
+           if (m.size() == plano) {
+             rg.resize(plano * 2);
+             if (hoyosActivo()) {
+               rellenarVistas(m.data(), n, t.ganancia * (float)n,
+                              t.apoyoFijo >= 0.0f ? t.apoyoFijo : t.red->focusPlane(), rg.data(), nullptr);
+             } else {
+               for (size_t i = 0; i < plano; i++) rg[2 * i] = rg[2 * i + 1] = m[i];
+             }
+           }
+         }
+         {
+           std::lock_guard<std::mutex> g(candado);
+           mascara = std::move(mk), mw = gw, mh = gh, textoFrac = frac;
+           mapaRG = std::move(rg);
+           mapa = ok ? std::move(m) : std::vector<uint8_t>{};
+           error = ok ? std::string() : e;
+           ms = t.red->lastMs();
+           terminado = true;
+           enCurso = false;
+         }
+         libre.notify_all();
+       }
+     }
+     /* `ganancia` es la del conversor (unidades de pantalla por unidad de mapa) y `apoyoFijo` el plano
+        de apoyo cuando el usuario lo puso a mano (< 0 = el que saque la red de este mismo cuadro): con
+        eso el relleno de huecos por ojo se hace aqui, fuera del hilo que dibuja (v0.69). */
+     void arrancar(DepthNet *red, const uint8_t *chico, int sz, bool apoyar, float ganancia, float apoyoFijo) {
+       {
          std::lock_guard<std::mutex> g(candado);
-         mascara = std::move(mk), mw = gw, mh = gh, textoFrac = frac;
-         mapa = ok ? std::move(m) : std::vector<uint8_t>{};
-         error = ok ? std::string() : e;
-         ms = red->lastMs();
-         terminado = true;
-       });
+         trabajo.red = red;
+         trabajo.copia.assign(chico, chico + (size_t)sz * (size_t)sz * 4);
+         trabajo.sz = sz;
+         trabajo.apoyar = apoyar;
+         trabajo.ganancia = ganancia;
+         trabajo.apoyoFijo = apoyoFijo;
+         hayTrabajo = true;
+         terminado = false;
+         error.clear();
+       }
+       ocupado = true;
+       if (!hilo.joinable()) hilo = std::thread([this] { bucle(); });
+       aviso.notify_one();
      }
      /* 0 = sigue trabajando, 1 = mapa listo (en `fuera`), -1 = fallo (en `errFuera`) */
      int recoger(std::vector<uint8_t> &fuera, float &msFuera, std::string &errFuera,
                  std::vector<uint8_t> *masc = nullptr, int *mw = nullptr, int *mh = nullptr,
-                 float *frac = nullptr) {
+                 float *frac = nullptr, std::vector<uint8_t> *rgFuera = nullptr) {
        if (!ocupado)
          return 0;
        std::lock_guard<std::mutex> g(candado);
@@ -1280,6 +1350,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          return -1;
        }
        fuera.swap(mapa);
+       if (rgFuera)
+         rgFuera->swap(mapaRG);
        if (masc)
          masc->swap(mascara);
        if (mw) *mw = this->mw, *mh = this->mh, *frac = textoFrac;
@@ -2065,6 +2137,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
 #endif
       }
+      /* ODYSSEYVK_FUENTE_VIVA=1 (taller, v0.69): da la fuente por nueva en cada cuadro, sin volver a
+         subirla. El conversor trabaja entonces con la cadencia de un video (una estimacion cada tres
+         cuadros) y se puede medir el coste del bucle sin captura, sin navegador y sin panel. */
+      static const bool kFuenteViva = entornoOdyssey("ODYSSEYVK_FUENTE_VIVA") != nullptr;
+      if (kFuenteViva && haveTest) newSource = true;
       if (!haveTest || (testAnim && now >= animNext)) {
         makeTestSbs(testPx, fbW, fbH, now - t0, 34.0);
         newSource = wv.sourceFromRgba(testPx.data(), fbW, fbH, true, &err);
@@ -2349,18 +2426,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* con el video quieto no hace falta repetir la red, pero tampoco queremos un mapa
          congelado si el cuadro no cambia: como mucho una vez cada medio segundo */
       /* con la red en su hilo solo lanzamos una estimacion nueva cuando la anterior ya se subio */
-      if (!hiloRed.ocupado && (newSource || now - ultimaEstim > 0.5) && wv.hasSource() &&
-          ++convSalto >= cadaConv) {
+      /* Los cuadros se cuentan desde el LANZAMIENTO anterior (v0.69). Antes solo se contaban con el
+         hilo libre, o sea que a lo que tardaba la red se le sumaban tres cuadros de espera y salian
+         ~13 mapas por segundo en vez de los 30-40 que caben. */
+      if (newSource && convSalto < 1000) ++convSalto;
+      if (!hiloRed.ocupado && ((newSource && convSalto >= cadaConv) || now - ultimaEstim > 0.5) &&
+          wv.hasSource()) {
         convSalto = 0;
         ultimaEstim = now;
         std::string cerr;
-        if (wv.readSmall(chico, &cerr)) {
+        const double tLee0 = glfwGetTime();
+        const bool leido = wv.readSmall(chico, &cerr);
+        medLeeMs += (glfwGetTime() - tLee0) * 1000.0;
+        medLeeN++;
+        if (leido) {
           /* La dureza de los dos planos se puede subir o bajar con `g`/`v` en mitad de la pelicula:
              se pasa a la red justo antes de lanzar la pasada, que es el unico momento en que su hilo
              esta libre y no hay dos sitios tocando el mismo numero. */
           red.setPlanos(ui.tune.planos);
           red.setMuestras(ui.tune.muestras);
-          hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla);
+          hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla, wv.converterGain(),
+                           apoyoAuto ? -1.0f : wv.converterRef());
         } else if (++convFallos == 1 || convFallos % 100 == 0) {
           std::fprintf(stderr, "[conversor] no se pudo leer el cuadro pequeno (%d): %s\n", (int)convFallos,
                        cerr.c_str());
@@ -2371,10 +2457,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::vector<uint8_t> mascara;
       int masW = 0, masH = 0;
       float fracTexto = 0.0f;
-      const int estado = hiloRed.recoger(mapa, msHecho, errHecho, &mascara, &masW, &masH, &fracTexto);
+      std::vector<uint8_t> mapaRG;
+      const int estado = hiloRed.recoger(mapa, msHecho, errHecho, &mascara, &masW, &masH, &fracTexto, &mapaRG);
       if (estado == 1) {
         convMs = msHecho;
-        if (wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr)) {
+        const double tSube0 = glfwGetTime();
+        const bool subido = mapaRG.size() == mapa.size() * 2
+                                ? wv.setDepthMapRG(mapaRG.data(), red.size(), red.size(), &cerr)
+                                : wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
+        medSubeMs += (glfwGetTime() - tSube0) * 1000.0;
+        medSubeN++;
+        if (subido) {
           /* con --dump guardamos tambien el mapa del primer cuadro: sirve para ver si la red
              esta entendiendo bien la escena (claro = cerca, oscuro = lejos) */
           if (!opts.dumpPath.empty() && (convHechas == 0 || convHechas == 8)) {
@@ -2807,8 +2900,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
 #endif
     frames++;
+    {
+      /* cuadros que tardan mas de un refresco y medio: cada uno es un refresco perdido */
+      const double ahoraM = glfwGetTime();
+      if (medUltimo > 0.0 && ahoraM - medUltimo > 1.5 / (hz > 0 ? (double)hz : 120.0)) medLentos++;
+      medUltimo = ahoraM;
+    }
     if (now - clock > 5.0) {
       std::printf("[fps] %.1f\n", frames / (now - clock));
+      /* ODYSSEYVK_MEDIR: donde se va el cuadro. `leer` es bajar la copia pequena para la red y
+         `subir` es mandar el mapa nuevo a la tarjeta; las dos corren en el hilo que dibuja. */
+      static const bool kMedir = entornoOdyssey("ODYSSEYVK_MEDIR") != nullptr;
+      if (kMedir)
+        std::printf("[medir] cuadros lentos %.1f%% (%lld de %lld) · leer %.2f ms x %lld · subir %.2f ms x %lld\n",
+                    frames ? 100.0 * (double)medLentos / (double)frames : 0.0, medLentos, (long long)frames,
+                    medLeeN ? medLeeMs / (double)medLeeN : 0.0, medLeeN,
+                    medSubeN ? medSubeMs / (double)medSubeN : 0.0, medSubeN);
+      medLentos = 0; medLeeMs = medSubeMs = 0.0; medLeeN = medSubeN = 0;
       std::fflush(stdout);
       frames = 0;
       clock = now;
