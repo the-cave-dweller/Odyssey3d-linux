@@ -533,13 +533,19 @@ detalle completo sigue en `odysseyvk ctl estado` o `tail -f ~/.local/state/odyss
 ## La interfaz (pastilla con ratón)
 
 El visor dibuja una pastilla arriba a la derecha, con cursor de flecha y manejable con el ratón. Desde
-v0.78 es **una sola fila** (462 × 76 px del lienzo virtual; 651 con la casilla; antes 824 × 134):
+v0.78 es **una sola fila** (462 × 76 px del lienzo virtual; 651 con la casilla; antes 824 × 134), y
+desde v0.79 lleva el **tono de la tarjeta**: fondo gris casi negro y el acento morado del paisaje
+(antes verde):
 
 * **interruptor ON/OFF del 3D** (`Ctrl+Shift+1`): pista verde con la bola a la izquierda y `ON`, pista
   gris con la bola a la derecha y `OFF`. Se pica en cualquier punto de la pista;
 * **Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — en modo de legado se llama **Plano de apoyo**;
 * **Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
-* la casilla **No volver a preguntar**, que solo sale cuando el vídeo lo lanzó el servicio: es la
+* dos **botones de solo icono** (v0.79), con el dibujo de las teselas de la tarjeta: **vídeo normal**
+  y **vídeo dividido**. El que está puesto sale encendido y con filo; se pica el otro y el visor
+  cambia de tipo de 3D sin salir del vídeo (enciende o apaga el conversor). Si la aplicación estaba
+  guardada, se queda guardada con el tipo nuevo. En modo de legado no salen;
+* debajo, la casilla **No volver a preguntar**, que solo sale cuando el vídeo lo lanzó el servicio: es la
   misma de la tarjeta de la orilla, pero dentro del vídeo. Marcada, esa aplicación pasa directa al 3D
   la próxima vez; **desmarcada, el servicio vuelve a preguntar**. El cambio se apunta en `serve.conf`
   (`auto = app:modo`) y debajo de la pastilla sale unos segundos la respuesta;

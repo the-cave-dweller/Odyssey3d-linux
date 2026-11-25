@@ -42,6 +42,10 @@ public:
        lo lanzo el servicio, que es quien guarda la eleccion en serve.conf. */
     bool recordarVisible = false;
     bool recordar = false;
+    /* los dos botones de icono de la pastilla (v0.79): que tipo de 3D se esta haciendo y poder
+       cambiarlo en marcha. 1 = video normal (el conversor), 2 = video dividido (lado a lado). */
+    bool modoVisible = false;
+    int modo3d = 1;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -74,7 +78,9 @@ public:
     HitAskDont,
     HitAskClose,
     HitAskAyuda,       /* el "?" de la tarjeta: no manda nada, solo cambia el texto al pasar por encima */
-    HitRecordar        /* la casilla de «no volver a preguntar» de la pastilla */
+    HitRecordar,       /* la casilla de «no volver a preguntar» de la pastilla */
+    HitModoNormal,     /* los dos botones de icono de la pastilla: video normal ... */
+    HitModoDividido    /* ... y video dividido */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -175,6 +181,10 @@ private:
   void icono(Rect r, const Rect &m, float cr, float cg, float cb, float ca, float fx0 = 0.0f, float fy0 = 0.0f,
              float fx1 = 1.0f, float fy1 = 1.0f);
   float muestra(float u, float v) const;
+  /* el paisaje de las teselas y de los botones de la pastilla: `apretado` lo estrecha (cada mitad
+     del video dividido), `luz` lo apaga (el boton que no esta puesto) y `radio` > 0 le redondea las
+     esquinas tapandolas con el color `fondo` */
+  void paisaje(Rect r, float apretado, float luz, float radio, const float *fondo);
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
              bool center = false);
   float textWidth(const std::string &s, float size) const;
@@ -215,7 +225,7 @@ private:
   Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
-  Rect chkRecordar_;
+  Rect chkRecordar_, btnNormal_, btnDividido_;
 };
 
 #endif

@@ -115,6 +115,8 @@ struct VkUi {
   std::string estadoVideo;   /* " · video en pausa": ya no se pinta (lo dice el propio video), queda para depurar */
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
+  bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
+  std::string modoElegido;   /* "conv" / "sbs" / "tb": con que tipo de 3D se guarda el «no volver a preguntar» */
   /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nativa
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
   bool textoToggle = false;  /* la tecla R: rotulos apoyados en la pantalla o no */
@@ -446,20 +448,50 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       st.weaveOn = false;
       printTuning(ui, "2D plano");
       break;
+    case Hud::HitModoNormal:
+    case Hud::HitModoDividido: {
+      /* los dos botones de icono de la pastilla: cambiar de tipo de 3D sin salir del video. El
+         conversor se enciende o se apaga en el bucle del visor (es quien tiene la red). */
+      const bool normal = (hit == Hud::HitModoNormal);
+      if ((st.modo3d == 1) == normal && st.weaveOn) break;   /* ya estaba en ese */
+      st.ask = false;
+      st.weaveOn = true;
+      t.topBottom = false;
+      if (normal) {
+        ui.convWant = true;
+      } else {
+        ui.convFuera = true;
+        /* los dos deslizadores vuelven a lo de un video que ya trae sus dos imagenes: sin empuje */
+        st.depth = 50;
+        st.popout = 0;
+      }
+      ui.modoElegido = normal ? "conv" : "sbs";
+      std::printf("[formato] desde la pastilla: %s\n", normal ? "video normal (2D a 3D)" : "video dividido (lado a lado)");
+      std::fflush(stdout);
+      /* si esta aplicacion estaba apuntada para no preguntar, se queda apuntada con el tipo nuevo */
+      if (st.recordar && ui.opts && !ui.opts->recordarApp.empty()) {
+        std::string e;
+        if (ajuste::pedirRecordar(ui.opts->recordarApp, ui.modoElegido, &e))
+          std::printf("[recordar] %s: %s\n", ui.opts->recordarApp.c_str(), ui.modoElegido.c_str());
+        else
+          std::fprintf(stderr, "[recordar] %s\n", e.c_str());
+      }
+      break;
+    }
     case Hud::HitRecordar: {
       /* la casilla de «no volver a preguntar», dentro del video: el recado lo recoge el servicio */
       if (!ui.opts || ui.opts->recordarApp.empty()) break;
       const std::string &app = ui.opts->recordarApp;
       const bool quiere = !st.recordar;
       std::string e;
-      if (!ajuste::pedirRecordar(app, quiere ? ui.opts->recordarModo : std::string("no"), &e)) {
+      if (!ajuste::pedirRecordar(app, quiere ? ui.modoElegido : std::string("no"), &e)) {
         std::fprintf(stderr, "[recordar] %s\n", e.c_str());
         ui.extraInfo = "no se pudo guardar la elección";
       } else {
         st.recordar = quiere;
         ui.extraInfo = quiere ? app + " pasa directo al 3D, sin preguntar"
                               : "la próxima vez se vuelve a preguntar por " + app;
-        std::printf("[recordar] %s: %s\n", app.c_str(), quiere ? ui.opts->recordarModo.c_str() : "se vuelve a preguntar");
+        std::printf("[recordar] %s: %s\n", app.c_str(), quiere ? ui.modoElegido.c_str() : "se vuelve a preguntar");
         std::fflush(stdout);
       }
       ui.extraHasta = glfwGetTime() + 6.0;
@@ -1168,6 +1200,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.hud.state().overlayOn = !opts.noHud;
   /* la casilla de «no volver a preguntar» sale solo si el servicio dijo de que aplicacion es el video */
   ui.hud.state().recordarVisible = !opts.recordarApp.empty() && !opts.recordarModo.empty();
+  ui.modoElegido = !opts.recordarModo.empty() ? opts.recordarModo : (opts.conver ? "conv" : (opts.topBottom ? "tb" : "sbs"));
   ui.hud.state().recordar = opts.recordado;
   ui.hud.state().ratonLibre = !opts.noPassthrough;
   /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
@@ -1787,7 +1820,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             tiene = true;
           }
         }
-        const Hud::Hit hit = tiene ? ui.hud.hit(cx, cy) : Hud::HitNone;
+        Hud::Hit hit = tiene ? ui.hud.hit(cx, cy) : Hud::HitNone;
+        /* por nombre, sin pasar por la geometria: los dos botones de icono de la pastilla */
+        if (tok == "normal") hit = Hud::HitModoNormal, tiene = true;
+        if (tok == "dividido") hit = Hud::HitModoDividido, tiene = true;
         float ax = 0, ay = 0, aw = 0, ah = 0;
         ui.hud.pillBounds(&ax, &ay, &aw, &ah);
         std::printf("[golpe] %s -> lienzo (%.0f,%.0f) -> golpe %d · pastilla %.0f,%.0f %.0fx%.0f escala %.2f\n",
@@ -1939,6 +1975,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         std::fflush(stdout);
       }
     }
+    if (ui.convFuera) {
+      /* el boton de video dividido: apagar el conversor si estaba puesto (y nada mas si no) */
+      ui.convFuera = false;
+      if (convActivo) ui.convToggle = true;
+    }
     if (ui.convToggle || ui.convWant) {
       const bool pidiendo = ui.convWant;
       ui.convToggle = false, ui.convWant = false;
@@ -1946,8 +1987,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (!convActivo) {
         if (!red.ready() && !arrancarRed(convGpu, &cerr0)) {
           std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
+          ui.extraInfo = "el conversor de vídeo normal no abrió", ui.extraHasta = glfwGetTime() + 8.0;
         } else if (!wv.converterReady() && !wv.prepareConverter(red.size(), &cerr0)) {
           std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
+          ui.extraInfo = "el conversor de vídeo normal no abrió", ui.extraHasta = glfwGetTime() + 8.0;
         } else {
           convActivo = true;
           ui.hud.state().weaveOn = true;   /* hace falta la trama: el relieve sale de ahi */
@@ -2775,6 +2818,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     /* la fila de Facetracking solo existe en el visor: el hub no rastrea. No es un
        boton: dice con que camara se esta siguiendo la cara y que esta viendo. */
+    /* los botones de icono: cual de los dos tipos de 3D esta puesto de verdad (lo dice el conversor) */
+    ui.hud.state().modoVisible = (kind == SourceKind::Capture) && !ui.hud.state().legado;
+    ui.hud.state().modo3d = ui.convInfo ? 1 : 2;
     ui.hud.state().controlOjo = opts.track;   /* desde v0.78 solo dice si se PIDIO rastreo: la fila ya no se pinta */
 #ifdef HAVE_OPENCV
     {

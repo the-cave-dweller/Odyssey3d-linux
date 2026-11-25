@@ -305,6 +305,27 @@ void Hud::icono(Rect r, const Rect &m, float cr, float cg, float cb, float ca, f
   quad(r, {x0 / (float)aw_, y0 / (float)ah_, (x1 - x0) / (float)aw_, (y1 - y0) / (float)ah_}, cr, cg, cb, ca);
 }
 
+/* Cielo, sol, sierra y lomas. En el video dividido cada mitad lleva la imagen entera aplastada a la
+   mitad, como llega de verdad. Las esquinas se redondean tapandolas con el color de lo que hay
+   detras (por eso se le pasa). */
+void Hud::paisaje(Rect r, float apretado, float luz, float radio, const float *fondo) {
+  solid(r.x, r.y, r.w, r.h, 0.42f * luz, 0.33f * luz, 0.88f * luz, 1.0f);
+  const float d = r.h * 0.25f;
+  icono({r.x + r.w * 0.80f - d * apretado * 0.5f, r.y + r.h * 0.13f, d * apretado, d}, pill_, 0.82f * luz,
+        0.76f * luz, 1.0f * luz, 1.0f);
+  icono(r, monteLejos_, 0.31f * luz, 0.23f * luz, 0.70f * luz, 1.0f);
+  icono(r, monteCerca_, 0.21f * luz, 0.15f * luz, 0.50f * luz, 1.0f);
+  if (radio <= 0.0f) return;
+  const Rect esq[4] = {{r.x, r.y, radio, radio},
+                       {r.x + r.w - radio, r.y, radio, radio},
+                       {r.x, r.y + r.h - radio, radio, radio},
+                       {r.x + r.w - radio, r.y + r.h - radio, radio, radio}};
+  for (int k = 0; k < 4; k++) {
+    const float fx = (k & 1) ? 0.5f : 0.0f, fy = (k & 2) ? 0.5f : 0.0f;
+    icono(esq[k], hueco_, fondo[0], fondo[1], fondo[2], 1.0f, fx, fy, fx + 0.5f, fy + 0.5f);
+  }
+}
+
 float Hud::muestra(float u, float v) const {
   if (atlas_.empty() || aw_ <= 0 || ah_ <= 0) return 1.0f;
   float fx = u * (float)aw_ - 0.5f, fy = v * (float)ah_ - 0.5f;
@@ -432,7 +453,9 @@ void Hud::begin(int w, int h, float altoLogico) {
   const int vw = (int)std::lround((float)w / sc_), vh = (int)std::lround((float)h / sc_);
   if (!st_.overlayOn && !st_.ask) return;
 
-  const float accent[3] = {0.20f, 0.78f, 0.35f};
+  /* v0.79: el acento es el morado del paisaje de la tarjeta (antes verde) y el fondo de la pastilla
+     es el gris casi negro de la tarjeta: las dos piezas se ven de la misma familia. */
+  const float accent[3] = {0.46f, 0.37f, 0.92f};
   const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   const float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -444,21 +467,26 @@ void Hud::begin(int w, int h, float altoLogico) {
      la linea de abajo a la izquierda), el letrero de la lente encima de la pastilla y los avisos
      de teclas repartidos, que ahora caben en un renglon. Sigue RECTA, como la pidio Rodolfo. */
   chkRecordar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  btnNormal_ = btnDividido_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
     const bool leg = st_.legado;
     const float aire = 16.0f, anchoSw = 100.0f, anchoDes = 140.0f;
     const char *rotRec = "No volver a preguntar";
     const float anchoRec = 18.0f + 8.0f + textWidth(rotRec, 12.5f);
+    /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
+       Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
+    const bool hayModo = st_.modoVisible && !leg;
+    const float anchoBloque = st_.recordarVisible ? anchoRec : (hayModo ? 128.0f : 0.0f);
     float pw = aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
-    if (st_.recordarVisible) pw += 26.0f + anchoRec;
+    if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     pw = std::min(pw, (float)vw - 48.0f);
     const float ph = 76.0f;
     panelW_ = pw;
     panelH_ = ph;
     const float x0 = (float)vw - 24.0f - pw, y0 = 24.0f;
     pillPanel_ = {x0, y0, pw, ph};
-    solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.10f, 0.11f, 0.13f, 0.82f);
+    solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.115f, 0.12f, 0.135f, 0.90f);
 
     /* ---- el interruptor del 3D ----
        ON con la bola a la izquierda y la letra a su derecha; OFF con la bola a la derecha y la letra
@@ -501,21 +529,52 @@ void Hud::begin(int w, int h, float altoLogico) {
            std::to_string(st_.depth));
     slider(&popTrack_, &popKnob_, "Salida", (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
 
+    const float bloqueX = popTrack_.x + anchoDes + 26.0f;
+    const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + aire <= x0 + pw + 0.5f;
+
+    /* ---- los dos botones de icono: video normal y video dividido (v0.79) ----
+       Sin letra, con el mismo dibujo de las teselas de la tarjeta. El que esta puesto sale encendido
+       y con filo; el otro, apagado. Se pica el otro y el visor cambia de tipo de 3D sin salir. */
+    if (cabeBloque && hayModo) {
+      const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
+      const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
+      btnNormal_ = {bloqueX, by, bw, bh};
+      btnDividido_ = {bloqueX + bw + 8.0f, by, bw, bh};
+      const Rect bs[2] = {btnNormal_, btnDividido_};
+      for (int i = 0; i < 2; i++) {
+        const Rect &b = bs[i];
+        const bool puesto = (st_.modo3d == i + 1), hov = b.inside(mx_, my_);
+        const float fondo[3] = {puesto ? 0.26f : (hov ? 0.23f : 0.17f), puesto ? 0.25f : (hov ? 0.235f : 0.175f),
+                                puesto ? 0.36f : (hov ? 0.27f : 0.20f)};
+        if (puesto) solid(b.x - 1.5f, b.y - 1.5f, b.w + 3.0f, b.h + 3.0f, ink[0], ink[1], ink[2], 0.85f);
+        solid(b.x, b.y, b.w, b.h, fondo[0], fondo[1], fondo[2], 1.0f);
+        const float luz = puesto ? 1.0f : (hov ? 0.80f : 0.55f);
+        const float iw = 42.0f, ih = 22.0f, ix = b.x + (b.w - iw) * 0.5f, iy = b.y + (b.h - ih) * 0.5f;
+        if (i == 0) {
+          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo);
+        } else {
+          const float mitad = (iw - 3.0f) * 0.5f;
+          paisaje({ix, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
+          paisaje({ix + mitad + 3.0f, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
+        }
+      }
+    }
+
     /* ---- «no volver a preguntar», dentro del video ----
        Es la misma casilla de la tarjeta de la orilla. Marcada, esta aplicacion pasa directa al 3D la
-       proxima vez; se desmarca aqui mismo y el servicio vuelve a preguntar. Solo sale cuando el
-       video llego por el servicio (que es quien guarda la eleccion). */
-    if (st_.recordarVisible && popTrack_.x + anchoDes + 26.0f + anchoRec + aire <= x0 + pw + 0.5f) {
-      const Rect caja{popTrack_.x + anchoDes + 26.0f, y0 + 24.0f, 18.0f, 18.0f};
-      chkRecordar_ = {caja.x - 6.0f, caja.y - 8.0f, anchoRec + 12.0f, 34.0f};
+       proxima vez (con el tipo que este puesto arriba); se desmarca aqui mismo y el servicio vuelve
+       a preguntar. Solo sale cuando el video llego por el servicio, que es quien guarda la eleccion. */
+    if (cabeBloque && st_.recordarVisible) {
+      const Rect caja = hayModo ? Rect{bloqueX, y0 + 49.0f, 16.0f, 16.0f} : Rect{bloqueX, y0 + 24.0f, 18.0f, 18.0f};
+      chkRecordar_ = {caja.x - 6.0f, caja.y - 5.0f, anchoRec + 12.0f, caja.h + 10.0f};
       const bool hov = chkRecordar_.inside(mx_, my_);
       const float c = hov ? 1.0f : 0.86f;
       solid(caja.x, caja.y, caja.w, caja.h, c, c, c + 0.02f, 1.0f);
       if (st_.recordar)
-        icono({caja.x + 2.0f, caja.y + 2.0f, 14.0f, 14.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
+        icono({caja.x + 2.0f, caja.y + 2.0f, caja.w - 4.0f, caja.h - 4.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
       else
-        solid(caja.x + 2.0f, caja.y + 2.0f, 14.0f, 14.0f, 0.10f, 0.11f, 0.13f, 1.0f);
-      text(rotRec, caja.x + 26.0f, caja.y + 1.0f, 12.5f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.88f);
+        solid(caja.x + 2.0f, caja.y + 2.0f, caja.w - 4.0f, caja.h - 4.0f, 0.115f, 0.12f, 0.135f, 1.0f);
+      text(rotRec, caja.x + 26.0f, caja.y + (caja.h - 16.0f) * 0.5f, 12.5f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.88f);
     }
 
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
@@ -592,26 +651,6 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float tw = (aw - 2.0f * borde - 14.0f) * 0.5f, th = 156.0f, ty = ay + 98.0f;
     askConv_ = {ax + borde, ty, tw, th};
     askSbs_ = {ax + borde + tw + 14.0f, ty, tw, th};
-    /* el paisaje: cielo, sol, sierra y lomas, con las esquinas redondeadas tapandolas con el color
-       de la tesela (por eso se le pasa). `apretado` es cuanto se estrecha el dibujo: en el video
-       dividido cada mitad lleva la imagen entera aplastada a la mitad, como llega de verdad. */
-    auto paisaje = [&](Rect r, float apretado, const float *fondo) {
-      solid(r.x, r.y, r.w, r.h, 0.42f, 0.33f, 0.88f, 1.0f);
-      const float d = r.h * 0.25f;
-      icono({r.x + r.w * 0.80f - d * apretado * 0.5f, r.y + r.h * 0.13f, d * apretado, d}, pill_, 0.82f, 0.76f,
-            1.0f, 1.0f);
-      icono(r, monteLejos_, 0.31f, 0.23f, 0.70f, 1.0f);
-      icono(r, monteCerca_, 0.21f, 0.15f, 0.50f, 1.0f);
-      const float rr = 7.0f;
-      const Rect esq[4] = {{r.x, r.y, rr, rr},
-                           {r.x + r.w - rr, r.y, rr, rr},
-                           {r.x, r.y + r.h - rr, rr, rr},
-                           {r.x + r.w - rr, r.y + r.h - rr, rr, rr}};
-      for (int k = 0; k < 4; k++) {
-        const float fx = (k & 1) ? 0.5f : 0.0f, fy = (k & 2) ? 0.5f : 0.0f;
-        icono(esq[k], hueco_, fondo[0], fondo[1], fondo[2], 1.0f, fx, fy, fx + 0.5f, fy + 0.5f);
-      }
-    };
     const Rect tiles[2] = {askConv_, askSbs_};
     const char *names[2] = {"Vídeo normal", "Vídeo dividido"};
     const char *subs[2] = {"una sola imagen", "dos imágenes lado a lado"};
@@ -624,11 +663,11 @@ void Hud::begin(int w, int h, float altoLogico) {
       const float iw = std::min(128.0f, t.w - 36.0f), ih = 72.0f;
       const float ix = t.x + (t.w - iw) * 0.5f, iy = t.y + 20.0f;
       if (i == 0) {
-        paisaje({ix, iy, iw, ih}, 1.0f, fondo);
+        paisaje({ix, iy, iw, ih}, 1.0f, 1.0f, 7.0f, fondo);
       } else {
         const float mitad = (iw - 5.0f) * 0.5f;
-        paisaje({ix, iy, mitad, ih}, 0.5f, fondo);
-        paisaje({ix + mitad + 5.0f, iy, mitad, ih}, 0.5f, fondo);
+        paisaje({ix, iy, mitad, ih}, 0.5f, 1.0f, 7.0f, fondo);
+        paisaje({ix + mitad + 5.0f, iy, mitad, ih}, 0.5f, 1.0f, 7.0f, fondo);
       }
       const float fs = tw < 150.0f ? 12.5f : 15.0f, fss = tw < 150.0f ? 10.0f : 11.5f;
       text(encaja(names[i], fs, t.w - 16.0f), t.x + t.w * 0.5f, t.y + 104.0f, fs, ink[0], ink[1], ink[2], 1.0f,
@@ -662,7 +701,7 @@ void Hud::begin(int w, int h, float altoLogico) {
   if (!info_.empty() && st_.overlayOn) {
     const float tam = 12.0f, tw = textWidth(info_, tam);
     const float der = pillPanel_.x + pillPanel_.w, arriba = pillPanel_.y + pillPanel_.h + 6.0f;
-    solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.10f, 0.11f, 0.13f, 0.82f);
+    solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.115f, 0.12f, 0.135f, 0.90f);
     text(info_, der - tw - 10.0f, arriba + 5.0f, tam, ink[0], ink[1], ink[2], 0.92f);
   }
 }
@@ -718,6 +757,8 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
   if (dt.inside(mx, my)) return HitDepth;
   if (pt.inside(mx, my)) return HitPopout;
+  if (btnNormal_.inside(mx, my)) return HitModoNormal;
+  if (btnDividido_.inside(mx, my)) return HitModoDividido;
   if (chkRecordar_.inside(mx, my)) return HitRecordar;
   return HitNone;
 }

@@ -2811,6 +2811,10 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().recordarVisible = !(rec && rec[0] == '0');
   hud.state().recordar = !(rec && rec[0] == '2');
   hud.state().remember = rec && rec[0] == '1';
+  /* los botones de icono: ODYSSEYVK_HUD_MODO=0 los quita, 1 = video normal puesto, 2 = dividido */
+  const char *modo = std::getenv("ODYSSEYVK_HUD_MODO");
+  hud.state().modoVisible = !(modo && modo[0] == '0');
+  hud.state().modo3d = (modo && modo[0] == '2') ? 2 : 1;
   if (const char *linea = std::getenv("ODYSSEYVK_HUD_LINEA")) hud.setInfo(linea);
   if (const char *cuerpo = std::getenv("ODYSSEYVK_HUD_CUERPO")) hud.setAskText("", cuerpo);
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
@@ -2846,9 +2850,9 @@ static int cmdHudSelfTest(int argc, char **argv) {
                               "deslizador salida",   "boton red (quitado)", "tesela video dividido",
                               "tesela arriba/abajo", "tesela plana",        "tesela video normal",
                               "casilla de la tarjeta", "cerrar la tarjeta", "ayuda de la tarjeta",
-                              "casilla de la pastilla"};
-  const int casos = 12;
-  int cuenta[13] = {0}, px0[13] = {0}, py0[13] = {0};
+                              "casilla de la pastilla", "boton video normal", "boton video dividido"};
+  const int casos = 14;
+  int cuenta[15] = {0}, px0[15] = {0}, py0[15] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
@@ -3439,9 +3443,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       args.push_back(valor);
     }
   }
-  if (modo == "conv") {
-    /* video normal: la red de profundidad decide cuanto desplazar cada ojo */
-    args.push_back("--conver");
+  /* video normal: la red de profundidad decide cuanto desplazar cada ojo */
+  if (modo == "conv") args.push_back("--conver");
+  /* La red y sus numeros viajan tambien con el video dividido (v0.79): desde la pastilla se puede
+     pasar a video normal en marcha, y sin esto el visor abria la otra red, no la de serve.conf.
+     Pasarlas no abre nada: la red solo se carga cuando el conversor se enciende. */
+  if (modo == "conv" || ((modo == "sbs" || modo == "tb") && !legadoPuesto)) {
     args.push_back("--cada");
     args.push_back(std::to_string(cada));
     args.push_back("--red");

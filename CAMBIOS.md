@@ -3,6 +3,30 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Pastilla morada y botones de tipo de 3D (v0.79)
+
+- Rodolfo, con la 0.78 en el panel: «me gusta», y pidió que la pastilla tenga la tonalidad de la
+  tarjeta («ese morado») y, sobre el «no volver a preguntar», un botón sin texto para los dos 3D,
+  solo los iconos.
+- `src/vkui.cpp`: el acento de la pastilla pasa del verde al morado del paisaje (0,46 0,37 0,92) y el
+  fondo al gris de la tarjeta. Bloque de la derecha: arriba dos botones de icono (el paisaje entero =
+  vídeo normal, las dos mitades = vídeo dividido; el puesto encendido y con filo, el otro apagado),
+  debajo la casilla. La pastilla sigue en 651 × 76 con la casilla y mide 616 × 76 sin ella.
+- `src/vkview.cpp`: los botones cambian de tipo en marcha por el camino de la tecla `C` (encender el
+  conversor, o apagarlo y dejar lado a lado con los deslizadores en 50 / 0). La casilla guarda el tipo
+  que esté puesto, y si la aplicación ya estaba guardada se reapunta con el nuevo.
+- `src/main.cpp`: el servicio pasa la red (`--modelo`, `--alterno`, `--cada`, `--red`) también cuando
+  lanza un vídeo dividido; si no, al pasar a vídeo normal desde la pastilla se abría la otra red.
+  DERIVADO del código: la red solo se carga al encender el conversor (`if (convActivo)`).
+- MEDIDO sin panel: `ctl hud` a 3840x2160, ningún rótulo se sale; botón normal 2 418 celdas de ratón,
+  dividido 2 418, casilla 4 752. Imágenes revisadas (normal puesto y casilla marcada; dividido puesto
+  con el ratón encima del otro; sin casilla).
+- MEDIDO por Vulkan fuera del panel (`ODYSSEY_GOLPE="dividido;normal;dividido;dividido;normal"
+  odysseyvk test --windowed --no-panel --no-lens --no-scaler --conver …`): conversor apagado,
+  encendido, apagado, nada (ya estaba), encendido; sin errores.
+- **No probado**: nada en el panel; los botones con el ratón sobre un vídeo de verdad; el reapunte de
+  la aplicación guardada al cambiar de tipo (no se mandó para no escribir en el `serve.conf` real).
+
 ## Tarjeta como la oficial y pastilla de una fila (v0.78)
 
 - Rodolfo, con la 0.77 («vuelve perfecto y el 3d bien»), pidió mejoras de interfaz con la foto de la
