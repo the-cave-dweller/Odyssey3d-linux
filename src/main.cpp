@@ -1930,6 +1930,9 @@ struct ServeCfg {
      mismo que las teclas j/k y u/i, pero dejado por escrito para comparar mananas enteras. */
   double ganFondo = -1.0;
   double ganFrente = -1.0;
+  /* empuje por capa, en puntos de panel; 999 = no puesto (0 si vale: es el neutro) */
+  double empFondo = 999.0;
+  double empFrente = 999.0;
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2026,7 +2029,8 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
-             k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente") {
+             k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente" ||
+             k == "empuje_fondo" || k == "empuje_frente") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2042,6 +2046,9 @@ static void loadServeCfg(ServeCfg &cfg) {
       else if (k == "rampa_y") cfg.rampaY = (d > -0.05 && d < 0.05) ? d : 999.0;
       else if (k == "fondo") cfg.ganFondo = (d >= 0.2 && d <= 2.0) ? d : -1.0;
       else if (k == "frente") cfg.ganFrente = (d >= 0.2 && d <= 2.0) ? d : -1.0;
+      /* empuje de cada capa, en puntos de panel (positivo = hacia fuera de la pantalla) */
+      else if (k == "empuje_fondo") cfg.empFondo = (d >= -15.0 && d <= 15.0) ? d : 999.0;
+      else if (k == "empuje_frente") cfg.empFrente = (d >= -15.0 && d <= 15.0) ? d : 999.0;
       else cfg.faseTemblor = d;
     }
     else if (k == "auto") {
@@ -2216,6 +2223,19 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       std::snprintf(valor, sizeof valor, "%.3f", pila->ganFrente);
       ::setenv("ODYSSEY3D_GAN_FRENTE", valor, 1);
       std::fprintf(stderr, "[serve] capa frente = %s (1 = sin cambiar)\n", valor);
+    }
+    /* `empuje_fondo` / `empuje_frente`: desplazamiento fijo de cada capa, en puntos de panel. Es
+       lo que en la config de Windows es `far_diff_popup` en las bandas y `depth_offset` en la capa
+       de graficos superpuestos: llevar una banda entera a un plano concreto. */
+    if (pila->empFondo <= 15.0) {
+      std::snprintf(valor, sizeof valor, "%.3f", pila->empFondo);
+      ::setenv("ODYSSEY3D_EMP_FONDO", valor, 1);
+      std::fprintf(stderr, "[serve] empuje fondo = %s puntos (0 = sin cambiar)\n", valor);
+    }
+    if (pila->empFrente <= 15.0) {
+      std::snprintf(valor, sizeof valor, "%.3f", pila->empFrente);
+      ::setenv("ODYSSEY3D_EMP_FRENTE", valor, 1);
+      std::fprintf(stderr, "[serve] empuje frente = %s puntos (0 = sin cambiar)\n", valor);
     }
   }
   ::execv(exe.c_str(), av.data());

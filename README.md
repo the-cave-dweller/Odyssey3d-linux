@@ -185,6 +185,8 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `9` `0` | convergencia horizontal (∓0.0005) |
 | `j` `k` | **capa fondo** (0,20–2,00, de 0,05 en 0,05): cuánto más se va hacia atrás lo que está **detrás** del plano de apoyo, sin tocar los primeros planos (v0.45) |
 | `u` `i` | **capa frente**: lo mismo con lo que sale **delante** de la pantalla. Los dos en 1,00 es exactamente como se comportaba antes |
+| `h` `l` | **empuje del fondo** (−12…+12 puntos de panel, de 0,5 en 0,5): desplaza toda la capa de detrás a un plano concreto, sea cual sea su profundidad (v0.46) |
+| `y` `o` | **empuje del frente**: lo mismo con la capa de delante; es la forma de traer al frente subtítulos, banderines y ventanas (positivo = sale más de la pantalla) |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
@@ -533,6 +535,17 @@ escalado se aplica **antes** de los topes por ojo de Samsung (+12,67 puntos haci
 adentro sobre 3840), así que por mucho que se suba no nos salimos del presupuesto que su programa
 considera sano. En marcha se ajustan con `j`/`k` y `u`/`i`; por escrito se dejan para comparar una
 tarde entera sin tocar teclas.
+
+Y en v0.46, el **empuje** de cada capa: `empuje_fondo` y `empuje_frente`, en puntos de panel
+(positivo = hacia fuera de la pantalla). Estirar la escala solo mueve lo que ya tiene relieve, así que
+un objeto casi plano no se entera; el empuje le da un desplazamiento fijo a la banda entera y permite
+llevarla a un plano concreto aunque el plano de apoyo esté en otro sitio — que es exactamente lo que
+hace falta para poner subtítulos, banderoles y ventanas por delante del vídeo, o para hundir el fondo
+de un plano entero. En la config de Windows eso es `far_diff_popup −1,0` en `scene_dspr` y
+`depth_offset 0,0` en la capa `overlay` de `degraph`. Se interpola en una zona suave de 1,5 puntos
+alrededor del plano de apoyo, así que un objeto que lo cruza no se parte; y vuelve a pasar por los
+topes por ojo, que siguen mandando. Teclas `h`/`l` (fondo) y `y`/`o` (frente), de 0,5 en 0,5, tope
+±12 puntos.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

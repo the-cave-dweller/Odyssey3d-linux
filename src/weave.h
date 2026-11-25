@@ -43,6 +43,16 @@ struct WeaveTuning {
      de Samsung. Teclas: `j`/`k` el fondo, `u`/`i` el frente, de 0,05 en 0,05. */
   float ganFondo = 1.0f;
   float ganFrente = 1.0f;
+  /* Empuje por capa: ademas de estirar, cada banda puede recibir un desplazamiento FIJO, en
+     puntos de panel, que se suma al que ya le toca por su profundidad. Sirve para llevar una
+     banda entera a un plano concreto (subtitulos, ventanas, el fondo del plano) sin depender de
+     donde caiga el plano de apoyo. Es el `far_diff_popup -1,0` de las bandas de `scene_dspr` y el
+     `depth_offset` de la capa `overlay` de `degraph` en la config de Windows. Positivo = hacia
+     fuera de la pantalla. 0 es como estaba. Teclas: `h`/`l` el fondo y `y`/`o` el frente, de 0,5
+     puntos en 0,5. */
+  float empFondo = 0.0f;
+  float empFrente = 0.0f;
+  bool capaTocada = false;   /* al menos una tecla de capas pulsada: manda lo del visor */
   bool weave = true;
   bool topBottom = false;      /* video arriba/abajo en lugar de lado a lado */
   bool swapLR = false;         /* profundidad invertida -> alternar */

@@ -830,6 +830,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   };
   ganArranque("ODYSSEY3D_GAN_FONDO", ui.tune.ganFondo);
   ganArranque("ODYSSEY3D_GAN_FRENTE", ui.tune.ganFrente);
+  /* Empuje por capa (`empuje_fondo` / `empuje_frente` en serve.conf), en puntos de panel: mismo
+     arreglo, punto de arranque de las teclas `h`/`l` (lo de atras) y `y`/`o` (lo de delante). */
+  const auto empArranque = [](const char *nombre, float &destino) {
+    const char *e = std::getenv(nombre);
+    if (!e) return;
+    const float v = (float)std::atof(e);
+    if (v >= -15.0f && v <= 15.0f) {
+      destino = v;
+      std::printf("[conversor] empuje %s = %+.1f puntos\n",
+                  strstr(nombre, "FONDO") ? "fondo" : "frente", (double)v);
+    }
+  };
+  empArranque("ODYSSEY3D_EMP_FONDO", ui.tune.empFondo);
+  empArranque("ODYSSEY3D_EMP_FRENTE", ui.tune.empFrente);
   int convSalto = 0;
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
@@ -1618,9 +1632,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     t.xtalkDyn = ui.tune.xtalkDyn;
     t.contrast = ui.tune.contrast;
     t.corrAScale = ui.tune.corrAScale;
-    /* capas: cuanto se estira el relieve a cada lado del plano de apoyo (teclas j/k y u/i) */
+    /* capas: cuanto se estira el relieve a cada lado del plano de apoyo (teclas j/k y u/i) y
+       cuanto se desplaza esa banda entera de su plano (h/l y y/o) */
     t.ganFondo = ui.tune.ganFondo;
     t.ganFrente = ui.tune.ganFrente;
+    t.empFondo = ui.tune.empFondo;
+    t.empFrente = ui.tune.empFrente;
+    t.capaTocada = ui.tune.capaTocada;
     const Hud::State &st = ui.hud.state();
     t.conv = ui.convBase + (float)st.popout / 50.0f * 0.004f;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);

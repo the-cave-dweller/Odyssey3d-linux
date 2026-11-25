@@ -264,7 +264,29 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
       if (key == GLFW_KEY_K) t.ganFondo = topeGan(t.ganFondo + 0.05f);
       if (key == GLFW_KEY_U) t.ganFrente = topeGan(t.ganFrente - 0.05f);
       if (key == GLFW_KEY_I) t.ganFrente = topeGan(t.ganFrente + 0.05f);
+      t.capaTocada = true;
       std::snprintf(etiqueta, sizeof etiqueta, "fondo %.2f · frente %.2f", t.ganFondo, t.ganFrente);
+      *tag = etiqueta;
+      break;
+    }
+    /* Empuje por capa: desplazamiento FIJO, en puntos de panel, que se suma al relieve que ya
+       tiene cada banda. Sirve para llevar una banda entera a un plano concreto (subtitulos y
+       ventanas al frente, fondo del plano hundido) sin depender del plano de apoyo; es el
+       `far_diff_popup -1,0` de `scene_dspr` y el `depth_offset` de la capa `overlay` de `degraph`
+       en la config de Windows. Positivo = hacia fuera de la pantalla. Se topa a 12 puntos porque
+       ese es justo el tope oficial hacia fuera (9,98 hacia dentro) y pasar no se ve. */
+    case GLFW_KEY_H:
+    case GLFW_KEY_L:
+    case GLFW_KEY_Y:
+    case GLFW_KEY_O: {
+      const auto topeEmp = [](float v) { return v < -12.0f ? -12.0f : (v > 12.0f ? 12.0f : v); };
+      if (key == GLFW_KEY_H) t.empFondo = topeEmp(t.empFondo - 0.5f);
+      if (key == GLFW_KEY_L) t.empFondo = topeEmp(t.empFondo + 0.5f);
+      if (key == GLFW_KEY_Y) t.empFrente = topeEmp(t.empFrente - 0.5f);
+      if (key == GLFW_KEY_O) t.empFrente = topeEmp(t.empFrente + 0.5f);
+      t.capaTocada = true;
+      std::snprintf(etiqueta, sizeof etiqueta, "empuje fondo %+.1f · frente %+.1f puntos",
+                    t.empFondo, t.empFrente);
       *tag = etiqueta;
       break;
     }

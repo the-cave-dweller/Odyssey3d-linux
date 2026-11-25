@@ -793,14 +793,28 @@ void VkWeave::fillUbo(uint8_t *dst) {
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v >= 0.2f && v <= 2.0f) ? v : 0.0f;
   }();
+  static const float empBaseFondo = [] {
+    const char *e = std::getenv("ODYSSEY3D_EMP_FONDO");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return (v >= -15.0f && v <= 15.0f) ? v : 0.0f;
+  }();
+  static const float empBaseFrente = [] {
+    const char *e = std::getenv("ODYSSEY3D_EMP_FRENTE");
+    const float v = e ? (float)std::atof(e) : 0.0f;
+    return (v >= -15.0f && v <= 15.0f) ? v : 0.0f;
+  }();
   float *t7 = (float *)(dst + kOffTun7);
-  t7[0] = tune_.ganFondo > 0.0f ? tune_.ganFondo : ganBaseFondo;
-  t7[1] = tune_.ganFrente > 0.0f ? tune_.ganFrente : ganBaseFrente;
-  t7[2] = 0.0f;
-  t7[3] = 0.0f;
+  /* En cuanto se pulsa una tecla de capas manda lo del visor; mientras no se haya tocado ninguna,
+     manda lo de serve.conf. `capaTocada` evita la trampa de volver a 0 con la tecla: sin ella, un
+     empuje bajado a 0 caeria de nuevo sobre el valor de arranque. */
+  const bool capa = tune_.capaTocada;
+  t7[0] = (capa || tune_.ganFondo > 0.0f) ? tune_.ganFondo : ganBaseFondo;
+  t7[1] = (capa || tune_.ganFrente > 0.0f) ? tune_.ganFrente : ganBaseFrente;
+  t7[2] = capa ? tune_.empFondo : empBaseFondo;
+  t7[3] = capa ? tune_.empFrente : empBaseFrente;
   if (std::getenv("ODYSSEY_UBO")) {
-    std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · rampa %.5f %.5f · capas %.2f %.2f · v4 TL %.2f %.2f %.2f\n",
-                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], rrX, rrY, t7[0], t7[1], v4[0], v4[1], v4[2]);
+    std::fprintf(stderr, "[ubo] res %.0fx%.0f slope %.3f xt %.4f · paso %.6f tramado %.1f · ind %.1f · rampa %.5f %.5f · capas %.2f %.2f · empuje %+.1f %+.1f · v4 TL %.2f %.2f %.2f\n",
+                 res[0], res[1], res[2], res[3], t2[1], t2[2], t3[0], rrX, rrY, t7[0], t7[1], t7[2], t7[3], v4[0], v4[1], v4[2]);
   }
 }
 

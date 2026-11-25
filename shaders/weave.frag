@@ -26,7 +26,8 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun4;     /* conversor 2D/3D: x activo · y cuanto se desplaza cada ojo · z plano de referencia · w copia pura */
     vec4 tun5;     /* conversor fino: x temblor del desplazamiento en pixeles · y/z topes por ojo en pixeles (0 = sin tope) */
     vec4 tun6;     /* medición: x temblor de la propia fase de la trama, en ciclos (0 = apagado) */
-    vec4 tun7;     /* capas: x escala de lo de DETRAS del plano de apoyo · y escala de lo de DELANTE (0 o 1 = sin cambio) */
+    vec4 tun7;     /* capas: x/y escala de lo de atras / lo de delante (0 o 1 = sin escalar) ·
+                      z/w desplazamiento fijo de esa banda, en puntos de panel (0 = nada) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -168,6 +169,21 @@ void main()
         const float gFrente = P.tun7.y > 0.0 ? P.tun7.y : 1.0;
         float sI = (mp.x - P.tun4.z) * P.tun4.y * cantoI * (mp.x < P.tun4.z ? gFondo : gFrente);
         float sD = (mp.z - P.tun4.z) * P.tun4.y * cantoD * (mp.z < P.tun4.z ? gFondo : gFrente);
+        /* Empuje por capa (tun7.z para lo de atras, tun7.w para lo de delante), en puntos de
+           panel: un desplazamiento FIJO que se suma al relieve, para llevar una banda entera a un
+           plano concreto. Es el far_diff_popup de scene_dspr y el depth_offset de la capa overlay
+           de degraph en la config de Windows. El lado se decide sobre el desplazamiento ya
+           calculado y se interpola en una zona suave de 1,5 puntos alrededor del plano de apoyo en
+           vez de conmutar de golpe, para que un objeto que cruza el plano no se rompa: lo que
+           cambia es el plano al que va cada capa, no la continuidad. Va ANTES de los topes por
+           ojo, que siguen mandando. */
+        if (P.tun7.z != 0.0 || P.tun7.w != 0.0) {
+            const float Blando = 1.5;
+            float bandaI = 0.5 + 0.5 * smoothstep(-Blando, Blando, sI * P.res.x);
+            float bandaD = 0.5 + 0.5 * smoothstep(-Blando, Blando, sD * P.res.x);
+            sI += mix(P.tun7.z, P.tun7.w, bandaI) / P.res.x;
+            sD += mix(P.tun7.z, P.tun7.w, bandaD) / P.res.x;
+        }
         /* El programa de Samsung mueve el desplazamiento de a saltos y en las zonas llanas (pared,
            cielo) se ven bandas: por eso le suma un temblor de 0,25 a 0,4 px al mapa. Aqui se suma
            igual, pero solo donde el mapa esta llano (canto = 1), que es justo donde la banda se ve

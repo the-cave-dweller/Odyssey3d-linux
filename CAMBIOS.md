@@ -2,6 +2,56 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Empuje por capa: llevar una banda entera a un plano (v0.46)
+- Con solo estirar la escala (`fondo`/`frente` de v0.45) un elemento **casi plano** no se entera: si
+  su profundidad casi no se separa del plano de apoyo, su desplazamiento es casi cero y no hay forma
+  de traerlo al frente. Falta la segunda mitad de `scene_dspr`: el **desplazamiento fijo** de cada
+  banda, que en la config de Windows es `far_diff_popup −1,0` y en la capa `overlay` de `degraph`
+  el `depth_offset`.
+- Añadido: `empuje_fondo` / `empuje_frente`, en **puntos de panel** (positivo = hacia fuera), teclas
+  `h`/`l` y `y`/`o` de 0,5 en 0,5, topados a ±12 (el tope oficial hacia fuera es 12,67). Van por los
+  huecos que ya tenía `tun7` (`z` y `w`), así que **el bloque de parámetros sigue en 320 bytes** y el
+  diseño de memoria no se tocó; comprobado otra vez sobre el SPIR-V compilado (desplazamientos
+  0…304, último miembro en 304).
+- Detalle que importa: el lado no se conmuta de golpe en el plano de apoyo, se **interpola en una zona
+  suave de 1,5 puntos** (`smoothstep` sobre el desplazamiento ya calculado). Con un salto duro, un
+  objeto que cruza el plano se parte en dos y la costura se ve; así solo cambia el plano al que va
+  cada capa. El empuje se suma **antes** de los topes por ojo, que siguen mandando.
+- Para no caer en la trampa de que una tecla bajando a cero «reviva» el valor de `serve.conf`, el
+  ajuste lleva un `capaTocada`: en cuanto se pulsa una tecla de capas manda lo del visor.
+- Sin tocar lo conseguido: con los dos empujes en 0 (o sin escribir la línea) el cuadro sale idéntico
+  al de v0.45; la rama del conversor, la red, la trama y las rampas no se mexieron.
+
+## Qué hace el deslizador de profundidad del Nintendo 3DS (investigación, fuentes duras)
+- **El deslizador no toca la óptica.** Ruta real: potenciómetro → MCU por I2C (`mcu::HID`, comando
+  `0x00070000 GetRaw3DSliderPosition`, un byte) → el módulo HID lo normaliza a float y lo publica en
+  la memoria compartida en `0x1FF81080` (0,0 = 3D apagado · 1,0 = tope) → el juego lo lee
+  (`osGet3DSliderState()`) y **escala su propia disparidad**. No hay recorte duro por hardware: si el
+  juego se pasa, se pasa. (3dbrew: MCU_Services, Configuration Memory; libctru `include/3ds/os.h`)
+- En los emuladores pasa lo mismo: en Citra y Azahar el «factor 3D» **solo alimenta** ese valor de
+  memoria compartida (`Settings::values.factor_3d` → `SharedPage::Set3DSlider(v/100)`); ningún shader
+  de presentación tiene un uniform de profundidad. Azahar permite 0–255 (hasta 2,55) con aviso de que
+  eso en una consola real no existe: poder pasarse es consecuencia de que el valor sea puro software.
+- **La barrera sí se mueve, pero por otro camino** y no la controla el deslizador: máscara de 12
+  unidades con bit de polaridad, rendija abierta 6/12 (mitad), posición en pasos de un iod/12 con
+  iod = 62 mm (unos 5,17 mm por paso, 12 posiciones), escrita por un expansor I2C→paralelo TI
+  TCA6416A y reescrita **unas 100 veces por segundo alternando el patrón y su complemento** (así se
+  evita polarizar en continuo esa capa). El «Super Stable 3D» de la New 3DS mueve la **posición de la
+  barrera** siguiendo los ojos (cámara interna 320x240 a 30 fps + giroscopio para predecir), no toca
+  la imagen que renderiza el juego. (3dbrew: LCD_Registers `0x10202000`/`0x10202004`, QTM_Services;
+  libctru `qtm.h`)
+- Apunte honrado: no apareció ninguna fuente primaria del porqué la pantalla se atenúa al subir el
+  deslizador; lo único confirmado es el coste fijo de tener 3D puesto (rendija al 50 % ⇒ alrededor de la mitad
+  de la retroiluminación). Tampoco existen `SecureGet3Dn2D` ni `GET3DFEATURE` en Config Services (el
+  comando 9 de `cfg:u` es el código de país), ni hay un «modo mini» anti-mareo documentado.
+- **Qué nos lleva a nosotros**: (1) el parecido con lo que acabamos de hacer es exacto —el Hub de
+  Windows y el 3DS exponen un multiplicador de disparidad por software, y los dos se apoyan en un
+  presupuesto duro; nuestro tope por ojo (+12,67 / −9,98 puntos) es lo que al 3DS le falta; (2) la
+  idea de mover la barrera según la cabeza es literalmente lo que hacemos con la fase de la trama y el
+  rastreo IR; (3) alternar dos fases cuadro a cuadro es lo que hace el 3DS con patrón + complemento, y es
+  el argumento a favor del `fase_temblor` que ya tenemos; (4) el 3DS guarda un retardo explícito de
+  conmutación 2D↔3D (`cfg 0x00050006`) en vez de cambiar de golpe: imitable con una rampa global 0..1.
+
 ## Dos mandos separados: hundir el fondo sin tocar los primeros planos (v0.45)
 - Falta que él señaló: para «mandar unos elementos al frente y otros al fondo» el conversor solo
   tenía **una** escala de relieve para toda la imagen. Ahora el desplazamiento se estira **por
