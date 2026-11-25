@@ -2902,12 +2902,13 @@ static int cmdServe(int argc, char **argv) {
   /* Que numeros de trama ha leido el servicio, para no tener que adivinar si la ultima linea de
      serve.conf entro o se la comio un tope de rango. -1 en los crudos significa sin ajustar. */
   {
-    char rx[32], ry[32];
+    char rx[32], ry[32], pl[32];
     if (cfg.rampaX < 900.0) std::snprintf(rx, sizeof rx, "%.6f", cfg.rampaX); else std::snprintf(rx, sizeof rx, "sin ajustar");
     if (cfg.rampaY < 900.0) std::snprintf(ry, sizeof ry, "%.6f", cfg.rampaY); else std::snprintf(ry, sizeof ry, "sin ajustar");
+    if (cfg.planos >= 0.0) std::snprintf(pl, sizeof pl, "%.2f", cfg.planos); else std::snprintf(pl, sizeof pl, "apagado");
     std::printf("[serve] trama cruda (-1 = sin ajustar): fase %.4f paso %.4f filtro %.4f temblor %.4f"
-                " canto %.4f fase_temblor %.4f · rampa_x %s rampa_y %s\n",
-                cfg.fase, cfg.paso, cfg.filtro, cfg.temblor, cfg.canto, cfg.faseTemblor, rx, ry);
+                " canto %.4f fase_temblor %.4f · rampa_x %s rampa_y %s · dos planos %s\n",
+                cfg.fase, cfg.paso, cfg.filtro, cfg.temblor, cfg.canto, cfg.faseTemblor, rx, ry, pl);
     std::fflush(stdout);
   }
 

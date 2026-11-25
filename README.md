@@ -596,11 +596,11 @@ topes por ojo, que siguen mandando. Teclas `h`/`l` (fondo) y `y`/`o` (frente), d
 
 Y en v0.48, **`planos`**: la dureza con la que el conversor cierra el mapa en **dos láminas planas**
 en vez de dejarlo continuo (`0` … `1`; sin escribir la línea, o `0`, es el comportamiento de siempre,
-píxel por píxel). `planos = 0,6` deja un relieve con dos planos claros y bordes definidos, que en
-deportes, series con desenfondo y cualquier mapa manchado se ve mucho más limpio que el continuo; `1`
+píxel por píxel). claro que en deportes, series con desenfondo y cualquier mapa manchado se ve mucho más limpio que el continuo; `1`
 son dos láminas perfectamente planas. El lugar del corte lo saca el propio cuadro y se persigue en el
-tiempo, así que no hace falta afinar ningún umbral; subiendo o bajando la dureza (`g`/`v`) basta. Ojo:
-`serve.conf` lee los números con punto, no con coma (`planos = 0.6`). En marcha es lo mismo con `g`/`v`.
+tiempo, así que no hace falta afinar ningún umbral; subiendo o bajando la dureza (`g`/`v`) basta. Se
+escribe igual que los demás números de la config, con coma o con punto (`planos = 0,3`), y en marcha es
+lo mismo con `g`/`v`.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

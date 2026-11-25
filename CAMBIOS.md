@@ -25,8 +25,9 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   el cuadro con media móvil de 0,08 y banda muerta de 0,004, saltan de golpe en un cambio de plano y se
   recalculan si las láminas se pegan (separación < 0,10). El mapa ya cuantizado alimenta `prev_`, así que
   la realimentación es estable en vez de pelearse cuadro a cuadro.
-- Mandos: teclas `g`/`v` (dureza ±0,1, tope 0…1), `--planos 0..1` en la línea de mando y `planos = 0.6`
-  en `serve.conf` (esa clave va **con punto**: el lector de la config no entiende comas). No es un número
+- Mandos: teclas `g`/`v` (dureza ±0,1, tope 0…1), `--planos 0..1` en la línea de mando y `planos = 0,3`
+  en `serve.conf` (esa rama de la config ya convierte las comas en punto, como `rampa_x` y compañía).
+  No es un número
   de la trama: no entra en el UBO, y por eso el vigía anti-pisotón de v0.47 solo lo mira como un campo más
   de los que mueven las teclas.
 - Herramientas nuevas para medir esto **sin tocar el panel**:
@@ -61,8 +62,15 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
   - Con `--mapa-fijo` y el conversor apagado las cuatro tramas salían **idénticas**: sin relieve el mapa no
       mueve nada, y el `setConverter` solo corría dentro del bloque de la red. Añadido `--relieve` y una
       llamada paralela para el mapa fijo.
-  - En ventana el lienzo a veces sale a 3840 × 2160 y a veces a 5760 × 3240 (aviso del escala 1,5 ya
-      conocido), así que los volcados no eran comparables entre sí: hay que comparar solo del mismo tamaño.
+  - En ventana el lienzo a veces salía a 3840 × 2160 y a veces a 5760 × 3240: con el panel a escala de
+      contenido 1,5 pedíamos una ventana del tamaño del **modo** y KWin la hacía en puntos lógicos, o sea
+      1,5 veces más grande que la pantalla. Se veía solo una esquina, y de la escalera de disparidad del
+      patrón desaparecían los cuadros de la derecha (Rodolfo: «se ven solo los últimos, del amarillo al
+      azul»). Arreglado en modo ventana: se pide el tamaño del modo dividido por la escala de contenido y
+      el lienzo vuelve a salir píxel a píxel. Medido después del arreglo: los **nueve** cuadros de la
+      escalera están en el volcado y dos pasadas seguidas dan un volcado **idéntico** (desvío 0,00), así
+      que los A/B por fin son comparables. La sesión de verdad no se toca por aquí: al tomar el panel la
+      escala queda en 1 y no se entra en ese parche.
   - Las dos funciones nuevas cayeron dentro del primer `namespace {` anónimo de `depth.cpp` y chocaban con
       las declaraciones de `depth.h` (llamada ambigua). Movidas fuera del anónimo.
 - Detalles a tener en cuenta: `anclarTexto` sigue apoyando los rótulos en `focus_` (el plano de la
