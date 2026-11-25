@@ -4242,7 +4242,7 @@ static int cmdServe(int argc, char **argv) {
        pagina a pantalla completa sin nada que ver. Solo lo hacemos con la ventana de una sesion que
        cerro PORQUE EL VIDEO SE FUE: cuando uno elige 2D plano, entrega la pantalla con Tab o saca el
        visor con ESC, el video sigue sonando y la pantalla completa es suya, ahi no se toca.
-       Tampoco peleamos con el navegador: tres intentos separados 1,2 s dentro de los 12 segundos
+       Tampoco peleamos con el navegador: tres intentos separados 1,2 s dentro de los 6 segundos
        siguientes; si la vuelve a poner despues de eso, se avisa una sola vez y se lo deja a el.
        Se apaga con `devolver_fullscreen = no` en serve.conf. */
     if (cfg.devolverFull && !seFueUuid.empty()) {
@@ -4253,11 +4253,18 @@ static int cmdServe(int argc, char **argv) {
          vuelto a medir a las 22:04 con mpv: si uno se rinde al primer vistazo porque "ya esta normal",
          nunca llega a ver la reposicion de la pagina. Mientras dure la vigilia NO nos vamos porque este
          normal: esperamos a ver si se la vuelve a poner. */
-      const bool yaFuera = now - seFueDesde > 20.0 || fullQuitadas >= 3;
+      /* v0.73: la vigilia dura 6 s y caduca aunque la ventana este normal. Antes solo caducaba al
+         verla a pantalla completa, o sea que se quedaba armada sin fin: medido el 25-nov, seis veces
+         salto minutos despues ("sigue a pantalla completa despues de 0 intento(s)") cuando Rodolfo
+         volvio a poner el video, y con menos de 20 s le habria quitado la pantalla completa que el
+         acababa de pedir. La reposicion de Firefox que esto vigila llega al segundo del cierre. */
+      const bool yaFuera = now - seFueDesde > 6.0 || fullQuitadas >= 3;
       if (!viva) {
         seFueUuid.clear();     /* la ventana cerro: ya no hay nada que devolver */
       } else if (!v.fullscreen()) {
-        /* de momento en su tamano normal: seguimos mirando un rato mas */
+        if (yaFuera) seFueUuid.clear();   /* se quedo normal: fin de la vigilia */
+      } else if (yaFuera && fullQuitadas == 0) {
+        seFueUuid.clear();     /* la puso el usuario pasada la vigilia: es suya, sin aviso */
       } else if (yaFuera) {
         if (!fullAvisado) {
           fullAvisado = true;
@@ -4451,6 +4458,13 @@ static int cmdServe(int argc, char **argv) {
         const char *motivo = nullptr;
         double paciencia = 1.5;   /* lo que tiene que durar la senal antes de cerrar */
         const bool asentada = hijoDesde > 0.0 && now - hijoDesde >= 12.0;
+        /* La pantalla completa solo se repone mientras dura nuestro cambio de modo. v0.73, medido el
+           25-nov en 20 sesiones: lo que el cambio de modo le hace a la ventana del video termina a
+           los 2 s de lanzar la sesion, y ninguna vez le quito el estado. La unica reposicion del dia
+           (09:04:19, sesion de 11 s) fue Rodolfo saliendo del video: se la volvimos a poner y el
+           navegador quedo a pantalla completa sin video, con la trama encima otros 7 s. Pasados 5 s,
+           perder el estado es una salida del video y cierra la sesion. */
+        const bool enCambioDeModo = hijoDesde > 0.0 && now - hijoDesde < 5.0;
         int sx = 0, sy = 0, sw = 0, sh = 0;
         bool salidaVista = false;
         for (const WindowMonitor::Salida &s : wm.outputs()) {
@@ -4488,7 +4502,7 @@ static int cmdServe(int argc, char **argv) {
              nuestro cambio de modo, el tamano nuevo llega solo (medido: el flujo del navegador paso de
              2560x1440 a 3840x2160 a los siete segundos de la sesion). Mientras tanto la trama se
              estira: se ve algo menos nitido, pero no roto y no rompe el video. */
-          if (!asentada && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
+          if (enCambioDeModo && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
             reacomodoDesde = now;
             ++reafirmadas;
             std::string e4;
@@ -4510,7 +4524,7 @@ static int cmdServe(int argc, char **argv) {
                         (unsigned)video.w, (unsigned)video.h, sw, sh,
                         " Ctrl+Shift+1 sale del 3D si lo queres ver.");
             std::fflush(stdout);
-          } else if (asentada && sinEstado) {
+          } else if (!enCambioDeModo && sinEstado) {
             motivo = "la ventana del video salio de pantalla completa";
             videoSeFue = true;   /* el video se fue el solo: la ventana no tiene por que seguir a pantalla completa */
             /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y

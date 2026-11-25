@@ -3,6 +3,35 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Al salir del video, el navegador ya no se queda a pantalla completa (v0.73)
+
+- Rodolfo, con la 0.72: el vaivén de lado a lado «sí bajó mucho» (la zona muerta del paralaje, probada
+  en el panel). Y: «en mi última ejecución, al salir del video se quedó el navegador en fullscreen».
+- MEDIDO en el registro de esa sesión (09:04:08): a los 11 s la ventana de Firefox pasó de pantalla
+  completa a 1709x1048 (la salida del video) y el vigilante contestó «el cambio de modo dejó al video sin
+  pantalla completa: se la devolvemos (1/3)». Esa orden va a la VENTANA, no a la página: Firefox quedó a
+  pantalla completa sin video, con la trama encima, hasta que Rodolfo salió otra vez a los 18 s.
+- MEDIDO en las 20 sesiones del día: lo que nuestro cambio de modo le hace a la ventana del video termina
+  a los 2 s de lanzar la sesión y **ninguna vez** le quitó la pantalla completa; la única reposición del
+  día fue esa. La ventana de «sesión joven» era de 12 s.
+- MEDIDO de paso: la vigilia que le quita la pantalla completa al navegador tras el cierre (v0.5x) solo
+  caducaba al ver la ventana a pantalla completa, así que quedaba armada sin fin: seis veces saltó
+  minutos después («sigue a pantalla completa después de 0 intento(s)») cuando Rodolfo volvió a poner un
+  video. Con menos de 20 s le habría quitado la pantalla completa recién pedida.
+
+### Lo que cambia (`src/main.cpp`, el vigilante)
+
+- La pantalla completa del video solo se repone en los **primeros 5 s** de la sesión (antes 12). Después,
+  perderla es salir del video: la sesión se cierra a los 0,4 s, como ya hacía con la sesión asentada.
+- La vigilia de después del cierre dura **6 s** (antes 20) y caduca aunque la ventana esté normal; si el
+  usuario pone pantalla completa pasado ese tiempo, es suya y no hay aviso.
+
+### Comprobado / no probado
+
+- Comprobado: compila. La causa está leída en el registro, no deducida.
+- No probado: en el panel. Queda un hueco conocido: salir del video en los primeros 5 s todavía repone
+  la pantalla completa (hasta 3 veces).
+
 ## El paralaje deja de mecerse con la cabeza quieta, y la sincronización adaptativa se queda como esté (v0.72)
 
 - Rodolfo, con la 0.71: «el framerate y el HDR sirvieron, pero el movimiento de lado a lado también
