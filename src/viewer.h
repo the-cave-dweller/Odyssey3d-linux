@@ -20,6 +20,10 @@ struct ViewerOpts {
   bool noLens = false;
   bool noScaler = false;
   bool noPanel = false;
+  /* --sin-despejar: no mover las demas salidas cuando el panel pasa a escala 1. Por defecto si se
+     mueven, porque al crecer el area logica del panel se monta sobre el monitor de al lado y esa
+     franja se ve duplicada en las dos pantallas. */
+  bool noLayout = false;
   /* el raton atraviesa la ventana del visor salvo sobre la pastilla: asi se puede dar a pausa en
      el video, avanzar la barra o manejar el navegador sin quitar el 3D. Con --sin-pasar-raton el
      visor vuelve a tragarse todos los clics, que era lo que pasaba siempre. */

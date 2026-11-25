@@ -596,11 +596,30 @@ topes por ojo, que siguen mandando. Teclas `h`/`l` (fondo) y `y`/`o` (frente), d
 
 Y en v0.48, **`planos`**: la dureza con la que el conversor cierra el mapa en **dos láminas planas**
 en vez de dejarlo continuo (`0` … `1`; sin escribir la línea, o `0`, es el comportamiento de siempre,
-píxel por píxel). claro que en deportes, series con desenfondo y cualquier mapa manchado se ve mucho más limpio que el continuo; `1`
+píxel por píxel). `0,3` es la suave: las dos capas se insinúan sin cortar los bordes, y en deportes,
+series con desenfondo y cualquier mapa manchado se ve mucho más limpio que el continuo; `1`
 son dos láminas perfectamente planas. El lugar del corte lo saca el propio cuadro y se persigue en el
 tiempo, así que no hace falta afinar ningún umbral; subiendo o bajando la dureza (`g`/`v`) basta. Se
 escribe igual que los demás números de la config, con coma o con punto (`planos = 0,3`), y en marcha es
 lo mismo con `g`/`v`.
+
+Y en v0.49, **`video_parado`**: cuántos segundos tiene que decir el navegador «Parado» para que se quite
+la trama (segundos; `4` sin escribir la línea, `0` lo apaga). Es la salida de un vídeo de YouTube: la
+pantalla completa la sostiene **la página**, no el vídeo, así que al irse del vídeo la ventana de Firefox
+sigue a pantalla completa y por la ventana no hay manera de enterarse de que ya no hay nada que tramar.
+Firefox (y Chrome, Zen, Brave) publican el estado del vídeo por MPRIS, y con eso basta: «Parado» unos
+segundos, o el reproductor que desaparece del bus, cierran la sesión por la puerta de adelante. **«Pausado»
+no cierra nada**, porque una pausa es una pausa y ahí la trama se queda viendo. El vigía solo escucha al
+reproductor del propio navegador, así que un reproductor de música detenido no apaga la sesión.
+
+**El sitio de las salidas también se cuida** (v0.49). `Panel` lee la `Geometry:` que reporta kscreen y, si
+al poner el panel a escala 1 su área lógica crece encima del monitor de al lado, ese monitor **se mueve en la
+misma orden atómica** del cambio de modo y se devuelve al salir (`[panel] DP-7 pasa a 3840,624` / `[panel]
+DP-7 devuelta a 2560,624`). Sin esto la zona derecha del panel se veía duplicada en las dos pantallas y KWin
+le cambiaba el tamaño a la ventana del vídeo a media sesión. `ctl panel status` imprime el sitio de cada
+salida y `ctl panel apply --dry` imprime el comando completo, con las posiciones incluidas. Si no quieres que
+se mueva nada: `--sin-despejar` en el visor o `ODYSSEY3D_LAYOUT=0`. En este equipo el panel ya quedó **a
+escala 1 de forma permanente** y el otro monitor a la derecha, así que en sesión normal no cambia nada.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

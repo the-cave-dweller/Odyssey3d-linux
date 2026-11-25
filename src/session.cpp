@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unistd.h>
 
@@ -35,7 +36,9 @@ void Rig::bringUp(const ViewerOpts &o) {
           /* Aviso si una sesión anterior se quedó sin restaurar (no tocamos nada por nuestra
              cuenta: puede que el usuario haya cambiado la pantalla después). */
           PanelState stale{};
-          const bool hayStale = Panel::loadSnapshot(stale) && stale.name == name &&
+          std::vector<Placement> staleOtras;   /* sitios de origen guardados por esa sesion cortada */
+          const bool hayStale = Panel::loadSnapshot(stale, nullptr, nullptr, &staleOtras) &&
+                                stale.name == name &&
                                 (stale.modeIndex != st.modeIndex || stale.scale != st.scale ||
                                  stale.rotation != st.rotation);
           /* Si además el panel está justo en nuestra configuracion de 3D, lo que vemos no es el
@@ -55,14 +58,44 @@ void Rig::bringUp(const ViewerOpts &o) {
                            "rotacion %s). Si quieres recuperarlo: odyssey3d ctl panel restore\n",
                            stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
           }
+          /* Sitios de las otras salidas. Al pasar el panel a escala 1 su area logica crece
+             (aqui: de 2560x1440 a 3840x2160) y si el otro monitor esta pegado a la derecha, las
+             dos areas se montan 1280 px logicos: esa franja se ve en los dos monitores a la vez y
+             KWin le cambia el tamano a la ventana del video a media sesion. Movemos el otro monitor
+             en la MISMA orden atomica del modo y lo devolvemos al salir.
+             Puerta: ODYSSEY3D_LAYOUT=0 o --sin-despejar dejan el escritorio intacto. */
+          std::vector<Placement> movidas, originales;
+          const char *noLayout = std::getenv("ODYSSEY3D_LAYOUT");
+          const bool dejar = o.noLayout || (noLayout && !std::strcmp(noLayout, "0"));
+          if (!dejar) {
+            std::vector<PanelState> todos;
+            std::string err2;
+            int nw = 0, nh = 0;
+            if (Panel::allOutputs(todos, &err2) && Panel::modeSize(st, idx, 1.0, nw, nh)) {
+              movidas = Panel::despejar(todos, name, nw, nh);
+              for (const Placement &q : movidas) {
+                for (const PanelState &s : todos)
+                  if (s.name == q.name && s.geom) originales.push_back(Placement{s.name, s.x, s.y});
+                std::printf("[panel] %s pasa a %d,%d: con el panel a %dx%d logicos las dos zonas se "
+                            "montaban y esa franja se veia duplicada (al salir vuelve a su sitio)\n",
+                            q.name.c_str(), q.x, q.y, nw, nh);
+              }
+              if (movidas.empty() && st.geom && st.w > 0 && st.w != nw)
+                std::printf("[panel] el panel pasa de %dx%d a %dx%d logicos y el resto del escritorio"
+                            " ya esta despejado: no se mueve nada\n", st.w, st.h, nw, nh);
+            }
+          }
           std::string snapPath;
           if (residual) {
             st = stale;  /* el estado real del usuario es el guardado, no el que se ve ahora */
-          } else if (!Panel::saveSnapshot(st, &snapPath, &err)) {
+          } else if (!Panel::saveSnapshot(st, &snapPath, &err, movidas.empty() ? nullptr : &originales)) {
             std::fprintf(stderr, "[aviso] %s\n", err.c_str());
           }
-          if (Panel::apply(name, idx, 1.0, RotNone, true, &err, false)) {
+          if (Panel::apply(name, idx, 1.0, RotNone, true, &err, false, movidas.empty() ? nullptr : &movidas)) {
             saved = st;
+            /* En el caso residual los sitios de origen validos son los de la instantanea: lo que se
+               ve ahora en el escritorio ya es el escritorio movido de la sesion que se corto. */
+            otras = (residual && !staleOtras.empty()) ? staleOtras : originales;
             panelApplied = true;
             std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR apagado\n", name.c_str(), idx,
                         nombreModo.c_str());
@@ -126,9 +159,11 @@ void Rig::shutDown() {
   }
   if (panelApplied) {
     std::string err;
-    if (Panel::restore(saved, &err)) {
+    if (Panel::restore(saved, &err, otras.empty() ? nullptr : &otras)) {
       std::printf("[panel] restaurado: modo %d %s, escala %g, rotacion %s\n", saved.modeIndex, saved.modeRes.c_str(),
                   saved.scale, rotW(saved.rotation));
+      for (const Placement &q : otras)
+        std::printf("[panel] %s devuelta a %d,%d\n", q.name.c_str(), q.x, q.y);
       Panel::clearSnapshot();
     } else {
       std::fprintf(stderr, "[aviso] no se pudo restaurar el panel: %s\n", err.c_str());

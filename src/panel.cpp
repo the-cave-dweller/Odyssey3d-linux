@@ -93,6 +93,15 @@ static std::vector<PanelState> parseAll(const std::string &text) {
       }
     } else if (line.rfind("Scale:", 0) == 0) {
       cur->scale = atof(line.c_str() + 6);
+    } else if (line.rfind("Geometry:", 0) == 0) {
+      /* "Geometry: 2560,624 2048x1536" -> sitio logico y tamano logico de la salida. */
+      int gx = 0, gy = 0, gw = 0, gh = 0;
+      char coma = 0, equis = 0;
+      std::istringstream ss(line.substr(9));
+      if ((ss >> gx >> coma >> gy) && coma == ',' && (ss >> gw >> equis >> gh) && equis == 'x') {
+        cur->x = gx; cur->y = gy; cur->w = gw; cur->h = gh;
+        cur->geom = true;
+      }
     } else if (line.rfind("Rotation:", 0) == 0) {
       cur->rotation = atoi(line.c_str() + 9);
     } else if (line.rfind("Vrr:", 0) == 0) {
@@ -135,6 +144,70 @@ bool Panel::query(const std::string &out, PanelState &st, std::string *err) {
   return false;
 }
 
+bool Panel::allOutputs(std::vector<PanelState> &todos, std::string *err) {
+  std::string text = ksd("-o");
+  todos = parseAll(text);
+  if (todos.empty()) {
+    if (err)
+      *err = "kscreen-doctor no devolvio ninguna salida (¿sesión KDE/Wayland? revisa WAYLAND_DISPLAY "
+             "y XDG_RUNTIME_DIR)";
+    return false;
+  }
+  return true;
+}
+
+bool Panel::modeSize(const PanelState &st, int modeIndex, double scale, int &w, int &h) {
+  std::string res = modeName(st, modeIndex);
+  if (res.empty()) res = st.modeRes;
+  const std::string base = res.substr(0, res.find('@'));
+  size_t x = base.find('x');
+  if (x == std::string::npos) return false;
+  const int mw = atoi(base.substr(0, x).c_str());
+  const int mh = atoi(base.substr(x + 1).c_str());
+  if (mw <= 0 || mh <= 0) return false;
+  const double s = scale > 0.0 ? scale : 1.0;
+  w = (int)std::lround((double)mw / s);
+  h = (int)std::lround((double)mh / s);
+  return w > 0 && h > 0;
+}
+
+std::vector<Placement> Panel::despejar(const std::vector<PanelState> &todos, const std::string &panel,
+                                       int panelW, int panelH) {
+  std::vector<Placement> movidas;
+  const PanelState *p = nullptr;
+  for (const auto &s : todos)
+    if (s.name == panel) p = &s;
+  if (!p || !p->geom || panelW <= 0 || panelH <= 0) return movidas;
+  const int px = p->x, py = p->y;
+  /* El ancla de kscreen es la esquina superior izquierda: al pasar de escala 1,5 a 1 el panel
+     crece hacia la derecha y hacia abajo, que es justo donde tenemos el otro monitor. Medido en
+     esta maquina: DP-4 en 0,0 de 2560x1440 y DP-7 en 2560,624 de 2048x1536; al quedar DP-4 en
+     3840x2160 las dos areas se montan 1280 px logicos y la franja derecha del panel aparece
+     tambien en el monitor de al lado. */
+  auto seSolapa = [](int x, int y, int w, int h, int px, int py, int pw, int ph) {
+    return x < px + pw && x + w > px && y < py + ph && y + h > py;
+  };
+  for (const auto &s : todos) {
+    if (s.name == panel || !s.geom || s.w <= 0 || s.h <= 0) continue;
+    if (!seSolapa(s.x, s.y, s.w, s.h, px, py, panelW, panelH)) continue;  /* ya esta despejada */
+    /* La mandamos al lado por donde ya estaba: si su centro cae a la derecha del panel, al borde
+       derecho nuevo; si no, al izquierdo. La Y se conserva, asi el monitor sigue a la misma altura. */
+    Placement q{s.name, s.x, s.y};
+    const bool aLaDerecha = (s.x + s.w / 2) >= (px + panelW / 2);
+    q.x = aLaDerecha ? px + panelW : px - s.w;
+    if (!seSolapa(q.x, q.y, s.w, s.h, px, py, panelW, panelH)) {
+      movidas.push_back(q);
+      continue;
+    }
+    /* Si con eso no alcanza (el otro monitor esta encima o debajo), lo bajamos por completo. */
+    q.x = s.x;
+    q.y = (s.y + s.h / 2) >= (py + panelH / 2) ? py + panelH : py - s.h;
+    if (!seSolapa(q.x, q.y, s.w, s.h, px, py, panelW, panelH)) movidas.push_back(q);
+    else movidas.push_back(Placement{s.name, px + panelW, py});  /* ultimo recurso: a la derecha, arriba */
+  }
+  return movidas;
+}
+
 int Panel::pickMode(const PanelState &st, double preferHz) {
   int best = -1;            /* -1 = este monitor no tiene el modo nativo del Odyssey */
   double bestDiff = 1e9;
@@ -153,11 +226,14 @@ int Panel::pickMode(const PanelState &st, double preferHz) {
 }
 
 bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotation, bool disableHdr,
-                  std::string *err, bool dryRun) {
+                  std::string *err, bool dryRun, const std::vector<Placement> *movidas) {
   std::ostringstream args;
   args << "output." << out << ".mode." << modeIndex << " output." << out << ".scale." << scale;
   if (const char *rot = rotationWord(rotation))
     args << " output." << out << ".rotation." << rot;
+  if (movidas)
+    for (const Placement &q : *movidas)
+      args << " output." << q.name << ".position." << q.x << "," << q.y;
   if (dryRun) {
     if (err) *err = "kscreen-doctor " + args.str();
     return true;
@@ -174,12 +250,15 @@ bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotat
   return true;
 }
 
-bool Panel::restore(const PanelState &st, std::string *err) {
+bool Panel::restore(const PanelState &st, std::string *err, const std::vector<Placement> *otras) {
   if (st.name.empty()) return true;
   std::ostringstream args;
   args << "output." << st.name << ".mode." << st.modeIndex << " output." << st.name << ".scale." << st.scale;
   if (const char *rot = rotationWord(st.rotation))
     args << " output." << st.name << ".rotation." << rot;
+  if (otras)
+    for (const Placement &q : *otras)
+      args << " output." << q.name << ".position." << q.x << "," << q.y;
   std::string r = ksd(args.str());
   if (st.hdr) ksd("output." + st.name + ".hdr.enable");
   if (st.vrr == "Always")
@@ -201,7 +280,8 @@ static std::string stateDir() {
 
 static std::string snapshotPath() { return stateDir() + "/panel.state"; }
 
-bool Panel::saveSnapshot(const PanelState &st, std::string *path, std::string *err) {
+bool Panel::saveSnapshot(const PanelState &st, std::string *path, std::string *err,
+                         const std::vector<Placement> *otras) {
   std::string p = snapshotPath();
   std::error_code ec;
   std::filesystem::create_directories(std::filesystem::path(p).parent_path(), ec);
@@ -218,12 +298,22 @@ bool Panel::saveSnapshot(const PanelState &st, std::string *path, std::string *e
      << "rotation=" << st.rotation << "\n"
      << "vrr=" << st.vrr << "\n"
      << "hdr=" << (st.hdr ? 1 : 0) << "\n";
+  if (st.geom) {
+    char sitio[32];
+    std::snprintf(sitio, sizeof(sitio), "%d,%d %dx%d", st.x, st.y, st.w, st.h);
+    os << "geometry=" << sitio << "\n";
+  }
+  /* Los sitios originales de las demas salidas: si las movimos para que no se monten con el
+     panel agrandado, al salir tienen que volver exactamente a donde estaban. */
+  if (otras)
+    for (const Placement &q : *otras)
+      os << "otra=" << q.name << " " << q.x << "," << q.y << "\n";
   os.close();
   if (path) *path = p;
   return true;
 }
 
-bool Panel::loadSnapshot(PanelState &st, std::string *path, std::string *err) {
+bool Panel::loadSnapshot(PanelState &st, std::string *path, std::string *err, std::vector<Placement> *otras) {
   std::string p = snapshotPath();
   if (path) *path = p;
   std::ifstream is(p);
@@ -251,6 +341,24 @@ bool Panel::loadSnapshot(PanelState &st, std::string *path, std::string *err) {
       st.vrr = val;
     else if (key == "hdr")
       st.hdr = val == "1";
+    else if (key == "geometry") {
+      int gx = 0, gy = 0, gw = 0, gh = 0;
+      char coma = 0, equis = 0;
+      std::istringstream ss(val);
+      if ((ss >> gx >> coma >> gy) && coma == ',' && (ss >> gw >> equis >> gh) && equis == 'x') {
+        st.x = gx; st.y = gy; st.w = gw; st.h = gh;
+        st.geom = true;
+      }
+    } else if (key == "otra") {
+      Placement q{};
+      int qx = 0, qy = 0;
+      char coma = 0;
+      std::istringstream ss(val);
+      if ((ss >> q.name >> qx >> coma >> qy) && coma == ',' && !q.name.empty()) {
+        q.x = qx; q.y = qy;
+        if (otras) otras->push_back(q);
+      }
+    }
   }
   if (st.name.empty()) {
     if (err) *err = "instantanea invalida en " + p;

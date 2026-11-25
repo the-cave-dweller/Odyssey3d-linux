@@ -24,6 +24,8 @@ struct Rig {
   bool panelApplied = false;
   bool scalerOn = false;
   bool lensOk = false;
+  /* Sitios de origen de las demas salidas que movimos al agrandar el panel: shutDown() las devuelve. */
+  std::vector<Placement> otras;
   int hud() const { return (lensOk ? 1 : 0) + (scalerOn ? 2 : 0); }
   std::string output;
 

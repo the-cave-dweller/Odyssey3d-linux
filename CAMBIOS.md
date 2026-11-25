@@ -2,6 +2,50 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Tres arreglo del navegador: la franja duplicada, el sitio de las salidas y la trama que no se quita (v0.49)
+- Pedido de Rodolfo, tres cosas: (1) al pulsar **convertir** el vídeo «pasa a formar parte de un navegador
+  en pantalla completa» y hay que dar click en sus controles para traerlo; (2) **al salir del vídeo no se
+  quita la trama** porque el navegador sigue a pantalla completa; (3) **una parte del borde se pasa a la
+  segunda pantalla** cuando el overlay está activo, igual que con los cuadrados de prueba. Aclarado por él:
+  «overlay» es **la trama tejida sobre la imagen**, y el vídeo es **siempre Firefox (YouTube)** con la
+  ventana del navegador a pantalla completa.
+- Causa medida de (1) y (3), la misma: **el área lógica del panel cambiaba de tamaño al entrar en sesión**.
+  `kscreen-doctor -o` da el panel DP‑4 en `0,0 2560x1440` con **escala 1,5** (el lienzo físico es 3840 × 2160)
+  y DP‑7 en `2560,624 2048x1536` con escala 1. Al poner escala 1 el área lógica del panel pasa a
+  0…3840 × 0…2160, y **se monta 1280 px lógicos sobre DP‑7** (que empieza en 2560). De ahí la franja
+  duplicada y de ahí que KWin le cambie el tamaño a la ventana del navegador a media sesión.
+- Arreglado en dos capas, como eligió él («preparar la escala 1 **y** reponer posiciones por si acaso»):
+  - **Escritorio**: DP‑4 quedado **permanentemente a escala 1** y DP‑7 movido a **3840,624**, en una sola
+    orden atómica. Medido después: DP‑4 `0,0 3840x2160`, DP‑7 `3840,624 2048x1536`, **solape 0**; la ventana
+    de Firefox pasó a `0,0 3840x2160` y la de Strata siguió a su monitor. El texto del escritorio se ve más
+    chico (es el precio de la escala 1); se compensa subiendo el tamaño de fuente en Ajustustes, no la escala.
+  - **Código**: `Panel` ahora **lee la geometría** (`parseAll()` ignoraba la línea `Geometry:`, así que antes
+    no se guardaba ni se devolvía ningún sitio), y hay `allOutputs()`, `modeSize()` y `despejar()`. La regla de
+    `despejar()`: si la zona de otra salida se monta sobre la del panel con el tamaño nuevo, se mueve a la
+    derecha (o a la izquierda, según de qué lado caiga su centro) **en la misma invocación de kscreen-doctor**,
+    que es como lo pide la ayuda del propio kscreen-doctor. `saveSnapshot`/`loadSnapshot` guardan `geometry=`
+    y una línea `otra=NOMBRE x,y` por salida movida, y `shutDown()` / `devolverPanelHuerfano` la devuelven.
+    `ctl panel status` imprime el sitio, y `ctl panel apply --dry` imprime el comando completo con las
+    posiciones. Verificado en seco: `output.DP-4.mode.20 output.DP-4.scale.1 output.DP-4.rotation.none
+    output.DP-7.position.3840,624`, y con el escritorio ya preparado **no mueve nada**.
+  - Puertas por si acaso: `--sin-despejar` en el visor y `ODYSSEY3D_LAYOUT=0` dejan el escritorio intacto.
+    Si una sesión se cortó a mitad, los sitios de origen se toman de la instantánea, no del escritorio ya movido.
+- (2) ya no depende de la ventana: **el navegador lo dice por MPRIS**. Firefox publica
+  `org.mpris.MediaPlayer2.firefox.instance_1_42` con `PlaybackStatus` (medido: «Paused» con el título de la
+  pestaña). Añadido un vigía en el hub: con sesión abierta sobre una ventana de navegador, si el navegador
+  dice **«Stopped»** durante `video_parado` segundos, o si el reproductor desaparece del bus (la página se
+  quedó sin vídeo), mandamos SIGTERM al visor y la trama se quita sola. **«Paused» no cierra nada** — una
+  pausa es una pausa y ahí la trama se queda viendo — y solo se usa el reproductor **del propio navegador**,
+  para que el «Stopped» de un reproductor de música abierto no cierre la sesión. `video_parado = 4` en
+  `serve.conf`; con `0` se apaga y se vuelve al comportamiento anterior.
+- Nota del registro real (20:02 de hoy) que explica por qué antes se cerraba y volvía: la ventana del
+  navegador **recupera su pantalla completa sola** un segundo después (`[ventana] video: … -> … pantalla
+  completa`), así que por la ventana la señal de salida no es fiable en un navegador. Confirmado en código:
+  ni el visor ni la sesión escriben `Fullscreen` — la pantalla completa la sostiene la página, no nosotros.
+- Nuevos avisos en el registro: `[panel] DP-7 pasa a …`, `[panel] DP-7 devuelta a …`, `[video] <reproductor>
+  dice Playing/Paused/Stopped`, `[ventana] el navegador dice Stopped: el video se fue…`.
+
+
 ## Dos planos por cuadro, como en la Nintendo 3DS (v0.48)
 - Pedido de Rodolfo: «revises lo de crear un modelo que separe la imagen en 2 planos parallax, porque
   parece que todo lo maneja de forma similar, algo parecido al nintendo 3d». Elegido por él: **empezar

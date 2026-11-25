@@ -72,7 +72,10 @@ static const char *kUsage =
     "  odyssey3d ctl camera [--dev N] [--size 1280x480] [--format MJPG]   probar la camara\n"
     "  odyssey3d ctl track  [--segundos 20] [--dump foto.jpg]   rastreo de cabeza (cara y ojos)\n"
     "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
-    "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry]\n"
+    "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry] [--sin-despejar]\n"
+    "                                        status dice tambien el sitio de la salida; apply mueve lo que se\n"
+    "                                        monte encima del panel y restore lo devuelve (apply/restore --dry\n"
+    "                                        imprimen el comando de kscreen-doctor completo, con posiciones)\n"
     "  odyssey3d ctl windows [--watch]\n"
     "  odyssey3d ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|sobre|debajo|libre|salida NOMBRE|cerrar] [--uuid ID]\n"
     "                                        como esta la ventana del video; `salida DP-4` la devuelve al Odyssey\n"
@@ -1078,6 +1081,8 @@ static int cmdPanel(int argc, char **argv) {
     std::printf("  modo   : %d (%s)\n", st.modeIndex, st.modeRes.c_str());
     std::printf("  escala : %g\n", st.scale);
     std::printf("  rotacion: %d (%s)\n", st.rotation, rotW(st.rotation));
+    if (st.geom)
+      std::printf("  sitio  : %d,%d  %dx%d logico\n", st.x, st.y, st.w, st.h);
     std::printf("  vrr    : %s\n", st.vrr.empty() ? "?" : st.vrr.c_str());
     std::printf("  hdr    : %s\n", st.hdr ? "on" : "off");
     std::printf("  modos  : ");
@@ -1089,13 +1094,34 @@ static int cmdPanel(int argc, char **argv) {
   }
   if (what == "apply") {
     bool dry = hasFlag(argc, argv, "--dry");
+    bool sinDespejar = hasFlag(argc, argv, "--sin-despejar");
     int mode = Panel::pickMode(st, hz);
+    /* Despejar: si al poner el panel a escala 1 su zona logica crece encima del otro monitor,
+       ese monitor se mueve en la misma orden atomica (y su sitio de origen queda guardado). */
+    std::vector<Placement> movidas, originales;
+    if (!sinDespejar) {
+      std::vector<PanelState> todos;
+      int nw = 0, nh = 0;
+      if (Panel::allOutputs(todos) && Panel::modeSize(st, mode, 1.0, nw, nh)) {
+        movidas = Panel::despejar(todos, out, nw, nh);
+        for (const Placement &q : movidas) {
+          int ox = q.x, oy = q.y;
+          for (const PanelState &s : todos)
+            if (s.name == q.name && s.geom) {
+              ox = s.x; oy = s.y;
+              originales.push_back(Placement{s.name, s.x, s.y});
+            }
+          std::printf("  %s: de %d,%d a %d,%d para no montar %dx%d con el panel nuevo\n", q.name.c_str(),
+                      ox, oy, q.x, q.y, nw, nh);
+        }
+      }
+    }
     if (!dry) {
       std::string snapPath;
-      if (Panel::saveSnapshot(st, &snapPath, &err))
+      if (Panel::saveSnapshot(st, &snapPath, &err, originales.empty() ? nullptr : &originales))
         std::printf("  estado actual guardado en %s (para `ctl panel restore`)\n", snapPath.c_str());
     }
-    if (!Panel::apply(out, mode, 1.0, RotNone, true, &err, dry)) {
+    if (!Panel::apply(out, mode, 1.0, RotNone, true, &err, dry, movidas.empty() ? nullptr : &movidas)) {
       std::fprintf(stderr, "%s\n", err.c_str());
       return 1;
     }
@@ -1119,22 +1145,27 @@ static int cmdPanel(int argc, char **argv) {
   }
   if (what == "restore") {
     PanelState snap{};
+    std::vector<Placement> otras;
     std::string snapPath;
-    if (!Panel::loadSnapshot(snap, &snapPath, &err)) {
+    if (!Panel::loadSnapshot(snap, &snapPath, &err, &otras)) {
       std::fprintf(stderr, "%s\n", err.c_str());
       return 1;
     }
     std::printf("  instantanea: %s  modo %d %s, escala %g, rotacion %d (%s)\n", snapPath.c_str(), snap.modeIndex,
                 snap.modeRes.c_str(), snap.scale, snap.rotation, rotW(snap.rotation));
+    for (const Placement &q : otras)
+      std::printf("  sitio de origen de %s: %d,%d\n", q.name.c_str(), q.x, q.y);
     if (hasFlag(argc, argv, "--dry")) {
       std::printf("  ejecutaría: kscreen-doctor output.%s.mode.%d output.%s.scale.%g", snap.name.c_str(),
                   snap.modeIndex, snap.name.c_str(), snap.scale);
       if (const char *w = Panel::rotationWord(snap.rotation))
         std::printf(" output.%s.rotation.%s", snap.name.c_str(), w);
+      for (const Placement &q : otras)
+        std::printf(" output.%s.position.%d,%d", q.name.c_str(), q.x, q.y);
       std::printf("\n");
       return 0;
     }
-    if (!Panel::restore(snap, &err)) {
+    if (!Panel::restore(snap, &err, otras.empty() ? nullptr : &otras)) {
       std::fprintf(stderr, "%s\n", err.c_str());
       return 1;
     }
@@ -1320,6 +1351,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--h") { if (!need("h")) return false; o.h = atoi(argv[++i]); }
     else if (a == "--windowed") o.windowed = true;
     else if (a == "--no-panel") o.noPanel = true;
+    else if (a == "--sin-despejar") o.noLayout = true;
     else if (a == "--sin-pasar-raton") o.noPassthrough = true;
     else if (a == "--no-lens") o.noLens = true;
     else if (a == "--no-scaler") o.noScaler = true;
@@ -2144,6 +2176,11 @@ struct ServeCfg {
      planos del cuadro. -1 = sin ajustar (apagado, el relieve continuo de siempre); de 0,0 a 1,0.
      Es lo mismo que sube y baja la tecla `g`, pero dejado por escrito. */
   double planos = -1.0;
+  /* Cuanto tiene que decir el navegador "Parado" para cerrar la sesion (segundos). 0 apaga el
+     vigia por MPRIS. Hace falta porque al salir de un video de YouTube la pagina del navegador
+     suele seguir a pantalla completa: por la ventana no se entera uno de que el video se fue, y
+     la trama se queda tejida sobre el navegador. */
+  int paradoSeg = 4;
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2241,7 +2278,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
              k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente" ||
-             k == "empuje_fondo" || k == "empuje_frente" || k == "planos") {
+             k == "empuje_fondo" || k == "empuje_frente" || k == "planos" || k == "video_parado") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2262,6 +2299,8 @@ static void loadServeCfg(ServeCfg &cfg) {
       else if (k == "empuje_frente") cfg.empFrente = (d >= -15.0 && d <= 15.0) ? d : 999.0;
       /* dureza de los dos planos: 0 = apagado, 1 = laminas planas; fuera de ese rango no se usa */
       else if (k == "planos") cfg.planos = (d >= 0.0 && d <= 1.0) ? d : -1.0;
+      /* segundos que el navegador tiene que decir "Parado" para cerrar la sesion; 0 = apagado */
+      else if (k == "video_parado") cfg.paradoSeg = (d >= 0.0 && d <= 600.0) ? (int)d : 4;
       else cfg.faseTemblor = d;
     }
     else if (k == "auto") {
@@ -2852,8 +2891,9 @@ static void borrarMarcaVentana() {
    se queda en modo 3D, con la lente encendida y el scaler en 3D hasta que alguien cierre a mano. */
 static void devolverPanelHuerfano(const char *motivo) {
   PanelState snap{};
+  std::vector<Placement> otras;
   std::string snapPath, e;
-  if (!Panel::loadSnapshot(snap, &snapPath, &e)) return;
+  if (!Panel::loadSnapshot(snap, &snapPath, &e, &otras)) return;
   std::printf("[serve] %s: quedaba el panel guardado en modo 3D (modo %d %s, escala %g): lo devolvemos\n",
               motivo, snap.modeIndex, snap.modeRes.c_str(), snap.scale);
   std::fflush(stdout);
@@ -2868,9 +2908,11 @@ static void devolverPanelHuerfano(const char *motivo) {
   if (!sd.empty() && sc.open(sd)) {
     if (sc.set3d(false)) std::printf("[scaler] modo 3D apagado\n");
   }
-  if (Panel::restore(snap, &e)) {
+  if (Panel::restore(snap, &e, otras.empty() ? nullptr : &otras)) {
     Panel::clearSnapshot();
     std::printf("[panel] restaurado\n");
+    for (const Placement &q : otras)
+      std::printf("[panel] %s devuelta a %d,%d\n", q.name.c_str(), q.x, q.y);
   } else {
     std::fprintf(stderr, "[aviso] no se pudo restaurar el panel: %s\n", e.c_str());
   }
@@ -2995,6 +3037,12 @@ static int cmdServe(int argc, char **argv) {
   bool debajoAvisado = false;     /* el aviso de "el video pasa por debajo" va una sola vez */
   std::string firmaVideo;         /* estados y tamano del video la ultima vez que lo miramos, para dar
                                      cuenta de cualquier cambio con su reloj */
+  /* Vigia del navegador por MPRIS (ver el bloque que lo usa mas abajo). */
+  Mpris navegador;               /* reproductor MPRIS de la ventana del navegador, si lo hay */
+  bool navegadorAbierto = false; /* ya intentamos abrir el bus en esta sesion */
+  bool navegadorAvisado = false; /* el aviso de "no hay reproductor MPRIS" va una sola vez */
+  std::string estadoNavegador;   /* ultimo estado que nos dijo el navegador ("Playing", "Paused"...) */
+  double paradoDesde = 0.0;      /* cuando empezo a decir "Parado" (0 = no lo esta diciendo) */
   /* Otras ventanas que bajamos con KeepBelow mientras dura la sesion: guardamos su uuid y si tenian
      KeepAbove puesto, para devolvérselo tal cual. */
   std::vector<std::pair<std::string, bool>> bajadas;
@@ -3158,6 +3206,10 @@ static int cmdServe(int argc, char **argv) {
         otrosDesde = 0.0;
         otrosAvisado = false;
         firmaVideo.clear();
+        estadoNavegador.clear();
+        paradoDesde = 0.0;
+        navegadorAbierto = false;
+        navegadorAvisado = false;
         /* Backoff: al cambiar el modo del panel KWin remueve la ventana del video y hay instantes en
            que no figura a pantalla completa. Si acabamos de cerrar una sesion y la volvemos a lanzar
            al instante, entramos en un bucle de lanzar/cerrar que deja el monitor parpadeando. */
@@ -3443,6 +3495,76 @@ static int cmdServe(int argc, char **argv) {
       }
     } else {
       borrarMarcaVentana();
+    }
+
+    /* El navegador dice por MPRIS si el video de la pagina esta Reproduciendo, Pausado o Parado, y
+       esa es la unica senal que falta para quitar la trama al salir del video. Hace falta porque en
+       YouTube la pantalla completa la sostiene la pagina (el video es un elemento de la pagina), de
+       modo que al irse del video la ventana del navegador sigue a pantalla completa y por la ventana
+       no hay forma de enterarse: medido en la sesion real, la trama se quedaba tejida sobre el
+       navegador hasta que la pagina salia de pantalla completa.
+       Reglas: solo con ventanas de navegador y con el reproductor MPRIS del propio navegador (asi no
+       cierra la sesion el "Parado" de un reproductor de musica abierto). "Pausado" no cierra nada,
+       porque una pausa es una pausa y ahi la trama se queda viendo. "Parado" durante video_parado
+       segundos, o el reproductor que desaparece del bus (la pagina se quedo sin video), cierra la
+       sesion por la puerta de adelante: SIGTERM al visor, que devuelve el panel a 2D y apaga la lente. */
+    if (hijo > 0 && !cerrandoSesion && cfg.paradoSeg > 0 && hijoDesde > 0.0 && now - hijoDesde >= 3.0) {
+      static const char *navegadores[] = {"firefox", "zen", "chrom", "brave", "epiphany", "midori",
+                                          "edge", "vivaldi", "opera"};
+      auto esNavegador = [](const char *s) {
+        if (!s || !*s) return false;
+        for (const char *p : navegadores)
+          if (std::strstr(s, p)) return true;
+        return false;
+      };
+      WindowInfo ventanaVideo{};
+      if (wm.find(hijoUuid, ventanaVideo) && esNavegador(ventanaVideo.appId.c_str())) {
+        std::string errM, estado;
+        if (!navegadorAbierto) {
+          navegadorAbierto = navegador.open(&errM) && esNavegador(navegador.playerName().c_str());
+          if (!navegadorAbierto && !navegadorAvisado) {
+            navegadorAvisado = true;
+            std::printf("[video] %s: no vemos el estado del video por MPRIS (%s), asi que la trama se quita"
+                        " solo cuando la pagina salga de pantalla completa\n",
+                        ventanaVideo.appId.c_str(), errM.empty() ? "el reproductor que aparece no es del navegador"
+                                                                : errM.c_str());
+            std::fflush(stdout);
+          }
+        }
+        if (navegadorAbierto) {
+          bool parado = false;
+          const bool leido = navegador.status(&estado, &errM);
+          if (leido && !estado.empty()) {
+            parado = (estado == "Stopped");
+            if (estado != estadoNavegador) {
+              std::printf("[video] %s dice %s (sesion de %.0f s)\n", navegador.playerName().c_str(),
+                          estado.c_str(), now - hijoDesde);
+              std::fflush(stdout);
+              estadoNavegador = estado;
+            }
+          } else if (!estadoNavegador.empty()) {
+            parado = true;   /* el reproductor desaparecio del bus: la pagina se quedo sin video */
+            estado = "sin reproductor";
+          }
+          if (parado) {
+            if (paradoDesde <= 0.0) {
+              paradoDesde = now;
+              std::printf("[video] %s: puede ser un cambio de pestana; si dura %d s quitamos la trama\n",
+                          estado.c_str(), cfg.paradoSeg);
+              std::fflush(stdout);
+            }
+            if (now - paradoDesde >= (double)cfg.paradoSeg) {
+              cerrandoSesion = true;
+              std::printf("[ventana] el navegador dice %s: el video se fue, cerramos la sesion 3D y"
+                          " devolvemos el panel a 2D (%s)\n", estado.c_str(), hijoUuid.c_str());
+              std::fflush(stdout);
+              ::kill(hijo, SIGTERM);
+            }
+          } else {
+            paradoDesde = 0.0;
+          }
+        }
+      }
     }
 
     /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
