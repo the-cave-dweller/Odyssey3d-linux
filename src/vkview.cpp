@@ -54,6 +54,7 @@ struct wl_region;
 #include <thread>
 #include <mutex>
 #include <unistd.h>
+#include <sys/stat.h>
 
 static void vkGlfwError(int code, const char *desc) { std::fprintf(stderr, "[glfw %d] %s\n", code, desc); }
 
@@ -159,6 +160,7 @@ static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX R
    El rastreo ya esta leyendo la camara a su tasa, asi que esto no abre nada ni le arranca nada a la
    camara del monitor: solo cambia cada cuanto guardamos una foto de lo que ya teniamos en la mano. */
 static bool g_vistaRapida = false;
+static int g_barraGuardar = 0;   /* copias chicas que faltan por guardar (`ctl barra guardar`) */
 /* Si esta sesion quiere la camara (`--track`, lo decide el hub): se apunta desde el arranque, aunque la
    apertura falle. Es la senal que mira `ctl vista` para cederla: la vista previa de la ventana de
    ajustes sabe que el visor la quiere y la suelta en medio segundo, y el visor la vuelve a abrir. */
@@ -1938,6 +1940,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              segundo en vez de una cada dos, y la ventana la va refrescando; la camara no se abre dos
              veces ni se le pide nada nuevo, porque el hilo del rastreo ya la esta leyendo a su tasa. Con
              `vista = 0` se vuelve a la cadencia tranquila, que es la que no gasta disco de mas. */
+          /* `barra = guardar` o `barra = 12`: guardar copias chicas del cuadro para afinar el detector
+             de la barra del reproductor (ver el bloque del video dividido, mas abajo) */
+          const auto ordenBarra = palabras.find("barra");
+          if (ordenBarra != palabras.end()) {
+            /* la orden lleva su hora (`16@1764100000`): el fichero de ajuste se queda escrito y el visor
+               lo lee tambien al arrancar, asi que sin la hora cada sesion nueva volveria a guardar */
+            const std::string &v = ordenBarra->second;
+            const int n = std::atoi(v.c_str());
+            const size_t arroba = v.find('@');
+            const long long hora = arroba == std::string::npos ? 0 : std::atoll(v.c_str() + arroba + 1);
+            const long long edad = (long long)std::time(nullptr) - hora;
+            if (n > 0 && edad >= 0 && edad <= 300) {
+              g_barraGuardar = std::min(n, 60);
+              std::printf("[barra] se guardaran %d copias chicas del cuadro en %s\n", g_barraGuardar,
+                          ajuste::rutaBarra().c_str());
+              std::fflush(stdout);
+            }
+          }
           const auto ordenVista = palabras.find("vista");
           if (ordenVista != palabras.end()) {
             const std::string v = strLower(ordenVista->second);
@@ -2583,9 +2603,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     vezAnterior = t;
     wv.setDepthShift(((float)st.depth - 50.0f) / 50.0f * 0.004f);
     /* ---- video dividido: la barra del reproductor, de una pieza (v0.81; ver barra.h) ----
-       Cada cuatro cuadros nuevos se baja la copia chica del cuadro (la misma del conversor) y se
-       buscan las filas donde las dos mitades no casan: ahi el reproductor pinto su barra a lo ancho
-       y esas filas se tejen en 2D con el cuadro entero. `barra_2d = no` en serve.conf lo apaga. */
+       Cada seis cuadros nuevos (o cada 0,2 s si el video esta quieto) se baja la copia chica del
+       cuadro (la misma del conversor) y se buscan las filas donde las dos mitades no casan: ahi el
+       reproductor pinto su barra a lo ancho y esas filas se tejen en 2D con el cuadro entero.
+       `barra_2d = no` en serve.conf lo apaga. */
     {
       static const bool kBarra = [] {
         const char *e = entornoOdyssey("ODYSSEYVK_BARRA_2D");
@@ -2593,8 +2614,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }();
       static DetectorBarra detector;
       static std::vector<uint8_t> chica;
-      static int cuentaBarra = 0;
+      static int cuentaBarra = 0, guardados = 0;
+      static double ultimoAnalisis = -1.0, ultimoGuardado = -1.0, parteDesde = -1.0;
       static bool barraFallo = false, avisoNoDividido = false, habiaBarra = false;
+      static int fallosBarra = 0;
+      /* el parte de cada 20 s: sin el no se sabe, leyendo el registro, si el detector no vio nada o
+         si no habia nada que ver */
+      static int pAnalisis = 0, pConBanda = 0, pNoDividido = 0;
+      static float pCentroMin = 1e9f, pCentroMax = 0.0f, pMaxAbajo = 0.0f, pMaxArriba = 0.0f;
       const bool dividido = kBarra && st.weaveOn && !st.ask && !ui.convInfo && !wv.converterOn() &&
                             !ui.tune.topBottom && opts.mapaFijo.empty();
       if (!dividido) {
@@ -2605,23 +2632,30 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
         detector.olvidar();
         cuentaBarra = 0;
+        parteDesde = -1.0;
         wv.setFilas2D(0.0f, 0.0f);
-      } else if (newSource && !barraFallo && ++cuentaBarra >= 4) {
+      } else if (!barraFallo && wv.hasSource() &&
+                 ((newSource && ++cuentaBarra >= 6) || now - ultimoAnalisis >= 0.2)) {
+        /* (con `hasSource`: el reloj de 0,2 s no espera a un cuadro nuevo, y antes del primer cuadro
+           no hay nada que bajar) */
         cuentaBarra = 0;
+        ultimoAnalisis = now;
         std::string eb;
         if ((wv.converterReady() || wv.prepareConverter(518, &eb)) && wv.readSmall(chica, &eb)) {
           const int lado = wv.converterSize();
+          fallosBarra = 0;
           DetectorBarra::Medida med;
           const Filas2D f = detector.analizar(chica.data(), lado, lado, now, &med);
           wv.setFilas2D(f.arriba, f.abajo);
           const bool hay = f.arriba > 0.0f || f.abajo > 0.0f;
-          if (hay != habiaBarra) {
+          const bool cambio = hay != habiaBarra;
+          if (cambio) {
             habiaBarra = hay;
             if (hay)
               std::printf("[barra] el reproductor pinto encima del video dividido: en 2D el %.1f %% de abajo y el "
-                          "%.1f %% de arriba (filas %d / %d, residuo %.0f / %.0f, umbral %.0f, centro %.1f)\n",
-                          100.0 * f.abajo, 100.0 * f.arriba, med.filasAbajo, med.filasArriba, med.maxAbajo,
-                          med.maxArriba, med.umbral, med.centro);
+                          "%.1f %% de arriba (filas %d+%d / %d+%d, residuo %.0f / %.0f, umbral %.0f, centro %.1f)\n",
+                          100.0 * f.abajo, 100.0 * f.arriba, med.filasAbajo, med.fuertesAbajo, med.filasArriba,
+                          med.fuertesArriba, med.maxAbajo, med.maxArriba, med.umbral, med.centro);
             else
               std::printf("[barra] se fue: todo el cuadro vuelve a 3D\n");
             std::fflush(stdout);
@@ -2632,9 +2666,48 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                         "parece dividido, no se toca ninguna fila\n", med.centro);
             std::fflush(stdout);
           }
+          /* el parte */
+          if (parteDesde < 0.0) parteDesde = now;
+          pAnalisis++;
+          if (hay) pConBanda++;
+          if (!med.dividido) pNoDividido++;
+          pCentroMin = std::min(pCentroMin, med.centro), pCentroMax = std::max(pCentroMax, med.centro);
+          pMaxAbajo = std::max(pMaxAbajo, med.maxAbajo), pMaxArriba = std::max(pMaxArriba, med.maxArriba);
+          if (now - parteDesde >= 20.0) {
+            std::printf("[barra] 20 s: %d analisis · centro %.1f..%.1f · residuo maximo abajo %.0f, arriba %.0f · con "
+                        "banda %d %% del tiempo · no dividido %d %%\n", pAnalisis, pCentroMin, pCentroMax, pMaxAbajo,
+                        pMaxArriba, 100 * pConBanda / std::max(1, pAnalisis), 100 * pNoDividido / std::max(1, pAnalisis));
+            std::fflush(stdout);
+            parteDesde = now;
+            pAnalisis = pConBanda = pNoDividido = 0;
+            pCentroMin = 1e9f, pCentroMax = pMaxAbajo = pMaxArriba = 0.0f;
+          }
+          /* `odysseyvk ctl barra guardar [N]`: deja en ~/.local/state/odysseyvk/barra las proximas N
+             copias chicas (cada vez que la banda se pone o se quita, y si no una por segundo), para
+             afinar el detector con cuadros del reproductor de verdad. */
+          if (g_barraGuardar > 0 && (cambio || now - ultimoGuardado >= 1.0)) {
+            ultimoGuardado = now;
+            const std::string dir = ajuste::rutaBarra();
+            ::mkdir(dir.c_str(), 0700);
+            char nombre[96];
+            std::snprintf(nombre, sizeof nombre, "/%03d-%s.ppm", guardados++,
+                          cambio ? (hay ? "se-pone" : "se-quita") : (hay ? "con-banda" : "sin-banda"));
+            if (FILE *fp = std::fopen((dir + nombre).c_str(), "wbe")) {
+              std::fprintf(fp, "P6\n%d %d\n255\n", lado, lado);
+              for (size_t p = 0; p < (size_t)lado * (size_t)lado; p++) std::fwrite(chica.data() + p * 4u, 1, 3, fp);
+              std::fclose(fp);
+              std::printf("[barra] guardada %s%s (quedan %d)\n", dir.c_str(), nombre, g_barraGuardar - 1);
+              std::fflush(stdout);
+            }
+            g_barraGuardar--;
+          }
         } else {
-          barraFallo = true;   /* decirlo una vez y no insistir cuadro tras cuadro */
-          std::fprintf(stderr, "[barra] no se pudo leer la copia chica del cuadro: %s\n", eb.c_str());
+          /* un fallo suelto no apaga el detector; cinco seguidos si, y se dice una vez */
+          if (++fallosBarra >= 5) {
+            barraFallo = true;
+            std::fprintf(stderr, "[barra] no se pudo leer la copia chica del cuadro (5 veces seguidas): %s · el "
+                                 "detector de la barra se apaga en esta sesion\n", eb.c_str());
+          }
         }
       }
     }

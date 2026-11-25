@@ -137,6 +137,9 @@ bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::s
    `fijarAutoEnServeConf` quita la aplicacion de todas las lineas `auto` y, si `modo` no viene vacio,
    la apunta de nuevo al final; el resto del fichero no se toca. */
 std::string rutaRecordar();
+/* la carpeta donde el visor deja, a pedido (`odysseyvk ctl barra guardar`), copias chicas del cuadro
+   para afinar el detector de la barra del reproductor (src/barra.h) */
+std::string rutaBarra();
 bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err = nullptr);
 bool tomarRecordar(std::string &app, std::string &modo);
 bool fijarAutoEnServeConf(const std::string &app, const std::string &modo, std::string *err = nullptr);

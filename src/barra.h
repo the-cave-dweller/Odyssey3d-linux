@@ -35,20 +35,29 @@ class DetectorBarra {
     float umbral = 0.0f;      /* a partir de cuanto una fila se da por pintada encima */
     float maxAbajo = 0.0f, maxArriba = 0.0f;   /* el residuo mas alto de cada zona */
     int filasAbajo = 0, filasArriba = 0;       /* cuantas filas pasan el umbral en cada zona */
+    int fuertesAbajo = 0, fuertesArriba = 0;   /* y cuantas pasan el doble del umbral */
     bool dividido = true;     /* falso: las mitades no casan ni en el centro (no es video dividido) */
   };
 
   /* `rgba` es el cuadro entero reducido a w x h (primera fila arriba); `ahora` en segundos.
-     Devuelve las filas que hay que tejer en 2D en este momento (con su memoria: hacen falta dos
-     analisis seguidos para poner una banda y medio segundo sin verla para quitarla). */
+     Devuelve las filas que hay que tejer en 2D en este momento. Tiene memoria, y poner la banda
+     pide mas que mantenerla (v0.82):
+       - para PONERLA, dos analisis que la vean en medio segundo, cada uno con 4 filas pasando el
+         umbral o 2 pasando el doble;
+       - para MANTENERLA basta con 2 filas pasando el umbral dentro de la banda (o una pasando el
+         doble), y se quita a los 0,6 s de no verlas.
+     MEDIDO con el reproductor de YouTube (sesion del 25/11, 15:30): al ponerse la banda solo 4 a 6
+     filas pasaban el umbral (la barra de progreso; los botones, de trazo fino, no llegan), o sea
+     justo el minimo, y en 30 s la banda se quito y se volvio a poner dos veces en menos de un
+     segundo (0,3 s y 0,8 s). */
   Filas2D analizar(const uint8_t *rgba, int w, int h, double ahora, Medida *m = nullptr);
   void olvidar();
   Filas2D actual() const { return puesta_; }
 
  private:
   struct Zona {
-    int seguidas = 0;         /* analisis seguidos viendola */
-    double ultima = -1.0;     /* cuando se vio por ultima vez */
+    double previa = -1.0;     /* el analisis anterior que la vio entera (para ponerla hacen falta dos) */
+    double ultima = -1.0;     /* cuando se vio por ultima vez, aunque fuera lo justo para mantenerla */
     float extension = 0.0f;   /* hasta donde llega (se queda con la mayor mientras dure) */
     bool puesta = false;
   };

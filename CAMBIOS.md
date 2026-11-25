@@ -3,6 +3,44 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La franja de la barra del reproductor, sin parpadeo (v0.82)
+
+- MEDIDO en el registro de Rodolfo con la 0.81 y YouTube (25/11, 15:30–15:32):
+  - vídeo dividido de verdad (centro 0,6..1,7), 30 s: la franja se puso cuatro veces (5,3 % y 7,2 % de
+    abajo; una vez con 4,7 % de arriba) y dos de los tres apagones duraron 0,3 s y 0,8 s: parpadeo.
+    Al ponerse solo pasaban el umbral 4 a 6 filas (residuo 46..96): justo el mínimo de 4;
+  - al entrar con el ratón sobre la barra: 15,9 % de abajo (16 filas);
+  - vídeo normal visto como dividido: «no parece dividido» (centro 57 y 138), ninguna franja;
+  - 119,8 cuadros por segundo con el detector puesto.
+- `src/barra.cpp`:
+  - el residuo va en **color** (los tres canales) y no solo en luminancia. MEDIDO en los cuadros de
+    prueba: la barra al 31 % pasa de 29..32 a 73..74 y al 55 % de 26 a 84; las 28 escenas limpias
+    siguen en 11 como mucho;
+  - **poner la franja pide más que mantenerla**: para ponerla, dos análisis que la vean en 0,5 s (ya
+    no tienen que ser seguidos), cada uno con 4 filas sobre el umbral o 2 sobre el doble; para
+    mantenerla, 2 filas sobre el umbral dentro de la franja o 1 sobre el doble; se quita a los 0,6 s;
+  - suavizado con suma acumulada (cada análisis: 1,1..1,4 ms con los tres canales).
+- `src/vkview.cpp`: análisis cada 6 cuadros nuevos **o cada 0,2 s** aunque no llegue ninguno (con el
+  vídeo en pausa la 0.81 podía no llegar a analizar); un fallo suelto al bajar la copia ya no apaga
+  el detector (hacen falta cinco seguidos); parte cada 20 s en el registro; `ctl barra guardar [N]`
+  guarda copias chicas del cuadro (la orden lleva su hora y caduca a los cinco minutos).
+- `tools/prueba-aparte.sh` (nuevo): el visor de prueba dentro de gamescope sin salida. Es la manera
+  de probar por Vulkan sin abrir ventanas en el escritorio de Rodolfo (lo que hice mal con la 0.81).
+- MEDIDO sin panel y sin abrir ninguna ventana:
+  - los 64 cuadros de antes: 28 limpios sin franja, 30 con barra detectados, 6 «no dividido»;
+  - secuencias (0,1 s por cuadro): vista / no vista / vista → se pone; puesta y luego solo la línea
+    de progreso fina (1 fila fuerte) o solo botones de trazo fino (2 filas) → se mantiene; después
+    cuadros limpios → se quita a los 0,6 s; la línea fina sola desde el principio → no se pone;
+  - por Vulkan, en el compositor aparte: la trama con barra es idéntica (0,00 %) a la de la 0.81; con
+    un cuadro limpio no sale franja y la trama es idéntica a la de sin detector; con la fuente quieta
+    (ningún cuadro nuevo) la franja sale igual (97 análisis en 20 s, 98 % del tiempo con franja);
+    convertido → dividido → convertido: la franja se pone y se quita con el cambio; `ctl barra
+    guardar 5` dejó 5 archivos de 805 KB en la carpeta de estado de la prueba.
+- **No probado**: nada en el panel. Variantes que NO se detectan con la franja apagada: la línea de
+  progreso de 5 px sola, la barra al 6 % o menos con línea fina, y botones de trazo fino con la
+  barra al 1 % (al empezar un vídeo la franja puede tardar en salir). Son barras imitadas: para
+  afinar hacen falta cuadros del reproductor de verdad, y para eso está `ctl barra guardar`.
+
 ## En el vídeo dividido, la barra del reproductor de una pieza (v0.81)
 
 - Rodolfo, con la 0.80: «¿hay forma de que el sbs tenga una barra de progreso consistente? La función

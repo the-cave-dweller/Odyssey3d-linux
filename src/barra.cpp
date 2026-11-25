@@ -18,33 +18,30 @@ constexpr int kFilasMin = 4;           /* una fila suelta no es una barra */
    detecta por si misma (MEDIDO con la barra al 97 %: la banda salia de 4,9 % y la barra quedaba
    fuera, a 5,5 % del borde). */
 constexpr float kMargenAbajo = 0.03f, kMargenArriba = 0.018f;
-constexpr double kSoltar = 0.45;       /* segundos sin verla para quitar la banda */
+constexpr double kSoltar = 0.6;        /* segundos sin verla para quitar la banda */
+constexpr double kDosVeces = 0.5;      /* las dos veces que hacen falta para ponerla, en este tiempo */
 constexpr int kRadio = 5;              /* media caja del suavizado de cada fila */
 
-/* Una fila de luminancia suavizada de la mitad que empieza en x0. La caja es ancha a proposito
+/* Una fila suavizada (los tres colores) de la mitad que empieza en x0. La caja es ancha a proposito
    (2 * kRadio + 1 puntos de la copia chica, unos 80 pixeles de pantalla): la copia chica toma un
    punto de cada siete sin promediar, asi que el detalle fino (un subtitulo que ya viene en el video)
    sale distinto en cada mitad segun donde caiga la muestra. MEDIDO con caja de 5: un cuadro limpio
    con dos renglones de subtitulos daba 9..14 niveles en 18 filas, lo mismo que una barra. Lo que
-   pinta el reproductor son grupos de botones de 40..55 puntos de ancho que estan en una mitad y en
-   la otra no: eso sobrevive a la caja; el detalle fino, no. */
+   pinta el reproductor son tramos anchos que estan en una mitad y en la otra no: eso sobrevive a
+   la caja; el detalle fino, no.
+   Va en color y no solo en luminancia (v0.82): la parte ya vista de la barra de progreso es roja y
+   la que falta es gris, y sobre un video oscuro las dos tienen casi la misma luminancia. */
 void filaSuave(const uint8_t *fila, int x0, int n, std::vector<float> &sal) {
-  std::vector<float> lum((size_t)n);
-  for (int x = 0; x < n; x++) {
-    const uint8_t *p = fila + (size_t)(x0 + x) * 4u;
-    lum[(size_t)x] = 0.25f * (float)p[0] + 0.5f * (float)p[1] + 0.25f * (float)p[2];
-  }
-  sal.resize((size_t)n);
-  for (int x = 0; x < n; x++) {
-    float s = 0.0f;
-    int c = 0;
-    for (int k = -kRadio; k <= kRadio; k++) {
-      const int q = x + k;
-      if (q < 0 || q >= n) continue;
-      s += lum[(size_t)q];
-      c++;
+  static thread_local std::vector<float> ac;
+  sal.resize((size_t)n * 3u);
+  ac.resize((size_t)n + 1u);
+  for (int c = 0; c < 3; c++) {
+    ac[0] = 0.0f;
+    for (int x = 0; x < n; x++) ac[(size_t)x + 1u] = ac[(size_t)x] + (float)fila[(size_t)(x0 + x) * 4u + (size_t)c];
+    for (int x = 0; x < n; x++) {
+      const int p = std::max(0, x - kRadio), q = std::min(n, x + kRadio + 1);
+      sal[(size_t)x * 3u + (size_t)c] = (ac[(size_t)q] - ac[(size_t)p]) / (float)(q - p);
     }
-    sal[(size_t)x] = s / (float)c;
   }
 }
 
@@ -69,13 +66,14 @@ float residuoFila(const uint8_t *fila, int w) {
     float mejor = 1e9f;
     for (int d = -D; d <= D; d++) {
       float s = 0.0f;
-      for (int x = x0; x < x1; x++) s += std::fabs(izq[(size_t)x] - der[(size_t)(x + d)]);
+      const float *a = izq.data() + (size_t)x0 * 3u, *b = der.data() + (size_t)(x0 + d) * 3u;
+      for (int k = 0; k < (x1 - x0) * 3; k++) s += std::fabs(a[k] - b[k]);
       mejor = std::min(mejor, s);
     }
     total += mejor;
     cuenta += x1 - x0;
   }
-  return total / (float)std::max(1, cuenta);
+  return total / (3.0f * (float)std::max(1, cuenta));
 }
 }  // namespace
 
@@ -118,10 +116,11 @@ Filas2D DetectorBarra::analizar(const uint8_t *rgba, int w, int h, double ahora,
   med.umbral = std::max(kUmbralMin, 3.0f * med.centro + 3.0f);
   med.dividido = med.centro <= kNoDividido;
 
-  /* la primera fila pintada de cada zona: tiene que ir acompanada (dos de las cuatro siguientes) */
+  /* la primera fila pintada de cada zona: tiene que ir acompanada (otra mas entre las cinco que le
+     siguen hacia el borde de la pantalla) */
   auto acompanada = [&](int y, int paso) {
     int n = 0;
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < 6; k++) {
       const int q = y + k * paso;
       if (q < 0 || q >= h) break;
       if (r[(size_t)q] > med.umbral) n++;
@@ -129,45 +128,65 @@ Filas2D DetectorBarra::analizar(const uint8_t *rgba, int w, int h, double ahora,
     return n >= 2;
   };
   float extAbajo = 0.0f, extArriba = 0.0f;
+  bool sigueAbajo = false, sigueArriba = false;
   if (med.dividido) {
-    int primera = -1;
+    /* abajo: de la zona hacia el borde. `en` cuenta lo que cae dentro de la banda que ya esta puesta */
+    const int bandaAbajo = h - (int)std::lround(abajo_.extension * (float)h);
+    int primera = -1, en = 0, enFuertes = 0;
     for (int y = iniAbajo; y < h; y++) {
-      med.maxAbajo = std::max(med.maxAbajo, r[(size_t)y]);
-      if (r[(size_t)y] <= med.umbral) continue;
+      const float v = r[(size_t)y];
+      med.maxAbajo = std::max(med.maxAbajo, v);
+      if (v <= med.umbral) continue;
       med.filasAbajo++;
+      if (v > 2.0f * med.umbral) med.fuertesAbajo++;
+      if (y >= bandaAbajo) {
+        en++;
+        if (v > 2.0f * med.umbral) enFuertes++;
+      }
       if (primera < 0 && acompanada(y, 1)) primera = y;
     }
-    if (med.filasAbajo >= kFilasMin && primera >= 0)
+    if ((med.filasAbajo >= kFilasMin || med.fuertesAbajo >= 2) && primera >= 0)
       extAbajo = std::min(1.0f - kZonaAbajo, (float)(h - primera) / (float)h + kMargenAbajo);
+    sigueAbajo = en >= 2 || enFuertes >= 1;
+
+    const int bandaArriba = (int)std::lround(arriba_.extension * (float)h);
     int ultima = -1;
+    en = 0, enFuertes = 0;
     for (int y = finArriba - 1; y >= 0; y--) {
-      med.maxArriba = std::max(med.maxArriba, r[(size_t)y]);
-      if (r[(size_t)y] <= med.umbral) continue;
+      const float v = r[(size_t)y];
+      med.maxArriba = std::max(med.maxArriba, v);
+      if (v <= med.umbral) continue;
       med.filasArriba++;
+      if (v > 2.0f * med.umbral) med.fuertesArriba++;
+      if (y < bandaArriba) {
+        en++;
+        if (v > 2.0f * med.umbral) enFuertes++;
+      }
       if (ultima < 0 && acompanada(y, -1)) ultima = y;
     }
-    if (med.filasArriba >= kFilasMin && ultima >= 0)
+    if ((med.filasArriba >= kFilasMin || med.fuertesArriba >= 2) && ultima >= 0)
       extArriba = std::min(kZonaArriba, (float)(ultima + 1) / (float)h + kMargenArriba);
+    sigueArriba = en >= 2 || enFuertes >= 1;
   }
 
-  auto llevar = [&](Zona &z, float ext) {
+  auto llevar = [&](Zona &z, float ext, bool sigue) {
     if (ext > 0.0f) {
-      z.seguidas++;
+      if (z.previa >= 0.0 && ahora - z.previa <= kDosVeces) z.puesta = true;
+      z.previa = ahora;
       z.ultima = ahora;
-      if (z.seguidas >= 2) z.puesta = true;
       /* mientras dure se queda con la mayor: si no, el borde de la banda baila con cada analisis */
       z.extension = std::max(z.extension, ext);
-    } else {
-      z.seguidas = 0;
-      if (z.ultima < 0.0 || ahora - z.ultima > kSoltar) {
-        z.puesta = false;
-        z.extension = 0.0f;
-      }
+    } else if (z.puesta && sigue) {
+      z.ultima = ahora;   /* no alcanza para ponerla de nuevo, pero sigue ahi: no se quita */
+    } else if (z.ultima < 0.0 || ahora - z.ultima > kSoltar) {
+      z.puesta = false;
+      z.extension = 0.0f;
+      z.previa = -1.0;
     }
     return z.puesta ? z.extension : 0.0f;
   };
-  puesta_.abajo = llevar(abajo_, extAbajo);
-  puesta_.arriba = llevar(arriba_, extArriba);
+  puesta_.abajo = llevar(abajo_, extAbajo, sigueAbajo);
+  puesta_.arriba = llevar(arriba_, extArriba, sigueArriba);
   if (m) *m = med;
   return puesta_;
 }

@@ -5329,6 +5329,26 @@ int main(int argc, char **argv) {
     if (sub == "preferencias") return cmdPreferencias(argc - 3, argv + 3);
     if (sub == "escritorio") return cmdEscritorio(argc - 3, argv + 3);
     if (sub == "capa") return cmdCapa(argc - 3, argv + 3);
+    if (sub == "barra") {
+      /* `ctl barra guardar [N]`: le pide al visor abierto que deje N copias chicas del cuadro (16 si
+         no se dice) para afinar el detector de la barra del reproductor; `ctl barra` dice donde. */
+      const std::string que = argc > 3 ? strLower(argv[3]) : std::string();
+      if (que != "guardar") {
+        std::printf("uso: odysseyvk ctl barra guardar [N]   (las deja en %s)\n", ajuste::rutaBarra().c_str());
+        return que.empty() ? 0 : 2;
+      }
+      const int cuantas = argc > 4 ? std::max(1, std::min(60, std::atoi(argv[4]))) : 16;
+      /* con su hora: el visor solo atiende la orden si tiene menos de cinco minutos */
+      const std::string n = std::to_string(cuantas) + "@" + std::to_string((long long)std::time(nullptr));
+      std::string err;
+      if (!ajuste::escribir(std::map<std::string, double>(), std::string(), {{"barra", n}}, &err)) {
+        std::fprintf(stderr, "%s\n", err.c_str());
+        return 1;
+      }
+      std::printf("pedido: el visor guardara copias chicas del cuadro en %s mientras este en video dividido\n",
+                  ajuste::rutaBarra().c_str());
+      return 0;
+    }
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "legado") return cmdLegado(argc - 3, argv + 3);
     if (sub == "mapa") return cmdMapa(argc - 3, argv + 3);

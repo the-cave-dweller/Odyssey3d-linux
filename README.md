@@ -571,10 +571,19 @@ progreso, botones, título) también se partía en dos. Ahora el visor mira el c
 cuatro cuadros nuevos: en las filas de vídeo las dos mitades casan (son la misma imagen, corrida
 por el relieve); donde el reproductor pintó su barra, no. Esas filas —arriba y abajo de la pantalla—
 se tejen en 2D con el cuadro entero: la barra sale de una pieza y se pica donde se ve; el resto sigue
-en 3D. Aparece a los dos análisis seguidos y se quita medio segundo después de que el reproductor
-esconde sus mandos. En esa franja el vídeo de debajo se ve como viene (las dos mitades, una al lado
+en 3D. Para ponerla hacen falta dos análisis que la vean en medio segundo; para mantenerla basta con
+mucho menos, y se quita 0,6 s después de que el reproductor esconde sus mandos (v0.82: antes
+parpadeaba). En esa franja el vídeo de debajo se ve como viene (las dos mitades, una al lado
 de la otra) mientras dura. Se apaga con `barra_2d = no` en `serve.conf`. Para probar el detector con
-capturas: `odysseyvk barra-detect [--filas] CUADRO.png …`.
+capturas: `odysseyvk barra-detect [--filas] CUADRO.png …`. Con un vídeo dividido abierto,
+`odysseyvk ctl barra guardar [N]` le pide al visor que deje N copias chicas del cuadro (518 × 518) en
+`~/.local/state/odysseyvk/barra/`, para afinar el detector con el reproductor de verdad; el registro
+lleva además un parte cada 20 s (`[barra] 20 s: …`).
+
+**Probar el visor sin abrir ninguna ventana** (v0.82): `tools/prueba-aparte.sh` corre `odysseyvk
+test` dentro de un compositor aparte y sin salida (gamescope en modo *headless*), con su propia
+carpeta de estado. No aparece nada en el escritorio ni se toca la sesión 3D que haya abierta, así que
+se puede medir la trama (volcado, `ODYSSEY_GOLPE`, `ODYSSEYVK_FUENTE_PNG`) mientras se ve un vídeo.
 
 Para mirar la interfaz sin el panel: `ODYSSEYVK_HUD_PNG=/ruta/salida.png odysseyvk ctl hud --w 3840
 --h 2160 [--legado]` la deja pintada en un archivo de fondo transparente (el mismo pintado de CPU que
