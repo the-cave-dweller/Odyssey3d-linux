@@ -21,6 +21,10 @@ public:
   bool playerFound() const { return !name_.empty(); }
   const std::string &playerName() const { return name_; }
 
+  /* App de la ventana del video (su app_id, p. ej. "firefox"): el reproductor que coincida gana.
+     Sin pista se elige el que sea un navegador por su Identity y este reproduciendo. */
+  void pista(const std::string &appId) { pista_ = appId; }
+
   /* Vuelve a mirar por si el navegador se abrió despues de empezar la sesion. */
   bool refresh(std::string *err = nullptr);
 
@@ -36,4 +40,5 @@ public:
 private:
   struct sd_bus *bus_ = nullptr;
   std::string name_;
+  std::string pista_;
 };

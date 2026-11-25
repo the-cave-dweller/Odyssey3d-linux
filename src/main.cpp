@@ -4484,6 +4484,7 @@ static int cmdServe(int argc, char **argv) {
       if (wm.find(hijoUuid, ventanaVideo) && esNavegador(ventanaVideo.appId.c_str())) {
         std::string errM, estado;
         if (!navegadorAbierto) {
+          navegador.pista(ventanaVideo.appId);   /* que gane el reproductor de ESA ventana (v0.60) */
           navegadorAbierto = navegador.open(&errM) && esNavegador(navegador.playerName().c_str());
           if (!navegadorAbierto && !navegadorAvisado) {
             navegadorAvisado = true;

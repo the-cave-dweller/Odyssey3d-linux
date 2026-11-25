@@ -36,6 +36,22 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   rastreo ya arreglado); las de las rondas B/C quedan comentadas debajo. Respaldo:
   `serve.conf.respaldo-2026-11-25-antes-v059`.
 
+### El vigilante cerraba la sesión a los 4 s: miraba el reproductor de otra app
+
+- MEDIDO (25-nov 07:01, recién instalada la 0.60): video de YouTube en Firefox a pantalla completa con
+  el conversor; la sesión 3D se cerraba sola a los ~8 s, dos veces seguidas, y le quitaba la pantalla
+  completa a Firefox. Rodolfo lo vio como «un crash en el overlay». No había volcado: lo cerraba el
+  vigilante (`el navegador dice Stopped: el video se fue`).
+- Causa (`src/mpris.cpp`): se quedaba con el primer reproductor cuyo nombre tuviera «chrom», «firefox»…
+  y no lo soltaba. La app de escritorio de Claude (Electron) publica
+  `org.mpris.MediaPlayer2.chromium.instanceN`, Identity «Claude», siempre `Stopped`; salía antes en la
+  lista que `firefox.instance_1_…` (`Playing`).
+- Arreglo: cada reproductor recibe puntos: +8 si coincide con la app de la ventana del video (el
+  vigilante le pasa el `app_id` con `Mpris::pista`), +4 si su **Identity** es de un navegador, +2 si está
+  `Playing`, +1 si `Paused`; a igualdad se queda el que ya tenía.
+- Comprobado: `ctl video status` en el mismo instante, con los dos reproductores vivos: el binario nuevo
+  elige `firefox.instance_1_6139 · Playing`; el instalado, `chromium.instance1036898 · Stopped`.
+
 ### No probado / visto de paso
 
 - Al **cerrar un ojo** para la prueba, la detección pierde ese ojo y la distancia entre ojos salta a
