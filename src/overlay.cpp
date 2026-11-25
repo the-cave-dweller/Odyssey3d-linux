@@ -223,25 +223,6 @@ struct Overlay::Impl {
     }
   }
 
-  /* ---------- muestreo del atlas de fuentes y máscaras ---------- */
-
-  float muestraAtlas(float u, float v) const {
-    const std::vector<uint8_t> &a = hud.atlasPixels();
-    const int aw = hud.atlasW(), ah = hud.atlasH();
-    if (a.empty() || aw <= 0 || ah <= 0) return 1.0f;
-    float fx = u * (float)aw - 0.5f, fy = v * (float)ah - 0.5f;
-    int x0 = (int)std::floor(fx), y0 = (int)std::floor(fy);
-    float tx = fx - (float)x0, ty = fy - (float)y0;
-    auto tex = [&](int x, int y) -> float {
-      x = std::max(0, std::min(aw - 1, x));
-      y = std::max(0, std::min(ah - 1, y));
-      return (float)a[(size_t)y * (size_t)aw + (size_t)x] / 255.0f;
-    };
-    const float a00 = tex(x0, y0), a10 = tex(x0 + 1, y0);
-    const float a01 = tex(x0, y0 + 1), a11 = tex(x0 + 1, y0 + 1);
-    return (a00 * (1.0f - tx) + a10 * tx) * (1.0f - ty) + (a01 * (1.0f - tx) + a11 * tx) * ty;
-  }
-
   /* ---------- dibujo de la tarjeta ---------- */
 
   /* Alto del escritorio en puntos logicos. El monitor es 3840x2160 fisicos pero con la escala
@@ -299,56 +280,8 @@ struct Overlay::Impl {
     if (entornoOdyssey("ODYSSEYVK_DEBUG_UI"))
       std::printf("[depurar capa] al dibujar: hud %.2f | recorte ox=%.0f buf=%dx%d\n",
                   hud.scale(), ox, bufAncho, bufAlto);
-    std::vector<HudVertex> vv = hud.vertices();
-
     const size_t npx = (size_t)bufAncho * (size_t)bufAlto;
-    acum.assign(npx * 4u, 0.0f);
-
-    for (size_t i = 0; i + 5 < vv.size(); i += 6) {
-      float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
-      float u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
-      for (int k = 0; k < 6; k++) {
-        const HudVertex &q = vv[i + (size_t)k];
-        x0 = std::min(x0, q.x);
-        y0 = std::min(y0, q.y);
-        x1 = std::max(x1, q.x);
-        y1 = std::max(y1, q.y);
-        u0 = std::min(u0, q.u);
-        v0 = std::min(v0, q.v);
-        u1 = std::max(u1, q.u);
-        v1 = std::max(v1, q.v);
-      }
-      const float r = vv[i].r, g = vv[i].g, b = vv[i].b, al = vv[i].a;
-      /* recorte contra la ventana de la tarjeta */
-      float ax0 = std::max(0.0f, x0 - (float)ox), ay0 = std::max(0.0f, y0 - (float)oy);
-      float ax1 = std::min((float)bufAncho, x1 - (float)ox), ay1 = std::min((float)bufAlto, y1 - (float)oy);
-      if (ax1 <= ax0 || ay1 <= ay0) continue;
-      if (x1 <= x0 || y1 <= y0) continue;
-      const float du = u1 - u0, dv = v1 - v0;
-      const float ancho = x1 - x0, alto = y1 - y0;
-      const int px0 = (int)std::floor(ax0), py0 = (int)std::floor(ay0);
-      const int px1 = std::min(bufAncho, (int)std::ceil(ax1)), py1 = std::min(bufAlto, (int)std::ceil(ay1));
-      for (int py = py0; py < py1; py++) {
-        const float fy = ((float)py + 0.5f - (y0 - (float)oy)) / alto;
-        const float v = v0 + fy * dv;
-        float *fila = acum.data() + ((size_t)py * (size_t)bufAncho + (size_t)px0) * 4u;
-        for (int px = px0; px < px1; px++) {
-          const float fx = ((float)px + 0.5f - (x0 - (float)ox)) / ancho;
-          const float m = muestraAtlas(u0 + fx * du, v);
-          const float a = al * m;
-          if (a <= 0.002f) {
-            fila += 4;
-            continue;
-          }
-          const float unoMenos = 1.0f - a;
-          fila[0] = r * a + fila[0] * unoMenos;
-          fila[1] = g * a + fila[1] * unoMenos;
-          fila[2] = b * a + fila[2] * unoMenos;
-          fila[3] = a + fila[3] * unoMenos;
-          fila += 4;
-        }
-      }
-    }
+    hud.pintarCpu((float)ox, (float)oy, bufAncho, bufAlto, acum);   /* el mismo pintado que `ctl hud --png` */
 
     /* ARGB8888 sin premultiplicar (así lo pide wl_shm) */
     Bloque *bl = nullptr;

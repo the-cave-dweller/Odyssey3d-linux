@@ -8,7 +8,11 @@
    del Facetracking ni las tarjetas del aviso. Unicas curvas: el propio interruptor ON/OFF (asi lo
    pidio Rodolfo, con su bola) y las cabecitas de los deslizadores. La fila de ocultar la pastilla
    ya no existe como boton: se oculta y se muestra con Ctrl+Shift+F1 (o con `odysseyvk ctl capa`,
-   que es la misma orden por fichero y sirve cuando el teclado lo tiene otra ventana). */
+   que es la misma orden por fichero y sirve cuando el teclado lo tiene otra ventana).
+
+   Desde v0.78 la pastilla es UNA fila (interruptor, dos deslizadores y la casilla de «no volver a
+   preguntar») con las teclas en un renglon, y la tarjeta de la orilla se parece a la de la
+   aplicacion oficial: redonda, con dos teselas ilustradas. La pastilla sigue recta. */
 #ifndef ODYSSEY_VKUI_H
 #define ODYSSEY_VKUI_H
 
@@ -33,6 +37,11 @@ public:
     int popout = 0;    /* "3D Popout" oficial: -50..+50 */
     bool ask = false;  /* aviso de conversión (abajo a la derecha) */
     bool remember = false;
+    /* la misma casilla, pero dentro del video (en la pastilla): `recordarVisible` la ensena y
+       `recordar` dice si esta aplicacion pasa directa al 3D sin preguntar. La pone el visor cuando
+       lo lanzo el servicio, que es quien guarda la eleccion en serve.conf. */
+    bool recordarVisible = false;
+    bool recordar = false;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -63,7 +72,9 @@ public:
     HitAskFlat,
     HitAskConv,
     HitAskDont,
-    HitAskClose
+    HitAskClose,
+    HitAskAyuda,       /* el "?" de la tarjeta: no manda nada, solo cambia el texto al pasar por encima */
+    HitRecordar        /* la casilla de «no volver a preguntar» de la pastilla */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -131,6 +142,18 @@ public:
     return true;
   }
   bool pillBounds(float *x, float *y, float *w, float *h) const;
+  /* caja de la casilla de la pastilla, en pixeles reales (para la prueba y para ODYSSEY_GOLPE) */
+  bool recordarBounds(float *x, float *y, float *w, float *h) const {
+    if (chkRecordar_.w <= 0.0f) return false;
+    if (x) *x = chkRecordar_.x * sc_;
+    if (y) *y = chkRecordar_.y * sc_;
+    if (w) *w = chkRecordar_.w * sc_;
+    if (h) *h = chkRecordar_.h * sc_;
+    return true;
+  }
+  /* Los vertices del ultimo `begin` pintados en la CPU sobre un lienzo de ancho x alto cuyo origen
+     esta en (ox, oy) de la ventana. Sale RGBA en coma flotante, color ya multiplicado por opacidad. */
+  void pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> &acum) const;
   /* La punta derecha de la caja que ocuparia la pastilla, aun estando ocultada. Es el rincon que
      el visor deja pinchable para que el raton pueda devolver la pastilla sin usar el teclado. */
   bool huecoDeLaPastilla(float *x, float *y, float *w, float *h) const;
@@ -149,18 +172,24 @@ private:
   void quad(Rect r, Rect uv, float cr, float cg, float cb, float ca);
   void solid(float x, float y, float w, float h, float cr, float cg, float cb, float ca);
   void mask9(Rect r, int which, float radius, float cr, float cg, float cb, float ca);
+  void icono(Rect r, const Rect &m, float cr, float cg, float cb, float ca, float fx0 = 0.0f, float fy0 = 0.0f,
+             float fx1 = 1.0f, float fy1 = 1.0f);
+  float muestra(float u, float v) const;
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
              bool center = false);
   float textWidth(const std::string &s, float size) const;
 
   /* máscaras del atlas: 0 píxel blanco, 1 píldora, 2 tarjeta */
   Rect white_, pill_, card_;
+  /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
+     las dos siluetas del paisaje (todas en pixeles del atlas) */
+  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
      bola del interruptor. Antes se usaba el radio de pantalla para recortar la mascara, y salian
      puntas de lente en vez de esquinas redondas. */
-  float maskRad_[2] = {48.0f, 8.0f};   /* {píldora, tarjeta} */
+  float maskRad_[2] = {48.0f, 24.0f};   /* {píldora, tarjeta} */
   Glyph glyphs_[256]{};
   /* unos pocos signos fuera del rango latino-1 (euro, raya, comillas tipograficas, puntos
      suspensivos): sin ellos el titulo de la tarjeta salta a "?" en mitad de la frase */
@@ -185,7 +214,8 @@ private:
      redondo de la pastilla: asi lo queria Rodolfo). btnOv_ ya no esta: ocultar la pastilla es tecla. */
   Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
-  Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
+  Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
+  Rect chkRecordar_;
 };
 
 #endif

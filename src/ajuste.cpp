@@ -12,6 +12,7 @@
 #include <ctime>
 #include <filesystem>
 #include <system_error>
+#include <unistd.h>
 
 namespace ajuste {
 
@@ -382,6 +383,112 @@ bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::s
     std::filesystem::copy_file(ruta, ruta + ".auterior",
                                std::filesystem::copy_options::overwrite_existing, ec);
   }
+  const std::string temporal = ruta + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  std::fputs(salida.c_str(), f);
+  std::fclose(f);
+  if (std::rename(temporal.c_str(), ruta.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + ruta + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
+}
+
+/* ---------------- «no volver a preguntar» ---------------- */
+
+std::string rutaRecordar() { return rutaEstadoOdyssey("recordar"); }
+
+bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err) {
+  if (app.empty()) {
+    if (err) *err = "no se sabe de que aplicacion es la ventana";
+    return false;
+  }
+  const std::string ruta = rutaRecordar(), temporal = ruta + ".tmp";
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(ruta).parent_path(), ec);
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  std::fprintf(f, "app = %s\nmodo = %s\n", app.c_str(), modo.empty() ? "no" : modo.c_str());
+  std::fclose(f);
+  if (std::rename(temporal.c_str(), ruta.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + ruta + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
+}
+
+bool tomarRecordar(std::string &app, std::string &modo) {
+  const std::string ruta = rutaRecordar();
+  if (::access(ruta.c_str(), R_OK) != 0) return false;   /* lo normal: no hay recado */
+  const std::map<std::string, std::string> pares = paresDe(ruta);
+  ::unlink(ruta.c_str());
+  const auto a = pares.find("app"), m = pares.find("modo");
+  if (a == pares.end() || m == pares.end() || a->second.empty()) return false;
+  app = strLower(a->second);
+  modo = strLower(m->second);
+  if (modo != "sbs" && modo != "tb" && modo != "conv" && modo != "flat") modo.clear();   /* `no` y lo raro */
+  return true;
+}
+
+bool fijarAutoEnServeConf(const std::string &app, const std::string &modo, std::string *err) {
+  const std::string ruta = rutaServeConf();
+  std::string contenido;
+  const bool existia = readSmallFile(ruta, contenido);
+  std::vector<std::string> lineas;
+  size_t inicio = 0;
+  while (inicio < contenido.size()) {
+    size_t fin = contenido.find('\n', inicio);
+    if (fin == std::string::npos) fin = contenido.size();
+    lineas.push_back(contenido.substr(inicio, fin - inicio));
+    inicio = fin + 1;
+  }
+  bool cambio = false;
+  std::vector<std::string> salen;
+  for (const std::string &l : lineas) {
+    const std::string limpio = recortar(l);
+    const size_t eq = limpio.find('=');
+    if (limpio.empty() || limpio[0] == '#' || eq == std::string::npos ||
+        strLower(recortar(limpio.substr(0, eq))) != "auto") {
+      salen.push_back(l);
+      continue;
+    }
+    /* auto = mpv:sbs, haruna:tb  -> se quita solo el par de esta aplicacion */
+    std::string resto, par;
+    const std::string valor = limpio.substr(eq + 1) + ",";
+    for (char c : valor) {
+      if (c != ',' && c != ' ' && c != '\t') {
+        par += c;
+        continue;
+      }
+      if (par.empty()) continue;
+      const size_t dd = par.find(':');
+      if (dd != std::string::npos && strLower(par.substr(0, dd)) == app) {
+        cambio = true;
+      } else {
+        resto += (resto.empty() ? "" : ", ") + par;
+      }
+      par.clear();
+    }
+    if (!resto.empty()) salen.push_back("auto = " + resto);
+  }
+  if (!modo.empty()) {
+    salen.push_back("auto = " + app + ":" + modo);
+    cambio = true;
+  }
+  if (!cambio) return true;   /* no estaba apuntada y no hay nada que apuntar */
+  std::string salida;
+  for (const std::string &l : salen) salida += l + "\n";
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(ruta).parent_path(), ec);
+  if (existia)
+    std::filesystem::copy_file(ruta, ruta + ".auterior", std::filesystem::copy_options::overwrite_existing, ec);
   const std::string temporal = ruta + ".tmp";
   FILE *f = std::fopen(temporal.c_str(), "we");
   if (!f) {

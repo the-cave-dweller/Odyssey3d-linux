@@ -3,6 +3,51 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Tarjeta como la oficial y pastilla de una fila (v0.78)
+
+- Rodolfo, con la 0.77 («vuelve perfecto y el 3d bien»), pidió mejoras de interfaz con la foto de la
+  tarjeta oficial de Samsung: que la de la orilla se parezca, que el «no volver a preguntar» se pueda
+  desactivar dentro del vídeo, quitar de la pastilla lo que sobra (el modelo, si uno es mejor), dejar
+  lo demás compacto, y fuera el texto de encima de la pastilla y el cuadro verde de la esquina.
+- **Tarjeta de la orilla** (`src/vkui.cpp`): oscura, de esquinas redondas, con la pregunta «¿Qué tipo
+  de vídeo estás viendo?», dos teselas ilustradas (Vídeo normal = conversor, Vídeo dividido = lado a
+  lado), la casilla de guardar, un `?` que explica al pasar el ratón y el aspa. Los dibujos (paisaje,
+  aspa, palomita, anillo) son máscaras propias horneadas en el atlas, no imágenes de Samsung. La tesela
+  «2D plano» salió: cerrar hace lo mismo.
+- **Pastilla** (`src/vkui.cpp`): una fila — interruptor, Profundidad, Salida, la casilla y un renglón de
+  teclas. De 824 × 134 a 462 × 76 (651 con la casilla). Salieron el botón de la red, la fila
+  Facetracking, los avisos de teclas sueltos y el letrero del hardware. La red: siempre la de Samsung
+  (`mde_large`), que ya era la de arranque; `1` / `2` la siguen cambiando.
+- **«No volver a preguntar» dentro del vídeo**: el servicio pasa `--recordar app:modo` (y `--recordado`
+  si ya estaba apuntada); la casilla de la pastilla deja un recado en `~/.local/state/odysseyvk/recordar`
+  y el servicio lo aplica a su memoria y a `serve.conf` (`ajuste::fijarAutoEnServeConf`, que quita solo
+  el par de esa aplicación y deja copia en `serve.conf.auterior`).
+- **Cuadro verde**: quitado de `shaders/weave.frag`. **Texto de encima de la pastilla**: quitado. Los
+  fallos (lente, scaler, cámara) y la respuesta a la casilla salen en un aviso bajo la pastilla.
+- De paso, tres defectos del dibujo que se vieron al sacar la interfaz a un archivo:
+  - el aviso de estado se colocaba con el alto REAL de la ventana en un lienzo virtual: a escala 2
+    (el panel) caía fuera de la pantalla. DERIVADO del código: y = (2160 − 34) × 2;
+  - los rellenos lisos se muestreaban a caballo con el borde del atlas y salían degradados (75 % → 100 %);
+  - el pintado de CPU de la tarjeta pintaba también los píxeles que el cuadro solo rozaba y traía la
+    máscara vecina (una raya junto al interruptor, un marco tenue en cada letra). Ahora sigue la regla
+    de la GPU. Y el espacio mide lo que dice la fuente (8 px de 26) y no medio cuadratín (13).
+- MEDIDO sin panel (`ODYSSEYVK_HUD_PNG=… odysseyvk ctl hud`, a 1080, 1440 y 2160): los 15 rótulos caben
+  en su caja; golpes de ratón: tesela normal y dividida 15 080 celdas cada una, casilla de la tarjeta
+  5 500, aspa 441, `?` 420, casilla de la pastilla 2 806, botón de red 0. Imágenes revisadas a ojo
+  (tarjeta en reposo, con una tesela bajo el ratón, con el `?`, casilla marcada; pastilla con y sin
+  casilla, modo de legado).
+- MEDIDO en una carpeta de prueba (HOME aparte): con `auto = mpv:sbs, zen:conv` y `auto = firefox:conv`,
+  quitar zen deja `auto = mpv:sbs`; cambiar firefox a sbs mueve su línea al final; quitar mpv borra la
+  línea vacía; quitar una aplicación que no estaba no toca el fichero; los comentarios se conservan.
+- MEDIDO por Vulkan, fuera del panel (`odysseyvk test --windowed --no-panel --no-lens --no-scaler
+  --recordar zen:conv --recordado --dump …`, cuadro de 3840x2160 leído de la GPU): la pastilla sale
+  igual que en el pintado de CPU, con la casilla marcada; el aviso de debajo dice «la lente 3D no
+  respondió · el scaler del monitor no respondió» (cierto en esa prueba); la esquina de arriba a la
+  izquierda vale (13, 13, 15) en 10,10, 30,30 y 60,60: ya no hay cuadro.
+- **No probado**: nada en el panel. El servicio con la casilla no se corrió entero (había un
+  vigilante vivo y no se levantó otro al lado): se probaron sus dos mitades, el recado y la
+  reescritura de `serve.conf`, por separado. La tarjeta nueva no se puso sobre el escritorio.
+
 ## ESC saca siempre del vídeo y del 3D a la vez (v0.77)
 
 - Rodolfo, con la 0.76: Esc sacaba del vídeo solo si antes había hecho clic en él; si no, el teclado lo

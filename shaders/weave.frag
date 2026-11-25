@@ -229,12 +229,9 @@ void main()
         return;
     }
 
-    /* indicador de estado del hardware, esquina superior izquierda */
-    if (px.x < 36.0 && px.y < 36.0) {
-        o = (P.tun3.x == 3.0) ? vec4(0.0, 1.0, 0.0, 1.0)
-                              : (P.tun3.x == 0.0 ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(1.0, 0.6, 0.0, 1.0));
-        return;
-    }
+    /* Aqui estaba el cuadro de color de la esquina superior izquierda (verde con lente y scaler,
+       naranja o rojo si faltaba alguno). Salio en v0.78: tapaba una esquina del video. Si la lente
+       o el scaler no responden lo dice la linea de abajo a la izquierda de la pastilla. */
 
     vec2 suv = vec2(u, v);
     float corrA = texture(uCorrA, suv).r * P.tun1.z;

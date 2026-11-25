@@ -46,6 +46,11 @@ struct ViewerOpts {
   /* "3D Salida" forzado (--relieve 0..100): sin relieve el mapa de profundidad no mueve nada, y para
      medir los dos planos hace falta ponerlo a mano. -1 = lo de siempre (0 sin conversor, 50 con el). */
   int relieve = -1;
+  /* «No volver a preguntar» dentro del video (--recordar APP:MODO, y --recordado si ya esta
+     apuntada): lo pasa el servicio, que es quien guarda la eleccion por aplicacion. Con esto la
+     pastilla ensena la casilla; vacio = no hay casilla (visor lanzado a mano). */
+  std::string recordarApp, recordarModo;
+  bool recordado = false;
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */

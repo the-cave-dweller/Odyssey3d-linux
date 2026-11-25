@@ -167,7 +167,7 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
 ```
 
 * `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
-  tecla `C` o con la cuarta tarjeta («Vídeo normal · 2D a 3D»).
+  tecla `C` o con la tesela «Vídeo normal» de la tarjeta.
 * `--modelo RUTA` cambia la red. La por defecto es *Depth Anything V2 Small* en ONNX,
   `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx` (99 MB). Si falta, el visor lo dice
   y el resto del 3D sigue funcionando sin conversión; el registro trae el `curl` para bajarla:
@@ -258,7 +258,7 @@ panel y la red metan ruido.
 | `3` | pase 2D (sin tramar) / 3D |
 | `F` | invertir profundidad (si se ve pseudoscópico: lo de dentro fuera) |
 | `M` | cambiar el formato del vídeo: lado a lado → arriba y abajo → 2D plano → vídeo normal (2D a 3D) |
-| `C` | encender / apagar el conversor de **vídeo normal a 3D** (lo mismo que la cuarta tarjeta) |
+| `C` | encender / apagar el conversor de **vídeo normal a 3D** (lo mismo que la tesela «Vídeo normal» de la tarjeta) |
 | `R` | **pegar / soltar los rótulos y subtítulos** del plano de la pantalla (con el conversor puesto; abajo) |
 | `←` `→` | fase de la trama (±0.002 ciclos) |
 | `RePag` `SavPg` | paso de lente (±0.0002); se usa si el paso real difiere del nominal |
@@ -523,49 +523,46 @@ todo lo demás —visor, hub, verbos `ctl`— queda igual.
 
 ## Cuál es el indicador de la esquina
 
-**Ya no hay cuadrado.** Desde v0.57 se quitó de la pastilla el cuadrito de color de arriba a la
-izquierda (verde/naranja/rojo según lente y scaler) y también el aviso escrito de «clic fuera de la
-pastilla manda sobre el vídeo de atrás». El estado del hardware se sigue diciendo, pero solo con
-texto, arriba de la pastilla: `lente y scaler activos`, `hardware parcial` o `sin lente ni scaler`
-(en modo de legado, `lente activa` / `sin lente`, porque ahí no se consulta el scaler). Si hace falta
-el detalle completo, `odysseyvk ctl estado` o `tail -f ~/.local/state/odysseyvk/estado`.
+**No hay ninguno.** El cuadro de color de arriba a la izquierda del vídeo (verde con lente y scaler,
+naranja o rojo si faltaba alguno) se quitó del sombreador en v0.78, y con él el letrero `lente y scaler
+activos` que iba escrito encima de la pastilla. Si la lente, el scaler o la cámara **no** responden,
+lo dice un aviso colgado debajo de la pastilla (`la lente 3D no respondió`, `el scaler del monitor no
+respondió`, `sin cámara: la trama va con la posición de fábrica`); con todo en orden no se pinta nada. El
+detalle completo sigue en `odysseyvk ctl estado` o `tail -f ~/.local/state/odysseyvk/estado`.
 
 ## La interfaz (pastilla con ratón)
 
-Desde v0.5 el visor dibuja una superposición al estilo del **Odyssey 3D Hub** oficial, con cursor
-de flecha visible y controlables con el ratón:
+El visor dibuja una pastilla arriba a la derecha, con cursor de flecha y manejable con el ratón. Desde
+v0.78 es **una sola fila** (462 × 76 px del lienzo virtual; 651 con la casilla; antes 824 × 134):
 
-* pastilla gris translúcida arriba a la derecha, con la línea verde de acento. Desde v0.56 todo lo
-  rectangular de la pastilla tiene las **esquinas cuadradas**: el panel, el botón rojo, las teselas y
-  casilla del aviso, los mandos de los deslizadores, los chips y los puntos de estado. Las únicas
-  curvas son la pista y la bola del interruptor:
-  * **interruptor ON/OFF del 3D** (`Ctrl+Shift+1`): pista verde con la bola a la izquierda y la letra
-    `ON` cuando la trama está puesta, pista gris con la bola a la derecha y `OFF` cuando está apagada.
-    Se pica en cualquier punto de la pista, no solo en la bola. Desde v0.57 la pista mide **112 px de
-    ancho** (antes 130), que es lo que gastan la bola de 26 px y la letra;
-  * debajo, escrito, `Ctrl+Shift+F1  oculta o muestra la pastilla`;
-  * **3D Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — desplaza la separación de las dos vistas;
-  * **3D Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
-  * fila **Facetracking** (`T`) con un chip por cámara —en la foto salen **3D Studio** en verde, porque
-    la estéreo del monitor está mandando, y **fallback** en gris, la webcam de respaldo sin usar— y a la
-    derecha, escrito, cómo está alimentando: `MJPG 1280x480 @ 60 (dos vistas, calibrada) · cara a la
-    vista`. `T` deja de seguir la cara y vuelve a la posición de fábrica. Hubo un deslizador de ángulo de
-    −15° a +15° (v0.31) para enfocar el relieve sin moverse; se quitó en v0.34: hacía duplicado con lo
-    que mide la cámara y lo que se quería era el comportamiento de siempre.
-  * escrito arriba de la pastilla, el estado del hardware: `lente y scaler activos`, `hardware parcial`
-    o `sin lente ni scaler` (en v0.57 se quitó el cuadrito de color que había antes).
-* aviso abajo a la derecha, casi negro, con tres teselas (**Lado a lado**, **Arriba y abajo**,
-  **2D plano**) y la casilla «no volver a preguntar», que es lo que manda el servicio cuando
-  detecta un vídeo a pantalla completa.
+* **interruptor ON/OFF del 3D** (`Ctrl+Shift+1`): pista verde con la bola a la izquierda y `ON`, pista
+  gris con la bola a la derecha y `OFF`. Se pica en cualquier punto de la pista;
+* **Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — en modo de legado se llama **Plano de apoyo**;
+* **Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
+* la casilla **No volver a preguntar**, que solo sale cuando el vídeo lo lanzó el servicio: es la
+  misma de la tarjeta de la orilla, pero dentro del vídeo. Marcada, esa aplicación pasa directa al 3D
+  la próxima vez; **desmarcada, el servicio vuelve a preguntar**. El cambio se apunta en `serve.conf`
+  (`auto = app:modo`) y debajo de la pastilla sale unos segundos la respuesta;
+* un renglón con las teclas: `Ctrl+Shift+ 1 el 3D · 3/4 profundidad · 5/6 salida · F1 oculta · Esc sale`.
 
-**La pastilla en modo de legado** (v0.57) lleva solo lo de verdad se usa ahí: el interruptor
-ON/OFF, los dos deslizadores reetiquetados como **3D Salida** y **Plano de apoyo**, la fila
-Facetracking y la nota corta `Tab  entrega la pantalla`. No hay botón de red ni aviso de `Tab` largo,
-y el texto del hardware habla solo de la lente (`lente activa` / `sin lente`). Medido con
-`odysseyvk ctl hud --w 1440 --h 900 [--legado]`: la pastilla pasa de **824x134 px a 648x134 px**, los
-vértices de la interfaz de **2784 a 2580** y las casillas de ratón del botón de red de **1458 a 0**;
-los deslizadores quedan en x = 1110 y x = 1260 (en el modo completo, x = 1116 y x = 1266), con 923
-casillas cada uno en los dos modos.
+Salieron de la pastilla (v0.78): el **botón de la red** (se usa siempre la de Samsung, que es la que
+mejor mide; las teclas sueltas `1` y `2` la siguen cambiando, y `ctl ajuste modelo=RUTA`), la fila
+**Facetracking** (informaba, no mandaba), los avisos de teclas repartidos y el letrero del hardware.
+La pastilla sigue con las esquinas cuadradas (v0.56); las únicas curvas son la pista y la bola.
+
+La **tarjeta de la orilla** (abajo a la derecha, la que pone el servicio al ver un vídeo a pantalla
+completa) se parece desde v0.78 a la de la aplicación oficial: tarjeta oscura de esquinas redondas con
+la pregunta «¿Qué tipo de vídeo estás viendo?», el nombre de la ventana en letra chica, dos teselas
+con su dibujo —**Vídeo normal** (una sola imagen: el conversor 2D a 3D) y **Vídeo dividido** (dos
+imágenes lado a lado)—, la casilla «Guardar el tipo de vídeo y no volver a preguntar» y, arriba a la
+derecha, un `?` que explica las dos opciones al pasar el ratón y el aspa, que cierra sin tocar nada
+(lo que antes era la tesela «2D plano»). El estéreo de arriba y abajo sigue solo por línea de orden
+(`--tb`).
+
+Para mirar la interfaz sin el panel: `ODYSSEYVK_HUD_PNG=/ruta/salida.png odysseyvk ctl hud --w 3840
+--h 2160 [--legado]` la deja pintada en un archivo de fondo transparente (el mismo pintado de CPU que
+usa la tarjeta), además de medir que cada rótulo quepa en su caja. `ODYSSEYVK_HUD_RATON=x,y` deja el
+puntero en un punto, `ODYSSEYVK_HUD_RECORDAR=0|1|2` quita, marca o desmarca la casilla.
 
 La pastilla se calcula en un lienzo virtual de 1080 px de alto y se escala con la altura del panel,
 así que conserva las proporciones de la aplicación oficial a 3840x2160. Se apaga arrancando con
@@ -774,7 +771,8 @@ systemctl --user edit odysseyvk-serve        # cambiarlo si hace falta
 ```
 
 Qué hace: escucha `org_kde_plasma_window_management` de KWin; cuando una ventana pasa a **pantalla
-completa** dibuja en la esquina una **tarjeta propia** (la misma interfaz del visor) con cuatro botones.
+completa** dibuja en la esquina una **tarjeta propia** (la misma interfaz del visor) con dos teselas
+(vídeo normal y vídeo dividido; ver «La interfaz»).
 Va en una capa `overlay` de `zwlr_layer_shell_v1`, así que **se ve por encima del vídeo a pantalla
 completa**, cosa que las notificaciones de KDE no logran (KWin las dibuja detrás, y con «No molestar»
 ni siquiera aparecen). Si el compositor no expone ese protocolo se vuelve al aviso de KDE. Al pulsar un
@@ -809,7 +807,7 @@ y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150); para 
 `texto` (`no` deja los rótulos con la profundidad que les dé la red en vez de apoyarlos en la pantalla). Las dos
 redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
 `mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
-se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
+se cambia de una a otra con las teclas sueltas `1` y `2` sin cerrar nada (el botón de la pastilla salió en v0.78),
 y la elección queda en `~/.config/odysseyvk/red-elegida`, aunque **al arrancar se vuelve siempre a la
 de Samsung** (desde v0.34): el archivo recuerda tu último cambio, pero el arranque empieza por la 1.
 
@@ -949,8 +947,8 @@ fuerza la CPU y `ODYSSEYVK_GPU=1` obliga a la segunda tarjeta.
 
 Si se
 marca la casilla de la tarjeta y se pulsa un botón, se guarda una línea `auto = app:modo` en ese
-archivo y desde entonces esa aplicación pasa directa sin preguntar (puedes editar o borrar esa línea a
-mano). `conv` es el vídeo normal pasado a 3D: con `auto = zen:conv` el navegador entra directo en
+archivo y desde entonces esa aplicación pasa directa sin preguntar. Se deshace **desde dentro del
+vídeo**, desmarcando «No volver a preguntar» en la pastilla (v0.78), o borrando esa línea a mano. `conv` es el vídeo normal pasado a 3D: con `auto = zen:conv` el navegador entra directo en
 conversión. Si no aparece la
 tarjeta:
 

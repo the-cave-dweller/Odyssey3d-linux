@@ -130,6 +130,17 @@ bool escribirCamaraVista(const std::vector<uint8_t> &jpeg, std::string *err = nu
 std::map<std::string, std::string> leerServeConf();
 bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::string *err);
 
+/* «No volver a preguntar» (v0.78). La eleccion por aplicacion vive en serve.conf como
+   `auto = aplicacion:modo` y la lleva el vigilante. El visor, que es quien pinta la casilla dentro del
+   video, no toca serve.conf: deja un recado en `recordar` (aplicacion y modo, o `no` para que se
+   vuelva a preguntar) y el vigilante lo recoge, lo aplica a su memoria y reescribe la linea.
+   `fijarAutoEnServeConf` quita la aplicacion de todas las lineas `auto` y, si `modo` no viene vacio,
+   la apunta de nuevo al final; el resto del fichero no se toca. */
+std::string rutaRecordar();
+bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err = nullptr);
+bool tomarRecordar(std::string &app, std::string &modo);
+bool fijarAutoEnServeConf(const std::string &app, const std::string &modo, std::string *err = nullptr);
+
 /* Cuantas claves de `numeros` se salen de `base`, y cuales son (para decirlo en la ventana). */
 int diferencias(const std::map<std::string, double> &numeros, const std::map<std::string, double> &base,
                 std::vector<std::string> *nombres = nullptr);

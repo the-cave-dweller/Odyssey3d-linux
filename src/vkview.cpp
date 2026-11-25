@@ -111,7 +111,8 @@ struct VkUi {
   bool mediaPausaManual = false;
   std::string fmtInfo;       /* " · lado a lado": recuerda que formato se esta entrelazando */
   bool convToggle = false;   /* la tecla C: el bucle del visor enciende o apaga el conversor */
-  std::string extraInfo;     /* " · video en pausa" y cosas asi, detras de la frase de estado */
+  std::string extraInfo;     /* el aviso del momento, bajo la pastilla: se quita solo */
+  std::string estadoVideo;   /* " · video en pausa": ya no se pinta (lo dice el propio video), queda para depurar */
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
   /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nativa
@@ -336,23 +337,24 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
 }
 
 /* frase breve bajo la pastilla: qué se está viendo y en qué estado está el hardware */
-std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int w, int h,
-                     const std::string &extra = "", const std::string &fmt = "", bool convOn = false) {
-  std::string out = kind == SourceKind::Capture ? "ventana capturada " : "patron de prueba ";
-  out += std::to_string(w) + "x" + std::to_string(h);
-  out += st.weaveOn ? (st.ask ? " sin formato elegido" : " con trama") : " 2D plano";
-  if (st.weaveOn) out += fmt;   /* el formato elegido en la tarjeta: lado a lado / arriba y abajo */
-  out += " · lente ";
-  out += (rig.lensOk ? "3D" : "2D");
-  out += " · scaler ";
-  out += (rig.scalerOn ? "3D" : "apagado");
-  /* el aviso que faltaba: la trama solo da profundidad si el video trae dos imagenes. Con un video
-     normal lo que sale es una imagen doble y movida, y es lo que se ve "regular" en el monitor. */
-  if (convOn)
-    out += " · conversor de video normal (C lo apaga)";
-  else if (st.weaveOn && !fmt.empty())
-    out += " · si el video es normal (una sola imagen) se vera doble: tecla 3 o 2D plano";
-  out += extra;
+/* La linea de abajo a la izquierda (v0.78): solo lo que hay que saber. Antes era un parte
+   entero ("ventana capturada 3022x1303 con trama · lente 3D · scaler 3D · conversor...") que se
+   quedaba puesto encima del video. Ahora dice lo que FALLA (la lente, el scaler o la camara no
+   responden) y el aviso del momento (pausa, cambio de red...), que se quita solo. Con todo en
+   orden no pinta nada. */
+std::string infoLine(const Hud::State &st, const std::string &extra) {
+  std::string out;
+  auto suma = [&](const std::string &s) {
+    if (s.empty()) return;
+    if (!out.empty()) out += " · ";
+    out += s;
+  };
+  if (st.weaveOn && !(st.hud & 1)) suma("la lente 3D no respondió");
+  if (st.weaveOn && !st.legado && !(st.hud & 2)) suma("el scaler del monitor no respondió");
+  if (st.controlOjo && !st.rastreoVivo) suma("sin cámara: la trama va con la posición de fábrica");
+  size_t i = 0;
+  while (i < extra.size() && (extra[i] == ' ' || (unsigned char)extra[i] == 0xC2 || (unsigned char)extra[i] == 0xB7)) i++;
+  suma(extra.substr(i));   /* las frases viejas venian con su " · " delante */
   return out;
 }
 
@@ -439,8 +441,30 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       st.remember = !st.remember;
       break;
     case Hud::HitAskClose:
+      /* cerrar sin elegir es quedarse en 2D: la tesela de «2D plano» ya no existe (v0.78) */
       st.ask = false;
+      st.weaveOn = false;
+      printTuning(ui, "2D plano");
       break;
+    case Hud::HitRecordar: {
+      /* la casilla de «no volver a preguntar», dentro del video: el recado lo recoge el servicio */
+      if (!ui.opts || ui.opts->recordarApp.empty()) break;
+      const std::string &app = ui.opts->recordarApp;
+      const bool quiere = !st.recordar;
+      std::string e;
+      if (!ajuste::pedirRecordar(app, quiere ? ui.opts->recordarModo : std::string("no"), &e)) {
+        std::fprintf(stderr, "[recordar] %s\n", e.c_str());
+        ui.extraInfo = "no se pudo guardar la elección";
+      } else {
+        st.recordar = quiere;
+        ui.extraInfo = quiere ? app + " pasa directo al 3D, sin preguntar"
+                              : "la próxima vez se vuelve a preguntar por " + app;
+        std::printf("[recordar] %s: %s\n", app.c_str(), quiere ? ui.opts->recordarModo.c_str() : "se vuelve a preguntar");
+        std::fflush(stdout);
+      }
+      ui.extraHasta = glfwGetTime() + 6.0;
+      break;
+    }
     default:
       break;
   }
@@ -581,7 +605,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     ui->media->status(&despues);
     const bool pausado = despues.empty() ? (antes != "Paused") : (despues == "Paused" || despues == "Stopped");
     ui->mediaPausaManual = pausado;
-    ui->extraInfo = pausado ? " · video en pausa" : " · video en marcha";
+    ui->estadoVideo = pausado ? " · video en pausa" : " · video en marcha";
     ui->extraHasta = glfwGetTime() + 8.0;
     std::printf("[video] %s (%s) · otra vez P para %s\n", pausado ? "pausado" : "en marcha",
                 ui->media->playerName().c_str(), pausado ? "reanudar" : "pausar");
@@ -1142,6 +1166,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      del video. */
   ui.hud.state().ask = (kind == SourceKind::Capture) && !opts.noHud && !opts.fmtGiven;
   ui.hud.state().overlayOn = !opts.noHud;
+  /* la casilla de «no volver a preguntar» sale solo si el servicio dijo de que aplicacion es el video */
+  ui.hud.state().recordarVisible = !opts.recordarApp.empty() && !opts.recordarModo.empty();
+  ui.hud.state().recordar = opts.recordado;
   ui.hud.state().ratonLibre = !opts.noPassthrough;
   /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
   if (opts.uiScale > 0.25f) {
@@ -1493,7 +1520,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                                              bufLam) : "");
       }
       ui.convInfo = true;
-      ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
+      ui.extraInfo.clear();   /* el recordatorio de las teclas ya va en el renglon de la pastilla */
       ui.extraHasta = glfwGetTime() + 9.0;
       std::fflush(stdout);
     }
@@ -1933,7 +1960,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                       "relieve %d, apoyo automatico -- Ctrl+Shift+6 sube, Ctrl+Shift+5 baja\n",
                       red.device().c_str(), ui.hud.state().popout);
           ui.convInfo = true;
-          ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
+          ui.extraInfo.clear();   /* el recordatorio de las teclas ya va en el renglon de la pastilla */
           ui.extraHasta = glfwGetTime() + 9.0;
         }
       } else if (!pidiendo) {
@@ -2315,7 +2342,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           ++reanudados;
           if (media.resumeIfNeeded(&merr)) {
             std::printf("[video] el navegador habia parado el video (%s): se reanuda solo\n", mst.c_str());
-            ui.extraInfo = " · video reanudado";
+            ui.estadoVideo = " · video reanudado";
             ui.extraHasta = now + 8.0;
           } else {
             std::printf("[video] el video estaba parado (%s) y no se pudo reanudar: %s\n", mst.c_str(),
@@ -2730,11 +2757,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #endif
     ui.hud.state().hud = rig.hud();
     /* la frase extra del video se quita sola, salvo si estamos en pausa a proposito */
-    if (!ui.extraInfo.empty() && ui.extraHasta > 0.0 && now >= ui.extraHasta && !ui.mediaPausaManual) {
+    if (!ui.extraInfo.empty() && ui.extraHasta > 0.0 && now >= ui.extraHasta) {
       ui.extraInfo.clear();
       ui.extraHasta = 0.0;
     }
-    ui.hud.setInfo(infoLine(kind, rig, ui.hud.state(), fbW, fbH, ui.extraInfo, ui.fmtInfo, ui.convInfo));
+    ui.hud.setInfo(infoLine(ui.hud.state(), ui.extraInfo));
     /* La pastilla ocultada vuelve sola en cuanto el puntero entra en el rincon que dejamos
        pinchable. Hace falta porque el que la oculto suele estar manejando el video: el foco lo
        tiene el navegador y ninguna tecla nuestra le llega, asi que el raton es la unica puerta. */
@@ -2748,7 +2775,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     /* la fila de Facetracking solo existe en el visor: el hub no rastrea. No es un
        boton: dice con que camara se esta siguiendo la cara y que esta viendo. */
-    ui.hud.state().controlOjo = true;
+    ui.hud.state().controlOjo = opts.track;   /* desde v0.78 solo dice si se PIDIO rastreo: la fila ya no se pinta */
 #ifdef HAVE_OPENCV
     {
       Hud::State &hs = ui.hud.state();

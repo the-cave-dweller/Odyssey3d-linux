@@ -1811,6 +1811,13 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
     else if (a == "--volcado-seguir") o.dumpKeep = true;
     else if (a == "--uuid") { if (!need("uuid")) return false; o.captureUuid = argv[++i]; }
+    else if (a == "--recordar") {
+      if (!need("recordar")) return false;
+      const std::string par = argv[++i];
+      const size_t dd = par.rfind(':');
+      if (dd != std::string::npos) o.recordarApp = par.substr(0, dd), o.recordarModo = par.substr(dd + 1);
+    }
+    else if (a == "--recordado") o.recordado = true;
     else if (a == "--segundos") { if (!need("segundos")) return false; o.segundos = atoi(argv[++i]); }
     else if (a == "--help" || a == "-h") { std::fputs(kUsage, stdout); exit(0); }
     else if (!a.empty() && a[0] == '-') { std::fprintf(stderr, "opcion desconocida: %s\n", a.c_str()); return false; }
@@ -2794,87 +2801,108 @@ static int cmdHudSelfTest(int argc, char **argv) {
   }
   const int W = o.w > 0 ? o.w : 1920, H = o.h > 0 ? o.h : 1080;
   hud.state().ask = true;
-  hud.state().controlOjo = true;   /* el visor ensena la fila del rastreo */
+  hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
-  hud.state().rastreoEstudio = true;   /* como si fuera la camara del monitor */
-  hud.state().rastreoNota = "1280x480 MJPG @ 60 · cara a la vista";
-  hud.state().legado = o.legado;   /* `--legado` en la prueba: la pastilla sale sencilla */
-  hud.setInfo("prueba de la interfaz");
+  hud.state().hud = 3;
+  hud.state().legado = o.legado;   /* `--legado` en la prueba: el deslizador de la izquierda cambia de nombre */
+  /* la casilla de «no volver a preguntar» de la pastilla: a la vista y marcada, que es el caso ancho.
+     ODYSSEYVK_HUD_RECORDAR=0 la quita (visor lanzado a mano) y =2 la deja a la vista sin marcar. */
+  const char *rec = std::getenv("ODYSSEYVK_HUD_RECORDAR");
+  hud.state().recordarVisible = !(rec && rec[0] == '0');
+  hud.state().recordar = !(rec && rec[0] == '2');
+  hud.state().remember = rec && rec[0] == '1';
+  if (const char *linea = std::getenv("ODYSSEYVK_HUD_LINEA")) hud.setInfo(linea);
+  if (const char *cuerpo = std::getenv("ODYSSEYVK_HUD_CUERPO")) hud.setAskText("", cuerpo);
+  /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
+  if (const char *raton = std::getenv("ODYSSEYVK_HUD_RATON")) {
+    float rx = -1.0f, ry = -1.0f;
+    if (std::sscanf(raton, "%f,%f", &rx, &ry) == 2) {
+      hud.begin(W, H);   /* la escala sale del primer trazado */
+      hud.setMouse(rx, ry);
+    }
+  }
   hud.begin(W, H);
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
-  /* desde v0.56 no hay boton de capa: la lista de golpes de raton es
-     nada, interruptor, dos deslizadores, boton de red y lo del aviso (11 casos) */
-  static const char *nom[] = {"nada",              "interruptor 3D",   "deslizador profundidad",
-                              "deslizador salida", "boton red",        "tesela SxS",
-                              "tesela arriba/abajo", "tesela plana",   "boton video normal",
-                              "casilla no preguntar", "cerrar el aviso"};
-  int cuenta[12] = {0}, px0[12] = {0}, py0[12] = {0};
+  /* ODYSSEYVK_HUD_PNG=ruta deja la interfaz pintada en un archivo (fondo transparente), con el mismo
+     pintado de CPU que usa la tarjeta de la orilla: sirve para mirarla sin el panel delante. */
+  if (const char *png = std::getenv("ODYSSEYVK_HUD_PNG")) {
+    std::vector<float> acum;
+    hud.pintarCpu(0.0f, 0.0f, W, H, acum);
+    std::vector<uint8_t> rgba((size_t)W * (size_t)H * 4u);
+    for (size_t p = 0; p < (size_t)W * (size_t)H; p++) {
+      const float A = acum[p * 4u + 3u];
+      for (int c = 0; c < 3; c++)
+        rgba[p * 4u + (size_t)c] =
+            (uint8_t)std::lround(255.0f * std::max(0.0f, std::min(1.0f, A > 0.0001f ? acum[p * 4u + (size_t)c] / A : 0.0f)));
+      rgba[p * 4u + 3u] = (uint8_t)std::lround(255.0f * std::max(0.0f, std::min(1.0f, A)));
+    }
+    std::printf("  volcado a %s: %s\n", png, glPngSave(png, W, H, rgba.data()) ? "hecho" : "NO SE PUDO");
+  }
+  /* la lista de golpes de raton: nada, interruptor, dos deslizadores, (el boton de la red, que ya
+     no existe y tiene que dar cero), las teselas de la tarjeta, su casilla, el aspa, el "?" y la
+     casilla de la pastilla */
+  static const char *nom[] = {"nada",                "interruptor 3D",      "deslizador profundidad",
+                              "deslizador salida",   "boton red (quitado)", "tesela video dividido",
+                              "tesela arriba/abajo", "tesela plana",        "tesela video normal",
+                              "casilla de la tarjeta", "cerrar la tarjeta", "ayuda de la tarjeta",
+                              "casilla de la pastilla"};
+  const int casos = 12;
+  int cuenta[13] = {0}, px0[13] = {0}, py0[13] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
-      if (h < 0 || h > 10) continue;
+      if (h < 0 || h > casos) continue;
       if (!cuenta[h]) {
         px0[h] = x;
         py0[h] = y;
       }
       cuenta[h]++;
     }
-  for (int h = 1; h <= 10; h++)
+  for (int h = 1; h <= casos; h++)
     std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
 
-  /* La fila de Facetracking (v0.54): ya no es un boton, informa. Lo que hay que comprobar es que
-     la etiqueta y las dos cajas quepan SIEMPRE en la pastilla de 824 px; la nota se recorta sola
-     al dibujar, pero si las cajas no caben la fila se sale del recuadro. */
-  {
-    const float etiqueta = hud.mideTexto("Facetracking", 14.0f);
-    const float cajaEstudio = hud.mideTexto("3D Studio", 14.0f) + 24.0f;   /* 12 px de aire por lado */
-    const float cajaExterna = hud.mideTexto("fallback", 14.0f) + 24.0f;
-    const float usado = 18.0f + etiqueta + 14.0f + cajaEstudio + 10.0f + cajaExterna;
-    const float nota = hud.mideTexto("1280x480 MJPG @ 60 · cara a la vista", 11.0f);
-    const float panel = hud.panelW();   /* 824 de normal, 648 en modo de legado */
-    std::printf("  fila Facetracking %.0f px (etiqueta %.0f + cajas %.0f + %.0f) de %.0f · quedan %.0f para"
-                " la nota, que mide %.0f  %s\n", (double)usado, (double)etiqueta, (double)cajaEstudio,
-                (double)cajaExterna, (double)panel, (double)(panel - 20.0f - usado), (double)nota,
-                usado + 20.0f + nota <= panel ? "cabe" : "SE SALE");
-  }
-
-  /* Rotulos de la pastilla, con la caja real donde se dibujan (ancho del boton menos el aire a cada
-     lado). Si la letra mide mas que su caja se sale del recuadro, que es lo que pasaba antes. */
+  /* Rotulos, con la caja real donde se dibujan. Si la letra mide mas que su caja se sale del
+     recuadro. La pastilla: el interruptor mide 100 (quedan 60 para la palabra), cada deslizador 140
+     (rotulo a la izquierda y numero a la derecha) y el renglon de teclas se achica solo si no cabe.
+     La tarjeta: 500 de ancho con 26 de borde; cada tesela mide 217. */
   struct Medida {
     const char *texto;
     float px, caja;
   };
-  /* el interruptor: la letra va entre la bola y el borde de la pista (70 px de aire con la pista
-     de 112 px, que es lo peor de los dos lados: con OFF hay tres letras) */
-  static const Medida med[] = {{"ON", 15.0f, 70.0f},                 {"OFF", 15.0f, 70.0f},
-                               {"Ctrl+Shift+1  el 3D", 11.0f, 160.0f},
-                               {"Ctrl+Shift+F1", 12.0f, 166.0f},     {"oculta o muestra la pastilla", 11.0f, 166.0f},
-                               {"Red 1 · Samsung", 14.0f, 136.0f},   {"Red 2 · nativa", 14.0f, 136.0f},
-                               {"Red sin conversor", 14.0f, 136.0f}, {"1 / 2  cambia de red", 11.0f, 160.0f},
-                               {"teclas 1 / 2", 11.0f, 160.0f},      {"Tab  entrega la pantalla", 11.0f, 272.0f},
-                               {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},  {"Ctrl+Shift+5 / 6", 11.0f, 120.0f}};
+  const float tesela = (500.0f - 52.0f - 14.0f) * 0.5f - 16.0f;
+  const Medida med[] = {{"ON", 15.0f, 60.0f},
+                        {"OFF", 15.0f, 60.0f},
+                        {"Profundidad  100", 12.0f, 140.0f},
+                        {"Plano de apoyo  100", 12.0f, 140.0f},
+                        {"Salida  -50", 12.0f, 140.0f},
+                        {"Ctrl+Shift+  1 el 3D · 3/4 profundidad · 5/6 salida · F1 oculta · Esc sale", 10.5f,
+                         hud.panelW() - 32.0f},
+                        {"¿Qué tipo de vídeo estás viendo?", 18.0f, 500.0f - 26.0f - 92.0f},
+                        {"Elige la opción correcta para la conversión 3D.", 13.5f, 448.0f},
+                        {"Vídeo normal: una sola imagen; se convierte a 3D.", 12.5f, 448.0f},
+                        {"Vídeo dividido: trae dos imágenes, una al lado de la otra.", 12.5f, 448.0f},
+                        {"Vídeo normal", 15.0f, tesela},
+                        {"Vídeo dividido", 15.0f, tesela},
+                        {"una sola imagen", 11.5f, tesela},
+                        {"dos imágenes lado a lado", 11.5f, tesela},
+                        {"Guardar el tipo de vídeo y no volver a preguntar", 13.0f, 448.0f - 30.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
-    std::printf("  letra  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w, (double)m.caja,
-                w <= m.caja ? "cabe" : "SE SALE");
+    std::printf("  letra  %4.0fpx %6.1f px de %5.0f  %s  %s\n", (double)m.px, (double)w, (double)m.caja,
+                w <= m.caja ? "cabe    " : "SE SALE ", m.texto);
   }
 
-  /* de cuanto salio la pastilla de verdad: 824 x 134 de siempre y 648 en modo de legado (la altura es
-     la misma: lo que quito el modo de legado es el boton de la red y el deslizador de la profundidad
-     del conversor, no filas). Si la ventana se queda angosta, la pastilla se encoge con ella. */
-  std::printf("  pastilla dibujada: %.0f x %.0f px en ventana de %dx%d (%s)\n", (double)hud.panelW(),
-              (double)hud.panelH(), W, H, o.legado ? "modo de legado" : "modo completo");
-
-  /* letras que solo salen en el modo de legado: los dos deslizadores se llaman alli de otra manera y
-     el aviso del hardware habla solo de la lente (ahi el scaler del monitor no se toca) */
-  static const Medida medLegado[] = {{"Plano de apoyo", 12.0f, 120.0f}, {"3D Salida", 12.0f, 120.0f},
-                                     {"Ctrl+Shift+3 / 4", 11.0f, 120.0f}, {"Tab  entrega la pantalla", 11.0f, 272.0f},
-                                     {"lente activa", 11.0f, 220.0f},   {"sin lente", 11.0f, 220.0f}};
-  for (const Medida &m : medLegado) {
-    const float w = hud.mideTexto(m.texto, m.px);
-    std::printf("  letra legado  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w,
-                (double)m.caja, w <= m.caja ? "cabe" : "SE SALE");
+  /* de cuanto salio la pastilla: 462 x 76 sin la casilla y unos 650 con ella (antes de v0.78 eran
+     824 x 134). Si la ventana se queda angosta, la pastilla se encoge con ella. */
+  std::printf("  pastilla dibujada: %.0f x %.0f px en ventana de %dx%d (%s, %s)\n", (double)hud.panelW(),
+              (double)hud.panelH(), W, H, o.legado ? "modo de legado" : "modo completo",
+              hud.state().recordarVisible ? "con la casilla" : "sin la casilla");
+  {
+    float ax = 0, ay = 0, aw = 0, ah = 0;
+    if (hud.askBounds(&ax, &ay, &aw, &ah))
+      std::printf("  tarjeta dibujada: %.0f x %.0f px reales en %.0f,%.0f (escala %.2f)\n", (double)aw, (double)ah,
+                  (double)ax, (double)ay, (double)hud.scale());
   }
 
   const int d0 = hud.state().depth, p0 = hud.state().popout;
@@ -3081,19 +3109,6 @@ struct ServeCfg {
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
-/* Se añade al final del archivo, así se conservan los comentarios de arriba. */
-static void guardarAutoEnDisco(const std::string &appId, const std::string &modo) {
-  const char *home = std::getenv("HOME");
-  if (!home || appId.empty()) return;
-  const std::string dir = std::string(home) + "/.config/odysseyvk";
-  ::mkdir(dir.c_str(), 0700);
-  FILE *f = std::fopen((dir + "/serve.conf").c_str(), "ae");
-  if (!f) return;
-  std::fseek(f, 0, SEEK_END);
-  std::fprintf(f, "auto = %s:%s\n", appId.c_str(), modo.c_str());
-  std::fclose(f);
-}
-
 static void splitList(const std::string &text, std::vector<std::string> &out) {
   std::string item;
   for (char c : text) {
@@ -3294,7 +3309,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
                         const std::string &alterno = std::string(), bool rastreo = false,
-                        float suavizado = 0.0f, ServeCfg *pila = nullptr, bool escritorio = false) {
+                        float suavizado = 0.0f, ServeCfg *pila = nullptr, bool escritorio = false,
+                        const std::string &recordar = std::string(), bool recordado = false) {
   /* El modo de legado se cambia desde la ventana de ajustes sin reiniciar el servicio, y el
      vigilante leia serve.conf una sola vez al arrancar: lo volvemos a mirar justo antes de lanzar el
      visor, para que el modo que se ve marcado en la ventana sea el que sale en pantalla. Solo se
@@ -3320,6 +3336,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
+  /* la casilla de «no volver a preguntar» dentro del video: `aplicacion:modo`, y si ya esta apuntada */
+  if (!recordar.empty()) {
+    args.push_back("--recordar");
+    args.push_back(recordar);
+    if (recordado) args.push_back("--recordado");
+  }
   /* el modo de legado: el visor arma la trama con los numeros de fabrica, no abre el conversor que
      saca dos vistas de una y pinta la pastilla sencilla. Aqui arriba no se pasan a proposito ni la
      fase, ni el paso, ni el filtro, ni los planos: ahi la trama lleva lo de fabrica. */
@@ -3855,8 +3877,8 @@ static int cmdOverlay(int argc, char **argv) {
   int segundos = 12;
   if (std::string v = flag(argc, argv, "--segundos"); !v.empty()) segundos = std::max(1, std::atoi(v.c_str()));
   const std::string volcado = flag(argc, argv, "--dump");
-  std::string titulo = "¿Convertir el vídeo actual a 3D?";
-  std::string cuerpo = "Elige el formato de la imagen que estás viendo.";
+  std::string titulo;   /* vacio = la pregunta de fabrica de la tarjeta */
+  std::string cuerpo = "Nombre del vídeo de prueba — Navegador";
   if (std::string v = flag(argc, argv, "--titulo"); !v.empty()) titulo = v;
   if (std::string v = flag(argc, argv, "--cuerpo"); !v.empty()) cuerpo = v;
 
@@ -4056,6 +4078,8 @@ static int cmdServe(int argc, char **argv) {
   std::map<std::string, std::string> idUuid;   /* id del aviso -> uuid de la ventana */
   std::set<std::string> preguntadas;           /* ventanas por las que ya preguntamos o actuamos */
   std::string avisoId, avisoUuid, accion;      /* aviso pendiente y respuesta del usuario */
+  std::string accionApp;                       /* de que aplicacion era la tarjeta que se contesto */
+  bool accionGuardada = false;                 /* y si se marco «no volver a preguntar» */
   double avisoT = 0.0;
   std::string tarjetaUuid, tarjetaApp;         /* ventana a la que le pusimos la tarjeta */
   double tarjetaT = 0.0;
@@ -4900,6 +4924,25 @@ static int cmdServe(int argc, char **argv) {
       }
     }
 
+    /* La casilla de «no volver a preguntar» de la pastilla del visor deja aqui su recado: se
+       aplica a la memoria del servicio y a serve.conf. Desmarcada, la aplicacion vuelve a pasar por
+       la tarjeta la proxima vez que se ponga a pantalla completa. */
+    {
+      std::string rApp, rModo;
+      if (ajuste::tomarRecordar(rApp, rModo)) {
+        if (rModo.empty()) cfg.porApp.erase(rApp);
+        else cfg.porApp[rApp] = rModo;
+        std::string e;
+        if (!ajuste::fijarAutoEnServeConf(rApp, rModo, &e))
+          std::fprintf(stderr, "[serve] no se pudo cambiar serve.conf: %s\n", e.c_str());
+        if (rModo.empty())
+          std::printf("[serve] desde la pastilla: se vuelve a preguntar por %s\n", rApp.c_str());
+        else
+          std::printf("[serve] desde la pastilla: %s pasa directo a %s sin preguntar\n", rApp.c_str(), rModo.c_str());
+        std::fflush(stdout);
+      }
+    }
+
     /* el aviso caduca: si nadie pulsa, se quita y no se vuelve a preguntar por esa ventana */
     /* lo mismo con la tarjeta: si nadie pulsa, se retira */
     if (!tarjetaUuid.empty()) {
@@ -4937,10 +4980,13 @@ static int cmdServe(int argc, char **argv) {
         } else {
           accion = acto;
           avisoUuid = tarjetaUuid;
+          accionApp = tarjetaApp;
+          accionGuardada = ov->remember() && !tarjetaApp.empty() && acto != "flat";
           std::printf("[serve] tarjeta -> %s (%s)\n", acto.c_str(), avisoUuid.c_str());
           if (ov->remember() && !tarjetaApp.empty() && acto != "flat") {
             cfg.porApp[tarjetaApp] = acto;
-            guardarAutoEnDisco(tarjetaApp, acto);
+            if (std::string e; !ajuste::fijarAutoEnServeConf(tarjetaApp, acto, &e))
+              std::fprintf(stderr, "[serve] no se pudo apuntar en serve.conf: %s\n", e.c_str());
             std::printf("[serve] apuntado: %s pasa directo a %s sin preguntar\n", tarjetaApp.c_str(), acto.c_str());
           }
         }
@@ -4984,7 +5030,10 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
+          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
+                             false, accionApp.empty() ? std::string() : accionApp + ":" + act, accionGuardada);
+          accionApp.clear();
+          accionGuardada = false;
           hijoDesde = now;
           hijoUuid = avisoUuid;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
@@ -5022,7 +5071,8 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             if (unaVez) break;
           } else {
-            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
+            hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
+                               false, app + ":" + fija->second, true);
             hijoDesde = now;
             hijoUuid = w.uuid;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
@@ -5030,9 +5080,10 @@ static int cmdServe(int argc, char **argv) {
             if (hijo > 0 && unaVez) break;
           }
         } else if (cfg.modo == "ask" && hayTarjeta) {
-          std::string titulo = "¿Convertir el vídeo actual a 3D?";
+          /* el titulo es el de fabrica de la tarjeta («¿Qué tipo de vídeo estás viendo?»); debajo,
+             en letra chica, la ventana por la que se pregunta */
+          std::string titulo;
           std::string cuerpo = w.title.empty() ? w.appId : w.title;
-          cuerpo += "  ·  " + std::to_string(w.w) + "x" + std::to_string(w.h);
           ov->showAsk(titulo, cuerpo);
           tarjetaUuid = w.uuid;
           tarjetaApp = app;
