@@ -530,6 +530,32 @@ lo dice un aviso colgado debajo de la pastilla (`la lente 3D no respondió`, `el
 respondió`, `sin cámara: la trama va con la posición de fábrica`); con todo en orden no se pinta nada. El
 detalle completo sigue en `odysseyvk ctl estado` o `tail -f ~/.local/state/odysseyvk/estado`.
 
+## El panel de ajustes y los juegos (v0.84)
+
+`odysseyvk ajustes` —el icono de OdysseyVK del menú del sistema, o el engranaje de la pastilla
+cuando hay un vídeo en 3D— abre una tarjeta translúcida de esquinas redondas que flota en el centro
+de la pantalla, encima de lo que haya. Abrirla otra vez la cierra (también el aspa). Con un vídeo
+en 3D debajo se dibuja al doble, porque se ve a través de la lente. Dos pestañas:
+
+* **Ajustes**, solo lo de todos los días:
+  * qué hacer al ver un vídeo a pantalla completa: preguntar, vídeo normal o vídeo dividido (`modo`);
+  * suavizar los vídeos divididos (`dividido_suavizado`; es el único sitio donde se quita);
+  * fuerza del relieve del conversor (`relieve`) y reducir el fantasma (`crosstalk_base`, se nota al
+    momento con un vídeo abierto);
+  * seguir la cabeza con la cámara (`rastreo`), mantener el HDR durante el 3D (`hdr_en_3d`), atajos
+    de teclado en todo el escritorio (`atajos_globales`);
+  * las aplicaciones que pasan sin preguntar (`auto = app:modo`), con un aspa para olvidar cada una.
+* **Juegos**: la biblioteca de Steam, leída de sus propios ficheros (`libraryfolders.vdf` y los
+  `appmanifest_*.acf` de cada biblioteca; sin Proton ni los Steam Linux Runtime), los jugados hace
+  menos primero. Se pica uno y arranca (`steam steam://rungameid/ID`); cuando el juego se pone a
+  pantalla completa el servicio ofrece el 3D como con cualquier ventana. Es la primera piedra del
+  lanzador: todavía sin carátulas y sin elegir el 3D por juego.
+
+Todo se escribe en `~/.config/odysseyvk/serve.conf` y el servicio lo relee solo cuando cambia (ya
+no hace falta reiniciarlo para esas claves). La ventana de siempre, con los veinte números de la
+trama, los perfiles por red y la vista de la cámara, sigue existiendo como banco de taller:
+`odysseyvk-ajustes`, o clic derecho en el icono → «Ajustes de taller».
+
 ## La interfaz (pastilla con ratón)
 
 El visor dibuja una pastilla arriba a la derecha, con cursor de flecha y manejable con el ratón. Desde
@@ -541,14 +567,15 @@ desde v0.79 lleva el **tono de la tarjeta**: fondo gris casi negro y el acento m
   gris con la bola a la derecha y `OFF`. Se pica en cualquier punto de la pista;
 * **Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — en modo de legado se llama **Plano de apoyo**;
 * **Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
-* tres **botones de solo icono** (v0.79; el tercero, v0.83), con el dibujo de las teselas de la
-  tarjeta. El que está puesto sale encendido y con filo; se pica otro y el visor cambia de tipo de 3D
-  sin salir del vídeo. Si la aplicación estaba guardada, se queda guardada con el tipo nuevo. En modo
-  de legado no salen:
+* dos **botones de solo icono**, con el dibujo de las teselas de la tarjeta. El que está puesto sale
+  encendido y con filo; se pica el otro y el visor cambia de tipo de 3D sin salir del vídeo. Si la
+  aplicación estaba guardada, se queda guardada con el tipo nuevo. En modo de legado no salen:
   * una imagen entera = **vídeo normal** (el conversor le pone el relieve);
-  * dos imágenes separadas = **vídeo dividido**, con el relieve que trae el propio vídeo;
-  * una imagen con la raya a trazos en medio = **vídeo dividido suavizado**: se usa solo una de sus
-    dos imágenes y el relieve lo pone el conversor (ver «Cuando el vídeo dividido se ve doble»);
+  * el otro = **vídeo dividido**. De normal va **suavizado** (una imagen con la raya a trazos en
+    medio: una sola de sus dos imágenes y el relieve del conversor; ver «Cuando el vídeo dividido se
+    ve doble»). El suavizado solo se quita en el panel de ajustes (v0.84); quitado, el botón lleva
+    las dos imágenes separadas y teje el vídeo con el relieve que trae;
+* el **engranaje** (v0.84), al final: abre el panel de ajustes por encima del vídeo;
 * debajo, la casilla **No volver a preguntar**, que solo sale cuando el vídeo lo lanzó el servicio: es la
   misma de la tarjeta de la orilla, pero dentro del vídeo. Marcada, esa aplicación pasa directa al 3D
   la próxima vez; **desmarcada, el servicio vuelve a preguntar**. El cambio se apunta en `serve.conf`
@@ -589,7 +616,7 @@ y su fantasma es la que el propio vídeo pone entre sus dos imágenes a esa prof
 de este panel nunca separa más de unos 4 mm; un vídeo dividido puede traer mucho más (medido por
 Rodolfo: 2–3 mm en lo normal, casi 4 cm en objetos muy cercanos), y eso no lo arregla ninguna
 calibración: 4 cm a 67 cm de distancia son 3,4°, que no se funden. Para esos vídeos está el tercer
-botón, **dividido suavizado**: el visor se queda con la imagen izquierda, estirada al ancho entero, y
+botón de vídeo dividido, que desde v0.84 va suavizado de fábrica: el visor se queda con la imagen izquierda, estirada al ancho entero, y
 el relieve lo pone el conversor de vídeo normal, dentro del presupuesto del panel. Se pierde el
 relieve propio del vídeo (queda el que estima la red); con el 3D apagado se ve un 2D de verdad en vez
 de las dos mitades. En `serve.conf` se guarda como `auto = app:suave`. El registro dice cada 20 s

@@ -12,6 +12,8 @@
 
 #include <cstdint>
 #include <memory>
+
+#include "vkui.h"
 #include <string>
 #include <utility>
 #include <vector>
@@ -47,6 +49,22 @@ public:
   /* Acción pulsada con el ratón desde la última llamada (vacía si nadie pulsó):
      "sbs", "tb", "flat" o "close". */
   std::string takeAction();
+
+  /* ---- el panel de ajustes (v0.84) --------------------------------------------------------
+     La misma capa, pero en el centro de la pantalla y con el panel flotante en vez de la tarjeta.
+     Quien lo ensena rellena las filas en `hud().state()` (src/preferencias.cpp), lo pone con
+     `showPanel` y va recogiendo los golpes del raton con `takeGolpe`. `grande` lo dibuja al
+     doble: es para cuando hay un video en 3D debajo y el panel se ve a traves de la lente. */
+  struct Golpe {
+    int tipo = 0;          /* un Hud::Hit: HitPanelCerrar, HitPanelPestana o HitPanelItem */
+    int item = -1, sub = 0;
+    float frac = 0.0f;     /* por donde va el deslizador */
+    bool soltado = true;   /* falso mientras se arrastra un deslizador */
+  };
+  Hud &hud();
+  void showPanel(bool grande);
+  void repaint();
+  bool takeGolpe(Golpe &g);
 
   /* Vuelca la tarjeta a un archivo PNG (para comprobar el dibujo sin el compositor). */
   bool dumpPng(const std::string &ruta, std::string *err = nullptr);

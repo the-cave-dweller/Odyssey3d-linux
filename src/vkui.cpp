@@ -150,6 +150,16 @@ bool Hud::buildAtlas(std::string *err) {
     cupo = subir(n, n, palomita, &icoPalomita_) && cupo;
     cupo = subir(n, n, anillo, &icoAnillo_) && cupo;
     cupo = subir(n, n, hueco, &hueco_) && cupo;
+    /* el engranaje (v0.84): un disco de ocho dientes con su agujero, para abrir los ajustes */
+    std::vector<uint8_t> engranaje((size_t)n * n);
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < n; i++) {
+        const float x = (float)i + 0.5f - 32.0f, y = (float)j + 0.5f - 32.0f;
+        const float r = std::hypot(x, y), t = std::cos(8.0f * std::atan2(y, x));
+        const float borde = 21.0f + 7.0f * std::max(0.0f, std::min(1.0f, (t + 0.15f) / 0.5f));
+        engranaje[(size_t)j * (size_t)n + (size_t)i] = cubre(std::max(r - borde, 9.5f - r));
+      }
+    cupo = subir(n, n, engranaje, &icoEngranaje_) && cupo;
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -223,7 +233,7 @@ bool Hud::buildAtlas(std::string *err) {
       if (cargar(cp, glyphs_[cp]) < 0) { okAll = false; break; }   /* atlas lleno */
     }
     /* fuera del rango latino-1: los signos que mas salen en titulos de videos */
-    for (unsigned cp : {0x2014u, 0x2013u, 0x2026u, 0x2018u, 0x2019u, 0x201Cu, 0x201Du, 0x20ACu, 0x00A9u}) {
+    for (unsigned cp : {0x2014u, 0x2013u, 0x2026u, 0x2018u, 0x2019u, 0x201Cu, 0x201Du, 0x20ACu, 0x00A9u, 0x2122u}) {
       Glyph gl;
       if (cargar(cp, gl) != 0) continue;
       extra_.emplace_back(cp, gl);
@@ -247,6 +257,16 @@ bool Hud::buildAtlas(std::string *err) {
 /* ------------------------------------------------------------ dibujado ------------------------------------------------------------ */
 
 void Hud::quad(Rect r, Rect uv, float cr, float cg, float cb, float ca) {
+  /* con el recorte puesto (la lista del panel, que corre) el cuadro se corta contra su caja y las
+     coordenadas del atlas se cortan en la misma proporcion */
+  if (hayRecorte_) {
+    const float x0 = std::max(r.x, recorte_.x), y0 = std::max(r.y, recorte_.y);
+    const float x1 = std::min(r.x + r.w, recorte_.x + recorte_.w), y1 = std::min(r.y + r.h, recorte_.y + recorte_.h);
+    if (x1 <= x0 || y1 <= y0 || r.w <= 0.0f || r.h <= 0.0f) return;
+    const float fx0 = (x0 - r.x) / r.w, fx1 = (x1 - r.x) / r.w, fy0 = (y0 - r.y) / r.h, fy1 = (y1 - r.y) / r.h;
+    uv = {uv.x + uv.w * fx0, uv.y + uv.h * fy0, uv.w * (fx1 - fx0), uv.h * (fy1 - fy0)};
+    r = {x0, y0, x1 - x0, y1 - y0};
+  }
   /* dos triángulos en forma de tira: 6 vértices */
   const float X[6] = {r.x, r.x + r.w, r.x, r.x + r.w, r.x, r.x + r.w};
   const float Y[6] = {r.y, r.y, r.y + r.h, r.y + r.h, r.y + r.h, r.y};
@@ -451,7 +471,7 @@ void Hud::begin(int w, int h, float altoLogico) {
         : relacion > 0.25f ? std::max(1.0f, std::min(2.0f, relacion))
                            : std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
   const int vw = (int)std::lround((float)w / sc_), vh = (int)std::lround((float)h / sc_);
-  if (!st_.overlayOn && !st_.ask) return;
+  if (!st_.overlayOn && !st_.ask && !st_.panel) return;
 
   /* v0.79: el acento es el morado del paisaje de la tarjeta (antes verde) y el fondo de la pastilla
      es el gris casi negro de la tarjeta: las dos piezas se ven de la misma familia. */
@@ -467,6 +487,7 @@ void Hud::begin(int w, int h, float altoLogico) {
      la linea de abajo a la izquierda), el letrero de la lente encima de la pastilla y los avisos
      de teclas repartidos, que ahora caben en un renglon. Sigue RECTA, como la pidio Rodolfo. */
   chkRecordar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  btnEngranaje_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnNormal_ = btnDividido_ = btnSuave_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
@@ -477,11 +498,10 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
        Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
     const bool hayModo = st_.modoVisible && !leg;
-    /* tres botones de 48 con 8 de aire: 160. Con la casilla manda lo que mida su letra si es mas */
-    const float anchoBloque = hayModo ? std::max(160.0f, st_.recordarVisible ? anchoRec : 0.0f)
-                                      : (st_.recordarVisible ? anchoRec : 0.0f);
+    const float anchoBloque = st_.recordarVisible ? anchoRec : (hayModo ? 128.0f : 0.0f);
     float pw = aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
+    if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
     pw = std::min(pw, (float)vw - 48.0f);
     const float ph = 76.0f;
     panelW_ = pw;
@@ -532,36 +552,47 @@ void Hud::begin(int w, int h, float altoLogico) {
     slider(&popTrack_, &popKnob_, "Salida", (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
 
     const float bloqueX = popTrack_.x + anchoDes + 26.0f;
-    const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + aire <= x0 + pw + 0.5f;
+    const float sitioEngranaje = st_.engranaje ? 44.0f : 0.0f;
+    const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + sitioEngranaje + aire <= x0 + pw + 0.5f;
+    /* ---- el engranaje: abre el panel de ajustes por encima del video (v0.84) ---- */
+    if (st_.engranaje) {
+      btnEngranaje_ = {x0 + pw - aire - 30.0f, y0 + 23.0f, 30.0f, 30.0f};
+      const bool hov = btnEngranaje_.inside(mx_, my_);
+      if (hov) mask9(btnEngranaje_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+      icono({btnEngranaje_.x + 4.0f, btnEngranaje_.y + 4.0f, 22.0f, 22.0f}, icoEngranaje_, ink[0], ink[1], ink[2],
+            hov ? 1.0f : 0.78f);
+    }
 
-    /* ---- los botones de icono: video normal, video dividido y dividido suavizado ----
+    /* ---- los dos botones de icono: video normal y video dividido ----
        Sin letra, con el dibujo de las teselas de la tarjeta. El que esta puesto sale encendido y
-       con filo; los otros, apagados. Se pica otro y el visor cambia de tipo de 3D sin salir.
-         - una imagen entera            = video normal (el conversor le pone el relieve)
-         - dos imagenes separadas       = video dividido, con el relieve que trae
-         - una imagen con la raya en medio = video dividido SUAVIZADO (v0.83): se usa una sola de
-           sus dos imagenes y el relieve lo pone el conversor, para los videos cuyo relieve propio
-           se sale de lo que aguanta el panel (objetos muy cerca que se ven dobles). */
+       con filo; el otro, apagado. Se pica el otro y el visor cambia de tipo de 3D sin salir.
+         - una imagen entera = video normal (el conversor le pone el relieve)
+         - el otro es el video dividido. De normal va SUAVIZADO (una imagen con la raya a trazos en
+           medio: se usa una sola de sus dos imagenes y el relieve lo pone el conversor); si en los
+           ajustes del programa se quito el suavizado, lleva las dos imagenes separadas y teje el
+           video con el relieve que trae. Desde v0.84 no hay tercer boton: el suavizado solo se
+           quita en los ajustes (asi lo pidio Rodolfo). */
     if (cabeBloque && hayModo) {
-      const float bw = (anchoBloque - 16.0f) / 3.0f, bh = 30.0f;
+      const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
       const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
       btnNormal_ = {bloqueX, by, bw, bh};
       btnDividido_ = {bloqueX + bw + 8.0f, by, bw, bh};
-      btnSuave_ = {bloqueX + 2.0f * (bw + 8.0f), by, bw, bh};
-      const Rect bs[3] = {btnNormal_, btnDividido_, btnSuave_};
-      for (int i = 0; i < 3; i++) {
+      const Rect bs[2] = {btnNormal_, btnDividido_};
+      for (int i = 0; i < 2; i++) {
         const Rect &b = bs[i];
-        const bool puesto = (st_.modo3d == i + 1), hov = b.inside(mx_, my_);
+        const bool puesto = i == 0 ? st_.modo3d == 1 : st_.modo3d >= 2, hov = b.inside(mx_, my_);
         const float fondo[3] = {puesto ? 0.26f : (hov ? 0.23f : 0.17f), puesto ? 0.25f : (hov ? 0.235f : 0.175f),
                                 puesto ? 0.36f : (hov ? 0.27f : 0.20f)};
         if (puesto) solid(b.x - 1.5f, b.y - 1.5f, b.w + 3.0f, b.h + 3.0f, ink[0], ink[1], ink[2], 0.85f);
         solid(b.x, b.y, b.w, b.h, fondo[0], fondo[1], fondo[2], 1.0f);
         const float luz = puesto ? 1.0f : (hov ? 0.80f : 0.55f);
-        const float iw = std::min(40.0f, b.w - 8.0f), ih = 22.0f;
-        const float ix = b.x + (b.w - iw) * 0.5f, iy = b.y + (b.h - ih) * 0.5f;
+        const float iw = 42.0f, ih = 22.0f, ix = b.x + (b.w - iw) * 0.5f, iy = b.y + (b.h - ih) * 0.5f;
+        /* el dibujo del segundo sigue a lo que esta puesto de verdad si ya es un dividido (2 = tal
+           cual, 3 = suavizado); si no, a lo que haria al picarlo */
+        const bool suave = st_.modo3d == 3 || (st_.modo3d != 2 && st_.suavizado);
         if (i == 0) {
           paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo);
-        } else if (i == 1) {
+        } else if (!suave) {
           const float mitad = (iw - 3.0f) * 0.5f;
           paisaje({ix, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
           paisaje({ix + mitad + 3.0f, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
@@ -594,7 +625,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
     const std::string teclas = std::string("Ctrl+Shift+  1 el 3D · 3/4 ") + (leg ? "plano" : "profundidad") +
                                " · 5/6 salida · F1 oculta · Esc sale";
-    const float cabe = pw - 2.0f * aire;
+    const float cabe = pw - 2.0f * aire - sitioEngranaje;
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
   }
@@ -706,6 +737,8 @@ void Hud::begin(int w, int h, float altoLogico) {
          ink[2], hd ? 1.0f : 0.90f);
   }
 
+  if (st_.panel) dibujaPanel(vw, vh);
+
   /* ---- el aviso del momento, colgado debajo de la pastilla ----
      Antes era una linea abajo a la izquierda, y estaba colocada con el alto REAL de la ventana en
      vez del virtual: en el panel de 2160 (escala 2) caia fuera de la pantalla y no se veia nunca.
@@ -718,6 +751,258 @@ void Hud::begin(int w, int h, float altoLogico) {
     solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.115f, 0.12f, 0.135f, 0.90f);
     text(info_, der - tw - 10.0f, arriba + 5.0f, tam, ink[0], ink[1], ink[2], 0.92f);
   }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   El panel de ajustes (v0.84): una tarjeta translucida de esquinas redondas en el centro de la
+   pantalla, encima de lo que haya (el escritorio, o el video en 3D). Arriba el nombre, las pestanas
+   y el aspa; en medio la lista de filas, que corre con la rueda; abajo la frase de lo ultimo que se
+   cambio. Los colores son los de la tarjeta de la orilla y la pastilla.
+   --------------------------------------------------------------------------------------------- */
+void Hud::dibujaPanel(int vw, int vh) {
+  const float accent[3] = {0.46f, 0.37f, 0.92f};
+  const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
+  const float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
+  const float pw = std::min(820.0f, (float)vw - 48.0f), ph = std::min(600.0f, (float)vh - 48.0f);
+  const float px = std::floor(((float)vw - pw) * 0.5f), py = std::floor(((float)vh - ph) * 0.5f);
+  panelCaja_ = {px, py, pw, ph};
+  mask9(panelCaja_, 1, 22.0f, 0.42f, 0.43f, 0.50f, 0.80f);                                   /* el filo */
+  mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.085f, 0.09f, 0.11f, 0.86f);   /* translucido */
+
+  /* cabecera: nombre, pestanas en pildora y el aspa */
+  const float tx0 = text("OdysseyVK", px + 28.0f, py + 24.0f, 20.0f, ink[0], ink[1], ink[2], 1.0f);
+  panelPestanas_.clear();
+  float tx = tx0 + 26.0f;
+  for (size_t i = 0; i < st_.pestanas.size(); i++) {
+    const float w = textWidth(st_.pestanas[i], 14.0f) + 32.0f;
+    const Rect t{tx, py + 20.0f, w, 32.0f};
+    panelPestanas_.push_back(t);
+    const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_);
+    if (puesta) mask9(t, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
+    else if (hov) mask9(t, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.10f);
+    text(st_.pestanas[i], t.x + t.w * 0.5f, t.y + 7.0f, 14.0f, ink[0], ink[1], ink[2], puesta || hov ? 1.0f : 0.72f,
+         true);
+    tx += w + 8.0f;
+  }
+  panelCerrar_ = {px + pw - 20.0f - 32.0f, py + 20.0f, 32.0f, 32.0f};
+  const bool hc = panelCerrar_.inside(mx_, my_);
+  if (hc) mask9(panelCerrar_, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+  icono({panelCerrar_.x + 6.0f, panelCerrar_.y + 6.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2],
+        hc ? 1.0f : 0.78f);
+  solid(px + 20.0f, py + 68.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
+
+  /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */
+  panelCuerpo_ = {px + 12.0f, py + 76.0f, pw - 24.0f, ph - 76.0f - 44.0f};
+  const float izq = panelCuerpo_.x + 16.0f, der = panelCuerpo_.x + panelCuerpo_.w - 22.0f;
+  auto alto = [](const ItemPanel &it) {
+    switch (it.tipo) {
+      case ItemPanel::Seccion: return 38.0f;
+      case ItemPanel::Opciones: return 54.0f;
+      case ItemPanel::Fila: return 42.0f;
+      case ItemPanel::Juego: return 56.0f;
+      case ItemPanel::Nota: return 32.0f;
+      default: return it.nota.empty() ? 46.0f : 60.0f;
+    }
+  };
+  contenidoAlto_ = 0.0f;
+  for (const ItemPanel &it : st_.items) contenidoAlto_ += alto(it);
+  const float tope = std::max(0.0f, contenidoAlto_ - panelCuerpo_.h);
+  st_.corrida = std::max(0.0f, std::min(tope, st_.corrida));
+  zonas_.assign(st_.items.size(), ZonaItem{});
+  recorte_ = panelCuerpo_;
+  hayRecorte_ = true;
+  float y = panelCuerpo_.y - st_.corrida;
+  const bool dentro = panelCuerpo_.inside(mx_, my_);
+  for (size_t i = 0; i < st_.items.size(); i++) {
+    const ItemPanel &it = st_.items[i];
+    const float h = alto(it);
+    ZonaItem &z = zonas_[i];
+    z.caja = {panelCuerpo_.x + 4.0f, y, panelCuerpo_.w - 14.0f, h};
+    if (y + h < panelCuerpo_.y || y > panelCuerpo_.y + panelCuerpo_.h) {   /* fuera de la vista */
+      z.caja = {-10.0f, -10.0f, 0.0f, 0.0f};
+      y += h;
+      continue;
+    }
+    const bool hov = dentro && z.caja.inside(mx_, my_);
+    const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego;
+    if (hov && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
+      mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
+    const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
+    switch (it.tipo) {
+      case ItemPanel::Seccion:
+        text(it.rotulo, izq, y + 17.0f, 11.5f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
+        break;
+      case ItemPanel::Nota:
+        text(it.rotulo, izq, y + 8.0f, 12.5f, dim[0], dim[1], dim[2], 0.85f);
+        break;
+      case ItemPanel::Interruptor: {
+        text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
+        const Rect sw{der - 46.0f, y + (h - 26.0f) * 0.5f, 46.0f, 26.0f};
+        if (it.valor) mask9(sw, 0, 13.0f, accent[0], accent[1], accent[2], 0.98f);
+        else mask9(sw, 0, 13.0f, 0.28f, 0.29f, 0.33f, 0.98f);
+        mask9({it.valor ? sw.x + sw.w - 23.0f : sw.x + 3.0f, sw.y + 3.0f, 20.0f, 20.0f}, 0, 10.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+        break;
+      }
+      case ItemPanel::Opciones: {
+        text(it.rotulo, izq, y + 17.0f, 15.0f, ink[0], ink[1], ink[2], 1.0f);
+        float total = 6.0f;
+        for (const std::string &o : it.opciones) total += textWidth(o, 13.5f) + 26.0f;
+        const Rect caja{der - total, y + 10.0f, total, 34.0f};
+        mask9(caja, 0, 17.0f, 0.17f, 0.175f, 0.21f, 0.98f);
+        float ox = caja.x + 3.0f;
+        for (size_t k = 0; k < it.opciones.size(); k++) {
+          const float w = textWidth(it.opciones[k], 13.5f) + 26.0f;
+          const Rect o{ox, caja.y + 3.0f, w, 28.0f};
+          z.subs.push_back(o);
+          const bool puesta = (int)k == it.elegido, ho = dentro && o.inside(mx_, my_);
+          if (puesta) mask9(o, 0, 14.0f, accent[0], accent[1], accent[2], 0.98f);
+          else if (ho) mask9(o, 0, 14.0f, 1.0f, 1.0f, 1.0f, 0.10f);
+          text(it.opciones[k], o.x + o.w * 0.5f, o.y + 5.5f, 13.5f, ink[0], ink[1], ink[2], puesta || ho ? 1.0f : 0.70f,
+               true);
+          ox += w;
+        }
+        break;
+      }
+      case ItemPanel::Deslizador: {
+        text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
+        const float anchoPista = 220.0f, cy = y + h * 0.5f;
+        z.pista = {der - 70.0f - anchoPista, cy - 2.0f, anchoPista, 4.0f};
+        const float f = std::max(0.0f, std::min(1.0f, it.frac)), kx = z.pista.x + f * anchoPista;
+        mask9(z.pista, 0, 2.0f, 0.30f, 0.31f, 0.36f, 0.98f);
+        mask9({z.pista.x, z.pista.y, kx - z.pista.x, 4.0f}, 0, 2.0f, accent[0], accent[1], accent[2], 1.0f);
+        mask9({kx - 9.0f, cy - 9.0f, 18.0f, 18.0f}, 0, 9.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+        text(it.valorTexto, der - textWidth(it.valorTexto, 13.5f), cy - 9.0f, 13.5f, ink[0], ink[1], ink[2], 0.95f);
+        break;
+      }
+      case ItemPanel::Fila: {
+        text(it.rotulo, izq, y + 11.0f, 14.5f, ink[0], ink[1], ink[2], 1.0f);
+        text(it.valorTexto, izq + 230.0f, y + 12.0f, 13.0f, dim[0], dim[1], dim[2], 0.90f);
+        if (it.quitar) {
+          const Rect q{der - 28.0f, y + 7.0f, 28.0f, 28.0f};
+          z.subs.push_back(q);
+          const bool hq = dentro && q.inside(mx_, my_);
+          if (hq) mask9(q, 0, 14.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+          icono({q.x + 7.0f, q.y + 7.0f, 14.0f, 14.0f}, icoCerrar_, ink[0], ink[1], ink[2], hq ? 1.0f : 0.55f);
+        }
+        break;
+      }
+      case ItemPanel::Juego: {
+        /* la ficha de color con la inicial: el color sale del nombre, siempre el mismo para cada juego */
+        unsigned semilla = 2166136261u;
+        for (unsigned char ch : it.rotulo) semilla = (semilla ^ ch) * 16777619u;
+        const float tono = (float)(semilla % 360u) / 60.0f, xq = 1.0f - std::fabs(std::fmod(tono, 2.0f) - 1.0f);
+        float cr = 0.0f, cg = 0.0f, cb = 0.0f;
+        switch ((int)tono) {
+          case 0: cr = 1, cg = xq; break;
+          case 1: cr = xq, cg = 1; break;
+          case 2: cg = 1, cb = xq; break;
+          case 3: cg = xq, cb = 1; break;
+          case 4: cr = xq, cb = 1; break;
+          default: cr = 1, cb = xq; break;
+        }
+        const Rect ficha{izq, y + 8.0f, 40.0f, 40.0f};
+        mask9(ficha, 1, 10.0f, 0.22f + 0.38f * cr, 0.20f + 0.34f * cg, 0.30f + 0.42f * cb, 1.0f);
+        size_t n = 0;
+        nextCp(it.rotulo, n);
+        text(it.rotulo.substr(0, n), ficha.x + 20.0f, ficha.y + 9.0f, 19.0f, 1.0f, 1.0f, 1.0f, 0.96f, true);
+        text(it.rotulo, izq + 56.0f, y + 17.0f, 16.0f, ink[0], ink[1], ink[2], 1.0f);
+        if (hov) {
+          const float w = textWidth("Jugar", 13.5f) + 30.0f;
+          const Rect b{der - w, y + 13.0f, w, 30.0f};
+          mask9(b, 0, 15.0f, accent[0], accent[1], accent[2], 1.0f);
+          text("Jugar", b.x + b.w * 0.5f, b.y + 6.5f, 13.5f, 1.0f, 1.0f, 1.0f, 1.0f, true);
+        } else if (!it.valorTexto.empty()) {
+          text(it.valorTexto, der - textWidth(it.valorTexto, 12.0f), y + 20.0f, 12.0f, dim[0], dim[1], dim[2], 0.80f);
+        }
+        break;
+      }
+    }
+    y += h;
+  }
+  hayRecorte_ = false;
+  /* la barrita de la derecha, solo si hay mas lista que caja */
+  if (tope > 0.0f) {
+    const float largo = std::max(30.0f, panelCuerpo_.h * panelCuerpo_.h / contenidoAlto_);
+    const float sy = panelCuerpo_.y + (panelCuerpo_.h - largo) * (st_.corrida / tope);
+    mask9({panelCuerpo_.x + panelCuerpo_.w - 7.0f, sy, 4.0f, largo}, 0, 2.0f, 1.0f, 1.0f, 1.0f, 0.28f);
+  }
+  /* el pie */
+  solid(px + 20.0f, py + ph - 42.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
+  if (!st_.pie.empty()) text(st_.pie, px + 28.0f, py + ph - 30.0f, 12.5f, ink[0], ink[1], ink[2], 0.88f);
+  if (!st_.version.empty())
+    text(st_.version, px + pw - 28.0f - textWidth(st_.version, 12.0f), py + ph - 30.0f, 12.0f, dim[0], dim[1], dim[2],
+         0.75f);
+}
+
+bool Hud::panelBounds(float *x, float *y, float *w, float *h) const {
+  if (!st_.panel || panelCaja_.w <= 0.0f) return false;
+  if (x) *x = panelCaja_.x * sc_;
+  if (y) *y = panelCaja_.y * sc_;
+  if (w) *w = panelCaja_.w * sc_;
+  if (h) *h = panelCaja_.h * sc_;
+  return true;
+}
+
+Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac) const {
+  if (item) *item = -1;
+  if (sub) *sub = 0;
+  if (frac) *frac = 0.0f;
+  if (!st_.panel) return hit(mxa, mya);
+  const float mx = mxa / sc_, my = mya / sc_;
+  if (!panelCaja_.inside(mx, my)) return HitNone;
+  if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
+  for (size_t i = 0; i < panelPestanas_.size(); i++)
+    if (panelPestanas_[i].inside(mx, my)) {
+      if (sub) *sub = (int)i;
+      return HitPanelPestana;
+    }
+  if (!panelCuerpo_.inside(mx, my)) return HitPanel;
+  for (size_t i = 0; i < zonas_.size() && i < st_.items.size(); i++) {
+    const ZonaItem &z = zonas_[i];
+    if (z.caja.w <= 0.0f || !z.caja.inside(mx, my)) continue;
+    const ItemPanel &it = st_.items[i];
+    if (item) *item = (int)i;
+    switch (it.tipo) {
+      case ItemPanel::Interruptor:
+      case ItemPanel::Juego:
+        return HitPanelItem;
+      case ItemPanel::Opciones:
+        for (size_t k = 0; k < z.subs.size(); k++)
+          if (z.subs[k].inside(mx, my)) {
+            if (sub) *sub = (int)k;
+            return HitPanelItem;
+          }
+        return HitPanel;
+      case ItemPanel::Deslizador: {
+        const Rect p{z.pista.x - 12.0f, z.caja.y, z.pista.w + 24.0f, z.caja.h};
+        if (!p.inside(mx, my)) return HitPanel;
+        if (frac) *frac = std::max(0.0f, std::min(1.0f, (mx - z.pista.x) / std::max(1.0f, z.pista.w)));
+        return HitPanelItem;
+      }
+      case ItemPanel::Fila:
+        if (!z.subs.empty() && z.subs[0].inside(mx, my)) {
+          if (sub) *sub = 1;
+          return HitPanelItem;
+        }
+        return HitPanel;
+      default:
+        return HitPanel;
+    }
+  }
+  return HitPanel;
+}
+
+float Hud::fracDeslizador(int item, float mxa) const {
+  if (item < 0 || (size_t)item >= zonas_.size()) return 0.0f;
+  const Rect &p = zonas_[(size_t)item].pista;
+  return std::max(0.0f, std::min(1.0f, (mxa / sc_ - p.x) / std::max(1.0f, p.w)));
+}
+
+void Hud::correr(float cuanto) {
+  const float tope = std::max(0.0f, contenidoAlto_ - panelCuerpo_.h);
+  st_.corrida = std::max(0.0f, std::min(tope, st_.corrida + cuanto));
 }
 
 bool Hud::askBounds(float *x, float *y, float *w, float *h) const {
@@ -757,6 +1042,7 @@ bool Hud::huecoDeLaPastilla(float *x, float *y, float *w, float *h) const {
 
 Hud::Hit Hud::hit(float mxa, float mya) const {
   const float mx = mxa / sc_, my = mya / sc_;
+  if (st_.panel) return hitDetalle(mxa, mya, nullptr, nullptr, nullptr);
   if (st_.ask) {
     if (askClose_.inside(mx, my)) return HitAskClose;
     if (askAyuda_.inside(mx, my)) return HitAskAyuda;
@@ -773,8 +1059,8 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (pt.inside(mx, my)) return HitPopout;
   if (btnNormal_.inside(mx, my)) return HitModoNormal;
   if (btnDividido_.inside(mx, my)) return HitModoDividido;
-  if (btnSuave_.inside(mx, my)) return HitModoSuave;
   if (chkRecordar_.inside(mx, my)) return HitRecordar;
+  if (btnEngranaje_.inside(mx, my)) return HitEngranaje;
   return HitNone;
 }
 

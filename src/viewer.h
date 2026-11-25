@@ -55,6 +55,9 @@ struct ViewerOpts {
      de tejerlas tal cual se toma solo la izquierda y el relieve lo pone el conversor de video
      normal. Es para los videos cuyo relieve propio se sale de lo que aguanta este panel. */
   bool suave = false;
+  /* Que hace el boton de «video dividido» de la pastilla (v0.84): de normal lo pone SUAVIZADO; con
+     `--sin-suavizado` (suavizado = no en los ajustes) lo teje tal cual, con el relieve que trae. */
+  bool suavizado = true;
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */

@@ -3,6 +3,54 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Panel de ajustes flotante, lanzador de juegos y pastilla de dos botones (v0.84)
+
+- Rodolfo, con la 0.83: «Muchísimo mejor». Pidió (1) dejar en la pastilla solo el botón del conversor
+  y el del suavizado, y que desactivar el suavizado solo sea posible en la configuración normal del
+  programa; (2) rediseñar los ajustes como una interfaz transparente flotante de bordes curvos sobre
+  la imagen normal del monitor, que se abra con un engranaje en el hub del modo 3D o con el icono
+  del sistema, sin las funciones avanzadas que sobren; (3) empezar a integrar ahí un lanzador de
+  juegos que lea la biblioteca de Steam.
+- **Pastilla** (`src/vkui.cpp`, `src/vkview.cpp`): dos botones, vídeo normal y vídeo dividido. El
+  dividido va suavizado; clave nueva `dividido_suavizado = no` para quitarlo (`suavizado` a secas ya
+  era el filtro del rastreo: en su serve.conf vale 0,35). El servicio lanza «dividido» suavizado o
+  tal cual según esa clave (también lo que estaba guardado como `sbs` o `suave`) y se lo pasa al
+  visor (`--sin-suavizado`); el cambio desde el panel llega al visor abierto por el canal de ajuste.
+  Engranaje al final de la pastilla.
+- **Panel de ajustes** (`odysseyvk ajustes`): `src/vkui.cpp` lo dibuja (filas genéricas: sección,
+  interruptor, opciones, deslizador, fila con aspa, juego; lista que corre con recorte),
+  `src/overlay.cpp` lo pone en una capa superpuesta centrada (ratón, arrastre de deslizadores, rueda)
+  y `src/preferencias.cpp` dice qué filas hay y qué hace cada una. Un fichero con el número del
+  proceso hace de interruptor: abrirlo otra vez lo cierra.
+- **Juegos** (`prefs::juegosSteam`, `prefs::lanzarJuego`): las bibliotecas de `libraryfolders.vdf`, los
+  `appmanifest_*.acf` instalados, sin herramientas, ordenados por `LastPlayed`.
+- `src/main.cpp`: el servicio relee de serve.conf, cuando cambia, las claves que toca el panel;
+  `ctl ajuste` acepta órdenes de palabra. `odysseyvk.desktop`: el icono abre el panel; acciones
+  «Juegos» y «Ajustes de taller» (la ventana Qt de siempre, que no se toca).
+- MEDIDO sin panel:
+  - botón de dividido en el compositor aparte: de normal pone el suavizado; con `--sin-suavizado`,
+    lado a lado tal cual; `ctl ajuste dividido_suavizado=no` con el suavizado puesto lo quita al
+    momento (el registro: «los ajustes quitan el suavizado» y el conversor se apaga);
+  - lógica del panel en una carpeta aparte con copia de su serve.conf: los 11 golpes (modo, los
+    cuatro interruptores, los dos deslizadores, olvidar zen) dejan cada clave en su sitio; arrastrar
+    un deslizador no escribe hasta soltar; `suavizado = 0,35` y el resto, intactos;
+  - zonas de ratón (`ODYSSEYVK_HUD_PANEL=0|1 odysseyvk ctl hud`): opciones 4 180 celdas con las tres
+    vistas, interruptores ~20 800, deslizadores 6 520 con recorrido 0,00..1,00, cada juego ~19 300,
+    aspa 462, pestañas 1 155 / 1 092; la rueda corre la lista 90 puntos;
+  - biblioteca: 5 juegos (Harold Halibut, Stray, Cyberpunk 2077, Spyro Reignited Trilogy, Ninja
+    Gaiden 2 Black); Proton, el Steam Linux Runtime y los redistribuibles, fuera.
+- MEDIDO en su escritorio, sin sesión 3D abierta (un segundo en pantalla): `odysseyvk ajustes --dump`
+  puso el panel en DP-4, el volcado del lienzo real mide 1490 × 1094 y se ve bien; un segundo
+  `odysseyvk ajustes` lo cerró y quitó el fichero del proceso.
+- **No probado**: los clics, el arrastre y la rueda con el ratón de verdad; el panel sobre un vídeo en
+  3D (al doble) y el engranaje; lanzar un juego; que el servicio relea al cambiar el fichero (se
+  compila y es corto, pero no se corrió); la acción «Juegos» del icono.
+- Dos errores míos en la prueba: una orden encadenada iba a correr el programa de prueba de la lógica
+  contra su serve.conf real (la frenó el sistema; no se ejecutó), y el compositor aparte se quedó
+  colgado cuando el cliente salió enseguida (`tools/prueba-aparte.sh` lleva ahora `timeout -k 3`; su
+  proceso se llama `gamescope-wl`, no `gamescope`).
+- Pendiente del lanzador: carátulas, elegir el 3D por juego y arrancar el 3D solo.
+
 ## Vídeo dividido suavizado, medidor de separación y diafonía pareja (v0.83)
 
 - Rodolfo, con la 0.82: la franja de la barra «es mucho mejor, ya se puede controlar, está quieta».

@@ -36,7 +36,7 @@ mkdir -p "$estado"
 
 # La guarda de dentro: si por lo que sea el visor no fuera a conectarse al compositor aparte (y si
 # al escritorio de verdad), no se lanza.
-exec timeout "$tope" gamescope --backend headless -W 3840 -H 2160 --expose-wayland -- \
+exec timeout -k 3 "$tope" gamescope --backend headless -W 3840 -H 2160 --expose-wayland -- \
   env XDG_STATE_HOME="$estado" "${ambiente[@]}" \
   sh -c 'case "$WAYLAND_DISPLAY" in gamescope-*) ;; *) echo "esto NO es el compositor aparte: no se lanza nada" >&2; exit 9 ;; esac; exec "$0" "$@"' \
   "$bin" test --windowed --no-panel --no-lens --no-scaler "$@"

@@ -64,6 +64,9 @@ class Lector {
    `mono = auto|si|no` eligen la camara del Facetracking para la proxima sesion. El visor pasa de esas
    lineas en silencio (si no, las reportaria como un numero que no conoce). */
 bool esOrden(const std::string &nombre);
+/* Las ordenes de PALABRA que atiende el visor (`capa = ocultar`, `dividido_suavizado = no`, ...): no
+   son numeros y van por el mismo fichero. */
+bool esPalabra(const std::string &nombre);
 
 /* El vigilante cuenta que sesion tiene abierta (ninguna / video / escritorio), en que pantalla y con
    que modo, en su propio fichero. La ventana de ajustes lo lee para saber si su boton esta puesto. */
@@ -140,6 +143,8 @@ std::string rutaRecordar();
 /* la carpeta donde el visor deja, a pedido (`odysseyvk ctl barra guardar`), copias chicas del cuadro
    para afinar el detector de la barra del reproductor (src/barra.h) */
 std::string rutaBarra();
+/* el proceso del panel de ajustes abierto (`odysseyvk ajustes`): abrirlo otra vez lo cierra */
+std::string rutaPanel();
 bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err = nullptr);
 bool tomarRecordar(std::string &app, std::string &modo);
 bool fijarAutoEnServeConf(const std::string &app, const std::string &modo, std::string *err = nullptr);

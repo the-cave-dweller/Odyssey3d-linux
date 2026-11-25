@@ -55,6 +55,7 @@ struct wl_region;
 #include <mutex>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 static void vkGlfwError(int code, const char *desc) { std::fprintf(stderr, "[glfw %d] %s\n", code, desc); }
 
@@ -119,6 +120,7 @@ struct VkUi {
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
   int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
+  bool suavizado = true;     /* el boton de dividido lo pone suavizado (los ajustes del programa lo quitan) */
   std::string modoElegido;   /* "conv" / "sbs" / "tb": con que tipo de 3D se guarda el «no volver a preguntar» */
   /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nativa
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
@@ -460,7 +462,9 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       /* los botones de icono de la pastilla: cambiar de tipo de 3D sin salir del video. El cambio
          de verdad (encender o apagar el conversor, darle la imagen entera o solo la izquierda) lo
          hace el bucle del visor, que es quien tiene la red. */
-      const int modo = hit == Hud::HitModoNormal ? 1 : (hit == Hud::HitModoDividido ? 2 : 3);
+      /* el boton de video dividido lo pone suavizado, salvo que los ajustes del programa digan otra
+         cosa (v0.84). HitModoSuave ya no tiene boton: queda para la prueba por nombre. */
+      const int modo = hit == Hud::HitModoNormal ? 1 : (hit == Hud::HitModoSuave ? 3 : (ui.suavizado ? 3 : 2));
       if (st.modo3d == modo && st.weaveOn) break;   /* ya estaba en ese */
       st.ask = false;
       st.weaveOn = true;
@@ -471,7 +475,8 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
         st.depth = 50;
         st.popout = 0;
       }
-      static const char *kClave[] = {"", "conv", "sbs", "suave"};
+      /* el dividido se guarda siempre como `sbs`: que salga suavizado o no lo deciden los ajustes */
+      static const char *kClave[] = {"", "conv", "sbs", "sbs"};
       static const char *kNombre[] = {"", "video normal (2D a 3D)", "video dividido (lado a lado, su propio relieve)",
                                       "video dividido suavizado (una imagen y el relieve del conversor)"};
       static const char *kAviso[] = {"", "vídeo normal", "vídeo dividido: el relieve del propio vídeo",
@@ -489,6 +494,28 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
         else
           std::fprintf(stderr, "[recordar] %s\n", e.c_str());
       }
+      break;
+    }
+    case Hud::HitEngranaje: {
+      /* el engranaje de la pastilla: el panel de ajustes, por encima del video. Es otro proceso
+         (la capa superpuesta de la tarjeta de la orilla); se suelta del todo para que viva por su
+         cuenta, y pulsarlo otra vez lo cierra. */
+      char propio[512] = {0};
+      const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
+      const std::string exe = n > 0 ? std::string(propio, (size_t)n) : std::string("odysseyvk");
+      const pid_t pid = ::fork();
+      if (pid == 0) {
+        ::setsid();
+        if (::fork() != 0) ::_exit(0);
+        ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
+        ::_exit(127);
+      }
+      if (pid > 0) {
+        int stHijo = 0;
+        ::waitpid(pid, &stHijo, 0);
+      }
+      std::printf("[pastilla] engranaje: el panel de ajustes\n");
+      std::fflush(stdout);
       break;
     }
     case Hud::HitRecordar: {
@@ -1229,6 +1256,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.modoElegido = !opts.recordarModo.empty() ? opts.recordarModo
                    : (opts.suave ? "suave" : (opts.conver ? "conv" : (opts.topBottom ? "tb" : "sbs")));
   ui.hud.state().recordar = opts.recordado;
+  ui.suavizado = opts.suavizado;
+  ui.hud.state().engranaje = !opts.noHud;
+  ui.hud.state().suavizado = opts.suavizado;
   ui.hud.state().ratonLibre = !opts.noPassthrough;
   /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
   if (opts.uiScale > 0.25f) {
@@ -1983,6 +2013,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               std::printf("[barra] se guardaran %d copias chicas del cuadro en %s\n", g_barraGuardar,
                           ajuste::rutaBarra().c_str());
               std::fflush(stdout);
+            }
+          }
+          /* `dividido_suavizado = si|no`: lo mandan los ajustes del programa. Cambia lo que hace el
+             boton de video dividido y, si ahora mismo se esta viendo un dividido, lo cambia al momento. */
+          const auto ordenSuave = palabras.find("dividido_suavizado");
+          if (ordenSuave != palabras.end()) {
+            const std::string v = strLower(ordenSuave->second);
+            const bool quiere = !(v == "no" || v == "0" || v == "off" || v == "apagar" || v == "quitar");
+            if (quiere != ui.suavizado) {
+              ui.suavizado = quiere;
+              ui.hud.state().suavizado = quiere;
+              std::printf("[formato] los ajustes %s el suavizado del video dividido\n", quiere ? "ponen" : "quitan");
+              std::fflush(stdout);
+              if (ui.hud.state().modo3d >= 2 && ui.hud.state().weaveOn) ui.modoPedido = quiere ? 3 : 2;
             }
           }
           const auto ordenVista = palabras.find("vista");

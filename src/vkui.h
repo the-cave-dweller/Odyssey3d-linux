@@ -30,6 +30,20 @@ struct HudVertex {
 
 class Hud {
 public:
+  /* Una fila del panel de ajustes (v0.84). El panel no sabe de ajustes: pinta las filas que le den y
+     dice cual se pico; que hace cada una lo decide quien lo ensena (src/preferencias.cpp). */
+  struct ItemPanel {
+    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota };
+    Tipo tipo = Nota;
+    std::string rotulo, nota;
+    std::string valorTexto;          /* a la derecha: el numero del deslizador, el modo de una fila... */
+    bool valor = false;              /* interruptor */
+    int elegido = 0;                 /* opciones */
+    std::vector<std::string> opciones;
+    float frac = 0.0f;               /* deslizador, 0..1 */
+    bool quitar = false;             /* fila con aspa para quitarla */
+  };
+
   struct State {
     bool overlayOn = true;
     bool weaveOn = true;
@@ -48,6 +62,20 @@ public:
        del conversor). */
     bool modoVisible = false;
     int modo3d = 1;
+    /* v0.84: la pastilla lleva solo DOS botones, video normal y video dividido. El dividido es el
+       suavizado salvo que en los ajustes del programa se haya quitado: `suavizado` dice cual de los
+       dos dibujos lleva ese boton (la imagen con la raya a trazos, o las dos imagenes separadas). */
+    bool suavizado = true;
+    /* el engranaje de la pastilla, que abre el panel de ajustes (solo lo pone el visor) */
+    bool engranaje = false;
+    /* ---- el panel de ajustes flotante (v0.84) ---- */
+    bool panel = false;
+    int pestana = 0;
+    std::vector<std::string> pestanas;
+    std::vector<ItemPanel> items;
+    float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
+    std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
+    std::string version;             /* "OdysseyVK 0.84", abajo a la derecha */
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -83,7 +111,12 @@ public:
     HitRecordar,       /* la casilla de «no volver a preguntar» de la pastilla */
     HitModoNormal,     /* los dos botones de icono de la pastilla: video normal ... */
     HitModoDividido,   /* ... video dividido ... */
-    HitModoSuave       /* ... y video dividido suavizado (v0.83) */
+    HitModoSuave,      /* ... y video dividido suavizado (v0.83) */
+    HitEngranaje,      /* el engranaje de la pastilla: abre el panel de ajustes */
+    HitPanel,          /* dentro del panel de ajustes, sobre nada que se pique */
+    HitPanelCerrar,
+    HitPanelPestana,   /* `sub` = cual */
+    HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -138,6 +171,18 @@ public:
      reales de la ventana (los mismos que llevan los vertices). Lo usa la superposicion
      de Wayland para recortar su ventana justo a esa esquina. */
   bool askBounds(float *x, float *y, float *w, float *h) const;
+  /* lo mismo para el panel de ajustes, y `flotanteBounds` da el que este puesto de los dos (el panel
+     manda): es la caja que la capa de Wayland recorta */
+  bool panelBounds(float *x, float *y, float *w, float *h) const;
+  bool flotanteBounds(float *x, float *y, float *w, float *h) const {
+    return st_.panel ? panelBounds(x, y, w, h) : askBounds(x, y, w, h);
+  }
+  /* El golpe con sus senas: que fila del panel, que parte de ella y por donde va el deslizador. */
+  Hit hitDetalle(float mx, float my, int *item, int *sub, float *frac) const;
+  /* arrastrando el deslizador de la fila `item`: la fraccion que corresponde a esa x del raton */
+  float fracDeslizador(int item, float mx) const;
+  /* la rueda del raton sobre la lista del panel (positivo = bajar) */
+  void correr(float cuanto);
   /* Cuanto mide una etiqueta con la fuente de la interfaz: para comprobar que el texto de un boton
      cabe en su caja sin mirar la pantalla (con la letra mal medida los rotulos se salian del recuadro). */
   float mideTexto(const std::string &s, float px) const { return textWidth(s, px); }
@@ -188,6 +233,10 @@ private:
      del video dividido), `luz` lo apaga (el boton que no esta puesto) y `radio` > 0 le redondea las
      esquinas tapandolas con el color `fondo` */
   void paisaje(Rect r, float apretado, float luz, float radio, const float *fondo);
+  void dibujaPanel(int vw, int vh);
+  /* recorte de todo lo que se pinte mientras este puesto (la lista del panel, que corre) */
+  Rect recorte_;
+  bool hayRecorte_ = false;
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
              bool center = false);
   float textWidth(const std::string &s, float size) const;
@@ -196,7 +245,7 @@ private:
   Rect white_, pill_, card_;
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
-  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_;
+  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -228,7 +277,17 @@ private:
   Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
-  Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_;
+  Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_, btnEngranaje_;
+  /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
+  struct ZonaItem {
+    Rect caja;
+    std::vector<Rect> subs;   /* las opciones de un segmentado, o el aspa de una fila */
+    Rect pista;               /* la pista de un deslizador */
+  };
+  Rect panelCaja_, panelCerrar_, panelCuerpo_;
+  std::vector<Rect> panelPestanas_;
+  std::vector<ZonaItem> zonas_;
+  float contenidoAlto_ = 0.0f;
 };
 
 #endif

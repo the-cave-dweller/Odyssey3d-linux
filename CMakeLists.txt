@@ -164,6 +164,7 @@ add_executable(odysseyvk
   src/mpris.cpp
   src/atajos.cpp
   src/barra.cpp
+  src/preferencias.cpp
   src/depth.cpp
   src/hoyos.cpp
 )

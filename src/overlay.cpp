@@ -115,6 +115,11 @@ struct Overlay::Impl {
   bool atlasListo = false;
   bool tarjetaPuesta = false;
   int golpeVisto = Hud::HitNone;
+  /* el panel de ajustes: el deslizador que se esta arrastrando, lo que habia bajo el raton la
+     ultima vez (para no repintar de mas) y los golpes que esperan a quien lo ensena */
+  int arrastrando = -1;
+  long firmaVista = -1;
+  std::vector<Overlay::Golpe> golpes;
   double ratonX = -1.0, ratonY = -1.0;
   bool ratonDentro = false;
   std::string accion;
@@ -242,7 +247,7 @@ struct Overlay::Impl {
     float ax = 0.0f, ay = 0.0f, aw = 0.0f, ah = 0.0f;
     const double e = escala > 0.25 ? escala : 1.0;
     int caja[4] = {0, 0, 0, 0};
-    if (tarjetaPuesta && hud.askBounds(&ax, &ay, &aw, &ah)) {
+    if (tarjetaPuesta && hud.flotanteBounds(&ax, &ay, &aw, &ah)) {
       caja[0] = (int)std::floor((ax - (float)ox) / e);
       caja[1] = (int)std::floor((ay - (float)oy) / e);
       caja[2] = (int)std::ceil(aw / e);
@@ -342,7 +347,7 @@ struct Overlay::Impl {
      izquierda y se sale de sus cajas. */
   bool ajustaGeometria() {
     float ax = 0, ay = 0, aw = 0, ah = 0;
-    if (!hud.askBounds(&ax, &ay, &aw, &ah)) return false;
+    if (!hud.flotanteBounds(&ax, &ay, &aw, &ah)) return false;
     const float holgura = 4.0f * (float)std::max(1.0, escala);   /* para el borde suave */
     ax -= holgura;
     ay -= holgura;
@@ -362,8 +367,11 @@ struct Overlay::Impl {
        DENTRO del lienzo, en zona transparente. Con `set_margin` el compositor multiplica el
        margen por su escala, que no siempre coincide con la nuestra, y el sobrante se lo comia
        a la tarjeta: salia encogida y con la letra fuera de las cajas. */
-    const int nAncho = (int)std::lround((float)anchoE - ax);
-    const int nAlto = (int)std::lround((float)altoE - ay);
+    /* El panel de ajustes va en el centro y su lienzo es justo su caja; la tarjeta va en la esquina
+       y su lienzo llega hasta el borde de la pantalla (lo de aqui abajo). */
+    const bool esPanel = hud.state().panel;
+    const int nAncho = (int)std::lround(esPanel ? aw : (float)anchoE - ax);
+    const int nAlto = (int)std::lround(esPanel ? ah : (float)altoE - ay);
     if (nAncho < 16 || nAlto < 16) return false;
     const bool cambio = (nAncho != bufAncho || nAlto != bufAlto);
     ox = ax;
@@ -665,10 +673,54 @@ struct Overlay::Impl {
     s->ratonDentro = false;
     s->ratonX = s->ratonY = -1.0;
     s->hud.setMouse(-1.0f, -1.0f);
+    if (s->tarjetaPuesta && s->hud.state().panel && s->arrastrando < 0) {
+      s->firmaVista = -1;
+      s->pintar();   /* se apaga el realce de lo que habia bajo el raton */
+      return;
+    }
     if (s->tarjetaPuesta && s->golpeVisto != Hud::HitNone) {
       s->golpeVisto = Hud::HitNone;
       s->pintar();
     }
+  }
+  void panelMovimiento() {
+    if (arrastrando >= 0) {
+      const float f = hud.fracDeslizador(arrastrando, (float)ratonX);
+      if ((size_t)arrastrando < hud.state().items.size()) hud.state().items[(size_t)arrastrando].frac = f;
+      golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, f, false});
+      pintar();
+      return;
+    }
+    int item = -1, sub = 0;
+    float fr = 0.0f;
+    const Hud::Hit h = hud.hitDetalle((float)ratonX, (float)ratonY, &item, &sub, &fr);
+    const long firma = (long)h * 1000000L + (long)(item + 1) * 1000L + sub;
+    if (firma != firmaVista) {   /* solo se repinta si cambia lo que hay bajo el raton */
+      firmaVista = firma;
+      pintar();
+    }
+  }
+  void panelBoton(bool apretado) {
+    if (!apretado) {
+      if (arrastrando >= 0) {
+        golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.fracDeslizador(arrastrando, (float)ratonX), true});
+        arrastrando = -1;
+      }
+      return;
+    }
+    int item = -1, sub = 0;
+    float fr = 0.0f;
+    const Hud::Hit h = hud.hitDetalle((float)ratonX, (float)ratonY, &item, &sub, &fr);
+    if (h == Hud::HitPanelItem && item >= 0 && (size_t)item < hud.state().items.size() &&
+        hud.state().items[(size_t)item].tipo == Hud::ItemPanel::Deslizador) {
+      arrastrando = item;
+      hud.state().items[(size_t)item].frac = fr;
+      golpes.push_back({(int)h, item, 0, fr, false});
+      pintar();
+      return;
+    }
+    if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem)
+      golpes.push_back({(int)h, item, sub, fr, true});
   }
   static void ptrMotion(void *data, wl_pointer *, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
     Impl *s = static_cast<Impl *>(data);
@@ -676,6 +728,10 @@ struct Overlay::Impl {
     s->ratonX = s->ox + wl_fixed_to_double(sx) * s->escala;
     s->ratonY = s->oy + wl_fixed_to_double(sy) * s->escala;
     s->hud.setMouse((float)s->ratonX, (float)s->ratonY);
+    if (s->hud.state().panel) {
+      s->panelMovimiento();
+      return;
+    }
     /* sólo se redibuja si cambia el botón que hay bajo el ratón */
     const Hud::Hit h = s->hud.hit((float)s->ratonX, (float)s->ratonY);
     if (h != s->golpeVisto) {
@@ -685,6 +741,10 @@ struct Overlay::Impl {
   }
   static void ptrButton(void *data, wl_pointer *, uint32_t, uint32_t, uint32_t boton, uint32_t estado) {
     Impl *s = static_cast<Impl *>(data);
+    if (s->tarjetaPuesta && s->hud.state().panel) {
+      if (boton == BTN_LEFT) s->panelBoton(estado == WL_POINTER_BUTTON_STATE_PRESSED);
+      return;
+    }
     if (boton != BTN_LEFT || estado != WL_POINTER_BUTTON_STATE_PRESSED || !s->tarjetaPuesta) return;
     const Hud::Hit h = s->hud.hit((float)s->ratonX, (float)s->ratonY);
     switch (h) {
@@ -700,7 +760,14 @@ struct Overlay::Impl {
       default: break;
     }
   }
-  static void ptrAxis(void *, wl_pointer *, uint32_t, uint32_t, wl_fixed_t) {}
+  static void ptrAxis(void *data, wl_pointer *, uint32_t, uint32_t eje, wl_fixed_t v) {
+    /* la rueda corre la lista del panel de ajustes (eje 0 = vertical) */
+    Impl *s = static_cast<Impl *>(data);
+    if (!s->tarjetaPuesta || !s->hud.state().panel || eje != 0) return;
+    s->hud.correr((float)wl_fixed_to_double(v) * 2.5f);
+    s->firmaVista = -1;
+    s->pintar();
+  }
   static void ptrFrame(void *, wl_pointer *) {}
   static void ptrAxisSource(void *, wl_pointer *, uint32_t) {}
   static void ptrAxisStop(void *, wl_pointer *, uint32_t, uint32_t) {}
@@ -883,6 +950,81 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
   s.cerrada = false;
   s.pintar();
 }
+
+Hud &Overlay::hud() { return d->hud; }
+
+void Overlay::repaint() {
+  if (d && d->tarjetaPuesta) d->pintar();
+}
+
+bool Overlay::takeGolpe(Golpe &g) {
+  if (!d || d->golpes.empty()) return false;
+  g = d->golpes.front();
+  d->golpes.erase(d->golpes.begin());
+  return true;
+}
+
+/* El panel de ajustes: el mismo montaje que la tarjeta, pero sin anclas (centrado) y con el lienzo
+   justo de su caja. */
+void Overlay::showPanel(bool grande) {
+  if (!available()) return;
+  Impl &s = *d;
+  s.hud.state().panel = true;
+  s.hud.state().ask = false;
+  s.hud.state().overlayOn = false;
+  s.hud.setScale(grande ? 2.0f : 0.0f);
+  s.hud.begin(s.anchoE, s.altoE, s.altoLogico());
+
+  /* El escritorio puede haber cambiado desde que arrancó el servicio (otra pantalla
+     conectada, el modo 3D de la lente, una suspensión): se vuelve a elegir el monitor
+     y, si la capa estaba puesta en otro, se rehace para que la tarjeta no acabe en la
+     pantalla equivocada. */
+  s.eligeMonitor();
+  for (int esperarNombre = 0; esperarNombre < 4 && s.elegido &&
+                               (s.elegido->nombre.empty() || s.elegido->anchoFis <= 0); ++esperarNombre) {
+    /* la pantalla se acaba de anunciar y todavia no trae nombre ni modos: sin esos datos la
+       eleccion sale a ciegas y puede caer en el monitor equivocado */
+    s.esperar(60);
+    s.eligeMonitor();
+  }
+  if (s.layer && s.capaEn != (s.elegido ? s.elegido->obj : nullptr))
+    s.quitaEscuchaLayer();   /* destruye la capa: se volvera a crear sobre el monitor bueno */
+
+  s.hud.begin(s.anchoE, s.altoE, s.altoLogico());   /* por si el monitor cambio de tamano */
+  if (!s.ajustaGeometria()) return;
+  if (entornoOdyssey("ODYSSEYVK_DEBUG_UI"))
+    std::printf("[depurar capa] lienzo %dx%d escala %.2f hud %.2f | recorte ox=%.0f oy=%.0f buf=%dx%d | ventana %dx%d\n",
+                s.anchoE, s.altoE, s.escala, s.hud.scale(), s.ox, s.oy, s.bufAncho, s.bufAlto,
+                s.supAncho, s.supAlto);
+
+  if (!s.layer) {
+    s.layer = zwlr_layer_shell_v1_get_layer_surface(s.shell, s.surf, s.elegido ? s.elegido->obj : nullptr,
+                                                    ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "odysseyvk");
+    if (!s.layer) {
+      d->aviso = "el compositor rechazó la capa superpuesta";
+      return;
+    }
+    zwlr_layer_surface_v1_add_listener(s.layer, &Impl::layerListener, d.get());
+    s.capaEn = s.elegido ? s.elegido->obj : nullptr;
+  }
+  zwlr_layer_surface_v1_set_anchor(s.layer, 0);   /* sin anclas: la capa queda centrada */
+  zwlr_layer_surface_v1_set_margin(s.layer, 0, 0, 0, 0);   /* la separacion vive dentro del lienzo */
+  zwlr_layer_surface_v1_set_exclusive_zone(s.layer, -1);
+  zwlr_layer_surface_v1_set_size(s.layer, (uint32_t)s.supAncho, (uint32_t)s.supAlto);
+#ifdef HAVE_FRACTIONAL_SCALE
+  if (s.viewport) wp_viewport_set_destination(s.viewport, s.supAncho, s.supAlto);
+#endif
+  s.hayConfigure = false;
+  wl_surface_commit(s.surf);
+
+  /* el compositor tiene que confirmar el tamaño antes de poner el lienzo encima */
+  for (int intento = 0; intento < 100 && !s.hayConfigure && !s.cerrada; ++intento)
+    if (s.esperar(50) < 0) break;
+  s.tarjetaPuesta = true;
+  s.cerrada = false;
+  s.pintar();
+}
+
 
 void Overlay::hideAsk() {
   if (!d) return;

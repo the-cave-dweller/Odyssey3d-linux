@@ -5,18 +5,27 @@ Name=OdysseyVK
 Name[es_MX]=OdysseyVK
 GenericName=3D without glasses
 GenericName[es_MX]=Visor 3D sin gafas
-Comment=Settings window of the Samsung Odyssey 3D hub
-Comment[es_MX]=Ventana de ajustes del hub del Samsung Odyssey 3D
-Exec=odysseyvk-ajustes
-TryExec=odysseyvk-ajustes
+Comment=Settings and games of the Samsung Odyssey 3D hub
+Comment[es_MX]=Ajustes y juegos del hub del Samsung Odyssey 3D
+Exec=odysseyvk ajustes
+TryExec=odysseyvk
 Icon=odysseyvk
 Terminal=false
 Categories=AudioVideo;Video;
-StartupNotify=true
-StartupWMClass=odysseyvk-ajustes
-Actions=play;
+StartupNotify=false
+Actions=juegos;play;taller;
+
+[Desktop Action juegos]
+Name=Games
+Name[es_MX]=Juegos
+Exec=odysseyvk ajustes --juegos
 
 [Desktop Action play]
 Name=Play a file in 3D
 Name[es_MX]=Reproducir un archivo en 3D
 Exec=odysseyvk play %f
+
+[Desktop Action taller]
+Name=Workshop settings
+Name[es_MX]=Ajustes de taller
+Exec=odysseyvk-ajustes

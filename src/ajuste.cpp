@@ -71,8 +71,10 @@ bool esOrden(const std::string &nombre) {
    devuelve a su cadencia tranquila. */
 static bool esOrdenTexto(const std::string &nombre) {
   return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d" ||
-         nombre == "legado" || nombre == "vista" || nombre == "barra";
+         nombre == "legado" || nombre == "vista" || nombre == "barra" || nombre == "dividido_suavizado";
 }
+
+bool esPalabra(const std::string &nombre) { return esOrdenTexto(nombre); }
 
 static std::string recortar(std::string s) {
   while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' || s.back() == '\t')) s.pop_back();
@@ -405,6 +407,7 @@ bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::s
 
 std::string rutaRecordar() { return rutaEstadoOdyssey("recordar"); }
 std::string rutaBarra() { return rutaEstadoOdyssey("barra"); }
+std::string rutaPanel() { return rutaEstadoOdyssey("panel.pid"); }
 
 bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err) {
   if (app.empty()) {

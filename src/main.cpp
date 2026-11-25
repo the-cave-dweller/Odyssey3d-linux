@@ -11,6 +11,7 @@
 #include "mpris.h"
 #include "ajuste.h"
 #include "barra.h"
+#include "preferencias.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
 #include "overlay.h"
@@ -70,6 +71,7 @@ static const char *kUsage =
     "  odysseyvk attrs               atributos de trama calculados (para validar el modelo)\n"
     "  odysseyvk texto-detect PPM    que considera texto el apoyo de los rotulos (foto del --volcado)\n"
     "  odysseyvk barra-detect PNG..  en un video dividido, que filas tapa la barra del reproductor\n"
+    "  odysseyvk ajustes [--juegos]  el panel flotante de ajustes y juegos (otra vez lo cierra)\n"
     "  odysseyvk ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odysseyvk ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
@@ -1822,6 +1824,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     }
     else if (a == "--recordado") o.recordado = true;
     else if (a == "--conversor-en-espera") enEspera = true;
+    else if (a == "--sin-suavizado") o.suavizado = false;
     else if (a == "--suave") {
       /* video dividido suavizado: una de sus dos imagenes y el relieve del conversor */
       o.suave = true;
@@ -2596,6 +2599,7 @@ static int cmdAjuste(int argc, char **argv) {
   }
   if (uno == "modelos" || uno == "redes") { imprimirModelos(); return 0; }
   std::map<std::string, double> numeros;
+  std::map<std::string, std::string> palabras;
   std::string modelo;
   std::string dicho;
   for (int i = 0; i < argc;) {
@@ -2617,6 +2621,12 @@ static int cmdAjuste(int argc, char **argv) {
     if (k == "modelo" || k == "red") {
       modelo = valor;
       dicho += "  modelo = " + modelo + "\n";
+      continue;
+    }
+    if (ajuste::esPalabra(k) && !ajuste::esOrden(k)) {
+      /* una orden de palabra para el visor (`dividido_suavizado=no`, `capa=ocultar`...) */
+      palabras[k] = valor;
+      dicho += "  " + k + " = " + valor + "\n";
       continue;
     }
     if (ajuste::esOrden(k)) {
@@ -2649,7 +2659,7 @@ static int cmdAjuste(int argc, char **argv) {
     dicho += std::string("  ") + c->nombre + " = " + b + "   /* " + c->etiqueta + " */\n";
   }
   std::string err;
-  if (!ajuste::escribir(numeros, modelo, &err)) {
+  if (!ajuste::escribir(numeros, modelo, palabras, &err)) {
     std::fprintf(stderr, "%s\n", err.c_str());
     return 1;
   }
@@ -2842,6 +2852,127 @@ static int cmdLegado(int argc, char **argv) {
    pantalla se lo haya quedado otra ventana (una pagina a pantalla completa que se apilo encima del
    visor, un juego que hace grab del teclado, o el visor minimizado con `Tab`). La trama y el rastreo
    siguen trabajando: lo unico que se quita es la interfaz. */
+/* ---------------- ajustes: el panel flotante (v0.84) ----------------------------------------
+   Los ajustes de todos los dias y la biblioteca de juegos, en una tarjeta translucida de esquinas
+   redondas que flota en el centro de la pantalla, encima de lo que haya: el escritorio (se abre
+   con el icono del sistema) o el video en 3D (con el engranaje de la pastilla; ahi se dibuja al
+   doble porque se ve a traves de la lente). Es la misma capa superpuesta de la tarjeta de la
+   orilla. Abrirlo cuando ya esta abierto lo cierra. `--juegos` lo abre en esa pestana y
+   `--dump F.png` deja su dibujo en un archivo. */
+static volatile sig_atomic_t g_cierraPanel = 0;
+static void alCerrarPanel(int) { g_cierraPanel = 1; }
+
+static int cmdAjustes(int argc, char **argv) {
+  const std::string rutaPid = ajuste::rutaPanel();
+  {
+    /* ya hay uno abierto: se le pide que se cierre (el engranaje y el icono hacen de interruptor) */
+    FILE *f = std::fopen(rutaPid.c_str(), "re");
+    long viejo = 0;
+    if (f) {
+      if (std::fscanf(f, "%ld", &viejo) != 1) viejo = 0;
+      std::fclose(f);
+    }
+    if (viejo > 1 && ::kill((pid_t)viejo, 0) == 0) {
+      char destino[512] = {0};
+      const std::string enlace = "/proc/" + std::to_string(viejo) + "/exe";
+      const ssize_t n = ::readlink(enlace.c_str(), destino, sizeof destino - 1);
+      if (n > 0 && std::string(destino, (size_t)n).find("odysseyvk") != std::string::npos) {
+        ::kill((pid_t)viejo, SIGTERM);
+        return 0;
+      }
+    }
+  }
+  bool enJuegos = false;
+  std::string volcado, pista;
+  for (int i = 0; i < argc; i++) {
+    const std::string a = argv[i];
+    if (a == "--juegos") enJuegos = true;
+    else if (a == "--dump" && i + 1 < argc) volcado = argv[++i];
+    else if (a == "--pantalla" && i + 1 < argc) pista = argv[++i];
+  }
+  std::signal(SIGTERM, alCerrarPanel);
+  std::signal(SIGINT, alCerrarPanel);
+  Overlay ov;
+  if (pista.empty()) {
+    const auto conf = ajuste::leerServeConf();
+    if (const auto it = conf.find("pantalla"); it != conf.end()) pista = it->second;
+  }
+  if (!pista.empty()) ov.setPantalla(pista);
+  std::string err;
+  if (!ov.open(&err)) {
+    std::fprintf(stderr, "[ajustes] no se pudo abrir la capa superpuesta: %s\n", err.c_str());
+    return 1;
+  }
+  if (FILE *f = std::fopen(rutaPid.c_str(), "we")) {
+    std::fprintf(f, "%ld\n", (long)::getpid());
+    std::fclose(f);
+  }
+  /* con un video en 3D debajo el panel se ve a traves de la lente: al doble, como la pastilla */
+  const auto hub = ajuste::leerEstadoHub();
+  const auto ses = hub.find("sesion");
+  const bool grande = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
+  const std::vector<prefs::Juego> juegos = prefs::juegosSteam();
+  std::vector<std::string> ids;
+  Hud::State &st = ov.hud().state();
+  st.pestana = enJuegos ? 1 : 0;
+  st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+  auto rellenar = [&] { prefs::llenar(st, prefs::leer(), juegos, ids); };
+  rellenar();
+  ov.showPanel(grande);
+  if (!ov.askVisible()) {
+    std::fprintf(stderr, "[ajustes] el compositor no puso el panel: %s\n", ov.lastError().c_str());
+    ::unlink(rutaPid.c_str());
+    return 1;
+  }
+  std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
+              grande ? "al doble: hay una sesion 3D" : "tamano de escritorio", (int)juegos.size());
+  std::fflush(stdout);
+  if (!volcado.empty()) {
+    ov.waitAndDispatch(150);
+    std::printf("[ajustes] volcado a %s: %s\n", volcado.c_str(), ov.dumpPng(volcado, &err) ? "hecho" : err.c_str());
+  }
+  auto reloj = [] {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+  };
+  double cerrarEn = -1.0;
+  while (!g_cierraPanel && !ov.conexionCaida()) {
+    ov.waitAndDispatch(100);
+    Overlay::Golpe g;
+    bool repintar = false;
+    while (ov.takeGolpe(g)) {
+      if (g.tipo == (int)Hud::HitPanelCerrar) {
+        g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelPestana) {
+        st.pestana = g.sub == 1 ? 1 : 0;
+        st.corrida = 0.0f;
+        st.pie.clear();
+        rellenar();
+        repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size()) {
+        std::string aviso;
+        bool cerrar = false;
+        const std::string id = ids[(size_t)g.item];
+        const bool cambio = prefs::aplicar(id, g.sub, g.frac, g.soltado, juegos, &aviso, &cerrar);
+        if (!aviso.empty()) st.pie = aviso;
+        if (cambio) {
+          std::printf("[ajustes] %s%s%s\n", id.c_str(), aviso.empty() ? "" : " · ", aviso.c_str());
+          std::fflush(stdout);
+          rellenar();
+        }
+        if (cambio || !aviso.empty()) repintar = true;
+        if (cerrar) cerrarEn = reloj() + 1.2;   /* que de tiempo a leer «arrancando ...» */
+      }
+    }
+    if (repintar) ov.repaint();
+    if (cerrarEn > 0.0 && reloj() >= cerrarEn) break;
+  }
+  ov.hideAsk();
+  ::unlink(rutaPid.c_str());
+  return 0;
+}
+
 static int cmdCapa(int argc, char **argv) {
   const std::string uno = argc > 0 ? strLower(argv[0]) : "alternar";
   if (uno == "estado" || uno == "status" || uno == "info") {
@@ -2904,6 +3035,19 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().modo3d = (modo && modo[0] >= '2' && modo[0] <= '3') ? modo[0] - '0' : 1;
   if (const char *linea = std::getenv("ODYSSEYVK_HUD_LINEA")) hud.setInfo(linea);
   if (const char *cuerpo = std::getenv("ODYSSEYVK_HUD_CUERPO")) hud.setAskText("", cuerpo);
+  /* ODYSSEYVK_HUD_PANEL=0|1: el panel de ajustes en vez de la tarjeta, en esa pestana (0 = Ajustes,
+     1 = Juegos), con lo que hay de verdad en serve.conf y en la biblioteca de Steam */
+  hud.state().engranaje = true;
+  if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
+    hud.state().ask = false;
+    hud.state().panel = true;
+    hud.state().pestana = std::atoi(pn) == 1 ? 1 : 0;
+    std::vector<std::string> ids;
+    prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
+    hud.state().pie = "se aplica desde el siguiente vídeo";
+    hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+    if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
+  }
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
   if (const char *raton = std::getenv("ODYSSEYVK_HUD_RATON")) {
     float rx = -1.0f, ry = -1.0f;
@@ -2929,6 +3073,46 @@ static int cmdHudSelfTest(int argc, char **argv) {
       rgba[p * 4u + 3u] = (uint8_t)std::lround(255.0f * std::max(0.0f, std::min(1.0f, A)));
     }
     std::printf("  volcado a %s: %s\n", png, glPngSave(png, W, H, rgba.data()) ? "hecho" : "NO SE PUDO");
+  }
+  if (hud.state().panel) {
+    /* el panel de ajustes: cuantas celdas de raton tiene cada cosa que se pica, y con que senas */
+    struct Cuenta { int celdas = 0, subs = 0; float fmin = 9.0f, fmax = -9.0f; };
+    std::vector<Cuenta> porFila(hud.state().items.size());
+    int cerrar = 0, pestanas[4] = {0, 0, 0, 0}, vacio = 0, fuera = 0;
+    for (int y = 0; y < H; y += 2)
+      for (int x = 0; x < W; x += 2) {
+        int item = -1, sub = 0;
+        float fr = 0.0f;
+        const Hud::Hit g = hud.hitDetalle((float)x, (float)y, &item, &sub, &fr);
+        if (g == Hud::HitNone) fuera++;
+        else if (g == Hud::HitPanel) vacio++;
+        else if (g == Hud::HitPanelCerrar) cerrar++;
+        else if (g == Hud::HitPanelPestana) pestanas[sub & 3]++;
+        else if (g == Hud::HitPanelItem && item >= 0 && (size_t)item < porFila.size()) {
+          Cuenta &c = porFila[(size_t)item];
+          c.celdas++;
+          c.subs |= 1 << (sub & 7);
+          c.fmin = std::min(c.fmin, fr), c.fmax = std::max(c.fmax, fr);
+        }
+      }
+    float bx = 0, by = 0, bw = 0, bh = 0;
+    hud.panelBounds(&bx, &by, &bw, &bh);
+    std::printf("  panel de ajustes: %.0f x %.0f px en %.0f,%.0f (escala %.2f) · aspa %d celdas · pestanas %d / %d\n",
+                (double)bw, (double)bh, (double)bx, (double)by, (double)hud.scale(), cerrar, pestanas[0], pestanas[1]);
+    static const char *kTipo[] = {"seccion", "interruptor", "opciones", "deslizador", "fila", "juego", "nota"};
+    for (size_t i = 0; i < porFila.size(); i++) {
+      const Hud::ItemPanel &it = hud.state().items[i];
+      const Cuenta &c = porFila[i];
+      std::printf("    %-11s %5d celdas", kTipo[(int)it.tipo], c.celdas);
+      if (it.tipo == Hud::ItemPanel::Opciones) std::printf(" · opciones vistas %d%d%d", c.subs & 1, (c.subs >> 1) & 1, (c.subs >> 2) & 1);
+      if (it.tipo == Hud::ItemPanel::Deslizador && c.celdas) std::printf(" · recorrido %.2f..%.2f", (double)c.fmin, (double)c.fmax);
+      if (it.tipo == Hud::ItemPanel::Fila) std::printf(" · aspa %s", (c.subs & 2) ? "si" : "no");
+      std::printf("  %s\n", it.rotulo.c_str());
+    }
+    hud.correr(10000.0f);
+    hud.begin(W, H);
+    std::printf("    la rueda: la lista corre hasta %.0f puntos\n", (double)hud.state().corrida);
+    return 0;
   }
   /* la lista de golpes de raton: nada, interruptor, dos deslizadores, (el boton de la red, que ya
      no existe y tiene que dar cero), las teselas de la tarjeta, su casilla, el aspa, el "?" y la
@@ -3171,6 +3355,11 @@ struct ServeCfg {
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
   double crosstalkBase = -1.0;   /* compensacion pareja de la diafonia, 0..0,25; -1 = la de fabrica (0,0129) (v0.83) */
+  /* Los videos divididos se ven SUAVIZADOS (una de sus dos imagenes y el relieve del conversor) salvo
+     que aqui se diga que no (v0.84). Es el unico sitio donde se quita: `dividido_suavizado = no`, o
+     el interruptor de los ajustes del programa. (`suavizado` a secas ya era otra cosa: el filtro del
+     rastreo de la cabeza.) */
+  bool divididoSuave = true;
   double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
   double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
   double rampaX = 999.0;    /* rampa de fase en x, ciclos por pixel de panel; 999 = sin ajustar */
@@ -3319,6 +3508,10 @@ static void loadServeCfg(ServeCfg &cfg) {
       const double d = std::atof(numero.c_str());
       cfg.focoIir = (d > 0.0 && d <= 1.0) ? d : -1.0;
     }
+    else if (k == "dividido_suavizado") {
+      const std::string s = strLower(v);
+      cfg.divididoSuave = !(s == "no" || s == "0" || s == "off" || s == "apagado" || s == "quitado");
+    }
     else if (k == "crosstalk_base") {
       std::string numero = v;
       for (char &c : numero)
@@ -3407,7 +3600,7 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
   return false;
 }
 
-static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modo, int red = 0,
+static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modoPedido, int red = 0,
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
                         const std::string &alterno = std::string(), bool rastreo = false,
@@ -3424,7 +3617,19 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       const std::string v = strLower(it->second);
       pila->legado = (v == "si" || v == "on" || v == "1" || v == "encendido" || v == "puesto");
     }
+    /* y lo mismo con el suavizado de los videos divididos, que tambien se cambia desde los ajustes */
+    if (const auto it = conf.find("dividido_suavizado"); it != conf.end()) {
+      const std::string v = strLower(it->second);
+      pila->divididoSuave = !(v == "no" || v == "0" || v == "off" || v == "apagado" || v == "quitado");
+    } else {
+      pila->divididoSuave = true;
+    }
   }
+  /* El modo que de verdad se lanza. «Dividido» (`sbs`, y el `suave` que guardo la 0.83) es UNA
+     eleccion; que salga suavizado o tal cual lo dicen los ajustes del programa. */
+  const std::string modo = (pila && (modoPedido == "sbs" || modoPedido == "suave"))
+                               ? std::string(pila->divididoSuave ? "suave" : "sbs")
+                               : modoPedido;
   pid_t pid = ::fork();
   if (pid != 0) return pid;
   /* `escritorio = true` es el overlay FORZADO sobre el escritorio del monitor: no hay ventana de
@@ -3545,6 +3750,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "conv") args.push_back("--conver");
   /* video dividido suavizado (v0.83): el conversor, pero solo con la imagen izquierda de la ventana */
   if (modo == "suave") args.push_back("--suave");
+  /* y el boton de video dividido de la pastilla hace lo mismo que los ajustes */
+  if (pila && !pila->divididoSuave) args.push_back("--sin-suavizado");
   /* La red y sus numeros viajan tambien con el video dividido (v0.79): desde la pastilla se puede
      pasar a video normal en marcha, y sin esto el visor abria la otra red, no la de serve.conf.
      Pasarlas no abre nada: la red solo se carga cuando el conversor se enciende. */
@@ -5040,6 +5247,45 @@ static int cmdServe(int argc, char **argv) {
       }
     }
 
+    /* Los ajustes del panel (`odysseyvk ajustes`) se escriben en serve.conf. Antes hacia falta
+       reiniciar el servicio para que valieran; ahora, cuando el fichero cambia, se releen los que el
+       panel toca. Los demas (camara, pantalla, numeros de la trama) siguen siendo de arranque. */
+    {
+      static long long marcaConf = -2;
+      static double ultimaMirada = 0.0;
+      if (now - ultimaMirada >= 1.0) {
+        ultimaMirada = now;
+        struct stat sb {};
+        const long long marca = ::stat(ajuste::rutaServeConf().c_str(), &sb) == 0
+                                    ? (long long)sb.st_mtim.tv_sec * 1000000000LL + (long long)sb.st_mtim.tv_nsec + (long long)sb.st_size
+                                    : -1;
+        if (marcaConf == -2) marcaConf = marca;   /* la primera vez solo se apunta */
+        if (marca != marcaConf) {
+          marcaConf = marca;
+          ServeCfg nuevo;
+          loadServeCfg(nuevo);
+          const bool cambio = nuevo.modo != cfg.modo || nuevo.rastreo != cfg.rastreo || nuevo.hdrEn3d != cfg.hdrEn3d ||
+                              nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
+                              nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
+                              nuevo.porApp != cfg.porApp;
+          cfg.modo = nuevo.modo;
+          cfg.rastreo = nuevo.rastreo;
+          cfg.hdrEn3d = nuevo.hdrEn3d;
+          cfg.atajosGlobales = nuevo.atajosGlobales;
+          cfg.crosstalkBase = nuevo.crosstalkBase;
+          cfg.relieve = nuevo.relieve;
+          cfg.divididoSuave = nuevo.divididoSuave;
+          cfg.porApp = nuevo.porApp;
+          if (cambio) {
+            std::printf("[serve] serve.conf cambio: modo=%s · rastreo %s · dividido %s · %d aplicacion(es) sin preguntar\n",
+                        cfg.modo.c_str(), cfg.rastreo ? "si" : "no", cfg.divididoSuave ? "suavizado" : "tal cual",
+                        (int)cfg.porApp.size());
+            std::fflush(stdout);
+          }
+        }
+      }
+    }
+
     /* La casilla de «no volver a preguntar» de la pastilla del visor deja aqui su recado: se
        aplica a la memoria del servicio y a serve.conf. Desmarcada, la aplicacion vuelve a pasar por
        la tarjeta la proxima vez que se ponga a pantalla completa. */
@@ -5392,6 +5638,8 @@ int main(int argc, char **argv) {
     return cmdTexto(argc - 2, argv + 2);
   if (cmd == "barra-detect")
     return cmdBarra(argc - 2, argv + 2);
+  if (cmd == "ajustes")
+    return cmdAjustes(argc - 2, argv + 2);
   if (cmd == "planos")
     return cmdPlanos(argc - 2, argv + 2);
   if (cmd == "mapa")
