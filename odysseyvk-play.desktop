@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+NoDisplay=true
+Name=OdysseyVK
+Name[es_MX]=OdysseyVK
+GenericName=3D SBS player
+GenericName[es_MX]=Reproductor 3D side-by-side
+Comment=Play a side-by-side video on the Samsung Odyssey 3D
+Comment[es_MX]=Reproduce un vídeo side-by-side en el Samsung Odyssey 3D
+Exec=odysseyvk play %f
+TryExec=odysseyvk
+Icon=odysseyvk
+Terminal=false
+Categories=AudioVideo;Video;
+MimeType=video/x-matroska;video/mp4;video/x-msvideo;video/webm;
+StartupWMClass=odysseyvk

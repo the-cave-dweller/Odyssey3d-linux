@@ -131,6 +131,13 @@ medidas dentro de su hueco (usado / hueco): `Plano de apoyo` 96,9 / 120 · `3D S
   variable vieja), `haySesion` mira las dos unidades, y `guardar` mete en el bulto `install.sh`,
   `odysseyvk.desktop`, `systemd/`, `udev/`, `assets/` y `config/`, leyendo la config y el estado de la
   carpeta nueva **y** de la vieja.
+- Limpieza de las copias del nombre viejo (2026-11-25 04:10, después de ver el 3D y el rastreo con el
+  nombre nuevo): antes de moverlas, `find … -printf '%s %p\n' | sort` + `diff` dio que
+  `~/.local/share/odysseyvk` tiene exactamente los mismos ficheros y tamaños que
+  `~/.local/share/odyssey3d` (237 MB: las cuatro redes y el detector de cara). Las tres carpetas viejas
+  (`share`, `config` y `state` de `odyssey3d`) se movieron a
+  `../papelera-odyssey3d-2026-11-25/` en vez de borrarse, por si hace falta volver. No queda nada del
+  nombre viejo en `~/.config`, `~/.local/share` ni `~/.local/state`.
 
 ### Instalando la v0.57: dos cosas que el renombrado dejó cojas
 
@@ -194,8 +201,35 @@ medidas dentro de su hueco (usado / hueco): `Plano de apoyo` 96,9 / 120 · `3D S
   `167 fotogramas leidos, 165 poses validas` en 3 s, cara a ~55-60 cm, error 0,3-2,4 px; la segunda
   pasada en 2 s dio `107 fotogramas leidos, 105 poses validas`. Los ficheros que se usan son los
   migrados: `SR+CALCAM.bin` y `SR+CALET.bin`, 256 bytes cada uno, con cabecera 248/1 y 56/1 y
-  `fx = 474,32` en el de la cámara. Falta comprobarlo dentro de una sesión real (eso vuelve a agarrar el
-  panel), aunque el rastreo ya no depende de desde dónde se lance el visor.
+  `fx = 474,32` en el de la cámara.
+- **Comprobado dentro de una sesión lanzada por el servicio** (04:08-04:09, con `ctl escritorio poner`,
+  que es el botón de la ventana: el vigilante lanza `odysseyvk test --siempre … --track` y no toca ningún
+  vídeo): a los 6 s de abrir la cámara `camara_cara = si` y
+  `camara_nota = MJPG 1280x480 @ 60 (dos vistas, calibrada) · cara a la vista`; las líneas periódicas
+  pasaron de `1/0 cuadros (0.0 fps)` a `328/328 cuadros (57.7 fps) · error 1,70 px · siguiendo` y
+  aguantaron `1409/1409 cuadros (59.4 fps)` con error 0,1-2,6 px y la cara a ~67-76 cm del panel. Al
+  quitarlo, salida limpia: `modo 3D apagado`, `lente devuelta a 2D`, `panel restaurado: modo 20
+  3840x2160@119.88, escala 1.5`, `DP-7 devuelta a 2560,624` y ningún visor quedando vivo.
+
+### El icono de la aplicación no abría nada (v0.57)
+
+- Al pulsar el icono del menú no pasaba nada. No es el icono: el lanzador hacía `Exec=odysseyvk play %F`
+  y al abrirlo desde el menú no hay archivo detrás, así que el `%F` se queda vacío. Medido:
+  `odysseyvk play` a secas responde `falta el archivo: odysseyvk play ARCHIVO` y **sale con código 2**. El
+  lanzador venía así desde la época de `odyssey3d`, solo que entonces casi nunca se usaba el icono.
+- Ahora son dos entradas: `odysseyvk.desktop` abre **la ventana de ajustes** (`Exec=odysseyvk-ajustes`, con
+  una acción «Reproducir un archivo en 3D» en el menú contextual) y `odysseyvk-play.desktop`
+  (`NoDisplay=true`) guarda la asociación con vídeos (`Exec=odysseyvk play %f`, `MimeType=…`). El lanzador
+  visible lleva `TryExec=odysseyvk-ajustes` para que el menú lo apague si el binario no está.
+- `install.sh` copia las dos y refresca el caché de iconos y la base de escritorios. Las dos pasan
+  `desktop-file-validate` sin quejas.
+- Comprobado: `gtk-launch odysseyvk` (lo que hace el menú al pulsar) levantó la ventana — proceso
+  `odysseyvk-ajustes` vivo y visible en la captura de pantalla, con el título «Ajustes del visor 3D (proceso
+  aparte)» y el icono nuevo en la barra de título. Lo que **no** se ha probado: abrir un vídeo de verdad
+  desde el explorador de archivos ni la acción contextual.
+- En la máquina el lanzador instalado no era idéntico al del repo (tenía `MimeType` y `Name[es]` distintos,
+  tocados por el editor de menús de KDE); se sobrescribió con el del repo. El viejo quedó en
+  `/tmp/odysseyvk.desktop.viejo` y en el historial de git.
 
 ## La pastilla deja de ser redonda y el 3D se apaga con un interruptor (v0.56)
 - Pedido de Rodolfo: «quita el botón de apagar 3D y el de ocultar capa, cambia el de apagar por un botón

@@ -63,17 +63,24 @@ mapas de corrección del panel en `./calib`, junto al ejecutable o en `/usr/shar
 `odysseyvk-serve.service`, la regla udev `70-odysseyvk.rules` y los datos
 `~/.config/odysseyvk`, `~/.local/state/odysseyvk` y `~/.local/share/odysseyvk`. `install.sh` además de
 compilar e instalar mete el **icono** (`assets/hicolor/…/apps/odysseyvk.png`, ocho tamaños de 16 a 512)
-y el lanzador `odysseyvk.desktop` en `~/.local/share/applications`, y **limpia lo del nombre viejo**:
-apaga y borra `odyssey3d-serve.service`, quita `odyssey3d.desktop` y la regla
+y **dos lanzadores** en `~/.local/share/applications`: `odysseyvk.desktop`, que al pulsarlo abre la
+ventana de ajustes (`Exec=odysseyvk-ajustes`), y `odysseyvk-play.desktop` (`NoDisplay=true`, no sale en
+el menú), que es el que abre un vídeo con `odysseyvk play %f`. El lanzador del menú ya no puede ser
+`odysseyvk play %F`: sin archivo detrás el `%F` se queda vacío y el visor contesta «falta el archivo» y
+sale con código 2, así que el icono del menú no abría nada. `install.sh` también **limpia lo del nombre
+viejo**: apaga y borra `odyssey3d-serve.service`, quita `odyssey3d.desktop` y la regla
 `/etc/udev/rules.d/70-odyssey-3d.rules`, y mueve los binarios viejos a
 `/usr/local/bin/viejo-odyssey3d/` en vez de borrarlos.
 
 La migración de datos la hace el propio programa al arrancar: copia (no mueve) lo que haya en las
 carpetas viejas a las nuevas, sin pisar lo que ya exista. Por eso, mientras no se borre lo viejo, los
 modelos están duplicados: aquí son **237 MB en `~/.local/share/odyssey3d/modelos` y los mismos
-237 MB en `~/.local/share/odysseyvk/modelos`**. Cuando todo funcione con el nombre nuevo se puede
-quitar la carpeta vieja. Los nombres de entorno antiguos (`ODYSSEY3D_*`) siguen valiendo: la reserva
-está en `entornoOdyssey()` (`src/util.cpp`), probada también con la variable nueva.
+237 MB en `~/.local/share/odysseyvk/modelos`**. Comprobado el 2026-11-25, con el 3D y el rastreo
+funcionando ya con el nombre nuevo, las tres carpetas viejas (`~/.local/share/odyssey3d`,
+`~/.config/odyssey3d` y `~/.local/state/odyssey3d`) se compararon fichero por fichero con las nuevas
+—los mismos tamaños— y se movieron a `../papelera-odyssey3d-2026-11-25/`, que se puede borrar cuando se
+quiera. Los nombres de entorno antiguos (`ODYSSEY3D_*`) siguen valiendo: la reserva está en
+`entornoOdyssey()` (`src/util.cpp`), probada también con la variable nueva.
 
 ### Permisos (una sola vez)
 

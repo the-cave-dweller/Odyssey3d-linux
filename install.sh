@@ -58,12 +58,17 @@ for carpeta in "$here"/assets/hicolor/*x*/apps; do
   fi
 done
 mkdir -p "$datos/applications"
+# El lanzador del menú abre la ventana de ajustes. Antes hacía `odysseyvk play %F`, y al pulsarlo sin
+# ningún archivo detrás el %F se queda vacío: el visor contesta "falta el archivo" y sale con código 2,
+# así que el icono del menú no abría nada. La asociación con vídeos vive aparte, en
+# odysseyvk-play.desktop (NoDisplay, no aparece en el menú).
 cp -f "$here/odysseyvk.desktop" "$datos/applications/odysseyvk.desktop"
+cp -f "$here/odysseyvk-play.desktop" "$datos/applications/odysseyvk-play.desktop"
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -q -t -f "$datos/icons/hicolor" || true
 fi
 update-desktop-database "$datos/applications" 2>/dev/null || true
-echo "icono y lanzador del menú puestos en $datos (Icon=odysseyvk)"
+echo "icono y dos lanzadores del menú puestos en $datos (Icon=odysseyvk)"
 
 # --- lo del nombre viejo (odyssey3d): apagar y quitar lo que estorba ----------
 # Desde v0.57 todo se llama odysseyvk. El servicio viejo hay que apagarlo: dos vigilantes
