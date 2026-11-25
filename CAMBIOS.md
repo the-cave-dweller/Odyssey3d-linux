@@ -3,6 +3,48 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La saliencia del Hub para el plano de apoyo, y la ganancia de Windows (v0.65)
+
+- Pedido de Rodolfo tras la v0.64: «se ve mejor pero aún le falta profundidad comparado con Windows;
+  porta lo que decías» (la saliencia y el foco del Hub).
+- Leído en el ensamblador NV de la caché del Hub (MEDIDO):
+  - `depth.salc_dspr`: contraste centro-entorno = media de |F_s − F_c| en los pares de niveles de mip
+    (3,6) (4,6) (4,7) (5,7) (5,8) (6,8) (`salc.level.center 3`, `surround 6`).
+  - `depth.salc_merge`: saliencia = (0,2·D + 0,6·contraste(D) + 0,1·bordes + 0,1·contraste(Lab)) ×
+    smootherstep(1 − r/rmax) (6t⁵ − 15t⁴ + 10t³, r = distancia al centro, rmax = media diagonal). El
+    emparejado textura ↔ peso es el natural por nombre; los registros salen en otro orden.
+  - `dspr.get_cam_param`: con `b_auto_control` calcula foco y `verg` para que el tramo del sujeto llene
+    `real.depth_range` (−3..+4 cm); sin él copia `dflt.*`. La config de fábrica trae
+    `camera.virt.auto = False` (DEDUCIDO: es ese interruptor), así que **no está probado que el Hub mueva
+    el plano cero con la saliencia**; su `focus` (IIR 0,02 + cambio de escena) sí alimenta el centro de
+    `dspr.compress` y el relleno de bordes.
+  - Ganancia: con `real.*` (ipd 6,5, distancia 65, pantalla 50, recorrido −3..+4 cm) la separación cruda
+    del mapa entero sale de ~27 px por ojo, contra 22,7 de Linux con «3D Salida» 50 (DERIVADO): ~1,2 veces,
+    metida en el tope por la compresión suave.
+- Lo que se añade:
+  - **Saliencia** para el histograma del plano de apoyo (`src/depth.cpp`: `hacerPiramide`,
+    `centroEntorno`, en una rejilla de 64 × 64 sobre el mapa de 518); el color oponente (R−G, B−Y) se
+    guarda antes de normalizar la entrada de la red. **Apagada por defecto** (`ODYSSEYVK_SALIENCIA=1` o
+    `saliencia = si` en `serve.conf`): con ella el sujeto se queda en la pantalla y todo lo demás va hacia
+    dentro, que puede sentirse con menos «salida».
+  - `foco_iir` en `serve.conf` / `ODYSSEYVK_FOCO_IIR` (0,06 por defecto; el Hub usa 0,02).
+  - `serve.conf` del usuario: **`relieve = 1,2`** (la ganancia de Windows) y `saliencia = no` para
+    comparar. Respaldo: `serve.conf.respaldo-2026-11-25-antes-v065`.
+
+### Comprobado (sin panel)
+
+- Plano de apoyo elegido (con `ODYSSEYVK_FOCO_IIR=1` para ver el destino de cada cuadro), antes → con
+  saliencia: nave 0,36 → **0,95** (la nave en la pantalla), video de Riemann 0,61 → 0,80 (la cara en la
+  pantalla), video del micrófono 0,23 → 0,27, globo 0,27 → 0,42. Imagen:
+  `../pruebas/saliencia-antes-despues-2026-11-25.png`.
+- Coste: con la rejilla de cada 4 puntos la saliencia costaba ~6 ms por estimación; con la de cada 8,
+  16–19 ms por estimación con y sin saliencia (diez cuadros en caliente: dentro del ruido).
+- Sin ajuste, el binario elige lo mismo que antes (nave 0,359).
+
+### No probado
+
+- En el panel: si `relieve = 1,2` da la profundidad que falta, y si `saliencia = si` se ve mejor o peor.
+
 ## Los planos dejan de aplastarse contra el tope: la compresión suave de Windows (v0.64)
 
 - Pedido de Rodolfo: en Windows se distinguen planos (fondo, centro, frente, «como parallax») y aquí no.

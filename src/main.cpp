@@ -2862,6 +2862,8 @@ struct ServeCfg {
      separar las causas de una franja: `relieve = 0` deja la imagen PLANA del todo, que no se
      consigue con Ctrl+Shift+5 porque en 0 de "3D Salida" quedan 4 px de separacion entre ojos. */
   double relieve = -1.0;    /* escala de la ganancia del releve; 0 = sin releve ninguno */
+  std::string saliencia;    /* si / no: elegir el plano de apoyo con la saliencia del Hub (v0.65) */
+  double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
   double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
   double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
@@ -2994,6 +2996,14 @@ static void loadServeCfg(ServeCfg &cfg) {
     }
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
+    else if (k == "saliencia") cfg.saliencia = v;
+    else if (k == "foco_iir") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      cfg.focoIir = (d > 0.0 && d <= 1.0) ? d : -1.0;
+    }
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
              k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente" ||
@@ -3227,6 +3237,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (pila->relieve >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->relieve);
       ::setenv("ODYSSEYVK_RELIEVE", valor, 1);
+    }
+    if (!pila->saliencia.empty())
+      ::setenv("ODYSSEYVK_SALIENCIA", (pila->saliencia == "si" || pila->saliencia == "1") ? "1" : "0", 1);
+    if (pila->focoIir > 0.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->focoIir);
+      ::setenv("ODYSSEYVK_FOCO_IIR", valor, 1);
     }
     if (pila->temblor >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->temblor);

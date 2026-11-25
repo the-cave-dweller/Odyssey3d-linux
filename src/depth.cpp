@@ -3,6 +3,7 @@
    init() avisa y el conversor simplemente no esta disponible. */
 #include "depth.h"
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -599,6 +600,71 @@ bool DepthNet::cambiar(const std::string &model, std::string *err) {
   return false;
 }
 
+/* ---------------- saliencia al estilo del Hub de Windows (v0.65) ----------------
+   Leida del ensamblador NV de su cache (glfx/binary/depth.salc_dspr.bin y depth.salc_merge.bin):
+     contraste centro-entorno de un campo F = media de |F_s - F_c| en los seis pares de niveles de mip
+       (c, s) = (3,6) (4,6) (4,7) (5,7) (5,8) (6,8)            [salc.level.center 3 / surround 6]
+     saliencia = (0,2 D + 0,6 contraste(D) + 0,1 bordes + 0,1 contraste(Lab)) * smootherstep(1 - r/rmax)
+   con r la distancia al centro y rmax la media diagonal. Lo que mas pesa (0,6) es lo que se despega en
+   PROFUNDIDAD de lo que lo rodea: el sujeto, no lo que tiene mas bordes. El Lab se aproxima aqui con
+   luminancia y dos canales oponentes. */
+namespace {
+
+struct Piramide {
+  std::vector<std::vector<float>> nivel;
+  std::vector<int> tam;
+};
+
+/* medias 2x2 hasta `niveles` (nivel 0 = n x n) */
+void hacerPiramide(const float *src, int n, int niveles, Piramide &p) {
+  p.nivel.assign(1, std::vector<float>(src, src + (size_t)n * n));
+  p.tam.assign(1, n);
+  for (int l = 1; l < niveles; l++) {
+    const int a = p.tam.back(), b = a > 1 ? (a + 1) / 2 : 1;
+    const std::vector<float> &q = p.nivel.back();
+    std::vector<float> r((size_t)b * b);
+    for (int y = 0; y < b; y++)
+      for (int x = 0; x < b; x++) {
+        const int x0 = std::min(2 * x, a - 1), x1 = std::min(2 * x + 1, a - 1);
+        const int y0 = std::min(2 * y, a - 1), y1 = std::min(2 * y + 1, a - 1);
+        r[(size_t)y * b + x] = 0.25f * (q[(size_t)y0 * a + x0] + q[(size_t)y0 * a + x1] +
+                                        q[(size_t)y1 * a + x0] + q[(size_t)y1 * a + x1]);
+      }
+    p.nivel.push_back(std::move(r));
+    p.tam.push_back(b);
+  }
+}
+
+/* el nivel l muestreado (bilineal) en la posicion (u, v) en 0..1 */
+float enNivel(const Piramide &p, int l, float u, float v) {
+  const int t = p.tam[(size_t)l];
+  const std::vector<float> &q = p.nivel[(size_t)l];
+  float fx = u * (float)t - 0.5f, fy = v * (float)t - 0.5f;
+  fx = fx < 0.0f ? 0.0f : (fx > (float)(t - 1) ? (float)(t - 1) : fx);
+  fy = fy < 0.0f ? 0.0f : (fy > (float)(t - 1) ? (float)(t - 1) : fy);
+  const int x0 = (int)fx, y0 = (int)fy, x1 = std::min(x0 + 1, t - 1), y1 = std::min(y0 + 1, t - 1);
+  const float ax = fx - (float)x0, ay = fy - (float)y0;
+  return (q[(size_t)y0 * t + x0] * (1.0f - ax) + q[(size_t)y0 * t + x1] * ax) * (1.0f - ay) +
+         (q[(size_t)y1 * t + x0] * (1.0f - ax) + q[(size_t)y1 * t + x1] * ax) * ay;
+}
+
+float centroEntorno(const Piramide &p, float u, float v) {
+  static const int pares[6][2] = {{3, 6}, {4, 6}, {4, 7}, {5, 7}, {5, 8}, {6, 8}};
+  float s = 0.0f;
+  for (const auto &cs : pares) s += std::fabs(enNivel(p, cs[1], u, v) - enNivel(p, cs[0], u, v));
+  return s / 6.0f;
+}
+
+/* percentil 99 de una lista (para llevar cada senal a 0..1 sin que un punto raro mande) */
+float p99(std::vector<float> v) {
+  if (v.empty()) return 1.0f;
+  const size_t k = (size_t)((double)(v.size() - 1) * 0.99);
+  std::nth_element(v.begin(), v.begin() + (long)k, v.end());
+  return v[k] > 1e-6f ? v[k] : 1e-6f;
+}
+
+}  // namespace
+
 bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &out, std::string *err) {
 #ifdef HAVE_ORT
   if (!ready_ || !rgba || w < 2 || h < 2) return false;
@@ -619,8 +685,14 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   /* guia para limpiar el mapa despues: la luminancia de la foto, tomada antes de normalizarla
      para la red (es la que dice donde estan los cantos de los objetos) */
   guia_.resize(plane);
-  for (size_t i = 0; i < plane; i++)
-    guia_[i] = 0.299f * im->in[i] + 0.587f * im->in[plane + i] + 0.114f * im->in[2 * plane + i];
+  opRG_.resize(plane);
+  opBY_.resize(plane);
+  for (size_t i = 0; i < plane; i++) {
+    const float r = im->in[i], g = im->in[plane + i], b = im->in[2 * plane + i];
+    guia_[i] = 0.299f * r + 0.587f * g + 0.114f * b;
+    opRG_[i] = r - g;               /* canales oponentes: la parte de color del Lab de la saliencia */
+    opBY_[i] = b - 0.5f * (r + g);
+  }
   /* normalizacion de la foto: la misma con la que se entreno el modelo */
   static const float mean[3] = {0.485f, 0.456f, 0.406f}, sd[3] = {0.229f, 0.224f, 0.225f};
   for (int c = 0; c < 3; c++) {
@@ -756,17 +828,64 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   {
     float hist[32] = {0.0f};
     float total = 0.0f;
-    for (int y = 1; y < sz_ - 1; y++) {
-      for (int x = 1; x < sz_ - 1; x++) {
-        const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
-        const float gx = std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + sz_] - guia_[o - sz_]);
-        float w = 0.15f + 5.0f * gx;
-        if (w > 1.0f) w = 1.0f;
-        const bool dentro = x >= sz_ * 2 / 10 && x < sz_ * 8 / 10 && y >= sz_ * 2 / 10 && y < sz_ * 8 / 10;
-        w *= dentro ? 1.0f : 0.45f;      /* sesgo suave al centro: un sujeto apartado tambien ancla */
-        const int bin = (int)(salida[o] * 31.99f);
-        hist[bin] += w;
-        total += w;
+    /* ODYSSEYVK_SALIENCIA=1 (o `saliencia = si` en serve.conf) usa la saliencia del Hub; sin ella, el
+       peso de siempre (bordes y un escalon al centro). APAGADA por defecto: con la saliencia el plano
+       cero cae en el sujeto (la cara se queda en la pantalla y todo lo demas va hacia dentro), y en la
+       config de Windows (`camera.virt.auto = False`) get_cam_param copia el foco de `dflt.*` en vez de
+       calcularlo: no esta probado que el Hub mueva el plano cero con esta saliencia. A/B en el panel. */
+    static const bool kSaliencia = [] {
+      const char *e = entornoOdyssey("ODYSSEYVK_SALIENCIA");
+      return e && (e[0] == '1' || e[0] == 's');
+    }();
+    if (kSaliencia) {
+      /* rejilla de cada 8 puntos del mapa (64 x 64): el nivel 3 de la piramide ya mide 65, asi que mas
+         fino no aporta, y con cada 4 la saliencia costaba ~6 ms por estimacion */
+      Piramide pD, pL, pA, pB;
+      hacerPiramide(salida.data(), sz_, 9, pD);
+      hacerPiramide(guia_.data(), sz_, 9, pL);
+      hacerPiramide(opRG_.data(), sz_, 9, pA);
+      hacerPiramide(opBY_.data(), sz_, 9, pB);
+      const int paso = 8, g = (sz_ - 2) / paso + 1;
+      std::vector<float> vD, vCS, vE, vLab, vW;
+      vD.reserve((size_t)g * g); vCS.reserve((size_t)g * g); vE.reserve((size_t)g * g);
+      vLab.reserve((size_t)g * g); vW.reserve((size_t)g * g);
+      std::vector<int> vBin;
+      vBin.reserve((size_t)g * g);
+      const float cx = 0.5f * (float)sz_, cy = 0.5f * (float)sz_, rmax = std::sqrt(cx * cx + cy * cy);
+      for (int y = 1; y < sz_ - 1; y += paso)
+        for (int x = 1; x < sz_ - 1; x += paso) {
+          const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
+          const float u = ((float)x + 0.5f) / (float)sz_, v = ((float)y + 0.5f) / (float)sz_;
+          vD.push_back(salida[o]);
+          vCS.push_back(centroEntorno(pD, u, v));
+          vE.push_back(std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + sz_] - guia_[o - sz_]));
+          vLab.push_back(centroEntorno(pL, u, v) + centroEntorno(pA, u, v) + centroEntorno(pB, u, v));
+          float t = 1.0f - std::sqrt(((float)x - cx) * ((float)x - cx) + ((float)y - cy) * ((float)y - cy)) / rmax;
+          t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+          vW.push_back(t * t * t * (t * (6.0f * t - 15.0f) + 10.0f));   /* smootherstep, como el Hub */
+          vBin.push_back((int)(salida[o] * 31.99f));
+        }
+      const float nCS = p99(vCS), nE = p99(vE), nLab = p99(vLab);
+      for (size_t i = 0; i < vD.size(); i++) {
+        const float s = (0.2f * vD[i] + 0.6f * std::min(vCS[i] / nCS, 1.0f) + 0.1f * std::min(vE[i] / nE, 1.0f) +
+                         0.1f * std::min(vLab[i] / nLab, 1.0f)) * vW[i];
+        const float wgt = 0.02f + s;   /* un piso: que el histograma nunca quede vacio */
+        hist[vBin[i]] += wgt;
+        total += wgt;
+      }
+    } else {
+      for (int y = 1; y < sz_ - 1; y++) {
+        for (int x = 1; x < sz_ - 1; x++) {
+          const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
+          const float gx = std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + sz_] - guia_[o - sz_]);
+          float w = 0.15f + 5.0f * gx;
+          if (w > 1.0f) w = 1.0f;
+          const bool dentro = x >= sz_ * 2 / 10 && x < sz_ * 8 / 10 && y >= sz_ * 2 / 10 && y < sz_ * 8 / 10;
+          w *= dentro ? 1.0f : 0.45f;      /* sesgo suave al centro: un sujeto apartado tambien ancla */
+          const int bin = (int)(salida[o] * 31.99f);
+          hist[bin] += w;
+          total += w;
+        }
       }
     }
     int mejor = 0;
@@ -781,8 +900,18 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       }
     }
     float nuevo = ((float)(mejor > mediana ? mejor : mediana) + 0.5f) / 32.0f;
+    /* 0,06 por estimacion (el focus.iir.weight del Hub es 0,02: mas lento). ODYSSEYVK_FOCO_IIR o
+       `foco_iir` en serve.conf lo cambian (v0.65). */
+    static const float kFocoIir = [] {
+      const char *e = entornoOdyssey("ODYSSEYVK_FOCO_IIR");
+      std::string s = e ? e : "";
+      for (char &c : s)
+        if (c == ',') c = '.';
+      const float v = s.empty() ? 0.06f : (float)std::atof(s.c_str());
+      return (v > 0.0f && v <= 1.0f) ? v : 0.06f;
+    }();
     if (corte_ || std::fabs(nuevo - focus_) >= 0.01f)
-      focus_ += (nuevo - focus_) * (corte_ ? 1.0f : 0.06f);   /* Samsung usa 0,02; 0,06 responde antes */
+      focus_ += (nuevo - focus_) * (corte_ ? 1.0f : kFocoIir);
   }
 
   /* Los dos planos. Con dureza 0 (lo de siempre, y lo que arranca el programa) este bloque no se
