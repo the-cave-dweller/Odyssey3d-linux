@@ -3,6 +3,44 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El temblor de la v0.69: tope de mapas por segundo (v0.70)
+
+- Rodolfo, con la 0.69 instalada: «sí tiembla más, una sacudida leve de lado a lado, no pareja, pero se
+  percibe». En esa sesión el visor iba ya a **119,8 cuadros por segundo** (antes 81-84): la fluidez se
+  quedó, el temblor era lo que la v0.69 dejó «No probado».
+- Causa (MEDIDO con video real, `tools/mide_temblor.py`, 150 cuadros de dos clips a 25 por segundo,
+  `mde_large`, relieve 1,2 y salida 50): cada mapa trae algo de ruido de la red, y con más mapas por
+  segundo ese ruido deja de ser una deriva lenta y se vuelve temblor.
+
+  | clip | mapas por segundo | movimiento del mapa (px/s) | sobrante sobre el cambio neto | **vaivenes** (px/s) |
+  |---|---|---|---|---|
+  | nave (escena lenta) | ~6 (antes) | 0,84 | 0,65 | **0,34** |
+  | nave | 25 | 2,49 | 2,28 | **0,86** |
+  | globo (animación) | ~6 (antes) | 1,49 | 1,00 | **0,32** |
+  | globo | 25 | 3,15 | 2,65 | **0,76** |
+
+- Arreglo: tope de **6 mapas por segundo** (el ritmo que se aprobó en el panel hasta la v0.68, ahora
+  elegido a propósito), en `src/vkview.cpp`. `mapas_por_segundo` en `serve.conf` /
+  `ODYSSEYVK_MAPAS_SEG` (2..60) lo cambia. El dibujo no depende de esto y sigue a 120.
+- Comprobado sin panel: con el tope por defecto, 30 estimaciones en 5 s (6,0 por segundo), 119,8 fps y
+  0 de 600 cuadros lentos; con `ODYSSEYVK_MAPAS_SEG=20`, 100 en 5 s. A 6 por segundo los pesos «por
+  tiempo» de la v0.69 valen lo mismo que los de antes, así que el mapa es el de la v0.68.
+- No probado: en el panel. Deuda que queda: para tener a la vez mapas rápidos y sin temblor hay que
+  suavizar el mapa crudo en el tiempo **antes** del procesado (ver la v0.69) o promediar varias pasadas
+  de la red por mapa.
+
+### El color «seco / gris» (pregunta de Rodolfo: ¿se dibuja una red virtual encima?)
+
+- No hay red virtual: la trama solo decide, subpíxel a subpíxel, de qué ojo es cada uno. MEDIDO con el
+  cuadro real y el visor de verdad (trama completa contra la fuente): media RGB 51,56 / 37,31 / 32,18
+  contra 51,62 / 37,37 / 32,24; contraste 54,8 contra 55,3; saturación 22,2 contra 20,5; negro (p1) 1,0 en
+  las dos. El programa manda al panel los mismos colores que entrega el navegador.
+- Lo que sí cambia al entrar en 3D (MEDIDO en `kscreen-doctor -o` y en `src/panel.cpp`): el escritorio va
+  con **HDR y gama ancha encendidos** (blanco SDR a 310 nits) y el visor **apaga el HDR** al entrar
+  (`Panel::apply(..., disableHdr = true)`, restaurado al salir); la gama ancha no se toca. HIPÓTESIS: el
+  tono distinto viene de ahí (y de la lente física encendida), no de la trama. Sin probar: dejar el HDR
+  puesto, o quitar también la gama ancha, durante la sesión.
+
 ## El visor deja de pararse 75 ms en cada estimación: 120 cuadros por segundo con el conversor (v0.69)
 
 - Pedido de Rodolfo: investigar por qué el visor va a ~83 cuadros por segundo y no a los 120 del panel.

@@ -2430,7 +2430,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          hilo libre, o sea que a lo que tardaba la red se le sumaban tres cuadros de espera y salian
          ~13 mapas por segundo en vez de los 30-40 que caben. */
       if (newSource && convSalto < 1000) ++convSalto;
-      if (!hiloRed.ocupado && ((newSource && convSalto >= cadaConv) || now - ultimaEstim > 0.5) &&
+      /* Tope de mapas por segundo (v0.70). Hasta la v0.68 salian ~6 por segundo sin que nadie lo
+         hubiera elegido: el hilo que dibuja se paraba 86 ms en cada estimacion. Al quitar esas paradas
+         (v0.69) pasaron a ser 20 con video de 60 cuadros, y Rodolfo vio «una sacudida leve de lado a
+         lado»: cada mapa trae algo de ruido de la red, y con el triple de mapas ese ruido deja de ser
+         una deriva lenta y se vuelve temblor. MEDIDO con video real (tools/mide_temblor.py): los
+         vaivenes del mapa pasan de 0,34 a 0,86 px por segundo (nave) y de 0,32 a 0,76 (globo) al ir de
+         6 a 25 mapas por segundo. Se vuelve a 6 por defecto, ahora elegido y cambiable:
+         ODYSSEYVK_MAPAS_SEG / `mapas_por_segundo` en serve.conf (2..60). El dibujo sigue a 120. */
+      static const double kIntervaloMapas = [] {
+        const char *e = entornoOdyssey("ODYSSEYVK_MAPAS_SEG");
+        std::string s = e ? e : "";
+        for (char &c : s)
+          if (c == ',') c = '.';
+        const double v = s.empty() ? 6.0 : std::atof(s.c_str());
+        return 1.0 / ((v >= 2.0 && v <= 60.0) ? v : 6.0);
+      }();
+      const bool tocaMapa = now - ultimaEstim >= kIntervaloMapas * 0.97;   /* 3 % de holgura por el reloj */
+      if (!hiloRed.ocupado && tocaMapa && ((newSource && convSalto >= cadaConv) || now - ultimaEstim > 0.5) &&
           wv.hasSource()) {
         convSalto = 0;
         ultimaEstim = now;
