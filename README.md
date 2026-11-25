@@ -909,10 +909,18 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   cambio de fase que puedes seguir con `←`/`→`.
   El rastreo está implementado (`--track`, `ctl track`: cámara IR + YuNet + triangulación con la
   calibración de fábrica que lee `SR+CALCAM`), pero necesita dos cosas de la cámara:
-  * **la calibración en disco**. Si falta, el log dice `calibracion: sin SR+CALCAM.bin en ...` y no
-    llega ningún fotograma (`0/0 cuadros`), aunque la cámara esté bien. Se saca del propio monitor con
-    `odysseyvk ctl calib --out /usr/local/share/odysseyvk/calib` (habla con `/dev/ttyACM0`, no toca la
-    pantalla) y deja `SR+CALCAM.bin`, `SR+CALET.bin` y `SR+CAL3D.bin`.
+  * **la calibración en disco**. Si falta, el log dice `calibracion: sin SR+CALCAM.bin (buscado en …)`
+    y no llega ningún fotograma (`0/0 cuadros`), aunque la cámara esté bien y se haya abierto en el
+    formato correcto. Se saca del propio monitor con `odysseyvk ctl calib` (habla con `/dev/ttyACM0`, no
+    toca la pantalla) y deja `SR+CALCAM.bin`, `SR+CALET.bin` y `SR+CAL3D.bin`. Son **de fábrica por
+    unidad**, así que el sitio recomendado es `~/.config/odysseyvk/calib` —el mismo de los mapas de
+    corrección—; el de sistema (`/usr/local/share/odysseyvk/calib`) solo sirve para enseñar la forma.
+    Desde v0.57 esa carpeta se busca también para la calibración de la cámara: antes se buscaba junto al
+    binario y en rutas relativas al directorio actual, así que las sesiones lanzadas por el servicio se
+    quedaban sin rastreo (medido: `0/0 cuadros` en una sesión de 95 s lanzada por `odysseyvk-serve`,
+    mientras lanzado desde el repo llegaba a `59,8 fps`). El orden de búsqueda es
+    `~/.config/odysseyvk/calib`, `~/.config/odyssey3d/calib`, el directorio actual, junto al binario y
+    `/usr/local/share/odysseyvk/calib`.
   * que le contesten los controles UVC: si `ctl camera` falla con `VIDIOC_S_FMT ... Input/output
     error`, en `dmesg` verás `Failed to set UVC probe control : -110`: la interfaz de flujo de la
     cámara dejó de responder a los controles UVC. Suele empezar por una suspensión USB (el kernel la

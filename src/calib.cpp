@@ -65,7 +65,20 @@ static std::string exeDirForCalib() {
 }
 
 static std::vector<std::string> calibBases() {
-  std::vector<std::string> bases = {".", "./calib", "../calib"};
+  std::vector<std::string> bases;
+  /* SR+CALCAM y SR+CALET son de fabrica POR UNIDAD: el dueno los saca de su propio tablero con
+     `ctl calib` y se guardan en ~/.config/odysseyvk/calib. Ahi tenian que buscarse tambien, y hasta
+     ahora no se buscaba: solo se miraba junto al binario y en rutas RELATIVAS al directorio actual.
+     Lanzado desde la unidad de systemd el directorio actual es el home, asi que esas rutas relativas
+     no llevaban a ningun sitio y el rastreo se quedaba sin calibracion. Medido el 2026-11-25: una
+     sesion de 95 s lanzada por el servicio no recibio NI UN cuadro de la camara (0/0, nota
+     "sin SR+CALCAM.bin en ."), mientras 3.768 lineas de sesiones arrancadas desde el repo si
+     traian cuadros (hasta 59,8 fps). Desde el repo funcionaba por `./calib`, que es relativo. */
+  if (const char *h = std::getenv("HOME"); h && *h) {
+    bases.push_back(std::string(h) + "/.config/odysseyvk/calib");
+    bases.push_back(std::string(h) + "/.config/odyssey3d/calib");
+  }
+  for (const char *b : {".", "./calib", "../calib"}) bases.push_back(b);
   std::string ed = exeDirForCalib();
   if (!ed.empty()) {
     bases.push_back(ed + "/calib");
@@ -83,26 +96,32 @@ bool loadFactoryCalib(const std::string &dir, CameraCalibration *cam, TrackerTra
   if (!dir.empty()) bases.push_back(dir);
   for (const std::string &b : calibBases()) bases.push_back(b);
   bool camOk = false, trackOk = false;
-  std::string firstError;
   for (const std::string &b : bases) {
     if (!camOk && cam) {
       std::vector<uint8_t> blob;
       if (readBinaryFile(b + "/SR+CALCAM.bin", blob) && cam->fromBlob(blob)) {
         camOk = true;
         if (err) err->clear();
-      } else if (err && err->empty()) {
-        *err = "sin SR+CALCAM.bin en " + b;
       }
     }
     if (!trackOk && track) {
       std::vector<uint8_t> blob;
       if (readBinaryFile(b + "/SR+CALET.bin", blob) && track->fromBlob(blob)) {
         trackOk = true;
-      } else if (err && err->empty()) {
-        *err = "sin SR+CALET.bin en " + b;
       }
     }
     if ((!cam || camOk) && (!track || trackOk)) break;
+  }
+  /* El aviso acaba en el estado del visor (`camara_nota`) y en el rastreo: decir solo el primer
+     directorio hacia creer que no se busco en los demas. Se listan todos los probados. */
+  if (err && ((!camOk && cam) || (!trackOk && track))) {
+    std::string donde;
+    for (size_t i = 0; i < bases.size(); ++i) {
+      if (i) donde += ", ";
+      donde += bases[i];
+    }
+    *err = std::string("sin ") + ((!camOk && cam) ? "SR+CALCAM.bin" : "SR+CALET.bin") +
+           " (buscado en " + donde + ")";
   }
   return camOk || trackOk;
 }

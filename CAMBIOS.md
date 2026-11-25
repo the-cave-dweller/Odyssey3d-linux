@@ -164,8 +164,38 @@ medidas dentro de su hueco (usado / hueco): `Plano de apoyo` 96,9 / 120 · `3D S
   (9.680 y 9.681 bytes, `src/ajuste.cpp:371-379`); se escribe el nombre de siempre y el sobrante se borró.
 - Sin probar: que los dos filtros (lista y título) se notan con una ventana a pantalla completa delante,
   y que el modo refrescado llegue a una sesión real. Las dos cosas piden poner una ventana a pantalla
-  completa, y eso agarra el panel; además aquí no hay inyector de clics. Y el binario instalado es el de
-  antes de estos arreglos: entran con `sudo cmake --install build`.
+  completa, y eso agarra el panel; además aquí no hay inyector de clics.
+- Instalado y comprobado (03:50 y 03:57): `/usr/local/bin/odysseyvk` y `odysseyvk-ajustes` coinciden byte
+  a byte con los de `build/` (`md5` iguales), la unidad arrancada a las 03:57 corre ese binario, y Rodolfo
+  hizo una sesión real de 95 s con Firefox a pantalla completa: panel a 3D, scaler activado, y al salir
+  `modo 3D apagado`, `lente devuelta a 2D` y `panel restaurado: modo 20 3840x2160@119.88, escala 1.5`,
+  con DP-7 devuelta a su sitio.
+
+### El rastreo no arrancaba en las sesiones lanzadas por el servicio (v0.57)
+
+- Esa sesión de 95 s tuvo 3D pero **sin seguimiento de cabeza**: las líneas periódicas decían
+  `0/0 cuadros (0.0 fps) · hace -1,00 s · calibracion: sin SR+CALCAM.bin en .` y el estado
+  `camara_cara = no`, aunque la cámara se había abierto bien (`[rastreo] /dev/video0 en MJPG 1280x480 @
+  60 (dos vistas, calibrada), buscando la cara`).
+- La causa no es el renombrado: `calibBases()` (`src/calib.cpp:78-91`) buscaba `SR+CALCAM.bin` y
+  `SR+CALET.bin` junto al binario y en rutas **relativas** (`.`, `./calib`, `../calib`), pero nunca en
+  `~/.config/odysseyvk/calib`, que es donde se guardan los de ESA unidad (los mapa de corrección sí se
+  buscaban ahí, por `findDataFile`, `src/main.cpp:1365-1387`). Como el servicio lanza el visor con el
+  directorio actual en el home, las rutas relativas no llevaban a ninguna parte. Contado en el registro
+  de la unidad vieja: 3.768 líneas de rastreo con cuadros (las sesiones arrancadas desde el repo, que
+  tenían `./calib` a mano) frente a 1.044 con la nota de calibración faltante y **0 cuadros**; las dos
+  cosas están perfectamente correlacionadas. Con `odyssey3d` instalado y sesiones desde el repo, por eso
+  se veían hasta `4340/4340 cuadros (59.8 fps)`.
+- Arreglo: `calibBases()` pone primero `~/.config/odysseyvk/calib` y después el del nombre viejo
+  (`~/.config/odyssey3d/calib`) y luego lo de siempre; y el aviso ya no dice solo el primer directorio
+  probado, lista todos (`src/calib.cpp:93-128`) porque el texto sale en `camara_nota`.
+- Medido con el binario instalado, desde `/tmp` y sin abrir sesión: antes
+  `ctl track --segundos 3` → `sin SR+CALCAM.bin en .` y ninguna foto; después → `cara si`,
+  `167 fotogramas leidos, 165 poses validas` en 3 s, cara a ~55-60 cm, error 0,3-2,4 px; la segunda
+  pasada en 2 s dio `107 fotogramas leidos, 105 poses validas`. Los ficheros que se usan son los
+  migrados: `SR+CALCAM.bin` y `SR+CALET.bin`, 256 bytes cada uno, con cabecera 248/1 y 56/1 y
+  `fx = 474,32` en el de la cámara. Falta comprobarlo dentro de una sesión real (eso vuelve a agarrar el
+  panel), aunque el rastreo ya no depende de desde dónde se lance el visor.
 
 ## La pastilla deja de ser redonda y el 3D se apaga con un interruptor (v0.56)
 - Pedido de Rodolfo: «quita el botón de apagar 3D y el de ocultar capa, cambia el de apagar por un botón
