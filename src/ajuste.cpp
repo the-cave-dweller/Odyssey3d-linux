@@ -242,4 +242,172 @@ std::vector<std::string> historial(int n) {
   return lineas;
 }
 
+/* ---------------- lo de fabrica y los guardados por red ---------------- */
+
+std::string rutaServeConf() {
+  /* la misma ruta que lee el vigilante (src/main.cpp), para que "de fabrica" signifique lo mismo aqui
+     y alla: lo que trae el programa, corregido con lo que el usuario puso en serve.conf. */
+  const char *home = std::getenv("HOME");
+  return std::string(home ? home : "") + "/.config/odyssey3d/serve.conf";
+}
+
+std::map<std::string, double> valoresFabrica() {
+  /* Los numeros con los que arranca el visor, leidos del codigo: weave.h (10 de filtro, 1 de paso y de
+     ganancias, 0 del resto), vkui.h y vkview.cpp (3D Salida 50 y plano de apoyo 55 en cuanto la trama se
+     pone), y el temblor y el canto que trae VkWeave. No son topes: son los valores reales de arranque. */
+  static const struct { const char *clave; double valor; } kFabrica[] = {
+      {"fase", 0.0},          {"paso", 1.0},          {"filtro", 10.0},
+      {"crosstalk", 0.0},     {"conv", 0.0},          {"rampa_x", 0.0},
+      {"rampa_y", 0.0},       {"rampa_x_teclas", 0.0}, {"rampa_y_teclas", 0.0},
+      {"fondo", 1.0},         {"frente", 1.0},        {"empuje_fondo", 0.0},
+      {"empuje_frente", 0.0}, {"planos", 0.0},        {"muestras", 0.0},
+      {"temblor", 0.25},      {"canto", 0.004},       {"fase_temblor", 0.0},
+      {"relieve", 50.0},      {"apoyo", 55.0},
+  };
+  std::map<std::string, double> v;
+  for (const auto &f : kFabrica) v[f.clave] = f.valor;
+  /* serve.conf manda encima: usa las mismas palabras que este canal. */
+  for (const auto &par : paresDe(rutaServeConf())) {
+    const Clave *c = buscarClave(par.first);
+    if (!c) continue;                     /* `modo`, `pantalla`, `espera`... no son numeros de la trama */
+    double d = std::strtod(numeroADouble(par.second).c_str(), nullptr);
+    if (d < c->minimo) d = c->minimo;
+    if (d > c->maximo) d = c->maximo;
+    if (c->entero) d = std::floor(d + 0.5);
+    v[par.first] = d;
+  }
+  return v;
+}
+
+int diferencias(const std::map<std::string, double> &numeros, const std::map<std::string, double> &base,
+                std::vector<std::string> *nombres) {
+  int n = 0;
+  for (const auto &kv : numeros) {
+    const auto it = base.find(kv.first);
+    const double ref = it == base.end() ? 0.0 : it->second;
+    if (std::fabs(kv.second - ref) > 1e-6) {
+      ++n;
+      if (nombres) nombres->push_back(kv.first);
+    }
+  }
+  return n;
+}
+
+std::string rutaPerfiles() { return rutaEstadoOdyssey("perfiles"); }
+
+std::map<std::string, std::map<std::string, double>> leerPerfiles() {
+  std::map<std::string, std::map<std::string, double>> todo;
+  std::string contenido;
+  if (!readSmallFile(rutaPerfiles(), contenido)) return todo;
+  std::string seccion;
+  size_t inicio = 0;
+  while (inicio <= contenido.size()) {
+    size_t fin = contenido.find('\n', inicio);
+    if (fin == std::string::npos) fin = contenido.size();
+    const std::string l = recortar(contenido.substr(inicio, fin - inicio));
+    inicio = fin + 1;
+    if (l.empty() || l[0] == '#') continue;
+    if (l.front() == '[') {
+      const size_t eq = l.find('=');
+      const size_t cierre = l.find(']');
+      if (eq == std::string::npos || cierre == std::string::npos || cierre < eq) {
+        seccion.clear();
+        continue;
+      }
+      seccion = expandir(recortar(l.substr(eq + 1, cierre - eq - 1)));
+      continue;
+    }
+    if (seccion.empty()) continue;
+    const size_t eq = l.find('=');
+    if (eq == std::string::npos) continue;
+    const std::string k = strLower(recortar(l.substr(0, eq)));
+    if (!buscarClave(k)) continue;   /* si manoseamos el fichero a mano, lo desconocido se ignora */
+    const std::string valor = recortar(l.substr(eq + 1));
+    todo[seccion][k] = std::strtod(numeroADouble(valor).c_str(), nullptr);
+  }
+  return todo;
+}
+
+static bool escribirPerfiles(const std::map<std::string, std::map<std::string, double>> &todo,
+                             std::string *err) {
+  const std::string destino = rutaPerfiles();
+  const std::string temporal = destino + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  std::fputs("# Los numeros que se dejaron puestos para cada red (.onnx). Sirven para dos cosas: saber\n"
+             "# que red esta modificada respecto de lo de fabrica, y poder volver atras con el boton de\n"
+             "# revertir. Se quitan los renglones a mano si hace falta; lo desconocido se ignora.\n",
+             f);
+  for (const auto &p : todo) {
+    std::fprintf(f, "\n[ruta=%s]\n", p.first.c_str());
+    for (const auto &kv : p.second) std::fprintf(f, "%s = %s\n", kv.first.c_str(),
+                                                 std::to_string(kv.second).c_str());
+  }
+  std::fclose(f);
+  if (std::rename(temporal.c_str(), destino.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + destino + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
+}
+
+bool guardarPerfil(const std::string &modelo, const std::map<std::string, double> &numeros,
+                   std::string *err) {
+  if (modelo.empty()) {
+    if (err) *err = "no hay red que anotar";
+    return false;
+  }
+  auto todo = leerPerfiles();
+  if (todo[modelo] == numeros) return true;   /* no reescribir por reescribir */
+  todo[modelo] = numeros;
+  return escribirPerfiles(todo, err);
+}
+
+bool borrarPerfil(const std::string &modelo, std::string *err) {
+  auto todo = leerPerfiles();
+  if (!todo.count(modelo)) return true;
+  todo.erase(modelo);
+  return escribirPerfiles(todo, err);
+}
+
+std::string rutaSeleccion() { return rutaEstadoOdyssey("seleccion"); }
+
+std::vector<std::string> leerSeleccion() {
+  std::vector<std::string> rutas;
+  std::string contenido;
+  if (!readSmallFile(rutaSeleccion(), contenido)) return rutas;
+  size_t inicio = 0;
+  while (inicio <= contenido.size()) {
+    size_t fin = contenido.find('\n', inicio);
+    if (fin == std::string::npos) fin = contenido.size();
+    const std::string l = recortar(contenido.substr(inicio, fin - inicio));
+    inicio = fin + 1;
+    if (l.empty() || l[0] == '#') continue;
+    rutas.push_back(expandir(l));
+  }
+  return rutas;
+}
+
+bool guardarSeleccion(const std::vector<std::string> &rutas, std::string *err) {
+  const std::string destino = rutaSeleccion();
+  const std::string temporal = destino + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  std::fputs("# Las redes que la ventana de ajustes tiene a mano (la lista de la derecha). Son solo\n"
+             "# rutas: el visor no las lee. Una por linea.\n", f);
+  for (const std::string &r : rutas) std::fprintf(f, "%s\n", r.c_str());
+  std::fclose(f);
+  if (std::rename(temporal.c_str(), destino.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + destino + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
+}
+
 }  /* namespace ajuste */

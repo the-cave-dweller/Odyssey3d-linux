@@ -95,6 +95,9 @@ static const char *kUsage =
     "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
     "  odyssey3d ctl escritorio [poner|quitar|estado]   el overlay FORZADO en el escritorio del monitor:\n"
     "                                        trama y lente encendidas con patron de prueba, sin video (lo mismo que el boton de la ventana de ajustes)\n"
+    "  odyssey3d ctl ajuste [clave valor ...]  mandar numeros vivos al visor (fase, paso, conv, planos, ...)\n"
+    "  odyssey3d ctl ajuste limpiar | fabrica  vaciar el canal | mandar los numeros DE FABRICA (revertir)\n"
+    "  odyssey3d-ajustes                la ventana de ajustes: redes disponibles/seleccionadas, guardados y sus numeros\n"
     "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
     "  odyssey3d test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
     "  odyssey3d serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
@@ -2052,6 +2055,29 @@ static int cmdAjuste(int argc, char **argv) {
       return 1;
     }
     std::printf("canal de ajuste vaciado: vuelven a mandar las teclas y la linea de mando\n");
+    return 0;
+  }
+  if (uno == "fabrica" || uno == "revertir" || uno == "reset") {
+    /* lo mismo que hace el boton «Revertir los cambios de esta red» de la ventana de ajustes, pero sin
+       ventana: manda TODOS los numeros de fabrica al visor y quita el apunte de la red que estaba puesta.
+       De fabrica = lo que trae el programa, corregido con lo que dice serve.conf. */
+    const std::map<std::string, double> base = ajuste::valoresFabrica();
+    std::string err;
+    if (!ajuste::escribir(base, std::string(), &err)) {
+      std::fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    std::printf("mandados los %d numeros de fabrica (la tabla del programa corregida con %s):\n",
+                (int)base.size(), ajuste::rutaServeConf().c_str());
+    for (const auto &kv : base) std::printf("  %-16s %g\n", kv.first.c_str(), kv.second);
+    /* y el apunte de la red que estaba puesta deja de tener sentido */
+    const std::map<std::string, std::string> est = ajuste::leerEstado();
+    const auto it = est.find("modelo");
+    if (it != est.end() && !it->second.empty() && ajuste::leerPerfiles().count(it->second)) {
+      ajuste::borrarPerfil(it->second, &err);
+      std::printf("quitado el guardado de %s\n", it->second.c_str());
+    }
+    std::printf("si hay una sesion abierta los toma en una decima; si no, esperan a que se abra\n");
     return 0;
   }
   if (uno == "estado") {

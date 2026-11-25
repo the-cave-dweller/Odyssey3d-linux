@@ -93,6 +93,33 @@ std::string textoAjuste();
 /* Las ultimas `n` lineas del historial, de la mas vieja a la mas nueva. */
 std::vector<std::string> historial(int n);
 
+/* ---------------- lo de fabrica y los guardados por red (desde v0.52) ----------------
+
+   `valoresFabrica` es el punto de retorno del boton de revertir: los numeros con los que arranca el
+   visor (los que trae el programa, corregidos con lo que dice serve.conf). No es una copia de lo que
+   hay en el fichero de ajuste: ese es una orden de una vez y se vacia. */
+std::map<std::string, double> valoresFabrica();
+std::string rutaServeConf();
+
+/* Cuantas claves de `numeros` se salen de `base`, y cuales son (para decirlo en la ventana). */
+int diferencias(const std::map<std::string, double> &numeros, const std::map<std::string, double> &base,
+                std::vector<std::string> *nombres = nullptr);
+
+/* Los numeros que se guardaron PARA CADA RED (.onnx), en `perfiles`. Solo interesa guardar los de una
+   red que se modifico: revertir esa red es quitar su perfil y mandar los valores de fabrica. Fichero
+   de texto, una seccion `[ruta=/donde/mde_large.onnx]` por red y una linea `clave = valor` dentro. */
+std::string rutaPerfiles();
+std::map<std::string, std::map<std::string, double>> leerPerfiles();
+bool guardarPerfil(const std::string &modelo, const std::map<std::string, double> &numeros,
+                   std::string *err);
+bool borrarPerfil(const std::string &modelo, std::string *err);
+
+/* Las redes que la ventana tiene a mano (la lista de la derecha). Se quedan entre arranques, y no
+   tocan nada del visor: son solo una lista de rutas, una por linea. */
+std::string rutaSeleccion();
+std::vector<std::string> leerSeleccion();
+bool guardarSeleccion(const std::vector<std::string> &rutas, std::string *err);
+
 }  /* namespace ajuste */
 
 #endif
