@@ -2040,6 +2040,31 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     /* la fuente de este cuadro */
     bool newSource = false;
     if (kind == SourceKind::Test) {
+      /* ODYSSEYVK_FUENTE_PNG (taller, v0.62): un PNG del tamano de la pantalla en lugar del patron.
+         Sirve para pasar un cuadro real (p. ej. el -trama-cruda.png de un volcado) por el sombreador
+         de verdad con --mapa-fijo y --dump, sin video, sin red y sin panel. */
+      static const std::string kFuentePng = [] {
+        const char *e = entornoOdyssey("ODYSSEYVK_FUENTE_PNG");
+        return e ? std::string(e) : std::string();
+      }();
+      static bool fuentePngLista = false;
+      if (!kFuentePng.empty() && !fuentePngLista) {
+        fuentePngLista = true;
+#ifdef HAVE_PNG
+        int pw = 0, ph = 0;
+        std::vector<uint8_t> px;
+        if (pngLoadRGBA(kFuentePng, pw, ph, px) && pw == fbW && ph == fbH) {
+          testPx.swap(px);
+          newSource = wv.sourceFromRgba(testPx.data(), fbW, fbH, true, &err);
+          haveTest = true;
+          testAnim = false;
+          std::printf("[taller] fuente fija %s (%dx%d)\n", kFuentePng.c_str(), pw, ph);
+        } else {
+          std::fprintf(stderr, "[taller] ODYSSEYVK_FUENTE_PNG: %s no se pudo leer o no mide %dx%d\n",
+                       kFuentePng.c_str(), fbW, fbH);
+        }
+#endif
+      }
       if (!haveTest || (testAnim && now >= animNext)) {
         makeTestSbs(testPx, fbW, fbH, now - t0, 34.0);
         newSource = wv.sourceFromRgba(testPx.data(), fbW, fbH, true, &err);

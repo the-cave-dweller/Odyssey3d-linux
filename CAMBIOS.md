@@ -3,6 +3,44 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los cantos dejan de salir en peine: agrandado guiado del mapa (v0.62)
+
+- Lo que quedaba de la captura de Rodolfo tras la v0.61: el canto del micrófono (y de los hombros)
+  en sierra fina.
+- Causa: el mapa sale de la red a 518 × 518 y el sombreador lo estiraba a 3840 × 2160 con la cúbica,
+  **sin mirar la imagen** (7,4 × 4,2 px por punto). El canto de un objeto quedaba en escalera de ~4 filas
+  de pantalla y, en la franja de transición, el desplazamiento iba cambiando poco a poco y estiraba el
+  color en horizontal. El recorte de canto (`CantoSuave`) solo lo disimulaba quitando relieve.
+- Arreglo (`mapaGuiado` en `shaders/weave.frag`, el `jbu` del conversor de Windows): cada píxel mira los
+  3 × 3 puntos del mapa de alrededor y los pesa por distancia (σ 0,8 puntos) y por cuánto se parece el
+  color que ese punto va a mostrar (la imagen en su sitio menos su desplazamiento) al color que va a
+  mostrar el píxel (σ 0,06 en RGB 0..1). Con eso el canto del mapa cae en el canto de la imagen y el
+  desplazamiento va entero (sin recorte de canto; el temblor sigue solo en lo llano). Nuevo `vec4 tun8`
+  en el bloque: **`kUboBytes` 320 → 336**, `kOffTun8 = 320`, `static_assert` al día, y su nombre en la
+  vigía de NaN (sin él, un NaN en `tun8` leía fuera de la lista).
+- Llaves: `ODYSSEYVK_JBU=0` vuelve a la cúbica con recorte; `ODYSSEYVK_JBU_COLOR` cambia el 0,06.
+  Taller nuevo: `ODYSSEYVK_FUENTE_PNG=cuadro.png` hace que `odysseyvk test` use ese PNG (del tamaño de la
+  pantalla) en vez del patrón, para pasar un cuadro real por el sombreador con `--mapa-fijo` y `--dump`.
+
+### Comprobado (sin panel)
+
+- Simulación en numpy de un ojo con el cuadro real 3840 × 2160 de la sesión y su mapa
+  (`tools/simula_jbu.py`): el borde del micrófono sale escalonado con la cúbica y liso con el guiado.
+- **El sombreador de verdad**, con ese cuadro (`ODYSSEYVK_FUENTE_PNG`), el mapa real, apoyo 0,37,
+  relieve 50 y las sondas 1 y 2 (cada ojo por separado): con la cúbica, muescas en el canto izquierdo del
+  micrófono en el ojo izquierdo y en el derecho en el ojo derecho; con el guiado, el contorno del
+  micrófono como en el original. Cambian el 0,49 % de los píxeles.
+- Sin ruido nuevo en zonas con textura: detalle horizontal (media de |∂x|) cabeza 2,14 original · 2,08
+  cúbica · 2,06 guiado; libros 0,56 · 0,55 · 0,55.
+- Cuadros por segundo con el cuadro real y el mapa, 14 s cada uno, dos veces: 118,9-119,8 sin guiado y
+  118,7-119,8 con guiado (topado a 120 Hz por la sincronía: sin coste medible).
+
+### No probado
+
+- En el panel con video en movimiento. La red va cada 3 cuadros: entre mapa y mapa la imagen cambia y el
+  guiado compara con colores de un cuadro que ya no es el del mapa; con movimiento rápido puede temblar el
+  canto. Si pasa, `ODYSSEYVK_JBU=0` lo apaga sin recompilar.
+
 ## El detector de rótulos deja de aplastar la cara y el micrófono (v0.61)
 
 - Pedido de Rodolfo, con captura: video de YouTube con el conversor, «bordes asquerosos», sobre todo en el

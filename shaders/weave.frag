@@ -28,6 +28,8 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun6;     /* medición: x temblor de la propia fase de la trama, en ciclos (0 = apagado) */
     vec4 tun7;     /* capas: x/y escala de lo de atras / lo de delante (0 o 1 = sin escalar) ·
                       z/w desplazamiento fijo de esa banda, en puntos de panel (0 = nada) */
+    vec4 tun8;     /* agrandado guiado del mapa (v0.62): x activo · y parecido de color (RGB 0..1) ·
+                      z ancho del peso por distancia en puntos del mapa */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -80,6 +82,56 @@ vec4 mapaCubico(vec2 uv) {
         }
     }
     return v;
+}
+
+/* --- agrandado guiado del mapa (v0.62, el `jbu` del conversor de Windows) -----------------
+   El mapa llega a 518 x 518 y se estira a 3840 x 2160 (7,4 x 4,2 px por punto). Con la cubica el
+   canto de un objeto queda en escalera de ~4 filas y, en la franja de transicion, el desplazamiento
+   cambia poco a poco y estira el color en horizontal: el peine de los bordes del microfono que vio
+   Rodolfo (25-nov). Aqui cada pixel mira los 3 x 3 puntos del mapa que tiene alrededor y los pesa por
+   distancia y por cuanto se parece el color que ESE punto va a mostrar (la imagen en su sitio menos su
+   desplazamiento) al color que va a mostrar el pixel (con el desplazamiento grueso de la cubica). Asi
+   el canto del mapa cae justo en el canto de la imagen. Simulado antes con el cuadro real 3840 x 2160 y
+   su mapa (scratchpad sim_jbu.py): el borde del microfono deja de salir escalonado. */
+float desplazGuia(float d, float gF, float gN) {
+    float s = (d - P.tun4.z) * P.tun4.y * (d < P.tun4.z ? gF : gN);
+    float arriba = P.tun5.y > 0.0 ? P.tun5.y / P.res.x : 1.0;
+    float abajo = P.tun5.z > 0.0 ? P.tun5.z / P.res.x : 1.0;
+    return clamp(s, -abajo, arriba);
+}
+vec3 colorVisto(vec2 uvPantalla, float s, bool izq) {
+    vec2 q = uvPantalla;
+    if (P.tun3.z == 1.0)
+        q.y = 1.0 - q.y;
+    return texture(uSrc, q + vec2((izq ? -s : s) + P.tun1.w, 0.0)).rgb;
+}
+vec2 mapaGuiado(vec2 uv, vec2 d0, float gF, float gN) {
+    ivec2 tam = textureSize(uDepth, 0);
+    vec2 p = uv * vec2(tam) - 0.5;
+    ivec2 c = ivec2(floor(p + 0.5));
+    vec3 gI = colorVisto(uv, desplazGuia(d0.x, gF, gN), true);
+    vec3 gD = colorVisto(uv, desplazGuia(d0.y, gF, gN), false);
+    float kr = 1.0 / (2.0 * P.tun8.y * P.tun8.y);
+    float ke = 1.0 / (2.0 * P.tun8.z * P.tun8.z);
+    vec2 num = vec2(0.0), den = vec2(0.0);
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ivec2 q = clamp(c + ivec2(dx, dy), ivec2(0), tam - 1);
+            vec2 dq = texelFetch(uDepth, q, 0).rg;
+            vec2 uq = (vec2(q) + 0.5) / vec2(tam);
+            vec2 e = vec2(q) - p;
+            float esp = exp(-dot(e, e) * ke);
+            vec3 aI = gI - colorVisto(uq, desplazGuia(dq.x, gF, gN), true);
+            vec3 aD = gD - colorVisto(uq, desplazGuia(dq.y, gF, gN), false);
+            /* el 1e-4 es para que un pixel cuyo color no se parece a ningun vecino (ruido, un brillo)
+               no divida por cero: cae al peso por distancia, o sea a un bilineal suave */
+            float wI = esp * (exp(-dot(aI, aI) * kr) + 1e-4);
+            float wD = esp * (exp(-dot(aD, aD) * kr) + 1e-4);
+            num += vec2(wI * dq.x, wD * dq.y);
+            den += vec2(wI, wD);
+        }
+    }
+    return num / den;
 }
 
 void main()
@@ -169,6 +221,10 @@ void main()
         const float CantoSuave = P.tun5.w > 0.0 ? P.tun5.w : 0.004;
         float cantoI = clamp(CantoSuave / max(pendienteI, 0.00001), 0.10, 1.0);
         float cantoD = clamp(CantoSuave / max(pendienteD, 0.00001), 0.10, 1.0);
+        /* `relI`/`relD`: cuanto del desplazamiento se aplica. Con la cubica es el recorte de canto;
+           con el agrandado guiado el canto ya cae en su sitio y no hay franja borrosa que podar, asi
+           que va entero. `cantoI`/`cantoD` siguen mandando sobre el temblor (solo en lo llano). */
+        float relI = cantoI, relD = cantoD;
         /* Capas por profundidad: lo de detras del plano de apoyo y lo de delante se pueden
            estirar por separado (tun7.x y tun7.y; 0 en el hueco = sin escalar, que es como venia).
            El lado se mira sobre el mapa ya muestreado hacia cada ojo, asi que un objeto que cruza
@@ -178,8 +234,15 @@ void main()
            lo unico que se rompe es la pendiente, que es justo lo que se quiere controlar. */
         const float gFondo = P.tun7.x > 0.0 ? P.tun7.x : 1.0;
         const float gFrente = P.tun7.y > 0.0 ? P.tun7.y : 1.0;
-        float sI = (mp.x - P.tun4.z) * P.tun4.y * cantoI * (mp.x < P.tun4.z ? gFondo : gFrente);
-        float sD = (mp.z - P.tun4.z) * P.tun4.y * cantoD * (mp.z < P.tun4.z ? gFondo : gFrente);
+        if (P.tun8.x == 1.0) {
+            vec2 g = mapaGuiado(fuv, vec2(mp.x, mp.z), gFondo, gFrente);
+            mp.x = g.x;
+            mp.z = g.y;
+            relI = 1.0;
+            relD = 1.0;
+        }
+        float sI = (mp.x - P.tun4.z) * P.tun4.y * relI * (mp.x < P.tun4.z ? gFondo : gFrente);
+        float sD = (mp.z - P.tun4.z) * P.tun4.y * relD * (mp.z < P.tun4.z ? gFondo : gFrente);
         /* Empuje por capa (tun7.z para lo de atras, tun7.w para lo de delante), en puntos de
            panel: un desplazamiento FIJO que se suma al relieve, para llevar una banda entera a un
            plano concreto. Es el far_diff_popup de scene_dspr y el depth_offset de la capa overlay

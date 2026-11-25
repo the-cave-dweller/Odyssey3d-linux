@@ -25,11 +25,12 @@ constexpr size_t kMaxHudVerts = 65536;
    sexto los ajustes finos del mismo (temblor y topes por ojo), el septimo la medicion de la trama
    y el octavo las capas por profundidad (cuanto se estira el fondo y cuanto el frente). */
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
-                 kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304;
+                 kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304,
+                 kOffTun8 = 320;
 /* kUboBytes esta declarado en vkweave.h para que el almacen en CPU use el mismo numero. Si se
    anade otro vec4 al sombreador, hay que subir kUboBytes de 16 en 16 Y anadir su kOff... aqui:
    este aviso salta en la compilacion si los desfases se salen del bloque. */
-static_assert(kOffTun7 + 16 <= kUboBytes, "el ultimo bloque del UBO se sale de kUboBytes");
+static_assert(kOffTun8 + 16 <= kUboBytes, "el ultimo bloque del UBO se sale de kUboBytes");
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -800,6 +801,23 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t7[1] = (capa || tune_.ganFrente > 0.0f) ? tune_.ganFrente : ganBaseFrente;
   t7[2] = capa ? tune_.empFondo : empBaseFondo;
   t7[3] = capa ? tune_.empFrente : empBaseFrente;
+  /* Agrandado guiado del mapa (v0.62, ver mapaGuiado en weave.frag). ODYSSEYVK_JBU=0 lo apaga y
+     vuelve la cubica con el recorte de canto de siempre; ODYSSEYVK_JBU_COLOR cambia cuanto tiene que
+     parecerse el color de un punto del mapa al del pixel para que cuente (0,06 en RGB 0..1). */
+  static const bool kJbu = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_JBU");
+    return !e || e[0] != '0';
+  }();
+  static const float kJbuColor = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_JBU_COLOR");
+    const float v = e ? (float)std::atof(e) : 0.06f;
+    return (v > 0.005f && v < 1.0f) ? v : 0.06f;
+  }();
+  float *t8 = (float *)(dst + kOffTun8);
+  t8[0] = kJbu ? 1.0f : 0.0f;
+  t8[1] = kJbuColor;
+  t8[2] = 0.8f;   /* ancho del peso por distancia, en puntos del mapa */
+  t8[3] = 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
@@ -810,7 +828,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   {
     static const char *kMiembro[] = {"campo v2", "campo v3", "rampa v4", "res",      "tun1",
                                      "tun2",      "tun3",       "tun4",       "tun5", "tun6",
-                                     "tun7"};
+                                     "tun7",      "tun8"};   /* tun8: si falta, un NaN ahi leia fuera */
     const float *fl = (float *)dst;
     int malos = 0, primero = -1;
     for (int i = 0; i < kUboBytes / 4; i++)

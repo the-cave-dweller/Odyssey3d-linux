@@ -23,7 +23,8 @@
    almacen siguio a 288; cada cuadro se escribian 32 bytes fuera y el visor se pintaba
    gris (los numeros de la trama y del contraste se pisaban). Los desfases de cada campo
    estan en kOff... dentro del .cpp, con un static_assert que avisa si crece mas. */
-constexpr size_t kUboBytes = 320;
+/* v0.62: noveno vec4 (tun8, el agrandado guiado del mapa): 320 -> 336. */
+constexpr size_t kUboBytes = 336;
 
 class VkWeave {
 public:
