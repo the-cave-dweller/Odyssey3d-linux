@@ -660,10 +660,12 @@ lo mismo con `g`/`v`.
 Y en v0.51, **`devolver_fullscreen`**: `si` (así) o `no`. Con `si`, cuando la sesión 3D se cerró
 **porque el vídeo se fue** —la ventana del vídeo salió de pantalla completa, o el navegador dijo
 «Parado» / «sin reproductor» por MPRIS— se le quita la pantalla completa a **esa ventana** del navegador,
-para que el escritorio no se quede ocupado por una página a pantalla completa sin nada que ver. Son
-`3` intentos separados 1,2 s dentro de los 12 segundos siguientes; si la página se la vuelve a poner
-después de eso (medido: Firefox se la repone un segundo después), se avisa una vez en el registro y se
-deja al navegador en paz. **Durante una sesión no se toca nada**, y tampoco cuando la sesión se cerró por
+para que el escritorio no se quede ocupado por una página a pantalla completa sin nada que ver. Ojo con el
+orden: en el momento en que cerramos la sesión la ventana **ya está** en su tamaño normal (por eso la
+cerramos) y **un segundo después** la página se la vuelve a poner —medido con Firefox y con mpv—, así que el
+vigía se queda mirando **hasta 20 segundos** a ver si se la reponen; si se la pone, se la quita, con pausas
+de 1,2 s y **tope de 3 intentos**. Si aun así la página sigue insistiendo, se avisa **una sola vez** en el
+registro y se deja al navegador en paz. **Durante una sesión no se toca nada**, y tampoco cuando la sesión se cerró por
 elección (`2D plano`, `Tab`, `ESC`): ahí el vídeo sigue sonando y la pantalla completa es tuya. Vale para
 cualquier navegador que se ponga a pantalla completa (Firefox, Chrome, Zen, Brave, mpv).
 

@@ -61,14 +61,30 @@ Las copias de cada versión están en `../Versiones/` (guardadas con `tools/vers
 - Qué se hace ahora (en el hub, `src/main.cpp`): solo cuando la sesión se cerró **porque el vídeo se
   fue** (la ventana salió de pantalla completa, o el navegador dijo «Parado» o «sin reproductor» por
   MPRIS) se le quita la pantalla completa a ESA ventana, con pausas de 1,2 s y **tope de 3 intentos**
-  dentro de los 12 segundos siguientes; si después de eso la página la vuelve a poner, se avisa una vez
-  y se deja en paz al navegador.
+  dentro de los **20 segundos** siguientes.
+- Fallo que salió a la primera y se corrigió (medido a las 22:04): la primera versión se bajaba del
+  vigía en cuanto la ventana aparecía «ya en su tamaño normal»… que es justo como está en el momento en
+  que cerramos la sesión, porque por eso la cerramos. Así que nunca llegaba a ver la reposición de la
+  página, que llega un segundo DESPUÉS. Ahora la vigía se queda mirando hasta 20 s a ver si se la vuelven
+  a poner.
+- Medido a las 22:06 con mpv mandado por su propio socket IPC (sale de pantalla completa a los 0 s, la
+  página se la pone a los +5 s y vuelve a insistir a los +9 s). Registro de esa corrida:
+  - `la ventana del video salio de pantalla completa (…): cerramos la sesion 3D y devolvemos el panel a 2D`
+  - `sesion 3D terminada (…)`
+  - `el video se fue y la ventana del navegador sigue a pantalla completa: se la quitamos (1/3)`
+  - `… se la quitamos (2/3)`, y después `ctl windows` deja la ventana en `activa 0,0 1280x748`, **sin** la
+    marca de pantalla completa. O sea: el escritorio recupera su tamaño y el navegador no se queda
+    tapando todo con una página que ya no tiene vídeo.
+  - Al insistir una tercera vez, ya pasado el plazo: `… sigue a pantalla completa despues de 2 intento(s) y
+    no insistimos mas: la pagina se la sigue poniendo ella.` Aviso **una sola vez** y la ventana se queda
+    como ella quiere: no peleamos con el navegador para siempre.
 - Regla dura que se respetó: **nunca** se toca la pantalla completa durante una sesión (probado antes:
   el va-y-ven saca al vídeo de su propio fullscreen y corta el 3D) ni cuando la sesión se cerró por
   elección — `2D plano`, `Tab` o `ESC`—, porque ahí el vídeo sigue sonando y la pantalla completa es
   suya. Se apaga con `devolver_fullscreen = no` en `serve.conf`.
-- Pendiente: confirmar delante del panel con YouTube y con un vídeo local, en Firefox y en otro
-  navegador (hace falta otra sesión al panel, con su permiso).
+- Queda por tu parte: comprobarlo con YouTube de verdad (con el navegador, no con mpv), que es donde la
+  página sostiene la pantalla completa y donde MPRIS dice «Parado» al acabar el vídeo. La mecánica ya está
+  medida con mpv y no depende del navegador.
 
 ## La muestra intermedia entre las dos láminas (v0.50)
 - Pedido de Rodolfo: «el modelo nativo ya no tiene bordes rotos como el de samsung, se ve mucho más fluido
