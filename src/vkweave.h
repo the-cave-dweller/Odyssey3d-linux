@@ -25,7 +25,7 @@
    estan en kOff... dentro del .cpp, con un static_assert que avisa si crece mas. */
 /* v0.62: noveno vec4 (tun8, el agrandado guiado del mapa): 320 -> 336.
    v0.67: decimo vec4 (tun9, el paralaje de movimiento): 336 -> 352. */
-constexpr size_t kUboBytes = 352;
+constexpr size_t kUboBytes = 368;
 
 class VkWeave {
 public:
@@ -61,6 +61,12 @@ public:
   /* Video dividido: las filas de arriba y de abajo (fraccion del alto) que se tejen en 2D con el
      cuadro entero, porque ahi el reproductor pinto su barra a lo ancho (ver barra.h). 0 = ninguna. */
   void setFilas2D(float arriba, float abajo) { filasArriba_ = arriba, filasAbajo_ = abajo; }
+  /* Video dividido suavizado (v0.83): la fuente trae dos imagenes lado a lado y el conversor trabaja
+     solo con la izquierda, estirada al ancho entero. Al cambiarlo hay que tirar el mapa de
+     profundidad que hubiera (`dropDepthMap`): era de otra imagen. */
+  void setMediaFuente(bool m) { mediaFuente_ = m; }
+  bool mediaFuente() const { return mediaFuente_; }
+  void dropDepthMap() { depthUsable_ = false; }
   void setSrcFlipY(bool f) { srcFlipY_ = f; }
 
   /* cuadro fuera de pantalla: dibuja trama + interfaz en una imagen propia y la baja a la CPU
@@ -76,7 +82,10 @@ public:
   bool prepareConverter(int sz, std::string *err);      /* crear la copia pequena y el mapa */
   bool converterReady() const { return small_.valid(); }
   int converterSize() const { return smallW_; }
-  bool readSmall(std::vector<uint8_t> &rgba, std::string *err);   /* fuente -> RGBA sz x sz */
+  /* fuente -> RGBA sz x sz. De normal sale lo que ve el conversor (con `setMediaFuente`, solo la
+     imagen izquierda); `entera` = el cuadro entero pase lo que pase, que es lo que necesita el
+     detector de la barra del reproductor para comparar las dos mitades. */
+  bool readSmall(std::vector<uint8_t> &rgba, std::string *err, bool entera = false);
   bool setDepthMap(const uint8_t *g, int w, int h, std::string *err);
   /* lo mismo, con el mapa ya repartido por ojo (dos bytes por punto: izquierdo, derecho) */
   bool setDepthMapRG(const uint8_t *rg, int w, int h, std::string *err);
@@ -237,6 +246,7 @@ private:
   float paralaje_ = 0.0f;
   float sujeto_ = -1.0f;
   float filasArriba_ = 0.0f, filasAbajo_ = 0.0f;
+  bool mediaFuente_ = false;
   bool srcFlipY_ = false;
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   int pw_ = 3840, ph_ = 2160;

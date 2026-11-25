@@ -91,6 +91,90 @@ std::vector<float> residuoPorFila(const uint8_t *rgba, int w, int h, int cadaCen
   return r;
 }
 
+Separacion medirSeparacion(const uint8_t *rgba, int w, int h) {
+  Separacion sal;
+  if (!rgba || w < 64 || h < 64) return sal;
+  const int mitad = w / 2;
+  /* luminancia de las dos mitades, con una caja de 3 para que el punto suelto no mande */
+  std::vector<float> izq((size_t)mitad * (size_t)h), der((size_t)mitad * (size_t)h);
+  for (int y = 0; y < h; y++) {
+    const uint8_t *fila = rgba + (size_t)y * (size_t)w * 4u;
+    for (int lado = 0; lado < 2; lado++) {
+      float *d = (lado ? der.data() : izq.data()) + (size_t)y * (size_t)mitad;
+      const uint8_t *f = fila + (size_t)(lado ? mitad : 0) * 4u;
+      for (int x = 0; x < mitad; x++) {
+        float sum = 0.0f;
+        int n = 0;
+        for (int k = -1; k <= 1; k++) {
+          const int q = x + k;
+          if (q < 0 || q >= mitad) continue;
+          const uint8_t *p = f + (size_t)q * 4u;
+          sum += 0.25f * (float)p[0] + 0.5f * (float)p[1] + 0.25f * (float)p[2];
+          n++;
+        }
+        d[x] = sum / (float)n;
+      }
+    }
+  }
+  /* bloques de 16 x 16 puntos de la imagen izquierda, buscados en la derecha hasta un 10 % del ancho
+     a cada lado (en el panel, casi 6 cm: lo peor que midio Rodolfo fueron 4). Se mira una fila de
+     cada dos. Solo cuentan los bloques con dibujo (un cielo liso casa con cualquier corrimiento) y
+     cuyo mejor corrimiento gana con claridad. Los cuadros negros de arriba y abajo no tienen dibujo
+     y se caen solos. */
+  const int lado = 16, S = std::max(4, mitad / 10);
+  std::vector<float> vistos;
+  std::vector<float> coste((size_t)(2 * S + 1));
+  for (int y0 = 0; y0 + lado <= h; y0 += lado)
+    for (int x0 = S; x0 + lado <= mitad - S; x0 += lado) {
+      float dibujo = 0.0f;
+      for (int y = y0; y < y0 + lado; y += 2) {
+        const float *a = izq.data() + (size_t)y * (size_t)mitad + (size_t)x0;
+        for (int x = 1; x < lado; x++) dibujo += std::fabs(a[x] - a[x - 1]);
+      }
+      dibujo /= (float)((lado / 2) * (lado - 1));
+      if (dibujo < 2.5f) continue;
+      float mejor = 1e30f, total = 0.0f;
+      int dMejor = 0;
+      for (int d = -S; d <= S; d++) {
+        float c = 0.0f;
+        for (int y = y0; y < y0 + lado; y += 2) {
+          const float *a = izq.data() + (size_t)y * (size_t)mitad + (size_t)x0;
+          const float *b = der.data() + (size_t)y * (size_t)mitad + (size_t)(x0 + d);
+          for (int x = 0; x < lado; x++) c += std::fabs(a[x] - b[x]);
+        }
+        coste[(size_t)(d + S)] = c;
+        total += c;
+        if (c < mejor) mejor = c, dMejor = d;
+      }
+      const float medio = total / (float)(2 * S + 1);
+      /* gana con claridad: bastante por debajo del coste medio, y parecido de verdad (menos de 6
+         niveles de diferencia por punto) */
+      if (mejor > 0.55f * medio || mejor / (float)((lado / 2) * lado) > 6.0f) continue;
+      /* afinado por debajo del punto con la parabola de los tres costes */
+      float fino = (float)dMejor;
+      if (dMejor > -S && dMejor < S) {
+        const float c0 = coste[(size_t)(dMejor + S - 1)], c1 = mejor, c2 = coste[(size_t)(dMejor + S + 1)];
+        const float den = c0 - 2.0f * c1 + c2;
+        if (den > 1e-3f) fino += 0.5f * (c0 - c2) / den;
+      }
+      /* lo que en la izquierda esta en x, en la derecha esta en x + d: delante de la pantalla la
+         imagen del ojo izquierdo queda a la derecha de la del derecho, o sea d negativo */
+      vistos.push_back(-fino / (float)mitad);
+    }
+  sal.bloques = (int)vistos.size();
+  if (vistos.size() < 12) return sal;
+  std::sort(vistos.begin(), vistos.end());
+  auto pct = [&](float p) { return vistos[(size_t)std::min((float)(vistos.size() - 1), p * (float)vistos.size())]; };
+  sal.normal = pct(0.50f);
+  /* lo mas cercano y lo mas lejano: el tercero por cada punta, no un percentil. Un objeto que se
+     sale puede ocupar pocos bloques (MEDIDO: uno de 200 x 1000 puntos a 1 cm no llegaba al 5 % de
+     los bloques y el percentil 95 decia 0,0 mm), y con el tercero se perdonan dos casados en falso. */
+  sal.cerca = vistos[vistos.size() - 3];
+  sal.lejos = vistos[2];
+  sal.valida = true;
+  return sal;
+}
+
 void DetectorBarra::olvidar() {
   abajo_ = Zona{};
   arriba_ = Zona{};

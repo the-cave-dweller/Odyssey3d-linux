@@ -3,6 +3,49 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Vídeo dividido suavizado, medidor de separación y diafonía pareja (v0.83)
+
+- Rodolfo, con la 0.82: la franja de la barra «es mucho mejor, ya se puede controlar, está quieta».
+  Y pidió revisar los vídeos divididos: «en objetos muy cercanos el fantasma que queda de imagen es
+  de varios centímetros, casi 4», por si es de las calibraciones o hace falta un suavizado también
+  para esos vídeos. MEDIDO por él en el panel, a media tarea: en objetos normales 2–3 mm; las
+  personas se ven bien; puertas y fondo, unos 3 mm de fantasma; cosas cercanas, milímetros.
+- DERIVADO: la distancia entre imagen y fantasma es la separación que el vídeo trae entre sus dos
+  imágenes a esa profundidad; no depende de la calibración. 4 cm en este panel (598 mm de ancho,
+  3840 puntos) son 257 puntos, el 6,7 % del ancho, y a 67 cm (lo que mide el rastreo) 3,4°. El
+  conversor de vídeo normal, con los topes por ojo de Samsung (+12,67 / −9,98 puntos), no pasa de
+  ~25 puntos entre ojos: 3,9 mm. Lo normal de sus vídeos (2–3 mm) cabe; lo muy cercano se sale diez
+  veces. Lo que sí depende de la lente y de su compensación es cuánto se VE el fantasma (la diafonía).
+- **Vídeo dividido suavizado** (`--suave`, tercer botón de la pastilla, `auto = app:suave`): el
+  conversor trabaja solo con la imagen izquierda de la ventana, estirada al ancho entero.
+  `shaders/weave.frag`: `fuente()` y `tun10.x`; la franja de la barra del reproductor pasa por delante
+  del conversor. `src/vkweave.*`: `setMediaFuente`, `dropDepthMap`, `readSmall(…, entera)` (el
+  detector de la barra sigue viendo el cuadro entero). `src/vkview.cpp`: al cambiar de imagen se
+  espera al hilo de la red, se tira su resultado a medias, se olvida su memoria y se tira el mapa.
+- **Medidor de separación** (`medirSeparacion`, `src/barra.cpp`): bloques de 16 × 16 de la imagen
+  izquierda buscados en la derecha hasta el 10 % del ancho, con afinado por parábola; una medida por
+  segundo y un renglón `[relieve]` cada 20 s, en milímetros de este panel.
+- **`crosstalk_base`** (ajuste en vivo y clave de serve.conf): la compensación pareja de la diafonía,
+  que no tenía mando (`crosstalk` mueve solo el término que pesa hacia los bordes: MEDIDO con
+  `odysseyvk attrs`, su factor vale 0 en el centro y 0,11..0,41 en las esquinas).
+- MEDIDO sin panel y sin abrir ventanas (`tools/prueba-aparte.sh`):
+  - suavizado sobre un cuadro dividido contra el conversor sobre su imagen izquierda ya estirada: lo
+    que ve la red difiere 0,09 niveles, el mapa de profundidad correlaciona 0,9999 y la trama difiere
+    0,48 niveles de media (el estirado no es idéntico punto a punto);
+  - cambiar a suavizado en marcha da la misma trama que arrancar en suavizado (0,00 %); volver a
+    dividido da la de lado a lado de siempre (0,00 %);
+  - con la barra del reproductor: las dos franjas, idénticas al cuadro entero (0,00), en 3D y con el
+    3D apagado; el centro es la imagen izquierda (0,05 niveles en 2D);
+  - medidor: dos mitades iguales 0,0 mm; un objeto puesto a 1, 2 y 4 cm → +11,2, +20,9 y +39,8 mm;
+    28 escenas con separación sintética de hasta 7,2 mm → entre −6,9 y +7,2; 1,0..1,6 ms por medida;
+  - `crosstalk_base`: 0,03 por entorno al arrancar y 0,05 por `ctl ajuste` en marcha, los dos
+    reflejados en `estado` y en `preferencias.log`.
+- **No probado**: nada en el panel. Si el relieve del conversor sobre media imagen (la mitad de
+  puntos a lo ancho) convence. Si subir `crosstalk_base` baja el fantasma de 3 mm o lo vuelve
+  negativo: eso solo se ve delante del monitor.
+- Pendiente, si el suavizado convence: que sea automático (el relieve propio del vídeo mientras
+  quepa, y el suavizado solo mientras algo se salga), usando el medidor.
+
 ## La franja de la barra del reproductor, sin parpadeo (v0.82)
 
 - MEDIDO en el registro de Rodolfo con la 0.81 y YouTube (25/11, 15:30–15:32):

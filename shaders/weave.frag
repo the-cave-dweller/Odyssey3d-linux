@@ -35,10 +35,24 @@ layout(set = 0, binding = 3) uniform WeaveParams {
                       distancias entre ojos (0 = quieta; ya trae su ganancia y su tope de +-1) ·
                       realce del sujeto (v0.68): y profundidad del sujeto en el mapa (< 0 = usar el
                       plano de apoyo) · z fuerza (0 = apagado) · w filas de arriba en 2D (como tun3.x) */
+    vec4 tun10;    /* video dividido suavizado (v0.83): x = 1 la fuente trae dos imagenes lado a lado y
+                      el conversor trabaja solo con la izquierda, estirada al ancho entero */
 } P;
 
 layout(location = 0) in vec2 fuv;
 layout(location = 0) out vec4 o;
+
+/* La imagen fuente tal como la ve el conversor (y el 2D plano). De normal es el cuadro entero. Con
+   tun10.x = 1 el cuadro trae dos imagenes lado a lado (un video dividido) y aqui solo existe la
+   izquierda, estirada al ancho entero: asi el conversor de video normal le pone SU relieve, que nunca
+   pasa del presupuesto de este panel, a un video cuyo relieve propio se sale (v0.83). El tope de la
+   derecha evita que el filtro lineal traiga la primera columna de la otra imagen. */
+vec3 fuente(vec2 q)
+{
+    if (P.tun10.x == 1.0)
+        q.x = min(clamp(q.x, 0.0, 1.0) * 0.5, 0.5 - 0.5 / float(textureSize(uSrc, 0).x));
+    return texture(uSrc, q).rgb;
+}
 
 /* Una mitad del estéreo. fuv.y=0 es arriba de la pantalla. */
 vec3 srcHalf(vec2 uv, float which)
@@ -135,7 +149,7 @@ vec3 colorVisto(vec2 uvPantalla, float s, bool izq) {
     vec2 q = uvPantalla;
     if (P.tun3.z == 1.0)
         q.y = 1.0 - q.y;
-    return texture(uSrc, q + vec2((izq ? vistaIzq() : vistaDer()) * s + P.tun1.w, 0.0)).rgb;
+    return fuente(q + vec2((izq ? vistaIzq() : vistaDer()) * s + P.tun1.w, 0.0));
 }
 /* --- realce de detalle en el sujeto (v0.68, el inpaint.unsharp_mask del Hub) -----------------
    Leido de su ensamblador NV: detalle = imagen - imagen desenfocada (nivel 2 de mip, 4 x 4 puntos);
@@ -154,8 +168,10 @@ vec3 realceSujeto(vec3 c, vec2 q, float d) {
     if (lejos >= 1.0)
         return c;                      /* fuera del sujeto no se gastan las cuatro lecturas */
     vec2 t = 1.5 / vec2(textureSize(uSrc, 0));
-    vec3 borroso = 0.25 * (texture(uSrc, q + vec2(-t.x, -t.y)).rgb + texture(uSrc, q + vec2(t.x, -t.y)).rgb +
-                           texture(uSrc, q + vec2(-t.x, t.y)).rgb + texture(uSrc, q + vec2(t.x, t.y)).rgb);
+    if (P.tun10.x == 1.0)
+        t.x *= 2.0;                    /* la media imagen esta estirada al doble: sus puntos miden el doble */
+    vec3 borroso = 0.25 * (fuente(q + vec2(-t.x, -t.y)) + fuente(q + vec2(t.x, -t.y)) +
+                           fuente(q + vec2(-t.x, t.y)) + fuente(q + vec2(t.x, t.y)));
     vec3 det = c - borroso;
     float umbral = 0.05 * (1.0 + dot(c, vec3(0.1495, 0.2935, 0.057)));
     float puerta = smoothstep(0.5 * umbral, umbral, length(det));
@@ -214,9 +230,15 @@ void main()
         vec2 qc = vec2(u, v);
         if (P.tun3.z == 1.0)
             qc.y = 1.0 - qc.y;          /* la fuente puede venir con la primera fila abajo */
-        o = vec4(texture(uSrc, qc).rgb, 1.0);
+        o = vec4(fuente(qc), 1.0);     /* con tun10.x la red ve solo la imagen izquierda */
         return;
     }
+
+    /* Las filas donde el reproductor pinto su barra a lo ancho de la ventana (las encuentra el visor,
+       ver src/barra.h): ahi los dos ojos ven el cuadro ENTERO, sin partir y sin correr, para que la
+       barra salga de una pieza y este donde se pica con el raton. Vale para el video dividido tal
+       cual y para el suavizado. */
+    bool franja = (P.tun3.y == 0.0) && (fuv.y > 1.0 - P.tun3.x || fuv.y < P.tun9.w);
 
     /* pase 2D: sin tramar (la lente y el scaler pueden seguir activos). Aqui se muestrea la
        imagen ENTERA: si se usara srcHalf se veria solo media pantalla ampliada al doble, que es
@@ -225,7 +247,9 @@ void main()
         vec2 q2 = fuv;
         if (P.tun3.z == 1.0)
             q2.y = 1.0 - q2.y;          /* la fuente puede venir con la primera fila abajo */
-        o = vec4(texture(uSrc, q2).rgb, 1.0);
+        /* con el video dividido suavizado, el 2D plano es la imagen izquierda sola (un 2D de verdad,
+           no las dos mitades), salvo en las filas de la barra del reproductor */
+        o = vec4((P.tun10.x == 1.0 && !franja) ? fuente(q2) : texture(uSrc, q2).rgb, 1.0);
         return;
     }
 
@@ -257,7 +281,13 @@ void main()
     float dep = P.tun3.w;
     float cnv = P.tun1.w;
     vec3 L, R;
-    if (P.tun4.x == 1.0) {
+    if (franja) {
+        vec2 q5 = fuv;
+        if (P.tun3.z == 1.0)
+            q5.y = 1.0 - q5.y;
+        L = texture(uSrc, q5).rgb;
+        R = L;
+    } else if (P.tun4.x == 1.0) {
         /* Video normal (una sola imagen): el mapa de profundidad dice cuanto hay que desplazar
            cada ojo. Lo que esta en el plano de referencia (tun4.z) no se mueve; lo que esta por
            delante sale hacia fuera de la pantalla y el fondo hacia dentro. */
@@ -342,8 +372,8 @@ void main()
            muestrea al reves de hacia donde se mueve) */
         vec2 qI = q4 + vec2(vistaIzq() * sI + cnv, 0.0);
         vec2 qD = q4 + vec2(vistaDer() * sD + cnv, 0.0);
-        L = realceSujeto(texture(uSrc, qI).rgb, qI, mp.x);
-        R = realceSujeto(texture(uSrc, qD).rgb, qD, mp.z);
+        L = realceSujeto(fuente(qI), qI, mp.x);
+        R = realceSujeto(fuente(qD), qD, mp.z);
         if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
     } else if (P.tun4.w == 2.0) {
         /* conversor puesto pero aun sin mapa de profundidad: los dos ojos ven lo mismo, o sea la
@@ -352,16 +382,7 @@ void main()
         vec2 q3 = fuv;
         if (P.tun3.z == 1.0)
             q3.y = 1.0 - q3.y;
-        L = texture(uSrc, q3 + vec2(cnv, 0.0)).rgb;
-        R = L;
-    } else if (P.tun3.y == 0.0 && (fuv.y > 1.0 - P.tun3.x || fuv.y < P.tun9.w)) {
-        /* Video dividido, filas donde el reproductor pinto su barra a lo ancho de la ventana (las
-           encuentra el visor, ver src/barra.h): ahi los dos ojos ven el cuadro ENTERO, sin partir y
-           sin correr, para que la barra salga de una pieza y este donde se pica con el raton. */
-        vec2 q5 = fuv;
-        if (P.tun3.z == 1.0)
-            q5.y = 1.0 - q5.y;
-        L = texture(uSrc, q5).rgb;
+        L = fuente(q3 + vec2(cnv, 0.0));
         R = L;
     } else {
         L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);

@@ -42,8 +42,10 @@ public:
        lo lanzo el servicio, que es quien guarda la eleccion en serve.conf. */
     bool recordarVisible = false;
     bool recordar = false;
-    /* los dos botones de icono de la pastilla (v0.79): que tipo de 3D se esta haciendo y poder
-       cambiarlo en marcha. 1 = video normal (el conversor), 2 = video dividido (lado a lado). */
+    /* los botones de icono de la pastilla (v0.79): que tipo de 3D se esta haciendo y poder
+       cambiarlo en marcha. 1 = video normal (el conversor), 2 = video dividido (lado a lado, con el
+       relieve que trae), 3 = video dividido suavizado (v0.83: una de sus dos imagenes y el relieve
+       del conversor). */
     bool modoVisible = false;
     int modo3d = 1;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
@@ -80,7 +82,8 @@ public:
     HitAskAyuda,       /* el "?" de la tarjeta: no manda nada, solo cambia el texto al pasar por encima */
     HitRecordar,       /* la casilla de «no volver a preguntar» de la pastilla */
     HitModoNormal,     /* los dos botones de icono de la pastilla: video normal ... */
-    HitModoDividido    /* ... y video dividido */
+    HitModoDividido,   /* ... video dividido ... */
+    HitModoSuave       /* ... y video dividido suavizado (v0.83) */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -225,7 +228,7 @@ private:
   Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
-  Rect chkRecordar_, btnNormal_, btnDividido_;
+  Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_;
 };
 
 #endif

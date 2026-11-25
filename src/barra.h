@@ -65,6 +65,21 @@ class DetectorBarra {
   Filas2D puesta_;
 };
 
+/* Cuanto separa el propio video sus dos imagenes (v0.83). Es lo que decide si un video dividido se
+   puede ver tal cual: en este panel el conversor de video normal no separa nunca mas de unos 4 mm, y
+   un objeto que el video trae a 4 cm se ve doble (MEDIDO por Rodolfo el 25/11: 2..3 mm en lo normal,
+   casi 4 cm en lo muy cercano). Se mide casando bloques de la imagen izquierda contra la derecha
+   sobre la copia chica del cuadro; las cifras van en FRACCION DEL ANCHO de la imagen (que en
+   pantalla es el ancho del panel), positivas delante de la pantalla y negativas detras. */
+struct Separacion {
+  bool valida = false;     /* falso: no hubo bloques con dibujo suficiente que casaran */
+  float normal = 0.0f;     /* la mediana: por donde anda la escena */
+  float cerca = 0.0f;      /* lo mas cercano: el tercer bloque por arriba (perdona dos casados en falso) */
+  float lejos = 0.0f;      /* lo mas lejano: el tercero por abajo */
+  int bloques = 0;         /* cuantos bloques entraron en la cuenta */
+};
+Separacion medirSeparacion(const uint8_t *rgba, int w, int h);
+
 /* El residuo de cada fila (0..255): diferencia media entre la mitad izquierda y la derecha con el
    mejor corrimiento. Las filas que no se piden salen a -1. `cada` > 1 mide una fila de cada tantas
    en el centro (alli solo hace falta la mediana). Expuesto para la prueba. */

@@ -1822,6 +1822,12 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     }
     else if (a == "--recordado") o.recordado = true;
     else if (a == "--conversor-en-espera") enEspera = true;
+    else if (a == "--suave") {
+      /* video dividido suavizado: una de sus dos imagenes y el relieve del conversor */
+      o.suave = true;
+      o.conver = true;
+      o.fmtGiven = true;
+    }
     else if (a == "--segundos") { if (!need("segundos")) return false; o.segundos = atoi(argv[++i]); }
     else if (a == "--help" || a == "-h") { std::fputs(kUsage, stdout); exit(0); }
     else if (!a.empty() && a[0] == '-') { std::fprintf(stderr, "opcion desconocida: %s\n", a.c_str()); return false; }
@@ -1906,6 +1912,17 @@ static int cmdBarra(int argc, char **argv) {
                 "  ->  en 2D: abajo %.1f %% · arriba %.1f %%\n", f.c_str(), w, h, ms, med.centro, med.umbral,
                 med.dividido ? "dividido" : "NO dividido", med.filasAbajo, med.maxAbajo, med.filasArriba, med.maxArriba,
                 100.0 * r.abajo, 100.0 * r.arriba);
+    {
+      /* y cuanto separa el propio video sus dos imagenes, en milimetros de este panel (59,8 cm) */
+      const auto t0 = std::chrono::steady_clock::now();
+      const Separacion sp = medirSeparacion(chica.data(), lado, lado);
+      const double msSep = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      if (sp.valida)
+        std::printf("    separacion del video (%.2f ms, %d bloques): normal %+.1f mm · lo mas cercano %+.1f mm · lo mas "
+                    "lejano %+.1f mm\n", msSep, sp.bloques, 598.0 * sp.normal, 598.0 * sp.cerca, 598.0 * sp.lejos);
+      else
+        std::printf("    separacion del video: sin bloques que casen (%d)\n", sp.bloques);
+    }
     if (filas) {
       const std::vector<float> res = residuoPorFila(chica.data(), lado, lado, 4);
       for (int y = 0; y < lado; y++)
@@ -2880,10 +2897,11 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().recordarVisible = !(rec && rec[0] == '0');
   hud.state().recordar = !(rec && rec[0] == '2');
   hud.state().remember = rec && rec[0] == '1';
-  /* los botones de icono: ODYSSEYVK_HUD_MODO=0 los quita, 1 = video normal puesto, 2 = dividido */
+  /* los botones de icono: ODYSSEYVK_HUD_MODO=0 los quita, 1 = video normal puesto, 2 = dividido,
+     3 = dividido suavizado */
   const char *modo = std::getenv("ODYSSEYVK_HUD_MODO");
   hud.state().modoVisible = !(modo && modo[0] == '0');
-  hud.state().modo3d = (modo && modo[0] == '2') ? 2 : 1;
+  hud.state().modo3d = (modo && modo[0] >= '2' && modo[0] <= '3') ? modo[0] - '0' : 1;
   if (const char *linea = std::getenv("ODYSSEYVK_HUD_LINEA")) hud.setInfo(linea);
   if (const char *cuerpo = std::getenv("ODYSSEYVK_HUD_CUERPO")) hud.setAskText("", cuerpo);
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
@@ -2919,9 +2937,10 @@ static int cmdHudSelfTest(int argc, char **argv) {
                               "deslizador salida",   "boton red (quitado)", "tesela video dividido",
                               "tesela arriba/abajo", "tesela plana",        "tesela video normal",
                               "casilla de la tarjeta", "cerrar la tarjeta", "ayuda de la tarjeta",
-                              "casilla de la pastilla", "boton video normal", "boton video dividido"};
-  const int casos = 14;
-  int cuenta[15] = {0}, px0[15] = {0}, py0[15] = {0};
+                              "casilla de la pastilla", "boton video normal", "boton video dividido",
+                              "boton dividido suavizado"};
+  const int casos = 15;
+  int cuenta[16] = {0}, px0[16] = {0}, py0[16] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
@@ -3151,6 +3170,7 @@ struct ServeCfg {
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
+  double crosstalkBase = -1.0;   /* compensacion pareja de la diafonia, 0..0,25; -1 = la de fabrica (0,0129) (v0.83) */
   double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
   double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
   double rampaX = 999.0;    /* rampa de fase en x, ciclos por pixel de panel; 999 = sin ajustar */
@@ -3299,6 +3319,13 @@ static void loadServeCfg(ServeCfg &cfg) {
       const double d = std::atof(numero.c_str());
       cfg.focoIir = (d > 0.0 && d <= 1.0) ? d : -1.0;
     }
+    else if (k == "crosstalk_base") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      cfg.crosstalkBase = (d >= 0.0 && d <= 0.25) ? d : -1.0;
+    }
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
              k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente" ||
@@ -3338,7 +3365,7 @@ static void loadServeCfg(ServeCfg &cfg) {
         size_t dd = par.find(':');
         if (dd == std::string::npos) continue;
         std::string app = strLower(strTrim(par.substr(0, dd))), md = strLower(strTrim(par.substr(dd + 1)));
-        if (!app.empty() && (md == "sbs" || md == "tb" || md == "flat" || md == "conv")) cfg.porApp[app] = md;
+        if (!app.empty() && (md == "sbs" || md == "tb" || md == "flat" || md == "conv" || md == "suave")) cfg.porApp[app] = md;
       }
     }
     (void)last;
@@ -3423,7 +3450,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   const bool legadoPuesto = pila && pila->legado;
   if (legadoPuesto) {
     args.push_back("--legado");
-    if (modo == "conv")
+    if (modo == "conv" || modo == "suave")
       std::fprintf(stderr, "[serve] modo de legado: `modo = conv` no va ahi (aqui el video ya llega en"
                            " dos vistas); se pregunta el formato al arrancar\n");
     else
@@ -3516,13 +3543,15 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   }
   /* video normal: la red de profundidad decide cuanto desplazar cada ojo */
   if (modo == "conv") args.push_back("--conver");
+  /* video dividido suavizado (v0.83): el conversor, pero solo con la imagen izquierda de la ventana */
+  if (modo == "suave") args.push_back("--suave");
   /* La red y sus numeros viajan tambien con el video dividido (v0.79): desde la pastilla se puede
      pasar a video normal en marcha, y sin esto el visor abria la otra red, no la de serve.conf.
      Pasarlas no abre nada: la red solo se carga cuando el conversor se enciende. */
-  if (modo == "conv" || ((modo == "sbs" || modo == "tb") && !legadoPuesto)) {
+  if (modo == "conv" || modo == "suave" || ((modo == "sbs" || modo == "tb") && !legadoPuesto)) {
     /* `--modelo` enciende el conversor por si solo: con el video dividido tiene que esperar apagado
        (en la 0.79 faltaba esto y el video dividido arrancaba convertido como si fuera normal) */
-    if (modo != "conv") args.push_back("--conversor-en-espera");
+    if (modo != "conv" && modo != "suave") args.push_back("--conversor-en-espera");
     args.push_back("--cada");
     args.push_back(std::to_string(cada));
     args.push_back("--red");
@@ -3591,6 +3620,10 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (pila->focoIir > 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->focoIir);
       ::setenv("ODYSSEYVK_FOCO_IIR", valor, 1);
+    }
+    if (pila->crosstalkBase >= 0.0) {
+      std::snprintf(valor, sizeof valor, "%.5f", pila->crosstalkBase);
+      ::setenv("ODYSSEYVK_CROSSTALK_BASE", valor, 1);
     }
     if (pila->temblor >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->temblor);

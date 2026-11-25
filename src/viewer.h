@@ -51,6 +51,10 @@ struct ViewerOpts {
      pastilla ensena la casilla; vacio = no hay casilla (visor lanzado a mano). */
   std::string recordarApp, recordarModo;
   bool recordado = false;
+  /* Video dividido suavizado (--suave, v0.83): la ventana trae dos imagenes lado a lado, pero en vez
+     de tejerlas tal cual se toma solo la izquierda y el relieve lo pone el conversor de video
+     normal. Es para los videos cuyo relieve propio se sale de lo que aguanta este panel. */
+  bool suave = false;
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */

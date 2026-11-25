@@ -26,11 +26,11 @@ constexpr size_t kMaxHudVerts = 65536;
    y el octavo las capas por profundidad (cuanto se estira el fondo y cuanto el frente). */
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
                  kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304,
-                 kOffTun8 = 320, kOffTun9 = 336;
+                 kOffTun8 = 320, kOffTun9 = 336, kOffTun10 = 352;
 /* kUboBytes esta declarado en vkweave.h para que el almacen en CPU use el mismo numero. Si se
    anade otro vec4 al sombreador, hay que subir kUboBytes de 16 en 16 Y anadir su kOff... aqui:
    este aviso salta en la compilacion si los desfases se salen del bloque. */
-static_assert(kOffTun9 + 16 <= kUboBytes, "el ultimo bloque del UBO se sale de kUboBytes");
+static_assert(kOffTun10 + 16 == kUboBytes, "el ultimo bloque del UBO no cuadra con kUboBytes");
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -874,6 +874,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t9[1] = sujeto_;
   t9[2] = kDetalle;
   t9[3] = filasArriba_;
+  ((float *)(dst + kOffTun10))[0] = mediaFuente_ ? 1.0f : 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
@@ -884,7 +885,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   {
     static const char *kMiembro[] = {"campo v2", "campo v3", "rampa v4", "res",      "tun1",
                                      "tun2",      "tun3",       "tun4",       "tun5", "tun6",
-                                     "tun7",      "tun8",       "tun9"};   /* uno por vec4: si falta, un NaN ahi leia fuera */
+                                     "tun7",      "tun8",       "tun9", "tun10"};   /* uno por vec4: si falta, un NaN ahi leia fuera */
     const float *fl = (float *)dst;
     int malos = 0, primero = -1;
     for (int i = 0; i < kUboBytes / 4; i++)
@@ -1271,7 +1272,7 @@ bool VkWeave::prepareConverter(int sz, std::string *err) {
   return true;
 }
 
-bool VkWeave::readSmall(std::vector<uint8_t> &rgba, std::string *err) {
+bool VkWeave::readSmall(std::vector<uint8_t> &rgba, std::string *err, bool entera) {
   if (!dev_ || !small_.valid() || !smallSet_) {
     if (err) *err = "el conversor no está preparado";
     return false;
@@ -1290,6 +1291,7 @@ bool VkWeave::readSmall(std::vector<uint8_t> &rgba, std::string *err) {
     float *t4 = (float *)(ub + kOffTun4);
     t4[0] = 0.0f;
     t4[3] = 1.0f;   /* copia pura: sin campo de la lente ni trama */
+    if (entera) ((float *)(ub + kOffTun10))[0] = 0.0f;   /* el cuadro entero, aunque el conversor use media fuente */
     void *q = nullptr;
     if (vkMapMemory(dev_->device(), smallUboMem_, 0, kUboBytes, 0, &q) != VK_SUCCESS) {
       if (err) *err = "no se pudo actualizar los parametros de la copia pequena";

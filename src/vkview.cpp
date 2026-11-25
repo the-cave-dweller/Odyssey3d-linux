@@ -118,6 +118,7 @@ struct VkUi {
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
+  int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
   std::string modoElegido;   /* "conv" / "sbs" / "tb": con que tipo de 3D se guarda el «no volver a preguntar» */
   /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nativa
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
@@ -193,6 +194,7 @@ static std::map<std::string, double> ajusteActual(const VkUi &ui, const VkWeave 
   v["paso"] = t.pitch;
   v["filtro"] = t.filterSlope;
   v["crosstalk"] = t.xtalkDyn;
+  v["crosstalk_base"] = t.xtalkFac;
   v["conv"] = t.conv;
   v["rampa_x"] = wv.rampaBase(true);
   v["rampa_y"] = wv.rampaBase(false);
@@ -233,6 +235,7 @@ static void aplicarAjuste(VkUi &ui, VkWeave &wv, const std::string &k, double v)
   else if (k == "paso") { antes = fmtNumero(t.pitch); t.pitch = (float)v; }
   else if (k == "filtro") { antes = fmtNumero(t.filterSlope); t.filterSlope = (float)v; }
   else if (k == "crosstalk") { antes = fmtNumero(t.xtalkDyn); t.xtalkDyn = (float)v; }
+  else if (k == "crosstalk_base") { antes = fmtNumero(t.xtalkFac); t.xtalkFac = (float)v; }
   else if (k == "conv") { antes = fmtNumero(t.conv); t.conv = (float)v; }
   else if (k == "rampa_x") { antes = fmtNumero(wv.rampaBase(true)); wv.setRampaBase(true, (float)v); }
   else if (k == "rampa_y") { antes = fmtNumero(wv.rampaBase(false)); wv.setRampaBase(false, (float)v); }
@@ -452,24 +455,31 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       printTuning(ui, "2D plano");
       break;
     case Hud::HitModoNormal:
-    case Hud::HitModoDividido: {
-      /* los dos botones de icono de la pastilla: cambiar de tipo de 3D sin salir del video. El
-         conversor se enciende o se apaga en el bucle del visor (es quien tiene la red). */
-      const bool normal = (hit == Hud::HitModoNormal);
-      if ((st.modo3d == 1) == normal && st.weaveOn) break;   /* ya estaba en ese */
+    case Hud::HitModoDividido:
+    case Hud::HitModoSuave: {
+      /* los botones de icono de la pastilla: cambiar de tipo de 3D sin salir del video. El cambio
+         de verdad (encender o apagar el conversor, darle la imagen entera o solo la izquierda) lo
+         hace el bucle del visor, que es quien tiene la red. */
+      const int modo = hit == Hud::HitModoNormal ? 1 : (hit == Hud::HitModoDividido ? 2 : 3);
+      if (st.modo3d == modo && st.weaveOn) break;   /* ya estaba en ese */
       st.ask = false;
       st.weaveOn = true;
       t.topBottom = false;
-      if (normal) {
-        ui.convWant = true;
-      } else {
-        ui.convFuera = true;
+      ui.modoPedido = modo;
+      if (modo == 2) {
         /* los dos deslizadores vuelven a lo de un video que ya trae sus dos imagenes: sin empuje */
         st.depth = 50;
         st.popout = 0;
       }
-      ui.modoElegido = normal ? "conv" : "sbs";
-      std::printf("[formato] desde la pastilla: %s\n", normal ? "video normal (2D a 3D)" : "video dividido (lado a lado)");
+      static const char *kClave[] = {"", "conv", "sbs", "suave"};
+      static const char *kNombre[] = {"", "video normal (2D a 3D)", "video dividido (lado a lado, su propio relieve)",
+                                      "video dividido suavizado (una imagen y el relieve del conversor)"};
+      static const char *kAviso[] = {"", "vídeo normal", "vídeo dividido: el relieve del propio vídeo",
+                                     "vídeo dividido suavizado: el relieve lo pone el conversor"};
+      ui.modoElegido = kClave[modo];
+      ui.extraInfo = kAviso[modo];
+      ui.extraHasta = glfwGetTime() + 4.0;
+      std::printf("[formato] desde la pastilla: %s\n", kNombre[modo]);
       std::fflush(stdout);
       /* si esta aplicacion estaba apuntada para no preguntar, se queda apuntada con el tipo nuevo */
       if (st.recordar && ui.opts && !ui.opts->recordarApp.empty()) {
@@ -1195,6 +1205,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   if (!opts.mapaFijo.empty() && opts.apoyo < 0.0)
     std::printf("[taller] con --mapa-fijo deberias escribir --apoyo 0..1: sin red nadie sabe donde va "
                 "el plano de apoyo y se pone a la mitad del rango (0,50)\n");
+  /* La compensacion pareja de la diafonia (`crosstalk_base` en serve.conf, v0.83). De fabrica es
+     0,0128535: se resta el 1,3 % de la imagen del otro ojo. Si la lente deja pasar mas que eso, lo que
+     sobra se ve como un fantasma separado lo que el video separe ahi sus dos imagenes. */
+  if (const char *e = entornoOdyssey("ODYSSEYVK_CROSSTALK_BASE")) {
+    std::string num = e;
+    for (char &c : num)
+      if (c == ',') c = '.';
+    const double v = std::atof(num.c_str());
+    if (v >= 0.0 && v <= 0.25) {
+      ui.tune.xtalkFac = (float)v;
+      std::printf("[trama] compensacion pareja de la diafonia: %.4f (de fabrica 0,0129)\n", v);
+    }
+  }
   ui.hud.state().weaveOn = ui.tune.weave;
   /* La tarjeta de "que formato tiene el video" solo sirve si nadie lo eligio antes: si el hub
      o la linea de ordenes ya lo dijeron (--sbs, --tb, --2d), no la volvemos a pintar encima
@@ -1203,7 +1226,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.hud.state().overlayOn = !opts.noHud;
   /* la casilla de «no volver a preguntar» sale solo si el servicio dijo de que aplicacion es el video */
   ui.hud.state().recordarVisible = !opts.recordarApp.empty() && !opts.recordarModo.empty();
-  ui.modoElegido = !opts.recordarModo.empty() ? opts.recordarModo : (opts.conver ? "conv" : (opts.topBottom ? "tb" : "sbs"));
+  ui.modoElegido = !opts.recordarModo.empty() ? opts.recordarModo
+                   : (opts.suave ? "suave" : (opts.conver ? "conv" : (opts.topBottom ? "tb" : "sbs")));
   ui.hud.state().recordar = opts.recordado;
   ui.hud.state().ratonLibre = !opts.noPassthrough;
   /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
@@ -1285,6 +1309,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   DepthNet red;
   std::vector<uint8_t> chico, mapa;
   bool convActivo = opts.conver;
+  /* video dividido suavizado desde el arranque: el conversor ve solo la imagen izquierda */
+  wv.setMediaFuente(opts.suave && opts.conver);
   /* rotulos y subtitulos apoyados en el plano de la pantalla (ODYSSEYVK_TEXTO=0 para apagarlo) */
   bool textoAncla = opts.textoPanel != 0;
   if (const char *e = entornoOdyssey("ODYSSEYVK_TEXTO"))
@@ -1827,6 +1853,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         /* por nombre, sin pasar por la geometria: los dos botones de icono de la pastilla */
         if (tok == "normal") hit = Hud::HitModoNormal, tiene = true;
         if (tok == "dividido") hit = Hud::HitModoDividido, tiene = true;
+        if (tok == "suave") hit = Hud::HitModoSuave, tiene = true;
         float ax = 0, ay = 0, aw = 0, ah = 0;
         ui.hud.pillBounds(&ax, &ay, &aw, &ah);
         std::printf("[golpe] %s -> lienzo (%.0f,%.0f) -> golpe %d · pastilla %.0f,%.0f %.0fx%.0f escala %.2f\n",
@@ -1995,6 +2022,30 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                                                  : "soltados: llevan la profundidad que le da la red (R los apoya)");
         std::fflush(stdout);
       }
+    }
+    if (ui.modoPedido) {
+      /* Los botones de icono de la pastilla. Pasar de «imagen entera» a «solo la izquierda» (o al
+         reves) le cambia a la red la imagen de debajo: se espera a su hilo, se tira lo que traiga
+         a medias, se olvida su memoria (escala, apoyo, rotulos) y se tira el mapa puesto, que era
+         de otra imagen. Hasta que llegue el mapa nuevo se ve la imagen plana (un par de cuadros). */
+      const int modo = ui.modoPedido;
+      ui.modoPedido = 0;
+      const bool media = (modo == 3);
+      if (media != wv.mediaFuente()) {
+        if (hiloRed.ocupado) {
+          hiloRed.esperar();
+          std::vector<uint8_t> tiro;
+          float msTiro = 0.0f;
+          std::string eTiro;
+          hiloRed.recoger(tiro, msTiro, eTiro);
+        }
+        red.reset();
+        hiloRed.memoriaTexto.olvidar();
+        wv.setMediaFuente(media);
+        wv.dropDepthMap();
+      }
+      if (modo == 2) ui.convFuera = true;
+      else ui.convWant = true;
     }
     if (ui.convFuera) {
       /* el boton de video dividido: apagar el conversor si estaba puesto (y nada mas si no) */
@@ -2622,7 +2673,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          si no habia nada que ver */
       static int pAnalisis = 0, pConBanda = 0, pNoDividido = 0;
       static float pCentroMin = 1e9f, pCentroMax = 0.0f, pMaxAbajo = 0.0f, pMaxArriba = 0.0f;
-      const bool dividido = kBarra && st.weaveOn && !st.ask && !ui.convInfo && !wv.converterOn() &&
+      /* y cuanto separa el propio video sus dos imagenes (una medida por segundo, v0.83) */
+      static std::vector<float> sepNormal, sepCerca, sepLejos;
+      static double ultimaSeparacion = -1.0;
+      /* la ventana trae dos imagenes lado a lado: o se tejen tal cual (sin conversor) o el
+         conversor trabaja con la izquierda sola (el suavizado). En el suavizado vale tambien con el 3D
+         apagado: ahi el 2D es la imagen izquierda estirada y la barra saldria a medias. */
+      const bool fuenteDividida = wv.mediaFuente() || (!ui.convInfo && !wv.converterOn());
+      const bool dividido = kBarra && (st.weaveOn || wv.mediaFuente()) && !st.ask && fuenteDividida &&
                             !ui.tune.topBottom && opts.mapaFijo.empty();
       if (!dividido) {
         if (habiaBarra) {
@@ -2641,7 +2699,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         cuentaBarra = 0;
         ultimoAnalisis = now;
         std::string eb;
-        if ((wv.converterReady() || wv.prepareConverter(518, &eb)) && wv.readSmall(chica, &eb)) {
+        if ((wv.converterReady() || wv.prepareConverter(518, &eb)) && wv.readSmall(chica, &eb, true)) {
           const int lado = wv.converterSize();
           fallosBarra = 0;
           DetectorBarra::Medida med;
@@ -2673,10 +2731,33 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (!med.dividido) pNoDividido++;
           pCentroMin = std::min(pCentroMin, med.centro), pCentroMax = std::max(pCentroMax, med.centro);
           pMaxAbajo = std::max(pMaxAbajo, med.maxAbajo), pMaxArriba = std::max(pMaxArriba, med.maxArriba);
+          if (med.dividido && now - ultimaSeparacion >= 1.0) {
+            ultimaSeparacion = now;
+            const Separacion sp = medirSeparacion(chica.data(), lado, lado);
+            if (sp.valida) {
+              sepNormal.push_back(sp.normal);
+              sepCerca.push_back(sp.cerca);
+              sepLejos.push_back(sp.lejos);
+            }
+          }
           if (now - parteDesde >= 20.0) {
             std::printf("[barra] 20 s: %d analisis · centro %.1f..%.1f · residuo maximo abajo %.0f, arriba %.0f · con "
                         "banda %d %% del tiempo · no dividido %d %%\n", pAnalisis, pCentroMin, pCentroMax, pMaxAbajo,
                         pMaxArriba, 100 * pConBanda / std::max(1, pAnalisis), 100 * pNoDividido / std::max(1, pAnalisis));
+            if (sepNormal.size() >= 3) {
+              /* en milimetros de ESTE panel (27 pulgadas, 598 mm de ancho): lo normal es la mediana
+                 de las medidas, y de lo mas cercano y lo mas lejano se toma la segunda medida por cada
+                 punta, para que un solo segundo raro no mande */
+              const double mm = 598.0;
+              std::sort(sepNormal.begin(), sepNormal.end());
+              std::sort(sepCerca.begin(), sepCerca.end());
+              std::sort(sepLejos.begin(), sepLejos.end());
+              std::printf("[relieve] el video dividido separa sus dos imagenes: lo normal %+.1f mm · lo mas cercano "
+                          "%+.1f mm · lo mas lejano %+.1f mm (%d medidas; el conversor de este panel no pasa de 4 mm)%s\n",
+                          mm * sepNormal[sepNormal.size() / 2], mm * sepCerca[sepCerca.size() - 2], mm * sepLejos[1],
+                          (int)sepNormal.size(), wv.mediaFuente() ? " · ahora en suavizado" : "");
+            }
+            sepNormal.clear(), sepCerca.clear(), sepLejos.clear();
             std::fflush(stdout);
             parteDesde = now;
             pAnalisis = pConBanda = pNoDividido = 0;
@@ -2958,7 +3039,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        boton: dice con que camara se esta siguiendo la cara y que esta viendo. */
     /* los botones de icono: cual de los dos tipos de 3D esta puesto de verdad (lo dice el conversor) */
     ui.hud.state().modoVisible = (kind == SourceKind::Capture) && !ui.hud.state().legado;
-    ui.hud.state().modo3d = ui.convInfo ? 1 : 2;
+    ui.hud.state().modo3d = ui.convInfo ? (wv.mediaFuente() ? 3 : 1) : 2;
     ui.hud.state().controlOjo = opts.track;   /* desde v0.78 solo dice si se PIDIO rastreo: la fila ya no se pinta */
 #ifdef HAVE_OPENCV
     {

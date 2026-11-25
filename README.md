@@ -541,10 +541,14 @@ desde v0.79 lleva el **tono de la tarjeta**: fondo gris casi negro y el acento m
   gris con la bola a la derecha y `OFF`. Se pica en cualquier punto de la pista;
 * **Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — en modo de legado se llama **Plano de apoyo**;
 * **Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
-* dos **botones de solo icono** (v0.79), con el dibujo de las teselas de la tarjeta: **vídeo normal**
-  y **vídeo dividido**. El que está puesto sale encendido y con filo; se pica el otro y el visor
-  cambia de tipo de 3D sin salir del vídeo (enciende o apaga el conversor). Si la aplicación estaba
-  guardada, se queda guardada con el tipo nuevo. En modo de legado no salen;
+* tres **botones de solo icono** (v0.79; el tercero, v0.83), con el dibujo de las teselas de la
+  tarjeta. El que está puesto sale encendido y con filo; se pica otro y el visor cambia de tipo de 3D
+  sin salir del vídeo. Si la aplicación estaba guardada, se queda guardada con el tipo nuevo. En modo
+  de legado no salen:
+  * una imagen entera = **vídeo normal** (el conversor le pone el relieve);
+  * dos imágenes separadas = **vídeo dividido**, con el relieve que trae el propio vídeo;
+  * una imagen con la raya a trazos en medio = **vídeo dividido suavizado**: se usa solo una de sus
+    dos imágenes y el relieve lo pone el conversor (ver «Cuando el vídeo dividido se ve doble»);
 * debajo, la casilla **No volver a preguntar**, que solo sale cuando el vídeo lo lanzó el servicio: es la
   misma de la tarjeta de la orilla, pero dentro del vídeo. Marcada, esa aplicación pasa directa al 3D
   la próxima vez; **desmarcada, el servicio vuelve a preguntar**. El cambio se apunta en `serve.conf`
@@ -579,6 +583,24 @@ capturas: `odysseyvk barra-detect [--filas] CUADRO.png …`. Con un vídeo divid
 `odysseyvk ctl barra guardar [N]` le pide al visor que deje N copias chicas del cuadro (518 × 518) en
 `~/.local/state/odysseyvk/barra/`, para afinar el detector con el reproductor de verdad; el registro
 lleva además un parte cada 20 s (`[barra] 20 s: …`).
+
+**Cuando el vídeo dividido se ve doble** (v0.83). En un vídeo dividido la distancia entre la imagen
+y su fantasma es la que el propio vídeo pone entre sus dos imágenes a esa profundidad. El conversor
+de este panel nunca separa más de unos 4 mm; un vídeo dividido puede traer mucho más (medido por
+Rodolfo: 2–3 mm en lo normal, casi 4 cm en objetos muy cercanos), y eso no lo arregla ninguna
+calibración: 4 cm a 67 cm de distancia son 3,4°, que no se funden. Para esos vídeos está el tercer
+botón, **dividido suavizado**: el visor se queda con la imagen izquierda, estirada al ancho entero, y
+el relieve lo pone el conversor de vídeo normal, dentro del presupuesto del panel. Se pierde el
+relieve propio del vídeo (queda el que estima la red); con el 3D apagado se ve un 2D de verdad en vez
+de las dos mitades. En `serve.conf` se guarda como `auto = app:suave`. El registro dice cada 20 s
+cuánto separa el vídeo: `[relieve] el video dividido separa sus dos imagenes: lo normal +2,1 mm · lo
+mas cercano +38,0 mm · lo mas lejano -3,2 mm`.
+
+Lo que sí es de calibración es **cuánto se ve** ese fantasma: la parte de la imagen de un ojo que se
+cuela en el otro (diafonía). El sombreador resta de fábrica el 1,29 % de la otra imagen en toda la
+pantalla; desde v0.83 ese número se mueve en vivo con `odysseyvk ctl ajuste crosstalk_base=0,03`
+(0 … 0,25) y se deja fijo con `crosstalk_base = 0,03` en `serve.conf`. (`crosstalk`, la clave de
+siempre, solo pesa hacia los bordes de la pantalla: en el centro vale cero.)
 
 **Probar el visor sin abrir ninguna ventana** (v0.82): `tools/prueba-aparte.sh` corre `odysseyvk
 test` dentro de un compositor aparte y sin salida (gamescope en modo *headless*), con su propia

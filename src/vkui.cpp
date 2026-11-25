@@ -467,7 +467,7 @@ void Hud::begin(int w, int h, float altoLogico) {
      la linea de abajo a la izquierda), el letrero de la lente encima de la pastilla y los avisos
      de teclas repartidos, que ahora caben en un renglon. Sigue RECTA, como la pidio Rodolfo. */
   chkRecordar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
-  btnNormal_ = btnDividido_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  btnNormal_ = btnDividido_ = btnSuave_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
     const bool leg = st_.legado;
@@ -477,7 +477,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
        Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
     const bool hayModo = st_.modoVisible && !leg;
-    const float anchoBloque = st_.recordarVisible ? anchoRec : (hayModo ? 128.0f : 0.0f);
+    /* tres botones de 48 con 8 de aire: 160. Con la casilla manda lo que mida su letra si es mas */
+    const float anchoBloque = hayModo ? std::max(160.0f, st_.recordarVisible ? anchoRec : 0.0f)
+                                      : (st_.recordarVisible ? anchoRec : 0.0f);
     float pw = aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     pw = std::min(pw, (float)vw - 48.0f);
@@ -532,16 +534,22 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float bloqueX = popTrack_.x + anchoDes + 26.0f;
     const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + aire <= x0 + pw + 0.5f;
 
-    /* ---- los dos botones de icono: video normal y video dividido (v0.79) ----
-       Sin letra, con el mismo dibujo de las teselas de la tarjeta. El que esta puesto sale encendido
-       y con filo; el otro, apagado. Se pica el otro y el visor cambia de tipo de 3D sin salir. */
+    /* ---- los botones de icono: video normal, video dividido y dividido suavizado ----
+       Sin letra, con el dibujo de las teselas de la tarjeta. El que esta puesto sale encendido y
+       con filo; los otros, apagados. Se pica otro y el visor cambia de tipo de 3D sin salir.
+         - una imagen entera            = video normal (el conversor le pone el relieve)
+         - dos imagenes separadas       = video dividido, con el relieve que trae
+         - una imagen con la raya en medio = video dividido SUAVIZADO (v0.83): se usa una sola de
+           sus dos imagenes y el relieve lo pone el conversor, para los videos cuyo relieve propio
+           se sale de lo que aguanta el panel (objetos muy cerca que se ven dobles). */
     if (cabeBloque && hayModo) {
-      const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
+      const float bw = (anchoBloque - 16.0f) / 3.0f, bh = 30.0f;
       const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
       btnNormal_ = {bloqueX, by, bw, bh};
       btnDividido_ = {bloqueX + bw + 8.0f, by, bw, bh};
-      const Rect bs[2] = {btnNormal_, btnDividido_};
-      for (int i = 0; i < 2; i++) {
+      btnSuave_ = {bloqueX + 2.0f * (bw + 8.0f), by, bw, bh};
+      const Rect bs[3] = {btnNormal_, btnDividido_, btnSuave_};
+      for (int i = 0; i < 3; i++) {
         const Rect &b = bs[i];
         const bool puesto = (st_.modo3d == i + 1), hov = b.inside(mx_, my_);
         const float fondo[3] = {puesto ? 0.26f : (hov ? 0.23f : 0.17f), puesto ? 0.25f : (hov ? 0.235f : 0.175f),
@@ -549,13 +557,19 @@ void Hud::begin(int w, int h, float altoLogico) {
         if (puesto) solid(b.x - 1.5f, b.y - 1.5f, b.w + 3.0f, b.h + 3.0f, ink[0], ink[1], ink[2], 0.85f);
         solid(b.x, b.y, b.w, b.h, fondo[0], fondo[1], fondo[2], 1.0f);
         const float luz = puesto ? 1.0f : (hov ? 0.80f : 0.55f);
-        const float iw = 42.0f, ih = 22.0f, ix = b.x + (b.w - iw) * 0.5f, iy = b.y + (b.h - ih) * 0.5f;
+        const float iw = std::min(40.0f, b.w - 8.0f), ih = 22.0f;
+        const float ix = b.x + (b.w - iw) * 0.5f, iy = b.y + (b.h - ih) * 0.5f;
         if (i == 0) {
           paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo);
-        } else {
+        } else if (i == 1) {
           const float mitad = (iw - 3.0f) * 0.5f;
           paisaje({ix, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
           paisaje({ix + mitad + 3.0f, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
+        } else {
+          /* la imagen entera con la raya del corte a trazos: viene partida, se ve de una pieza */
+          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo);
+          for (int k = 0; k < 4; k++)
+            solid(ix + iw * 0.5f - 1.0f, iy + 1.0f + (float)k * 5.5f, 2.0f, 3.5f, luz, luz, luz, 1.0f);
         }
       }
     }
@@ -759,6 +773,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (pt.inside(mx, my)) return HitPopout;
   if (btnNormal_.inside(mx, my)) return HitModoNormal;
   if (btnDividido_.inside(mx, my)) return HitModoDividido;
+  if (btnSuave_.inside(mx, my)) return HitModoSuave;
   if (chkRecordar_.inside(mx, my)) return HitRecordar;
   return HitNone;
 }

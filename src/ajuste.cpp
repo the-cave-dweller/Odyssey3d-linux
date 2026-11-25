@@ -24,6 +24,9 @@ const std::vector<Clave> &claves() {
       {"paso", "paso de la lente", 0.5, 2.0, 0.0002, false},
       {"filtro", "filtro de la trama", 0.0, 30.0, 0.5, false},
       {"crosstalk", "crosstalk", -0.2, 0.2, 0.002, false},
+      /* la compensacion PAREJA de la diafonia (v0.83): cuanta imagen del otro ojo se resta en toda
+         la pantalla. `crosstalk` de arriba solo pesa hacia los bordes (en el centro vale 0). */
+      {"crosstalk_base", "crosstalk parejo", 0.0, 0.25, 0.002, false},
       {"conv", "convergencia", -0.05, 0.05, 0.0005, false},
       {"rampa_x", "rampa de fase en x", -0.05, 0.05, 0.00001, false},
       {"rampa_y", "rampa de fase en y", -0.05, 0.05, 0.00001, false},
@@ -318,7 +321,7 @@ std::map<std::string, double> valoresFabrica() {
      pone), y el temblor y el canto que trae VkWeave. No son topes: son los valores reales de arranque. */
   static const struct { const char *clave; double valor; } kFabrica[] = {
       {"fase", 0.0},          {"paso", 1.0},          {"filtro", 10.0},
-      {"crosstalk", 0.0},     {"conv", 0.0},          {"rampa_x", 0.0},
+      {"crosstalk", 0.0},     {"crosstalk_base", 0.0128535}, {"conv", 0.0}, {"rampa_x", 0.0},
       {"rampa_y", 0.0},       {"rampa_x_teclas", 0.0}, {"rampa_y_teclas", 0.0},
       {"fondo", 1.0},         {"frente", 1.0},        {"empuje_fondo", 0.0},
       {"empuje_frente", 0.0}, {"planos", 0.0},        {"muestras", 0.0},
@@ -434,7 +437,8 @@ bool tomarRecordar(std::string &app, std::string &modo) {
   if (a == pares.end() || m == pares.end() || a->second.empty()) return false;
   app = strLower(a->second);
   modo = strLower(m->second);
-  if (modo != "sbs" && modo != "tb" && modo != "conv" && modo != "flat") modo.clear();   /* `no` y lo raro */
+  if (modo != "sbs" && modo != "tb" && modo != "conv" && modo != "flat" && modo != "suave")
+    modo.clear();   /* `no` y lo raro */
   return true;
 }
 
