@@ -26,11 +26,11 @@ constexpr size_t kMaxHudVerts = 65536;
    y el octavo las capas por profundidad (cuanto se estira el fondo y cuanto el frente). */
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
                  kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304,
-                 kOffTun8 = 320;
+                 kOffTun8 = 320, kOffTun9 = 336;
 /* kUboBytes esta declarado en vkweave.h para que el almacen en CPU use el mismo numero. Si se
    anade otro vec4 al sombreador, hay que subir kUboBytes de 16 en 16 Y anadir su kOff... aqui:
    este aviso salta en la compilacion si los desfases se salen del bloque. */
-static_assert(kOffTun8 + 16 <= kUboBytes, "el ultimo bloque del UBO se sale de kUboBytes");
+static_assert(kOffTun9 + 16 <= kUboBytes, "el ultimo bloque del UBO se sale de kUboBytes");
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -824,6 +824,17 @@ void VkWeave::fillUbo(uint8_t *dst) {
     return !e || e[0] != '0';
   }();
   t8[3] = kCompresion ? 1.0f : 0.0f;
+  /* Paralaje de movimiento (v0.67): lo pone el visor cada cuadro con setParalaje. Para el taller,
+     ODYSSEYVK_PARALAJE_FIJO fuerza un valor (-1..1) sin rastreo: con +1 la vista izquierda es la imagen
+     sin desplazar y la derecha lleva el doble, que es como se comprueba con --dump. */
+  static const float kParalajeFijo = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_PARALAJE_FIJO");
+    const float v = e ? (float)std::atof(e) : 99.0f;
+    return (v >= -1.0f && v <= 1.0f) ? v : 99.0f;
+  }();
+  float *t9 = (float *)(dst + kOffTun9);
+  t9[0] = kParalajeFijo < 50.0f ? kParalajeFijo : paralaje_;
+  t9[1] = t9[2] = t9[3] = 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
@@ -834,7 +845,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   {
     static const char *kMiembro[] = {"campo v2", "campo v3", "rampa v4", "res",      "tun1",
                                      "tun2",      "tun3",       "tun4",       "tun5", "tun6",
-                                     "tun7",      "tun8"};   /* tun8: si falta, un NaN ahi leia fuera */
+                                     "tun7",      "tun8",       "tun9"};   /* uno por vec4: si falta, un NaN ahi leia fuera */
     const float *fl = (float *)dst;
     int malos = 0, primero = -1;
     for (int i = 0; i < kUboBytes / 4; i++)

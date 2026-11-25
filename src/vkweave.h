@@ -23,8 +23,9 @@
    almacen siguio a 288; cada cuadro se escribian 32 bytes fuera y el visor se pintaba
    gris (los numeros de la trama y del contraste se pisaban). Los desfases de cada campo
    estan en kOff... dentro del .cpp, con un static_assert que avisa si crece mas. */
-/* v0.62: noveno vec4 (tun8, el agrandado guiado del mapa): 320 -> 336. */
-constexpr size_t kUboBytes = 336;
+/* v0.62: noveno vec4 (tun8, el agrandado guiado del mapa): 320 -> 336.
+   v0.67: decimo vec4 (tun9, el paralaje de movimiento): 336 -> 352. */
+constexpr size_t kUboBytes = 352;
 
 class VkWeave {
 public:
@@ -53,6 +54,8 @@ public:
   void setHud(const std::vector<HudVertex> &v) { hud_ = v; }
   void setHudState(int st) { hudState_ = st; }
   void setDepthShift(float d) { depthShift_ = d; }
+  /* cuanto se ha movido la cabeza, en medias distancias entre ojos y ya con ganancia y tope (v0.67) */
+  void setParalaje(float h) { paralaje_ = h < -1.0f ? -1.0f : (h > 1.0f ? 1.0f : h); }
   void setSrcFlipY(bool f) { srcFlipY_ = f; }
 
   /* cuadro fuera de pantalla: dibuja trama + interfaz en una imagen propia y la baja a la CPU
@@ -223,6 +226,7 @@ private:
   int atlasW_ = 0, atlasH_ = 0;
   int hudState_ = 0;
   float depthShift_ = 0.0f;
+  float paralaje_ = 0.0f;
   bool srcFlipY_ = false;
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   int pw_ = 3840, ph_ = 2160;

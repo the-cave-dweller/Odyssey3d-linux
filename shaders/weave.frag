@@ -31,6 +31,8 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun8;     /* agrandado guiado del mapa (v0.62): x activo · y parecido de color (RGB 0..1) ·
                       z ancho del peso por distancia en puntos del mapa · w compresion suave en los
                       topes (v0.64, 1 = puesta) */
+    vec4 tun9;     /* paralaje de movimiento (v0.67): x cuanto se ha movido la cabeza, en medias
+                      distancias entre ojos (0 = quieta; ya trae su ganancia y su tope de +-1) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -120,11 +122,18 @@ float desplazGuia(float d, float gF, float gN) {
     float smaxB = max(0.0, P.tun4.z) * P.tun4.y * gF;
     return clamp(compSuave(s, arriba, abajo, smaxF, smaxB), -abajo, arriba);
 }
+/* Paralaje de movimiento (v0.67). Cada ojo es una camara en la posicion p (izquierdo -1, derecho +1, en
+   medias distancias entre ojos) y un punto con desplazamiento s se lee en q + p s. Si la cabeza se mueve
+   h, las dos camaras se mueven con ella: p = h -+ 1. Lo de delante de la pantalla se corre al reves que la
+   cabeza y lo de detras con ella, como al asomarse a una ventana. La separacion ENTRE ojos sigue siendo
+   2 s: no gasta presupuesto de la lente ni anade diafonia; lo que crece es el estirado en los cantos. */
+float vistaIzq() { return -1.0 + P.tun9.x; }
+float vistaDer() { return 1.0 + P.tun9.x; }
 vec3 colorVisto(vec2 uvPantalla, float s, bool izq) {
     vec2 q = uvPantalla;
     if (P.tun3.z == 1.0)
         q.y = 1.0 - q.y;
-    return texture(uSrc, q + vec2((izq ? -s : s) + P.tun1.w, 0.0)).rgb;
+    return texture(uSrc, q + vec2((izq ? vistaIzq() : vistaDer()) * s + P.tun1.w, 0.0)).rgb;
 }
 vec2 mapaGuiado(vec2 uv, vec2 d0, float gF, float gN) {
     ivec2 tam = textureSize(uDepth, 0);
@@ -306,8 +315,8 @@ void main()
         /* lo que esta por delante del plano de referencia va hacia fuera en la pantalla: en la
            vista izquierda el contenido se corre a la derecha y en la derecha a la izquierda (se
            muestrea al reves de hacia donde se mueve) */
-        L = texture(uSrc, q4 + vec2(-sI + cnv, 0.0)).rgb;
-        R = texture(uSrc, q4 + vec2(sD + cnv, 0.0)).rgb;
+        L = texture(uSrc, q4 + vec2(vistaIzq() * sI + cnv, 0.0)).rgb;
+        R = texture(uSrc, q4 + vec2(vistaDer() * sD + cnv, 0.0)).rgb;
         if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
     } else if (P.tun4.w == 2.0) {
         /* conversor puesto pero aun sin mapa de profundidad: los dos ojos ven lo mismo, o sea la

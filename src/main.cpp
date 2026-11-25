@@ -2869,6 +2869,7 @@ struct ServeCfg {
   double relieve = -1.0;    /* escala de la ganancia del releve; 0 = sin releve ninguno */
   std::string saliencia;    /* si / no: elegir el plano de apoyo con la saliencia del Hub (v0.65) */
   double pivote = -1.0;     /* 0..0,9: cuanto se retrasa el plano de la pantalla respecto al sujeto (v0.66) */
+  double paralaje = 999.0;  /* ganancia del paralaje de movimiento, -2..2; 999 = sin poner (apagado) (v0.67) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
@@ -3004,12 +3005,13 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
-    else if (k == "pivote" || k == "relieve_local") {
+    else if (k == "pivote" || k == "relieve_local" || k == "paralaje") {
       std::string numero = v;
       for (char &c : numero)
         if (c == ',') c = '.';
       const double d = std::atof(numero.c_str());
       if (k == "pivote") cfg.pivote = (d >= 0.0 && d <= 0.9) ? d : -1.0;
+      else if (k == "paralaje") cfg.paralaje = (d >= -2.0 && d <= 2.0) ? d : 999.0;
       else cfg.relieveLocal = (d >= 0.0 && d <= 3.0) ? d : -1.0;
     }
     else if (k == "foco_iir") {
@@ -3262,6 +3264,10 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (pila->relieveLocal >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->relieveLocal);
       ::setenv("ODYSSEYVK_RELIEVE_LOCAL", valor, 1);
+    }
+    if (pila->paralaje < 900.0) {
+      std::snprintf(valor, sizeof valor, "%.4f", pila->paralaje);
+      ::setenv("ODYSSEYVK_PARALAJE", valor, 1);
     }
     if (pila->focoIir > 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->focoIir);

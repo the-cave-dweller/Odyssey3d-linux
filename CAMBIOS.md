@@ -3,6 +3,41 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Paralaje de movimiento: lo cercano se desliza al mover la cabeza (v0.67)
+
+- Segunda de las tres ideas pedidas por Rodolfo. Hasta ahora el rastreo solo apuntaba cada vista a su
+  ojo: el contenido no cambiaba al moverse. El Hub tiene la pieza (`warp.auto_viewpos`,
+  `iir_viewpos_weight 0,1`) y la trae apagada.
+- Cómo: cada ojo es una cámara en la posición p (izquierdo −1, derecho +1, en medias distancias entre
+  ojos) y un punto con desplazamiento s se lee en q + p·s. Con la cabeza movida h, p = h ∓ 1
+  (`vistaIzq`/`vistaDer` en `shaders/weave.frag`, también en la guía del agrandado guiado). La separación
+  entre ojos sigue siendo 2 s: no gasta presupuesto de la lente. Nuevo `vec4 tun9`: `kUboBytes` 336 → 352,
+  `kOffTun9`, `static_assert` y nombre en la vigía de NaN.
+- En el visor (`src/vkview.cpp`): h = ganancia · (x − x_reposo) / 3,25 cm, con el reposo siguiendo a la
+  cabeza con 6 s de constante (da igual dónde te sientes), tope ±1 y un paso bajo de 60 ms encima del
+  One-Euro; sin cara, vuelve a 0.
+- `paralaje` en `serve.conf` / `ODYSSEYVK_PARALAJE` (0 = apagado, por defecto en el código; **0,5 en el
+  `serve.conf` de Rodolfo**; negativo invierte el sentido). Taller: `ODYSSEYVK_PARALAJE_FIJO` fuerza h.
+
+### Comprobado (sin panel)
+
+- El sombreador real con el cuadro real y el mapa real, forzando h, contra la original corrida los 15,36 px
+  de la convergencia: **h = +1, ojo izquierdo = la original** (media 0,074, 0,00 % de píxeles distintos);
+  **h = −1, ojo derecho = la original**; h = +0,5 medio desplazamiento (4,30 % distintos); h = 0 entero
+  (8,70 %); h = +1 ojo derecho, doble (14,41 %). Con h = 0, idéntico bit a bit a la v0.64 (diferencia 0).
+- DERIVADO (la misma cuenta del visor, simulada): mover la cabeza 3,25 cm en 0,3 s con ganancia 0,5 da un
+  pico de h = 0,47 a los 0,33 s, 0,19 a los 6 s y 0,07 a los 12 s; un temblor de rastreo de 0,17 cm deja
+  h temblando 0,011, o sea **0,13 px** en lo más cercano.
+
+### No probado / visto de paso
+
+- **Con el rastreo en vivo**: el sentido (si gira al revés, `paralaje = -0,5`), si «nada» con la cabeza
+  quieta y cómo se ve el retraso al moverse deprisa. Los mapas por ojo del relleno de huecos están hechos
+  para p = ∓1; con h ≠ 0 quedan corridos h·s (como mucho un par de puntos del mapa).
+- Visto de paso: con «3D Salida» en 50 toda la imagen se corre 15,36 px igual para los dos ojos
+  (`t.conv = ... popout/50 · 0,004`). En el conversor eso no cambia el relieve: solo desplaza la imagen
+  respecto al video de debajo (y al sitio donde caen los clics). Sin tocar.
+
 ## Más profundidad: pivote, relieve local, saliencia por defecto, y las mediciones corregidas (v0.66)
 
 - Pedido de Rodolfo: «¿alguna otra idea que pueda resaltar profundidades?» → relieve local primero, y

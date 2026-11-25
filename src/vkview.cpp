@@ -2640,6 +2640,45 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         e.z = z + opts.trackOffsetZ;
         ui.ojoBase = e;
       }
+      /* Paralaje de movimiento (v0.67): al mover la cabeza, lo cercano se desliza respecto a lo lejano.
+         Es la senal de profundidad mas fuerte que hay despues de la de los dos ojos, y hasta ahora el
+         rastreo solo servia para apuntar cada vista a su ojo: el contenido no cambiaba.
+         - Se mide contra una posicion «de reposo» que sigue a la cabeza muy despacio (6 s): asi da
+           igual donde te sientes, y si te quedas quieto en otro sitio la imagen vuelve a centrarse.
+         - Una media distancia entre ojos (3,25 cm) de movimiento es una vista entera de mas; se topa
+           a +-1 para que el estirado de los cantos no pase del doble.
+         - Un paso bajo corto (60 ms) encima del One-Euro: el temblor que quede del rastreo movería la
+           imagen entera (0,17 cm de temblor serian 0,05 vistas = 0,6 px en lo mas cercano).
+         ODYSSEYVK_PARALAJE / `paralaje` en serve.conf: ganancia (0 = apagado, 1 = geometria real,
+         negativo = al reves por si el eje de la camara estuviera invertido). */
+      {
+        static const double kParalaje = [] {
+          const char *e = entornoOdyssey("ODYSSEYVK_PARALAJE");
+          std::string s = e ? e : "";
+          for (char &c : s)
+            if (c == ',') c = '.';
+          const double v = s.empty() ? 0.0 : std::atof(s.c_str());
+          return (v >= -2.0 && v <= 2.0) ? v : 0.0;
+        }();
+        static double xReposo = 0.0, hSuave = 0.0, tParalaje = 0.0;
+        static bool paralajeListo = false;
+        if (kParalaje != 0.0) {
+          double dtp = paralajeListo ? now - tParalaje : 0.0;
+          dtp = dtp < 0.0 ? 0.0 : (dtp > 0.25 ? 0.25 : dtp);
+          tParalaje = now;
+          double objetivo = 0.0;   /* sin cara a la vista vuelve a cero despacio */
+          if (fresco && !opts.trackFixed) {
+            const double x = ui.ojoBase.x;
+            if (!paralajeListo) xReposo = x;
+            xReposo += (x - xReposo) * (1.0 - std::exp(-dtp / 6.0));
+            objetivo = (x - xReposo) / 3.25 * kParalaje;
+            objetivo = objetivo < -1.0 ? -1.0 : (objetivo > 1.0 ? 1.0 : objetivo);
+          }
+          paralajeListo = true;
+          hSuave += (objetivo - hSuave) * (1.0 - std::exp(-dtp / 0.06));
+          wv.setParalaje((float)hSuave);
+        }
+      }
       if (now - ultimoRastreo >= 1.0) {
         ultimoRastreo = now;
         const TrackSample &m = fs.sample;
