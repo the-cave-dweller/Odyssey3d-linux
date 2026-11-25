@@ -3,6 +3,36 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El botón de vídeo dividido pasa de verdad a lado a lado (v0.80)
+
+- Rodolfo, con la 0.79: «los botones están perfectos, pero el derecho no cambia al modo doble».
+- Eran dos fallos, los dos míos o destapados por la 0.79:
+  1. **La trama no se enteraba de que el conversor se apagaba.** `Weave::setConverter` solo se llamaba
+     con el conversor encendido; al apagarlo (el botón nuevo, o la tecla `C` de siempre) la trama se
+     quedaba con el último mapa de profundidad puesto. El registro decía «apagado» y en pantalla
+     seguía el vídeo normal con relieve. En la 0.79 solo miré el registro, no la imagen.
+  2. **El vídeo dividido arrancaba convertido** (regresión de la 0.79). El servicio empezó a pasar
+     `--modelo` / `--alterno` también con el vídeo dividido, y esas dos banderas encienden el
+     conversor por sí solas. Elegir «Vídeo dividido» en la tarjeta daba vídeo normal.
+- `src/vkview.cpp`: cada cuadro, si el conversor está apagado y la trama lo tiene puesto, se le quita.
+- `src/main.cpp`: bandera nueva `--conversor-en-espera` (la red viaja, el conversor arranca apagado);
+  el servicio la pasa con `sbs` y `tb`.
+- Taller: `ODYSSEYVK_VOLCADO_CUADRO=N` hace el volcado en el cuadro N (antes siempre el 4), y
+  `ODYSSEY_GOLPE` acepta `normal` y `dividido`, para sacar la trama después de un cambio en marcha.
+- MEDIDO fuera del panel (`odysseyvk test --windowed --no-panel --no-lens --no-scaler --sin-interfaz`,
+  trama de 3840x2160 leída de Vulkan, comparada píxel a píxel con la de un arranque `--sbs`):
+  - antes del arreglo, conversor ya con mapa y clic en dividido: 17,98 % de píxeles distintos de la
+    de lado a lado (el conversor sin tocar: 18,52 %). Si el clic llegaba antes del primer mapa salía
+    0,00 %: por eso la prueba de la 0.79 no lo vio;
+  - después: 0,00 % (idéntica a lado a lado);
+  - dividido y vuelta a normal: 0,00 % contra un arranque con conversor;
+  - arranque como lo hace el servicio con el vídeo dividido (`--sbs --conversor-en-espera --cada 3
+    --red 0 --modelo … --alterno …`): el conversor no arranca, 0,00 % contra lado a lado;
+  - ese mismo arranque y clic en normal: abre `mde_large` (la de serve.conf) y queda a 0,39 % de
+    píxeles (0,026 de media sobre 255) de un arranque con conversor.
+- **No probado**: nada en el panel ni con un vídeo de verdad; el servicio entero lanzando un vídeo
+  dividido (se probó la línea de banderas que arma, escrita a mano).
+
 ## Pastilla morada y botones de tipo de 3D (v0.79)
 
 - Rodolfo, con la 0.78 en el panel: «me gusta», y pidió que la pastilla tenga la tonalidad de la

@@ -1705,6 +1705,7 @@ static double leerNumero(const char *s) {
 }
 
 static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
+  bool enEspera = false;   /* --conversor-en-espera: la red viaja, pero el conversor arranca apagado */
   for (int i = 0; i < argc; i++) {
     std::string a = argv[i];
     auto need = [&](const char *what) {
@@ -1818,6 +1819,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
       if (dd != std::string::npos) o.recordarApp = par.substr(0, dd), o.recordarModo = par.substr(dd + 1);
     }
     else if (a == "--recordado") o.recordado = true;
+    else if (a == "--conversor-en-espera") enEspera = true;
     else if (a == "--segundos") { if (!need("segundos")) return false; o.segundos = atoi(argv[++i]); }
     else if (a == "--help" || a == "-h") { std::fputs(kUsage, stdout); exit(0); }
     else if (!a.empty() && a[0] == '-') { std::fprintf(stderr, "opcion desconocida: %s\n", a.c_str()); return false; }
@@ -1825,6 +1827,10 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else { std::fprintf(stderr, "solo se admite un archivo; ignorando %s\n", a.c_str()); }
   }
   if (o.track && o.trackModel.empty()) o.trackModel = defaultModelPath();
+  /* `--modelo` y `--alterno` encienden el conversor por si solos (es lo que espera quien los escribe
+     a mano). El servicio los pasa tambien con el video dividido, para que el boton de video normal
+     de la pastilla abra la red de serve.conf, y ahi el conversor tiene que esperar apagado. */
+  if (enEspera) o.conver = false;
   if (!o.corrDir.empty()) {
     std::string dir = o.corrDir;
     o.corrA = dir + "/3DStackCorrection_A.png";
@@ -3449,6 +3455,9 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
      pasar a video normal en marcha, y sin esto el visor abria la otra red, no la de serve.conf.
      Pasarlas no abre nada: la red solo se carga cuando el conversor se enciende. */
   if (modo == "conv" || ((modo == "sbs" || modo == "tb") && !legadoPuesto)) {
+    /* `--modelo` enciende el conversor por si solo: con el video dividido tiene que esperar apagado
+       (en la 0.79 faltaba esto y el video dividido arrancaba convertido como si fuera normal) */
+    if (modo != "conv") args.push_back("--conversor-en-espera");
     args.push_back("--cada");
     args.push_back(std::to_string(cada));
     args.push_back("--red");

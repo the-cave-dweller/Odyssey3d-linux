@@ -2792,6 +2792,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                       wv.hasDepthMap());
       wv.setSujeto(red.sujeto());   /* el realce de detalle va al sujeto, este donde este el plano (v0.68) */
     }
+    /* Apagado el conversor, la trama tiene que enterarse (v0.80). `setConverter` solo se llamaba
+       con el conversor encendido, asi que al apagarlo (tecla C, o el boton de video dividido de la
+       pastilla) la trama se quedaba con el ultimo mapa de profundidad puesto: el registro decia
+       "apagado" y en pantalla seguia el video normal con relieve, no las dos mitades. MEDIDO fuera
+       del panel: tras el boton, la trama se parecia a la del conversor (17,98 % de pixeles distintos
+       de la de lado a lado; el conversor, 18,52 %). */
+    if (!convActivo && wv.converterOn() && opts.mapaFijo.empty())
+      wv.setConverter(wv.converterGain(), wv.converterRef(), false);
     /* Con el mapa venido de un archivo (--mapa-fijo) no hay red que mande el relieve, y sin relieve
        el mapa no mueve nada: se manda por el mismo camino de siempre, con el apoyo que diga --apoyo
        (por eso esa bandera pide el apoyo escrito: no hay red que lo saque de la escena). */
@@ -3033,7 +3041,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_CAPTURE
     if (kind == SourceKind::Capture) fuenteLista = lastFrameCount > 0;
 #endif
-    if (!opts.dumpPath.empty() && !dumpHecho && ((fuenteLista && frames >= 4) || frames >= 150)) {
+    /* ODYSSEYVK_VOLCADO_CUADRO=N (taller, v0.80): el volcado espera al cuadro N en vez del 4, para
+       poder sacar la trama DESPUES de un cambio hecho en marcha (ODYSSEY_GOLPE) y compararla. */
+    static const int cuadroVolcado = [] {
+      const char *e = std::getenv("ODYSSEYVK_VOLCADO_CUADRO");
+      return (e && std::atoi(e) > 4) ? std::atoi(e) : 4;
+    }();
+    if (!opts.dumpPath.empty() && !dumpHecho &&
+        ((fuenteLista && frames >= cuadroVolcado) || frames >= std::max(150, cuadroVolcado + 146))) {
       std::vector<uint8_t> rgba;
       if (wv.grab(rgba, &err)) {
         std::string a = opts.dumpPath + "-trama-vulkan.png";
