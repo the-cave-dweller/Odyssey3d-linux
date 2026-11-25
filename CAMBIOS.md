@@ -3,6 +3,46 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El cierre tarda 0,8 s menos, y comparación de las redes (v0.63)
+
+### Abrir y cerrar
+
+- MEDIDO en el registro del vigilante (sesión de las 07:20, video de YouTube con el conversor): de elegir
+  «conv» al primer mapa, **8,8 s**. Seis de esos segundos eran el **volcado de diagnóstico**
+  (`volcado = /tmp/rampa` en `serve.conf`): cuatro PNG 4K escritos al arrancar, con el visor a 11,6 fps y la
+  red esperando. Se comentó en `serve.conf` (respaldo `serve.conf.respaldo-2026-11-25-con-volcado`). En la
+  sesión siguiente, de elegir «conv» al primer mapa: **2,6 s**.
+- Cierre, misma sesión: Firefox salió de pantalla completa a las 07,09 s, el vigilante lo dio por hecho a
+  las 08,29 y el panel estaba en 2D a las 08,77. **1,2 s eran la `paciencia`** antes de cerrar. Esa rama
+  solo corre con la sesión asentada (las salidas falsas eran las del arranque), así que pasa a **0,4 s**
+  (dos vueltas del bucle de 200 ms). Lo que queda: 0,46 s de devolver panel, lente y scaler.
+
+### Comparación de las redes (`tools/medir_redes.py`)
+
+22 cuadros (2 de YouTube con persona hablando, 8 de una nave, 6 de un globo animado, 6 de un clip con un
+papel) y 3 ráfagas de 10 cuadros seguidos, por `odysseyvk mapa` (el binario de verdad, con su limpieza).
+
+| red | ms/cuadro (mediana) | parecido a mde_large (Pearson / rangos) | bordes sobre bordes (azar 0,20) | canto p99 | 3 planos (eta) | parpadeo media / máx |
+|---|---|---|---|---|---|---|
+| **mde_large** (fp16, la de Windows) | 11,9 | 1 / 1 | 0,249 | 0,0236 | **0,920** | 0,0152 / 0,100 |
+| mde_large_fp32 | 15,5 | 1,000 / 1,000 | 0,249 | 0,0236 | 0,920 | 0,0152 / 0,100 |
+| depth_anything_v2_small (HF) | 12,4 | 0,851 / 0,876 | **0,281** | 0,0195 | 0,892 | 0,0141 / **0,055** |
+| **mde_small** (copiado del árbol de Windows, SHA256 verificado) | **8,2** | 0,949 / 0,943 | 0,241 | 0,0231 | 0,912 | **0,0132** / 0,107 |
+| mde_tiny | — | no abre: pide 256 × 256 y `DepthNet` siempre le da 518 | | | | |
+
+- Conclusión: **se queda `mde_large` por defecto** (la de Windows; la que mejor separa en planos).
+  `mde_large_fp32` es idéntica y más lenta: no aporta. `mde_small` es casi igual y un 31 % más rápida:
+  queda instalada en `~/.local/share/odysseyvk/modelos/` como alternativa. La de HuggingFace pone mejor
+  los bordes en el clip del papel y parpadea menos en el peor caso, pero despega menos la cara del cuerpo.
+- Lo que el usuario siente como «planos» de Windows (fondo / centro / frente) **no sale de otra red**: las
+  cuatro separan igual de bien (eta 0,89–0,92). Sale del post-proceso de Windows (`focus` con IIR 0,02 y
+  cambio de escena, `salc`, `apply_salc`, `depth_remap`, `vcs.compress`): ver
+  `detalle-profundidad-windows.md` §1 en el árbol de Windows.
+
+### No probado
+
+- El cierre con 0,4 s en el panel (falta instalar).
+
 ## Los cantos dejan de salir en peine: agrandado guiado del mapa (v0.62)
 
 - Lo que quedaba de la captura de Rodolfo tras la v0.61: el canto del micrófono (y de los hombros)

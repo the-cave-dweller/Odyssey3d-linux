@@ -4428,8 +4428,12 @@ static int cmdServe(int argc, char **argv) {
             motivo = "la ventana del video salio de pantalla completa";
             videoSeFue = true;   /* el video se fue el solo: la ventana no tiene por que seguir a pantalla completa */
             /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y
-               mientras la sesion sigue abierta el panel esta en modo 3D sobre un escritorio 2D. */
-            paciencia = 1.2;
+               mientras la sesion sigue abierta el panel esta en modo 3D sobre un escritorio 2D.
+               v0.63: 1,2 -> 0,4 s. Medido el 25-nov 07:24: Firefox salio de pantalla completa a las
+               07,09 y el panel no volvio a 2D hasta las 08,77, y 1,2 s de eso era esta espera. Las
+               salidas falsas que la pedian son las del arranque (nuestro cambio de modo), y esta rama
+               solo corre con la sesion ya asentada; 0,4 s son dos vueltas del bucle (200 ms). */
+            paciencia = 0.4;
           } else if (asentada && chica && !avisoChicoHecho) {
             avisoChicoHecho = true;   /* ya no insistimos: avisamos una vez y dejamos mirar */
             std::printf("[ventana] el video sigue a %ux%u en una salida de %dx%d: la trama no va a ser"
