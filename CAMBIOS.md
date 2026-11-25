@@ -3,6 +3,27 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Nota del 25-nov, sin versión nueva: el paso retocado con el rastreo fino (`serve.conf`)
+
+- Rodolfo, con la 0.74 y el patrón de los nueve cuadros: los de la izquierda del naranja se mueven bien
+  de un ojo al otro, menos los dos primeros con el ojo derecho; los tres últimos dejan un doble más
+  marcado en los dos ojos. El centro bien, lo peor a la derecha.
+- DERIVADO con el modelo (`odysseyvk attrs`, ojo en x −4,6 cm): un centímetro más de distancia mueve la
+  fase −0,024 ciclos en el borde izquierdo y +0,035 en el derecho (+1,59·10⁻⁵ ciclos por píxel, con el
+  cero en el píxel 1475). El rastreo fino mide ~1,2 cm más lejos que la media del de antes: −0,028 y
+  +0,042, o sea lo peor a la derecha, que es lo que se ve. El paso de la v0.59 se había afinado con el
+  rastreo de antes.
+- Probado en vivo con `ctl ajuste rampa_x … fase …`, de 0,00002 en 0,00002 y girando en el píxel 1475
+  (y en el tercer paso, en el píxel del ojo): −0,00122 con fase 0,0295 «mejoró»; −0,00124 con 0,059
+  «mejor»; −0,00126 con 0,0938 «peor». Queda `rampa_x = -0,00124` y `fase = 0,059` en `serve.conf`
+  (respaldo `serve.conf.respaldo-2026-11-25-antes-paso-v074`).
+- Comprobado después de guardar: con el vigilante reiniciado y el patrón arrancado ya de `serve.conf`
+  (`--align 0.059000` y `rampa_x = -0.001240` en el registro), Rodolfo lo ve «igual de bien» que el
+  mejor de los tres pasos.
+- No probado: la fase sola, y el patrón de un ojo (la tecla `b` no llegó al visor). La corrección
+  exacta sería un desfase de z del rastreo, que gira con la cabeza; con rampa y fase fijas el error al
+  mover la cabeza ±5 cm es de 0,006 ciclos.
+
 ## Nota del 25-nov, sin versión nueva: qué trae la calibración de fábrica de este panel y qué usa el visor
 
 - Rodolfo preguntó si las pruebas «en blanco» que hizo QWEN en Windows habían servido: en las dos salía
