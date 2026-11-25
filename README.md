@@ -362,7 +362,13 @@ socket, no puede tocar la trama. Habla con él por ficheros en `~/.local/state/o
 | `estado` | la **verdad del visor**, reescrito cada 0,5 s: versión, trama y conversor puestos o no, qué red y en qué tarjeta, y los 20 números |
 | `preferencias.log` | la **cuenta de lo cambiado**: hora, valor antes → después, red puesta y quién lo pidió |
 | `hub` | la **verdad del vigilante** (`odysseyvk serve`), reescrito cada 1 s: si hay sesión, si es de `video` o de `escritorio`, en qué pantalla, con qué modo y qué red. Lo escribe el hub y lo borra al pararse |
-| `camara.jpg` | el **último cuadro crudo** de la cámara del rastreo, volcado por el que la tiene abierta (el visor, o `ctl track`) cada 2 s para que la ventana de ajustes pueda enseñar la vista sin abrir la cámara una segunda vez |
+| `camara.jpg` | el **último cuadro crudo** de la cámara, volcado por quien la tiene abierta: el visor (una vez cada 2 s, o unas 8 por segundo si la ventana le mandó `vista = 1`) o el hijo `odysseyvk ctl vista` que la propia ventana levanta cuando no hay sesión. La ventana de ajustes lo enseña sin abrir la cámara una segunda vez |
+
+En `estado` hay dos claves nuevas (v0.58) para que la casilla de **Previsualización** y una sesión 3D no
+peleen por la cámara: `camara_pedida = si|no` dice si la sesión abierta **quiere** la cámara para el
+rastreo, aunque en este momento no la tenga abierta, y `camara_vista = rapida|normal` dice cada cuánto
+está volcando `camara.jpg`. Con la primera, el hijo `ctl vista` se aparta solo en cuanto el visor
+reclama el dispositivo; con la segunda, la ventana comprueba que el visor le hizo caso.
 
 ```sh
 odysseyvk-ajustes                       # la ventana (la puedes tener en el otro monitor)
@@ -439,8 +445,24 @@ Desde v0.54 la ventana enseñaba el rastreo de cara en su propia hoja:
   daría, y si lo tiene abierto otro proceso. El nodo de *metadata* de la cámara del monitor (`/dev/video1`)
   no aparece: no da cuadro. La lista se vuelve a contar cada 4 s, no veinte veces por segundo.
 - la **vista**: el JPEG crudo de `camara.jpg` decodificado por Qt (1280x480 con las dos vistas una al lado
-  de la otra, medidas en la máquina de la cámara). La ventana no abre la cámara: el monitor no admite dos
-  aperturas y su puerto UVC se pone terco si lo toca un segundo proceso.
+  de la otra, medidas en la máquina de la cámara). La ventana no abre la cámara directamente: el monitor no
+  admite dos aperturas y su puerto UVC se pone terco si lo toca un segundo proceso.
+- la casilla **«Previsualización (la camara aqui, en vivo)»** (v0.58), que es lo que hace que la vista
+  **se quede** en pantalla moviéndose mientras esté marcada. Quién manda los cuadros depende de quién tenga
+  la cámara:
+  * si hay sesión 3D y esa sesión quiere la cámara (en `estado`, `camara_pedida = si`), la ventana le manda
+    `vista = 1` por el canal de siempre y el visor vuelca un cuadro **ocho veces por segundo** en vez de uno
+    cada dos. Se puede comprobar en `estado`: pone `camara_vista = rapida`;
+  * si no hay sesión, o la sesión no usa la cámara, la ventana levanta `odysseyvk ctl vista --fps 8
+    --segundos 60 [--dev /dev/videoN]` como hijo suyo: abre la cámara **suelta**, sin rastreo, y le va
+    guardando el cuadro. Dura 60 s y la ventana lo vuelve a levantar sola, con metro y medio de calma, así
+    que no hay que tocar nada para seguir viendo.
+  El hijo mira `estado` cada vuelta y, en cuanto ve que la sesión abierta quiere la cámara, la suelta y se
+  sale con **código 3** (sin peleas ni reintentos a lo bruto); el visor, por su parte, reintenta abrir la
+  cámara un par de veces cada 2 s si al arrancar la encontró ocupada, así que el rastreo se suma a media
+  sesión. Al desmarcar la casilla se cierra la fuente y en el recuadro **queda el último cuadro** que llegó,
+  con un aviso al lado de lo viejo que es (`ojo: lo del recuadro es un cuadro de hace 12 s`). Con
+  `odysseyvk-ajustes --vista` la ventana arranca ya con la casilla marcada.
 - el botón `Usar esta camara en el rastreo`, que escribe `camara = /dev/videoN` (y `mono = si|no` si se
   eligió cómo leerla) en `serve.conf` —la línea anterior queda en `serve.conf.auterior`— y manda la misma
   orden viva por el canal de siempre. Vale para la **próxima** sesión: la cámara que tiene abierta la sesión
@@ -545,6 +567,21 @@ odysseyvk ctl track --dev /dev/video0 --segundos 8  # en vivo: cara si · panel 
 odysseyvk ctl track --foto cuadro.jpg --dump anotado.jpg   # un cuadro guardado, sin tocar la cámara
 odysseyvk ctl track --segundos 5 --volcar-crudo /tmp/ab     # vuelca cuadro crudo + anotado + A/B
 ```
+
+Y la **cámara suelta, sin rastreo**, que es lo que levanta la casilla de Previsualización de la ventana de
+ajustes cuando no hay sesión 3D abierta (v0.58):
+
+```
+odysseyvk ctl vista --dev /dev/video0 --fps 8 --segundos 60   # lo que levanta la casilla
+```
+
+Abre la cámara con el modo que más le cuadre (MJPG antes que YUYV, y nada por encima de 1920x1200), guarda el
+cuadro crudo en `~/.local/state/odysseyvk/camara.jpg` ocho veces por segundo y **cede la cámara**: si en
+`estado` aparece una sesión que la quiere (`camara_pedida = si`), la suelta y sale con **código 3**; si le
+cierran la entrada estándar —la ventana que lo levantó se cerró— se sale igual, y si la cámara no manda ningún
+cuadro en dos segundos lo dice y sale con código 1. Sale solo al vencer `--segundos`. La cámara del monitor
+(`04e8:20d7`) no admite dos procesos abiertos, así que esto nunca se usa a la vez que el rastreo del visor: lo
+que hace la ventana es apagar el hijo en cuanto el visor reclama la cámara.
 
 El sondeo en vivo cierra con la cuenta de por qué no salió la pose, que son tres cosas distintas:
 

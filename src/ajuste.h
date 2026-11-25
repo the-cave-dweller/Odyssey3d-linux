@@ -111,10 +111,16 @@ std::vector<std::string> historial(int n);
 std::map<std::string, double> valoresFabrica();
 std::string rutaServeConf();
 
-/* La vista de la camara que esta usando el visor: el visor vuelca ahi el ultimo cuadro crudo
-   (JPEG tal cual lo solto la camara) una vez cada dos segundos, y la ventana de ajustes lo ensena.
-   Se hace asi porque la camara del monitor la tiene abierta el visor: si la abriera tambien la
-   ventana, la 04e8:20d7 dejarfa de responder. */
+/* La vista de la camara: el ultimo cuadro crudo (JPEG tal cual lo solto la camara; PPM si la camara
+   no sabe de JPEG), y la ventana de ajustes lo ensena. Dos lo escriben, nunca a la vez:
+     - el VISOR, una vez cada dos segundos mientras rastrea, o unas ocho veces por segundo si la
+       ventana de ajustes le mando `vista = 1` (la casilla de Previsualizacion, que quiere la camara
+       en vivo y no conformarse con un cuadro cada dos segundos);
+     - `odysseyvk ctl vista`, un hijo que la propia ventana levanta cuando NO hay sesion 3D abierta:
+       abre la camara suelta, sin rastreo, y la suelta al desmarcar la casilla, al morir la ventana o
+       en cuanto el visor se pone a escribir su `estado`.
+   Se hace asi y no abriendo la camara desde la ventana porque la camara del monitor (04e8:20d7) no
+   admite dos procesos abiertos: si se insiste, deja de responder hasta apagar el monitor. */
 std::string rutaCamaraVista();
 bool escribirCamaraVista(const std::vector<uint8_t> &jpeg, std::string *err = nullptr);
 

@@ -3,6 +3,60 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La casilla «Previsualización»: la cámara en vivo y **quedándose** en la ventana de ajustes (v0.58)
+
+- Pedido de Rodolfo: «hay forma de que el visor de la camara si muestre el preview y se quede mostrandola si
+  presiono o doy click en una casilla de previsualizacion?». Antes no: `camara.jpg` era un cuadro cada dos
+  segundos y solo existía mientras una sesión 3D tenía la cámara abierta, así que el recuadro de la hoja de
+  cámara estaba vacío (o congelado) sin sesión y se movía a pasos de dos segundos con ella.
+
+### La casilla
+
+- Al fondo del grupo de cámara de la hoja *General*, la casilla **«Previsualización (la camara aqui, en
+  vivo)»**. Marcada, la cámara se ve en el recuadro y **se queda** viéndose ocho veces por segundo mientras
+  esté marcada: no es un botón que haya que estar pulsando. Desmarcada, se cierra la fuente y **en el recuadro
+  queda el último cuadro que llegó** (la ventana guarda el último `QPixmap` bueno), con el aviso al lado:
+  `ojo: lo del recuadro es un cuadro de hace 12 s`. Encima de la imagen no se pinta nada.
+- Debajo del recuadro, la línea de siempre dice ahora **quién está mandando los cuadros** (`los cuadros los
+  manda el visor, ocho veces por segundo` / `la camara la abrio esta ventana con odysseyvk ctl vista`) y, si
+  hace falta, lo viejo del cuadro.
+- `odysseyvk-ajustes --vista` abre la ventana con la casilla ya marcada (útil por ssh y para probar).
+
+### Quién tiene la cámara, y cómo se la cede al visor
+
+La regla que manda: la `04e8:20d7` del monitor **no admite dos procesos abiertos** y su puerto UVC se pone
+terco si lo toca un segundo proceso, así que la ventana nunca la abre ella: levanta un hijo y se la cede al
+visor en cuanto la quiere.
+
+- `odysseyvk ctl vista [--dev /dev/videoN] [--fps 8] [--segundos 25]` — la cámara **suelta**, sin rastreo:
+  elige el modo bueno (MJPG antes que YUYV, nada por encima de 1920x1200; si la cámara no sabe de JPEG escribe
+  un PPM), guarda el cuadro crudo en `camara.jpg` a la tasa pedida y se cierra solo al vencer `--segundos`.
+  Medido aquí con la del Odyssey: **107–227 cuadros leídos, 8–30 guardados** en 2–4 s, ~48–55 fps de captura y
+  8 por segundo de vuelco.
+- **Cede la cámara** (código de salida **3**) en dos casos: si en `estado` aparece una sesión que la quiere
+  (`camara_pedida = si`, mirado cada 0,4 s) y si le cierran la entrada estándar —la ventana que lo levantó
+  murió—. Para eso `cmdVistaCamara` hace `poll` del fd 0 con timeout 0, y solo se fía del cierre de la cañería
+  si al arrancar era una `S_ISFIFO` o una terminal; si no, avisa una vez (`la entrada no es una tuberia ni una
+  terminal: no hay boton de apagar por ahi`) y no vuelve a mirar.
+- La ventana (**`reconciliarVista`**, al principio del refresco de 0,5 s): con la casilla marcada y el visor
+  vivo pidiendo cámara, suelta al hijo (un `\n` por su entrada, y `terminate`/`kill` si hace falta) y manda
+  `vista = 1`; si el visor no estaba vivo o su sesión no usa la cámara, levanta el hijo con
+  `ctl vista --fps 8 --segundos 60`. Como el hijo dura 60 s y la ventana lo vuelve a levantar **sola** —con
+  metro y medio de calma, y cada 10 s si encadena tres fallos—, la vista se mantiene sin tocar nada. Antes de
+  levantar nada mira el listado: si la cámara la tiene otro proceso, directamente no lo intenta.
+- **Nada de bloqueos ida y vuelta**: el visor escribe `camara_pedida = si` en `estado` desde el arranque de la
+  sesión si la quiere (`--track`), **aunque la apertura falle**, y reintenta abrir la cámara **6 veces cada 2 s**
+  si la encontró ocupada. Probado de verdad: con la casilla marcada y el hijo comiéndose la cámara, la sesión
+  nueva dice `[rastreo] no arranco: ... Device or resource busy` y dos segundos después
+  `[rastreo] la camara estaba ocupada (la vista previa de la ventana de ajustes?): ya abrio, /dev/video0 en
+  MJPG 1280x480 @ 60` y pasa a `siguiendo` a ~55 fps; el hijo se había salido con código 3 sin que nadie lo
+  matara.
+- Claves nuevas en `estado`: `camara_pedida = si|no` y `camara_vista = rapida|normal` (esta última confirma que
+  el visor aceptó `vista = 1`; la ventana la re-manda si la sesión arrancó sin saberla). El visor vuelca
+  `camara.jpg` cada 2 s, o cada 0,12 s con la casilla marcada. Orden nueva en el canal: `vista = 1|0`.
+- La ventana cierra el hijo al cerrarse ella (`aboutToQuit`) y al cambiar de cámara en el combo; no queda ningún
+  `ctl vista` huérfano tras matar la ventana (comprobado).
+
 ## Todo se llama OdysseyVK y aparece el «modo de legado» (v0.57)
 
 - Pedido de Rodolfo: «renombra todo el proyecto a OdysseyVK, quita el texto sobre el overlay que habla

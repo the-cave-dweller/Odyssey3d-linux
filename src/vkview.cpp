@@ -147,6 +147,15 @@ void printTuning(const VkUi &ui, const char *what) {
    verdad (el fichero `estado`) y la cuenta de lo que va cambiando (`preferencias.log`). */
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
 static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
+/* La casilla de Previsualizacion de la ventana de ajustes (`vista = 1`): mientras esta pedida, la copia
+   del cuadro que guardamos en `camara.jpg` sale ocho veces por segundo en vez de una cada dos segundos.
+   El rastreo ya esta leyendo la camara a su tasa, asi que esto no abre nada ni le arranca nada a la
+   camara del monitor: solo cambia cada cuanto guardamos una foto de lo que ya teniamos en la mano. */
+static bool g_vistaRapida = false;
+/* Si esta sesion quiere la camara (`--track`, lo decide el hub): se apunta desde el arranque, aunque la
+   apertura falle. Es la senal que mira `ctl vista` para cederla: la vista previa de la ventana de
+   ajustes sabe que el visor la quiere y la suelta en medio segundo, y el visor la vuelve a abrir. */
+static bool g_camaraPedida = false;
 
 static std::string nombreCorto(const std::string &ruta) {
   const size_t b = ruta.find_last_of('/');
@@ -312,6 +321,13 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
       s += std::string("camara_tipo = ") + (hs.rastreoEstudio ? "3D Studio" : "externa") + "\n";
     s += std::string("camara_cara = ") + (hs.rastreoCara ? "si" : "no") + "\n";
     s += std::string("camara_nota = ") + (hs.rastreoNota.empty() ? "-" : hs.rastreoNota) + "\n";
+    /* si esta sesion quiere la camara, aunque ahora mismo no la tenga abierta (la encontro ocupada y
+       esta reintentando): `ctl vista` lo mira para cederla enseguida, y la ventana de ajustes para
+       saber si la vista previa tiene que salir del medio o puede seguir con la camara suelta. */
+    s += std::string("camara_pedida = ") + (g_camaraPedida ? "si" : "no") + "\n";
+    /* cada cuanto guardamos la copia en `camara.jpg`: `rapida` mientras la casilla de Previsualizacion
+       la pide. La ventana lo lee para confirmar que el visor acepto la orden. */
+    s += std::string("camara_vista = ") + (g_vistaRapida ? "rapida" : "normal") + "\n";
   }
   return s;
 }
@@ -1359,9 +1375,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   /* rastreo de cabeza: un hilo mira la camara IR y aqui se lee lo ultimo que vio */
 #ifdef HAVE_OPENCV
   TrackFeed feed;
+  TrackFeedOptions fo;   /* queda a la vista del bucle: si la camara estaba ocupada, se reintenta con esto */
   bool rastreoVivo = false;
+  int intentosCamara = 0;
+  double ultimoIntentoCamara = 0.0;
+  g_camaraPedida = opts.track;   /* se apunta aunque la apertura falle: es la senal para que `ctl vista` ceda */
   if (opts.track) {
-    TrackFeedOptions fo;
     fo.device = opts.trackDevice;
     fo.model = opts.trackModel;
     fo.calibDir = opts.trackCalibDir;
@@ -1652,6 +1671,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             else
               std::printf("[legado] no entiendo `legado = %s`: vale encender, apagar o alternar\n", v.c_str());
             cambioLegado(ui, wv, querido, "ctl legado");
+          }
+          /* `vista = 1|0`: la casilla de Previsualizacion de la hoja de Camara pidiendo la camara en
+             vivo. Con `vista = 1` la copia del cuadro que guardamos en `camara.jpg` sale ocho veces por
+             segundo en vez de una cada dos, y la ventana la va refrescando; la camara no se abre dos
+             veces ni se le pide nada nuevo, porque el hilo del rastreo ya la esta leyendo a su tasa. Con
+             `vista = 0` se vuelve a la cadencia tranquila, que es la que no gasta disco de mas. */
+          const auto ordenVista = palabras.find("vista");
+          if (ordenVista != palabras.end()) {
+            const std::string v = strLower(ordenVista->second);
+            if (v == "apagar" || v == "quitar" || v == "0" || v == "no" || v == "off")
+              g_vistaRapida = false;
+            else if (v == "encender" || v == "poner" || v == "1" || v == "si" || v == "on")
+              g_vistaRapida = true;
+            else
+              std::printf("[vista] no entiendo `vista = %s`: vale 1 o 0\n", v.c_str());
           }
           if (!modeloPedido.empty()) {
             ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
@@ -2479,6 +2513,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     bool fresco = false;
 #ifdef HAVE_OPENCV
+    /* y si al arrancar la sesion la camara estaba ocupada, se reintenta. Quien suele tenerla es la
+       vista previa de la ventana de ajustes (`ctl vista`), que al ver que esta sesion quiere la camara
+       la suelta en medio segundo: asi el rastreo se suma a media sesion en vez de quedarse fuera toda
+       la sesion. Pocos intentos y espaciados, para no machacar el USB si de verdad hay otra cosa
+       usando la camara. */
+    if (opts.track && !rastreoVivo && intentosCamara < 6 && now - ultimoIntentoCamara >= 2.0) {
+      ultimoIntentoCamara = now;
+      intentosCamara++;
+      std::string trk;
+      if (feed.start(fo, &trk)) {
+        rastreoVivo = true;
+        const TrackFeedState arr = feed.state();
+        std::printf("[rastreo] la camara estaba ocupada (la vista previa de la ventana de ajustes?): "
+                    "ya abrio, %s en %s\n", arr.camera.c_str(), arr.mode.c_str());
+        std::fflush(stdout);
+      } else if (intentosCamara == 6) {
+        std::fprintf(stderr, "[rastreo] la camara sigue ocupada tras %d intentos: %s\n", intentosCamara,
+                     trk.c_str());
+        std::fflush(stderr);
+      }
+    }
     if (rastreoVivo) {
       const TrackFeedState fs = feed.state();
       const double altoCm = (double)fbH * wv.field().pxPcm;
@@ -2536,11 +2591,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     fresco ? "siguiendo" : (fs.note.empty() ? "sin pose valida" : fs.note.c_str()));
         std::fflush(stdout);
       }
-      /* la vista de la camara, cada dos segundos: el cuadro crudo tal cual lo soltio, para que la
-         ventana de ajustes la ensene sin abrir el dispositivo (la camara del monitor no se puede
-         tener abierta dos veces). Si el rastreo no llego a abrir la camara, no hay nada que volcar
-         y la ventana lo dice con lo que hay en `estado`. */
-      if (now - ultimoCuadroVisto >= 2.0) {
+      /* la vista de la camara: el cuadro crudo tal cual lo soltio, para que la ventana de ajustes la
+         ensene sin abrir el dispositivo (la camara del monitor no se puede tener abierta dos veces).
+         La cadencia depende de lo que pida la ventana: una cada dos segundos por defecto, y ocho por
+         segundo mientras la casilla de Previsualizacion esta marcada (`vista = 1`), que es cuando esa
+         imagen se esta mirando de verdad. Si el rastreo no llego a abrir la camara, no hay nada que
+         volcar y la ventana lo dice con lo que hay en `estado`. */
+      if (now - ultimoCuadroVisto >= (g_vistaRapida ? 0.12 : 2.0)) {
         ultimoCuadroVisto = now;
         std::vector<uint8_t> crudo;
         if (feed.ultimoCuadro(&crudo)) {

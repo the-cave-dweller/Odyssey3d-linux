@@ -43,6 +43,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPlainTextEdit>
+#include <QProcess>
 #include <QScrollBar>
 #include <QList>
 #include <QScreen>
@@ -308,7 +309,12 @@ int main(int argc, char **argv) {
   migrarDatosDeViejoNombre();   /* si los datos siguen en la carpeta del nombre viejo, los copiamos */
 
   /* `--prueba` sirve para comprobar la ventana sin pantalla (por ssh, o con QT_QPA_PLATFORM=offscreen):
-     cuenta lo que ve en el disco y en los ficheros del visor y sale sin abrir nada. */
+     cuenta lo que ve en el disco y en los ficheros del visor y sale sin abrir nada.
+     `--vista` abre la ventana con la casilla de Previsualizacion ya marcada (comodo por ssh, y para
+     probar el idilio con la camara sin tener que andar pulsando nada en una pantalla). */
+  bool arrancarConVista = false;
+  for (int i = 1; i < argc; i++)
+    if (std::strcmp(argv[i], "--vista") == 0) arrancarConVista = true;
   for (int i = 1; i < argc; i++) {
     if (std::strcmp(argv[i], "--prueba") != 0) continue;
     const std::map<std::string, std::string> est = ajuste::leerEstado();
@@ -881,10 +887,16 @@ int main(int argc, char **argv) {
      cualquier webcam aparte, que mide la distancia por el ancho de la cara. No se ofrece
      encender ni apagar el rastreo: si la camara abre, manda la camara.
 
-     La vista NO la saca esta ventana. La camara del monitor no se puede tener abierta dos veces
-     y su puerto de control UVC se pone terco si lo toca otro proceso, asi que el visor, que es
-     el unico que la abre, vuelca el ultimo cuadro crudo a `camara.jpg` cada dos segundos y esta
-     ventana lo ensena. Si el visor no esta, no hay vista y la hoja lo dice con letras. */
+     La vista la manda quien tenga la camara abierta, y la camara del monitor no se puede tener
+     abierta dos veces: su puerto de control UVC se pone terco si lo toca otro proceso. Mientras hay
+     una sesion 3D que usa la camara, el unico que la abre es el visor. Con la casilla de
+     Previsualizacion marcada pasan dos cosas segun quien este delante:
+       - si hay sesion 3D y esa sesion quiere la camara, esta ventana le manda `vista = 1` al visor y
+         el visor guarda un cuadro ocho veces por segundo en vez de uno cada dos;
+       - si no hay sesion, o la sesion no usa la camara, esta ventana levanta `odysseyvk ctl vista` de
+         hijo: abre la camara suelta, sin rastreo, y la suelta en cuanto el visor la quiere.
+     Con la casilla desmarcada no llega nada nuevo: se queda en pantalla el ultimo cuadro que hubo y
+     el texto de al lado dice lo viejo que es. */
   /* desde v0.57 la camara del Facetracking ya no tiene hoja propia: vive al fondo de la hoja General,
      asi que la variable apunta a esa misma hoja y todo lo demas queda igual que estaba */
   QWidget *hojaCamara = hojaGeneral;
@@ -910,6 +922,28 @@ int main(int argc, char **argv) {
   selloCamara->setTextInteractionFlags(Qt::TextSelectableByMouse);
   selloCamara->setWordWrap(true);
   cajaCamara->addWidget(selloCamara);
+
+  /* la casilla de Previsualizacion (v0.58): marcada = la camara se ve aqui y SE QUEDA viendo en vivo
+     mientras este marcada, haya o no una sesion 3D abierta. Quien manda los cuadros depende de quien
+     tenga la camara: el visor si su sesion la esta usando, `ctl vista` levantado por esta ventana si no
+     la tiene nadie. Es una casilla y no un boton: no hay que estar pulsando nada para seguir viendola. */
+  auto *filaCasilla = new QHBoxLayout();
+  auto *casillaVista = new QCheckBox(QString::fromUtf8("Previsualizacion (la camara aqui, en vivo)"), hojaCamara);
+  casillaVista->setToolTip(QString::fromUtf8(
+      "Marcada: la camara se queda viendo en este recuadro, ocho cuadros por segundo.<br>"
+      "Si hay una sesion 3D abierta y esa sesion usa la camara, los cuadros los manda el visor (no se"
+      " abre la camara dos veces). Si no hay sesion, o la sesion no usa la camara, esta ventana abre la"
+      " camara ella sola con <code>odysseyvk ctl vista</code> y la suelta en cuanto el visor la quiere.<br>"
+      "Desmarcada: se apaga la fuente y en el recuadro queda el ultimo cuadro, con la nota de lo viejo"
+      " que es."));
+  filaCasilla->addWidget(casillaVista);
+  auto *fuenteVista = new QLabel(hojaCamara);
+  fuenteVista->setTextFormat(Qt::RichText);
+  fuenteVista->setWordWrap(true);
+  fuenteVista->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  fuenteVista->setText(QString::fromUtf8("<i>la casilla esta apagada: no llega nada nuevo</i>"));
+  filaCasilla->addWidget(fuenteVista, 1);
+  cajaCamara->addLayout(filaCasilla);
 
   auto *filaVista = new QHBoxLayout();
   auto *vistaCamara = new QLabel(hojaCamara);
@@ -997,11 +1031,185 @@ int main(int argc, char **argv) {
   };
   mirarCamaras();
 
-  /* la hoja entera, dos veces por segundo, con lo que hay en `estado` y en serve.conf */
-  long long cuadrosVistos = -1;
+  /* ---------------- la casilla de Previsualizacion: quien manda los cuadros ----------------
+     `camara.jpg` lo puede estar escribiendo el visor (ocho veces por segundo si le mandamos
+     `vista = 1`) o el hijo `odysseyvk ctl vista` que levantamos nosotros. La regla es una sola: la
+     camara del monitor no puede estar abierta dos veces, asi que el hijo solo se levanta cuando el
+     visor no la esta usando, y se cae en cuanto el visor la pide (el hijo mira `estado` y se va solo,
+     codigo 3). La casilla marcada significa "que se quede viendo": si el hijo se acaba (le dimos 60 s)
+     se levanta otro, y si el visor se lleva la camara le pasamos la orden a el. */
+  QProcess *hijoVista = new QProcess(&ventana);   /* con la ventana de padre: se va con ella */
+  bool vistaMarcada = false;      /* lo que pidio el usuario con la casilla */
+  bool vistaMandada = false;      /* el ultimo `vista = ...` que le quedo dicho al visor */
+  bool soltandoHijo = false;      /* mientras nosotros lo cerramos, su salida no es un fallo */
+  int fallosHijo = 0;             /* aperturas que fallaron: a la tercera se insiste cada diez segundos */
+  bool sinPrograma = false;       /* si no hay `odysseyvk` a mano, no hay nada que reintentar */
+  QDateTime ultimoLevantado;      /* para no levantar el hijo cada dos por tres */
+  QDateTime ultimaVistaMandada;
+  QString modoVista;              /* "visor" | "hijo" | "" : quien esta mandando los cuadros ahora */
+  QString notaVista;              /* el porque, para el texto de al lado del recuadro */
+
+  /* la programita que abre la camara suelta: se busca al lado de esta ventana y luego en el PATH
+     (instalada, queda en /usr/local/bin junto a `odysseyvk-ajustes`) */
+  const auto programaOdyssey = [&]() {
+    const QString lado = QCoreApplication::applicationDirPath() + "/odysseyvk";
+    if (QFileInfo(lado).isFile()) return lado;
+    return QStandardPaths::findExecutable("odysseyvk");
+  };
+
+  /* cerrar el hijo sin dejar la camara agarrada: primero se le escribe una linea por la entrada (el
+     hijo mira su entrada y se va solo, soltando el dispositivo bien) y si no, senal de termino */
+  const auto soltarHijoVista = [&]() {
+    if (hijoVista->state() == QProcess::NotRunning) return;
+    soltandoHijo = true;
+    hijoVista->write("\n");
+    hijoVista->closeWriteChannel();
+    if (!hijoVista->waitForFinished(1200)) {
+      hijoVista->terminate();
+      if (!hijoVista->waitForFinished(1200)) hijoVista->kill();
+    }
+    soltandoHijo = false;
+  };
+
+  const auto mandarVistaAlVisor = [&](bool rapida) {
+    std::string err;
+    std::map<std::string, std::string> ordenes;
+    ordenes["vista"] = rapida ? "1" : "0";
+    if (!ajuste::escribir(std::map<std::string, double>(), std::string(), ordenes, &err)) {
+      notaVista = QString::fromUtf8(("no se pudo mandar la orden de vista al visor: " + err).c_str());
+      return false;
+    }
+    vistaMandada = rapida;
+    ultimaVistaMandada = QDateTime::currentDateTime();
+    notaVista.clear();
+    return true;
+  };
+
+  /* la pintura del recuadro: se decodifica solo si el fichero cambio. La ultima imagen buena SE QUEDA
+     en pantalla si despues dejan de llegar cuadros (es mejor un cuadro viejo que un recuadro vacio):
+     lo viejo que es se dice en el texto de al lado, no encima de la imagen. */
+  long long cuadroTamano = -1;
   QDateTime cuadroHora;
+  long long cuadroViejos = -1;
+  const auto pintarVista = [&]() {
+    const QFileInfo fi(QString::fromStdString(ajuste::rutaCamaraVista()));
+    if (!fi.exists()) {
+      cuadroTamano = -1;
+      cuadroViejos = -1;
+      vistaCamara->setText(QString::fromUtf8("(sin vista: no hay ningun cuadro guardado todavia)"));
+      return;
+    }
+    const QDateTime hora = fi.lastModified();
+    cuadroViejos = hora.secsTo(QDateTime::currentDateTimeUtc());
+    if (cuadroTamano == (long long)fi.size() && cuadroHora == hora) return;   /* es el mismo cuadro */
+    cuadroHora = hora;
+    cuadroTamano = (long long)fi.size();
+    QFile f(fi.absoluteFilePath());
+    QImage cuadro;
+    if (f.open(QIODevice::ReadOnly) && cuadro.loadFromData(f.readAll())) {
+      vistaCamara->setPixmap(QPixmap::fromImage(
+          cuadro.scaled(vistaCamara->size(), Qt::KeepAspectRatio, Qt::FastTransformation)));
+    } else {
+      vistaCamara->setText(QString::fromUtf8("(el fichero de la vista no se pudo leer)"));
+    }
+  };
+
+  /* poner las cosas como quiere la casilla. Se llama en cada vuelta del refresco (dos por segundo),
+     que es cuando sabemos quien esta vivo por lo fresco que viene `estado`. */
+  const auto reconciliarVista = [&](const std::map<std::string, std::string> &est) {
+    long long estadoViejo = 999;
+    const QFileInfo fiEstado(QString::fromStdString(ajuste::rutaEstado()));
+    if (fiEstado.exists()) estadoViejo = fiEstado.lastModified().secsTo(QDateTime::currentDateTimeUtc());
+    const bool visorVivo = !est.empty() && estadoViejo <= 3;
+    const QString pedida = est.count("camara_pedida") ? QString::fromStdString(est.at("camara_pedida"))
+                                                      : QString();
+    const bool visorQuiereCamara = visorVivo && pedida == "si";
+    if (!vistaMarcada) {
+      soltarHijoVista();
+      if (vistaMandada) mandarVistaAlVisor(false);
+      modoVista.clear();
+      return;
+    }
+    if (visorQuiereCamara) {
+      /* la camara es del visor: fuera el hijo y que mande el los cuadros. Si el visor dice que su
+         cadencia no es rapida es que la sesion acaba de arrancar y se le olvido la orden: se reenvia,
+         con calma, una vez por segundo como mucho. */
+      soltarHijoVista();
+      modoVista = "visor";
+      const QString cadencia = est.count("camara_vista") ? QString::fromStdString(est.at("camara_vista"))
+                                                         : QString();
+      const qint64 desde = ultimaVistaMandada.isValid()
+                               ? ultimaVistaMandada.msecsTo(QDateTime::currentDateTime()) : 999999;
+      if (cadencia != "rapida" && desde > 1200 && !mandarVistaAlVisor(true)) modoVista.clear();
+      return;
+    }
+    /* nadie mas quiere la camara: la abrimos nosotros. Si el visor estaba vivo y le habiamos pedido
+       cuadros rapidos, se le quita la orden de encima. */
+    if (vistaMandada) mandarVistaAlVisor(false);
+    if (hijoVista->state() != QProcess::NotRunning) { modoVista = "hijo"; return; }
+    const qint64 desdeIntento = ultimoLevantado.isValid()
+                                    ? ultimoLevantado.msecsTo(QDateTime::currentDateTime()) : 999999;
+    /* si la camara esta terca se sigue intentando, pero con calma: un intento cada segundo y medio
+       mientras va nuevo, y ya cada diez segundos despues de tres fallos. La mayoria de las veces ni se
+       intenta, porque el listado de camaras dice si la tiene otro proceso. */
+    if (sinPrograma || desdeIntento < (fallosHijo >= 3 ? 10000 : 1500)) return;
+    const QString prog = programaOdyssey();
+    if (prog.isEmpty()) {
+      notaVista = QString::fromUtf8("no encuentro el programa `odysseyvk` (instalada, esta en"
+                                    " /usr/local/bin junto a esta ventana): no se puede abrir la camara"
+                                    " para la vista.");
+      sinPrograma = true;
+      return;
+    }
+    const QString dev = comboCam->currentData().toString();
+    for (const Camera::Info &c : camaras) {
+      if (!dev.isEmpty() && c.path != dev.toStdString()) continue;
+      if (c.ocupada) {
+        notaVista = QString::fromUtf8("la camara %1 la tiene abierta otro proceso: mientras este ocupada"
+                                      " no se puede abrir para la vista.").arg(dev.isEmpty() ? QString::fromUtf8("(la que sea)") : dev);
+        return;
+      }
+    }
+    QStringList arg;
+    arg << "ctl" << "vista" << "--fps" << "8" << "--segundos" << "60";
+    if (!dev.isEmpty()) arg << "--dev" << dev;
+    ultimoLevantado = QDateTime::currentDateTime();
+    hijoVista->setProcessChannelMode(QProcess::MergedChannels);
+    hijoVista->start(prog, arg);
+    modoVista = "hijo";
+  };
+
+  QObject::connect(hijoVista, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), &ventana,
+                   [&](int codigo, QProcess::ExitStatus) {
+                     modoVista.clear();
+                     if (soltandoHijo) return;   /* lo cerramos nosotros: no hay nada que contar */
+                     const bool agunto = ultimoLevantado.isValid() &&
+                                         ultimoLevantado.msecsTo(QDateTime::currentDateTime()) > 3000;
+                     if (agunto) fallosHijo = 0;
+                     const QString salida = QString::fromUtf8(hijoVista->readAll()).trimmed();
+                     if (codigo == 3) {
+                       notaVista = QString::fromUtf8("la vista previa se hizo a un lado: la camara la"
+                                                     " quiere el visor para su sesion 3D, y ahi los"
+                                                     " cuadros los manda el.");
+                     } else if (codigo != 0) {
+                       ++fallosHijo;
+                       notaVista = QString::fromUtf8("no se pudo abrir la camara para la vista (fallo %1)%2")
+                                       .arg(fallosHijo)
+                                       .arg(salida.isEmpty() ? QString() : (": " + salida.section('\n', -1)));
+                       if (fallosHijo >= 3)
+                         notaVista += QString::fromUtf8(" · se sigue intentando cada diez segundos");
+                     } else {
+                       notaVista = QString::fromUtf8("se acabo la apertura que teniamos (60 s): mientras la"
+                                                     " casilla siga marcada se abre otra en un momento.");
+                     }
+                   });
+
+  /* la hoja entera, dos veces por segundo, con lo que hay en `estado` y en serve.conf */
   const auto refrescarCamara = [&](const std::map<std::string, std::string> &est,
                                    const std::map<std::string, std::string> &hub) {
+    /* primero se pone cada cosa en su sitio segun la casilla (hijo fuera si el visor quiere la camara,
+       orden `vista = 1` si no...), y despues se pinta con lo que haya salido */
+    reconciliarVista(est);
     const QString vivo = est.count("facetracking") ? QString::fromStdString(est.at("facetracking")) : QString();
     const QString ahora = est.count("camara") ? QString::fromStdString(est.at("camara")) : QString();
     const QString tipo = est.count("camara_tipo") ? QString::fromStdString(est.at("camara_tipo")) : QString();
@@ -1048,32 +1256,24 @@ int main(int argc, char **argv) {
       detalle += QString::fromUtf8("<br>Hay sesion abierta (%1): cambiar la camara aqui vale para la"
                                    " proxima, la de ahora no se corta.").arg(
           QString::fromStdString(itSesion->second).toHtmlEscaped());
+    /* la vista en el recuadro: se pinta antes de armar el texto, porque el texto cuenta lo que acabe de
+       pasar (si llega algo nuevo o si el cuadro del recuadro ya es viejo) */
+    pintarVista();
+    QString fuente;
+    if (modoVista == "visor")
+      fuente = QString::fromUtf8("los cuadros los manda el visor, ocho veces por segundo");
+    else if (modoVista == "hijo")
+      fuente = QString::fromUtf8("la camara la abrio esta ventana con <code>odysseyvk ctl vista</code>");
+    else if (vistaMarcada)
+      fuente = QString::fromUtf8("la casilla esta marcada, pero ahora mismo no hay fuente de cuadros");
+    else
+      fuente = QString::fromUtf8("la casilla esta apagada: no llega nada nuevo");
+    if (cuadroViejos > 10)
+      fuente += QString::fromUtf8("<br><b>ojo: lo del recuadro es un cuadro de hace %1 s</b>").arg(cuadroViejos);
+    if (!notaVista.isEmpty()) fuente += "<br>" + notaVista.toHtmlEscaped();
+    fuenteVista->setText("<i>" + fuente + "</i>");
+    detalle += QString::fromUtf8("<br><b>la vista</b>: %1<br>").arg(fuente);
     estadoCamara->setText(detalle);
-
-    /* la vista: el JPEG crudo que volco el visor. Se vuelve a cargar solo si el fichero cambio. */
-    const QFileInfo fi(QString::fromStdString(ajuste::rutaCamaraVista()));
-    if (!fi.exists()) {
-      vistaCamara->setText(QString::fromUtf8("(sin vista: el visor no ha volcado ninguna camara)"));
-      cuadrosVistos = -1;
-    } else {
-      const QDateTime hora = fi.lastModified();
-      const long long viejos = hora.secsTo(QDateTime::currentDateTimeUtc());
-      if (cuadrosVistos != (long long)fi.size() || cuadroHora != hora) {
-        cuadroHora = hora;
-        cuadrosVistos = (long long)fi.size();
-        QFile f(fi.absoluteFilePath());
-        QImage cuadro;
-        if (f.open(QIODevice::ReadOnly) && cuadro.loadFromData(f.readAll())) {
-          vistaCamara->setPixmap(QPixmap::fromImage(
-              cuadro.scaled(vistaCamara->size(), Qt::KeepAspectRatio, Qt::FastTransformation)));
-        } else {
-          vistaCamara->setText(QString::fromUtf8("(el fichero de la vista no se pudo leer)"));
-        }
-      } else if (viejos > 10) {
-        vistaCamara->setText(QString::fromUtf8("la vista es de hace %1 s: el visor ya no esta"
-                                               " mandando cuadros").arg(viejos));
-      }
-    }
     /* el combo de la via sigue lo que dice serve.conf, salvo que el usuario lo este tocando */
     const QString viaConf = dame("mono");
     if (!comboVia->hasFocus()) {
@@ -1119,6 +1319,42 @@ int main(int argc, char **argv) {
                                           " y mandada al vigilante: vale para la proxima sesion 3D, la de"
                                           " ahora sigue con su camara.").arg(ruta));
   });
+
+  /* la casilla de Previsualizacion: marcada = quedarse viendo la camara aqui. Es una casilla y no un
+     boton: no hay que estar pulsandola ni volver a pulsarla, mientras este marcada la fuente se
+     mantiene encendida sola (el refresco de dos por segundo la reanima si se cae). */
+  QObject::connect(casillaVista, &QCheckBox::toggled, &ventana, [&](bool on) {
+    vistaMarcada = on;
+    if (on) {
+      fallosHijo = 0;
+      ultimoLevantado = QDateTime();   /* el arranque no espera su turno de segundo y medio */
+      notaVista.clear();
+    } else {
+      notaVista = QString::fromUtf8("casilla apagada: se cerro la fuente de cuadros y en el recuadro"
+                                    " queda el ultimo que llego.");
+    }
+    /* se hace en el acto, sin esperar al refresco, para que el visor vuelva a su cadencia de dos
+       segundos en cuanto se desmarca y la camara quede libre en cuanto se desmarca sin sesion */
+    reconciliarVista(ajuste::leerEstado());
+    pintarVista();
+  });
+
+  /* si se cambia la camara elegida con la vista puesta, la vista sigue a la camara elegida */
+  QObject::connect(comboCam, qOverload<int>(&QComboBox::currentIndexChanged), &ventana, [&](int) {
+    if (!vistaMarcada || modoVista != "hijo") return;
+    soltarHijoVista();
+    ultimoLevantado = QDateTime();
+  });
+
+  /* el recuadro, ocho veces por segundo mientras la casilla esta marcada: el refresco gordo va a dos
+     por segundo, que para seguir la cara de la camara se queda corto. Esto solo mira el fichero; si no
+     cambio desde la ultima vez, no decodifica nada. */
+  QTimer refrescoVista;
+  refrescoVista.setInterval(120);
+  QObject::connect(&refrescoVista, &QTimer::timeout, &ventana, [&]() {
+    if (vistaMarcada) pintarVista();
+  });
+  refrescoVista.start();
 
   /* ---------------- la escritura al canal, con algo de calma ----------------
      Un deslizador suelto manda veinte valores por segundo; el visor lo lee una vez cada decima y
@@ -1508,7 +1744,19 @@ int main(int argc, char **argv) {
         .arg(QString::fromStdString(ajuste::rutaServeConf()), QString::fromStdString(ajuste::rutaPerfiles()),
              QString::fromStdString(ajuste::rutaSeleccion())));
 
+  /* al cerrar la ventana, la camara se queda libre: si habiamos levantado `ctl vista` se cierra (y
+     suelta el dispositivo) y si le habiamos pedido cuadros rapidos al visor se le quita el pedido de
+     encima. Sin esto quedaria una apertura viva hasta que el hijo se canse a los 60 segundos. */
+  QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
+    soltarHijoVista();
+    if (vistaMandada) mandarVistaAlVisor(false);
+  });
+
   ventana.resize(1240, 900);
+  /* `--vista`: marcar la casilla en el acto es lo mismo que si la hubiera marcado la mano, y el
+     conectado de la casilla se encarga de levantar lo que haga falta */
+  if (arrancarConVista) casillaVista->setChecked(true);
+
   ventana.show();
   return app.exec();
 }

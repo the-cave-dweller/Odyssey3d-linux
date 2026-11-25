@@ -60,9 +60,14 @@ bool esOrden(const std::string &nombre) {
    en su mapa de texto. `camara` y `mono` las atiende el vigilante; `capa` la atiende el VISOR
    (`capa = ocultar|mostrar|alternar` es la tecla Ctrl+Shift+F1 mandada por fichero, para cuando el
    teclado de la pantalla lo tiene otra ventana a pantalla completa), y `legado` tambien la atiende el
-   VISOR (modo de legado: trama de fabrica, sin conversor y pastilla sencilla). */
+   VISOR (modo de legado: trama de fabrica, sin conversor y pastilla sencilla). `vista` tambien es del
+   VISOR: `vista = 1` le pide que vuelque el cuadro de la camara a `camara.jpg` unas ocho veces por
+   segundo en vez de cada dos segundos, que es lo que necesita la casilla de Previsualizacion de la
+   ventana de ajustes para ensenar la camara en vivo mientras hay una sesion abierta; `vista = 0` la
+   devuelve a su cadencia tranquila. */
 static bool esOrdenTexto(const std::string &nombre) {
-  return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d" || nombre == "legado";
+  return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d" ||
+         nombre == "legado" || nombre == "vista";
 }
 
 static std::string recortar(std::string s) {

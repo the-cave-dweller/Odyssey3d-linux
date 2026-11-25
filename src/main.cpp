@@ -72,6 +72,11 @@ static const char *kUsage =
     "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
     "  odysseyvk ctl calib  [--out calib]   leer calibracion de fabrica (camara IR y transformada)\n"
     "  odysseyvk ctl camera [--dev N] [--size 1280x480] [--format MJPG]   probar la camara\n"
+    "  odysseyvk ctl vista  [--dev /dev/videoN] [--fps 8] [--segundos 25]  la camara suelta, sin rastreo:\n"
+    "                                        vuelca lo que ve a ~/.local/state/odysseyvk/camara.jpg unas 8\n"
+    "                                        veces por segundo. Es lo que levanta la casilla Previsualizacion\n"
+    "                                        de la ventana de ajustes cuando no hay sesion 3D abierta; cede la\n"
+    "                                        camara en cuanto el visor la pide (codigo 3) y se cierra solo.\n"
     "  odysseyvk ctl track  [--segundos 20] [--dump foto.jpg]   rastreo de cabeza (cara y ojos)\n"
     "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
     "  odysseyvk ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry] [--sin-despejar]\n"
@@ -409,6 +414,219 @@ static int cmdCamera(int argc, char **argv) {
   cam.stop();
   std::printf("%d de %d fotogramas\n", ok, wanted);
   return ok > 0 ? 0 : 1;
+}
+
+/* ---------------- la vista suelta de la camara: `odysseyvk ctl vista` ---------------------------
+   Abre la camara y vuelca el ultimo cuadro a `camara.jpg` unas ocho veces por segundo, sin rastreo y
+   sin red. Para que sirve: la casilla de Previsualizacion de la hoja de Camara de la ventana de
+   ajustes quiere ensenar lo que ve la camara aunque NO haya ninguna sesion 3D abierta, y el unico que
+   suele abrir la camara es el visor. La ventana levanta este proceso de hijo y lo cierra al desmarcar
+   la casilla, y aqui hay tres salidas para no dejar la camara agarrada nunca:
+     - si el visor esta escribiendo su `estado` y esa sesion quiere la camara (`camara_pedida = si`) se
+       retira con codigo 3: asi la vista previa le devuelve la camara al rastreo en medio segundo, y el
+       visor la reabre (lo intenta unas veces al arrancar la sesion);
+     - si le cierran la entrada estandar, o le mandan cualquier tecla, para al instante (se va incluso
+       si a la ventana que lo levanto se le muere el proceso);
+     - y para solo a los `--segundos` (25 por defecto), por si acaso.
+   El cuadro se guarda tal cual lo suelta la camara (MJPG). Si la camara no sabe de JPEG se pasa de
+   YUYV a PPM, que la ventana lo lee sin decodificadores. */
+/* Que hizo el visor con la camara, leido de su fichero `estado`: cuantos segundos hace que lo toco (-1
+   si nunca) y si esa sesion quiere la camara (`camara_pedida = si`). La edad sola no basta para ceder:
+   puede haber una sesion abierta sin rastreo (`rastreo = no` en serve.conf) y ahi la camara esta libre,
+   asi que la vista previa sigue siendo bienvenida. Y esperar a que diga `facetracking = abierto`
+   tampoco sirve: si la camara la tenemos nosotros, el visor nunca logra abrirla y jamas lo diria, o sea
+   que las dos partes se esperarian para siempre. Se cede por INTENCION, no por exito. */
+static void estadoVisor(double *edad, bool *quiereCamara) {
+  if (edad) *edad = -1.0;
+  if (quiereCamara) *quiereCamara = false;
+  const std::string ruta = ajuste::rutaEstado();
+  struct stat st{};
+  if (stat(ruta.c_str(), &st) != 0) return;   /* no existe: nunca hubo visor */
+  const double ahora = (double)std::chrono::duration<double>(
+                           std::chrono::system_clock::now().time_since_epoch()).count();
+  if (edad) *edad = ahora - (double)st.st_mtim.tv_sec - (double)st.st_mtim.tv_nsec / 1e9;
+  std::ifstream in(ruta);
+  std::string linea;
+  while (std::getline(in, linea)) {
+    if (linea.rfind("camara_pedida = ", 0) == 0) {
+      if (quiereCamara) *quiereCamara = linea.compare(16, 2, "si") == 0;
+      break;
+    }
+  }
+}
+
+/* YUYV422 -> PPM (P6). La camara del monitor manda JPEG, pero una webcam vieja no, y la ventana de
+   ajustes tiene que poder pintar algo sin decodificadores. Devuelve vacio si el cuadro no cuadra. */
+static std::vector<uint8_t> yuyvAPpm(const uint8_t *p, size_t size, int w, int h) {
+  if (w <= 0 || h <= 0 || size < (size_t)w * (size_t)h * 2u) return {};
+  std::vector<uint8_t> out;
+  out.reserve((size_t)w * (size_t)h * 3u + 64u);
+  char cabecera[64];
+  const int largo = std::snprintf(cabecera, sizeof cabecera, "P6\n%d %d\n255\n", w, h);
+  out.insert(out.end(), cabecera, cabecera + largo);
+  const auto tope = [](int v) { return v < 0 ? 0 : (v > 255 ? 255 : v); };
+  for (int i = 0; i < w * h; i++) {
+    const size_t par = (size_t)i * 2u;
+    const size_t base = par & ~(size_t)1;
+    const int y = p[par], cb = p[base + 1], cr = p[base + 3];
+    out.push_back((uint8_t)tope(y + (int)(1.402 * (cr - 128))));
+    out.push_back((uint8_t)tope(y - (int)(0.344 * (cb - 128) + 0.714 * (cr - 128))));
+    out.push_back((uint8_t)tope(y + (int)(1.772 * (cb - 128))));
+  }
+  return out;
+}
+
+static int cmdVistaCamara(int argc, char **argv) {
+  std::string err;
+  std::string dev = flag(argc, argv, "--dev");
+  if (!pickCameraDevice(dev, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  double fps = std::atof(flag(argc, argv, "--fps").c_str());
+  if (fps <= 0.0) fps = 8.0;
+  fps = fps < 1.0 ? 1.0 : (fps > 30.0 ? 30.0 : fps);
+  double limite = std::atof(flag(argc, argv, "--segundos").c_str());
+  if (limite <= 0.0) limite = 25.0;
+  if (limite > 600.0) limite = 600.0;
+  bool vigilarEntrada = !hasFlag(argc, argv, "--sin-entrada");
+
+  /* El modo: JPEG primero (la ventana lo pinta tal cual) y dentro de ese formato el que mas pixeles
+     de, sin pasarse; si no sabe de JPEG, YUYV. Los modos enormes se saltean: para una vista previa no
+     hace falta traer 4K por el USB. Se consulta la lista ANTES de abrir, igual que hace `ctl camera`:
+     consultar y abrir sobre el mismo nodo cerrado es lo que deja a la 04e8:20d7 tranquila. */
+  std::vector<Camera::Mode> modos = Camera::modes(dev);
+  const auto puntua = [](const Camera::Mode &m) {
+    const long bonus = m.fourcc == "MJPG" ? 4000000L : (m.fourcc == "YUYV" ? 0L : -4000000L);
+    return bonus + (long)m.width * (long)m.height / 1000L;
+  };
+  std::sort(modos.begin(), modos.end(),
+            [&](const Camera::Mode &a, const Camera::Mode &b) { return puntua(a) > puntua(b); });
+
+  double edad = -1.0;
+  bool quiereCamara = false;
+  estadoVisor(&edad, &quiereCamara);
+  Camera cam;
+  if (!cam.open(dev, &err)) {
+    if (edad >= 0.0 && edad < 2.5 && quiereCamara)
+      std::fprintf(stderr, "%s: hay una sesion 3D abierta y la camara la tiene el visor; marca la "
+                           "casilla otra vez cuando se cierre\n", err.c_str());
+    else
+      std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  bool listo = false;
+  for (const Camera::Mode &m : modos) {
+    if ((long)m.width * (long)m.height > 1920L * 1200L) continue;
+    if (cam.setFormat(m.width, m.height, m.fourcc, m.fps, &err)) { listo = true; break; }
+  }
+  if (!listo) {
+    const int fijos[][3] = {{1280, 480, 60}, {1280, 720, 30}, {640, 480, 30}};
+    for (const auto &f : fijos) {
+      if (cam.setFormat(f[0], f[1], "MJPG", f[2], &err)) { listo = true; break; }
+      if (cam.setFormat(f[0], f[1], "YUYV", f[2], &err)) { listo = true; break; }
+    }
+  }
+  if (!listo) {
+    std::fprintf(stderr, "ningun modo de %s sirvio para la vista: %s\n", dev.c_str(), err.c_str());
+    return 1;
+  }
+  if (!cam.start(&err)) {
+    std::fprintf(stderr, "arranque del flujo: %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("vista      %s %dx%d %s · %g cuadros por segundo · hasta %g s\n", dev.c_str(), cam.width(),
+              cam.height(), cam.mjpeg() ? "MJPG" : "YUYV", fps, limite);
+  std::fflush(stdout);
+
+  const auto t0 = std::chrono::steady_clock::now();
+  const auto instantes = [&t0]() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  };
+  long long leidos = 0, volcados = 0, sinCuadros = 0;
+  double marcaCuadro = -1e9, marcaInfo = -1e9, marcaCeso = -1e9;
+  std::string nota;
+  int salida = 0;
+  for (;;) {
+    const double visto = instantes();
+    if (visto >= limite) { nota = "se acabo el tiempo pedido"; break; }
+    if (vigilarEntrada) {
+      /* La entrada es el boton de apagar: la ventana que levanto este proceso le escribe una linea o
+         le cierra la tuberia cuando desmarca la casilla, y ahi el proceso se va solo, soltando la
+         camara en su propio cierre. Un fin de archivo no siempre es una orden: si la entrada no es ni
+         una tuberia ni una terminal (arrancado con la entrada cerrada o apuntando a /dev/null) no hay
+         nadie que pueda escribir, y se deja de mirar la entrada en vez de irse a los cero segundos. */
+      struct pollfd p{0, POLLIN, 0};
+      const int pr = poll(&p, 1, 0);
+      if (pr > 0 && (p.revents & (POLLIN | POLLHUP | POLLERR))) {
+        char descarte = 0;
+        const ssize_t leido = (p.revents & POLLIN) ? ::read(0, &descarte, 1) : 0;
+        if (leido > 0) { nota = "me mandaron algo por la entrada: suelto la camara"; break; }
+        /* se acabo la entrada. Si era una tuberia o una terminal, eso ES una orden: la ventana que
+           levantamos cerro su lado (o alguien le dio Ctrl-D), y hay que soltar la camara. Si era
+           /dev/null o un fichero, simplemente no hay nadie delante que pueda mandar nada. */
+        struct stat stEntrada;
+        const bool delante = fstat(0, &stEntrada) == 0 && (S_ISFIFO(stEntrada.st_mode) || isatty(0));
+        if (delante) {
+          nota = "se cerro la entrada (se fue la ventana que nos levanto): suelto la camara";
+          break;
+        }
+        vigilarEntrada = false;
+        std::printf("vista      la entrada no es una tuberia ni una terminal: no hay boton de apagar por ahi\n");
+        std::fflush(stdout);
+      }
+    }
+    if (visto - marcaCeso >= 0.4) {
+      marcaCeso = visto;
+      double edad = -1.0;
+      bool quiereCamara = false;
+      estadoVisor(&edad, &quiereCamara);
+      if (edad >= 0.0 && edad < 2.5 && quiereCamara) {
+        nota = "el visor quiere la camara para su sesion: le cedo";
+        salida = 3;
+        break;
+      }
+    }
+    const uint8_t *data = nullptr;
+    size_t size = 0;
+    std::string why;
+    if (!cam.read(&data, &size, 400, &why)) {
+      if (++sinCuadros > 20) { nota = "la camara dejo de mandar cuadros: " + why; salida = 1; break; }
+      /* a los dos segundos sin un solo cuadro se avisa el porque: si la camara no manda nada, eso es lo
+         que hay que leer, y no hace falta esperar al resumen del final (ni a los ocho segundos del corte) */
+      if (sinCuadros == 5) {
+        std::printf("vista      %s no mando ningun cuadro en dos segundos: %s\n", dev.c_str(), why.c_str());
+        std::fflush(stdout);
+      }
+      continue;
+    }
+    sinCuadros = 0;
+    leidos++;
+    if (visto - marcaCuadro >= 1.0 / fps) {
+      marcaCuadro = visto;
+      const std::vector<uint8_t> cuadro =
+          cam.mjpeg() ? std::vector<uint8_t>(data, data + size) : yuyvAPpm(data, size, cam.width(), cam.height());
+      if (cuadro.empty())
+        nota = "el cuadro no tiene el tamano esperado";
+      else if (!ajuste::escribirCamaraVista(cuadro, &err))
+        nota = err;
+      else
+        volcados++;
+    }
+    cam.release();
+    if (visto - marcaInfo >= 1.0) {
+      marcaInfo = visto;
+      const std::string colofon = nota.empty() ? std::string() : " · " + nota;
+      std::printf("vista      %lld cuadros, %lld guardados · %.1f por segundo%s\n", leidos, volcados,
+                  leidos / std::max(visto, 0.001), colofon.c_str());
+      std::fflush(stdout);
+    }
+  }
+  cam.stop();
+  std::printf("vista      parada: %lld cuadros, %lld guardados · %s\n", leidos, volcados,
+              nota.empty() ? "sin motivo" : nota.c_str());
+  std::fflush(stdout);
+  return salida;
 }
 
 #ifdef HAVE_OPENCV
@@ -4580,6 +4798,7 @@ int main(int argc, char **argv) {
     if (sub == "ir") return cmdIr(argc - 3, argv + 3);
     if (sub == "calib") return cmdCalib(argc - 3, argv + 3);
     if (sub == "camera") return cmdCamera(argc - 3, argv + 3);
+    if (sub == "vista") return cmdVistaCamara(argc - 3, argv + 3);
 #ifdef HAVE_OPENCV
     if (sub == "track") return cmdTrack(argc - 3, argv + 3);
 #endif
