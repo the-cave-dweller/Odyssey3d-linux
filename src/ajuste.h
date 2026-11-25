@@ -2,9 +2,9 @@
 
    El visor se queda el teclado de la pantalla del panel (por eso la trama tapa el navegador), asi
    que los numeros solo se podian mover con las teclas dentro de esa ventana. Este canal rompe eso
-   sin tocar el compositor: tres ficheros en ~/.local/state/odyssey3d.
+   sin tocar el compositor: tres ficheros en ~/.local/state/odysseyvk.
 
-     ajuste          lo escribe de fuera (la ventana Qt o `odyssey3d ctl ajuste`) y lo lee el visor
+     ajuste          lo escribe de fuera (la ventana Qt o `odysseyvk ctl ajuste`) y lo lee el visor
                      cada decima de segundo; `clave=valor`, una por linea, `#` comentarios.
      estado          lo escribe el visor dos veces por segundo: su valor REAL de cada numero, la red
                      que tiene abierta y cuanto tarda. La ventana de desarrollo lee de ahi.

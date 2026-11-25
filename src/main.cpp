@@ -1,4 +1,4 @@
-/* odyssey3d — visor/reproductor 3D sin gafas para el Samsung Odyssey 3D (G90XF)
+/* odysseyvk — visor/reproductor 3D sin gafas para el Samsung Odyssey 3D (G90XF)
    en Wayland. Parte de control de hardware: lente lenticular, scaler MediaTek,
    iluminador IR y modo del panel. */
 #include "ircam.h"
@@ -59,52 +59,55 @@ static const char *rotW(int r) {
 }
 
 static const char *kUsage =
-    "odyssey3d — 3D sin gafas en el Samsung Odyssey 3D (G90XF) bajo Wayland\n"
+    "odysseyvk — 3D sin gafas en el Samsung Odyssey 3D (G90XF) bajo Wayland\n"
     "\n"
-    "  odyssey3d play ARCHIVO        reproducir un video side-by-side en 3D sin gafas\n"
-    "  odyssey3d test                patron de calibracion (disparidades, barras RGB) sobre el panel\n"
-    "  odyssey3d doctor              diagnostico: lente, scaler, camara IR, panel, permisos\n"
-    "  odyssey3d weave               escribe un PNG con la trama calculada (sin tocar el panel)\n"
-    "  odyssey3d attrs               atributos de trama calculados (para validar el modelo)\n"
-    "  odyssey3d texto-detect PPM    que considera texto el apoyo de los rotulos (foto del --volcado)\n"
-    "  odyssey3d ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
-    "  odyssey3d ctl scaler [on|off] [--dev /dev/sg1]\n"
-    "  odyssey3d ctl ir     [on|off] [--dev /dev/video2]\n"
-    "  odyssey3d ctl calib  [--out calib]   leer calibracion de fabrica (camara IR y transformada)\n"
-    "  odyssey3d ctl camera [--dev N] [--size 1280x480] [--format MJPG]   probar la camara\n"
-    "  odyssey3d ctl track  [--segundos 20] [--dump foto.jpg]   rastreo de cabeza (cara y ojos)\n"
+    "  odysseyvk play ARCHIVO        reproducir un video side-by-side en 3D sin gafas\n"
+    "  odysseyvk test                patron de calibracion (disparidades, barras RGB) sobre el panel\n"
+    "  odysseyvk doctor              diagnostico: lente, scaler, camara IR, panel, permisos\n"
+    "  odysseyvk weave               escribe un PNG con la trama calculada (sin tocar el panel)\n"
+    "  odysseyvk attrs               atributos de trama calculados (para validar el modelo)\n"
+    "  odysseyvk texto-detect PPM    que considera texto el apoyo de los rotulos (foto del --volcado)\n"
+    "  odysseyvk ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
+    "  odysseyvk ctl scaler [on|off] [--dev /dev/sg1]\n"
+    "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
+    "  odysseyvk ctl calib  [--out calib]   leer calibracion de fabrica (camara IR y transformada)\n"
+    "  odysseyvk ctl camera [--dev N] [--size 1280x480] [--format MJPG]   probar la camara\n"
+    "  odysseyvk ctl track  [--segundos 20] [--dump foto.jpg]   rastreo de cabeza (cara y ojos)\n"
     "                     [--foto IMAGEN] revisa la deteccion en un archivo; [--sintetico] prueba la geometria\n"
-    "  odyssey3d ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry] [--sin-despejar]\n"
+    "  odysseyvk ctl panel  [status|apply|restore] [--output DP-4] [--hz 120] [--dry] [--sin-despejar]\n"
     "                                        status dice tambien el sitio de la salida; apply mueve lo que se\n"
     "                                        monte encima del panel y restore lo devuelve (apply/restore --dry\n"
     "                                        imprimen el comando de kscreen-doctor completo, con posiciones)\n"
-    "  odyssey3d ctl windows [--watch]\n"
-    "  odyssey3d ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|sobre|debajo|libre|salida NOMBRE|cerrar] [--uuid ID]\n"
+    "  odysseyvk ctl windows [--watch]\n"
+    "  odysseyvk ctl ventana [fullscreen|normal|maximizar|minimizar|aparecer|sobre|debajo|libre|salida NOMBRE|cerrar] [--uuid ID]\n"
     "                                        como esta la ventana del video; `salida DP-4` la devuelve al Odyssey\n"
-    "  odyssey3d ctl aparece   la ventana del visor otra vez a la vista (para atarla a la tecla PB)\n"
-    "  odyssey3d ctl salidas   cada pantalla con su posicion y tamano logicos en el espacio global\n"
-    "  odyssey3d ctl apilamiento  el orden arriba/abajo que ve el compositor (el ultimo esta arriba)\n"
-    "  odyssey3d ctl capture [--uuid X] [--out F] [--segundos N]\n"
-    "  odyssey3d ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
-    "  odyssey3d ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
+    "  odysseyvk ctl aparece   la ventana del visor otra vez a la vista (para atarla a la tecla PB)\n"
+    "  odysseyvk ctl salidas   cada pantalla con su posicion y tamano logicos en el espacio global\n"
+    "  odysseyvk ctl apilamiento  el orden arriba/abajo que ve el compositor (el ultimo esta arriba)\n"
+    "  odysseyvk ctl capture [--uuid X] [--out F] [--segundos N]\n"
+    "  odysseyvk ctl capture-gl [--uuid X] [--out F] [--segundos N]\n"
+    "  odysseyvk ctl vkprobe [--gpu N] [--solamente-gpu] [--verboso] [--uuid X] [--out F]\n"
       "                                        muestra y guarda un fotograma leido en Vulkan\n"
-    "  odyssey3d ctl notify [--wait N]\n"
-    "  odyssey3d ctl flujo [--uuid ID] [--segundos N]  medir si el compositor manda fotogramas nuevos\n"
-    "  odyssey3d ctl video  [status|pause|play|toggle]   pausar y reanudar el video sin quitar la capa\n"
-    "  odyssey3d ctl overlay [--segundos 12] [--dump F.png] [--titulo T] [--cuerpo T]\n"
+    "  odysseyvk ctl notify [--wait N]\n"
+    "  odysseyvk ctl flujo [--uuid ID] [--segundos N]  medir si el compositor manda fotogramas nuevos\n"
+    "  odysseyvk ctl video  [status|pause|play|toggle]   pausar y reanudar el video sin quitar la capa\n"
+    "  odysseyvk ctl overlay [--segundos 12] [--dump F.png] [--titulo T] [--cuerpo T]\n"
     "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
-    "  odyssey3d ctl escritorio [poner|quitar|estado]   el overlay FORZADO en el escritorio del monitor:\n"
+    "  odysseyvk ctl escritorio [poner|quitar|estado]   el overlay FORZADO en el escritorio del monitor:\n"
     "                                        trama y lente encendidas con patron de prueba, sin video (lo mismo que el boton de la ventana de ajustes)\n"
-    "  odyssey3d ctl 3d     [encender|apagar|alternar|estado]  lo mismo que el interruptor ON/OFF de la\n"
+    "  odysseyvk ctl 3d     [encender|apagar|alternar|estado]  lo mismo que el interruptor ON/OFF de la\n"
     "                                        pastilla (Ctrl+Shift+1 con el visor enfocado)\n"
-    "  odyssey3d ctl capa   [ocultar|mostrar|alternar|estado]  quitar o poner la pastilla sin tocar el\n"
+    "  odysseyvk ctl capa   [ocultar|mostrar|alternar|estado]  quitar o poner la pastilla sin tocar el\n"
     "                                        teclado (es Ctrl+Shift+F1 mandado por fichero; la trama sigue)\n"
-    "  odyssey3d ctl ajuste [clave valor ...]  mandar numeros vivos al visor (fase, paso, conv, planos, ...)\n"
-    "  odyssey3d ctl ajuste limpiar | fabrica  vaciar el canal | mandar los numeros DE FABRICA (revertir)\n"
-    "  odyssey3d-ajustes                la ventana de ajustes: redes disponibles/seleccionadas, guardados y sus numeros\n"
-    "  odyssey3d capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
-    "  odyssey3d test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
-    "  odyssey3d serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
+    "  odysseyvk ctl legado [encender|apagar|alternar|estado]  el modo de LEGADO: video que ya viene en dos\n"
+    "                                        vistas, sin conversor y con la pastilla sencilla (lo mismo que el\n"
+    "                                        interruptor de la ventana de ajustes; se recuerda en serve.conf)\n"
+    "  odysseyvk ctl ajuste [clave valor ...]  mandar numeros vivos al visor (fase, paso, conv, planos, ...)\n"
+    "  odysseyvk ctl ajuste limpiar | fabrica  vaciar el canal | mandar los numeros DE FABRICA (revertir)\n"
+    "  odysseyvk-ajustes                la ventana de ajustes: redes disponibles/seleccionadas, guardados y sus numeros\n"
+    "  odysseyvk capture3d [--uuid X]   capturar una ventana a pantalla completa y tramarla en 3D\n"
+    "  odysseyvk test [--windowed]      patron de prueba con la interfaz (raton y teclas)\n"
+    "  odysseyvk serve [--dry]          servicio: avisa cuando algo se pone a pantalla completa y lo pone en 3D\n"
     "\n"
     "opciones:\n"
     "  --output NOMBRE   salida del panel (por defecto, la que tenga modo 3840x2160)\n"
@@ -308,9 +311,9 @@ static std::string defaultModelPath() {
     if (slash != std::string::npos) dir = dir.substr(0, slash);
     bases.push_back(dir);
     bases.push_back(dir + "/..");
-    bases.push_back(dir + "/../share/odyssey3d");
-    bases.push_back("/usr/local/share/odyssey3d");
-    bases.push_back("/usr/share/odyssey3d");
+    bases.push_back(dir + "/../share/odysseyvk");
+    bases.push_back("/usr/local/share/odysseyvk");
+    bases.push_back("/usr/share/odysseyvk");
   }
   for (const auto &b : bases) {
     const std::string p = b + "/modelos/face_detection_yunet_2023mar.onnx";
@@ -903,7 +906,7 @@ static int cmdCaptureGl(int argc, char **argv) {
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  GLFWwindow *winGl = glfwCreateWindow(320, 240, "odyssey3d-gl", nullptr, nullptr);
+  GLFWwindow *winGl = glfwCreateWindow(320, 240, "odysseyvk-gl", nullptr, nullptr);
   if (!winGl) {
     std::fprintf(stderr, "no se pudo crear el contexto OpenGL\n");
     glfwTerminate();
@@ -1036,7 +1039,7 @@ static int cmdNotify(int argc, char **argv) {
   std::vector<std::pair<std::string, std::string>> botones = {
       {"sbs", "3D lado a lado"}, {"tb", "3D arriba/abajo"}, {"conv", "Video normal a 3D"},
       {"flat", "Solo lente"}, {"no", "No"}};
-  if (!n.send("odyssey3d-prueba", "Video a pantalla completa detectado",
+  if (!n.send("odysseyvk-prueba", "Video a pantalla completa detectado",
               "Elige como quieres verlo en el Odyssey 3D", botones, &err)) {
     std::fprintf(stderr, "%s\n", err.c_str());
     return 1;
@@ -1054,7 +1057,7 @@ static int cmdNotify(int argc, char **argv) {
     poll(&pfd, 1, 250);
     if (pfd.revents & POLLIN) n.process();
   }
-  n.remove("odyssey3d-prueba");
+  n.remove("odysseyvk-prueba");
   if (!picked) std::printf("no pulso nadie ningun boton\n");
   return picked ? 0 : 3;
 #endif
@@ -1366,18 +1369,18 @@ static std::string findDataFile(const std::string &name, const std::string &cali
      propia linea de montaje y solo vale para ESE panel. Los que llevamos instalados son de otra
      unidad; el promedio se parece pero dejan errores de fase localizados (medido: 0,04 ciclos de
      media y hasta 1,7 px de desplazamiento de trama en una esquina). Si el dueno puso los suyos en
-     ~/.config/odyssey3d/calib, esos mandan sobre los instalados. */
+     ~/.config/odysseyvk/calib, esos mandan sobre los instalados. */
   if (const char *h = std::getenv("HOME"); h && *h)
-    bases.push_back(std::string(h) + "/.config/odyssey3d/calib");
+    bases.push_back(std::string(h) + "/.config/odysseyvk/calib");
   for (const char *b : {".", "./calib", "../calib"}) bases.push_back(b);
   std::string ed = exeDir();
   if (!ed.empty()) {
     bases.push_back(ed + "/calib");
-    bases.push_back(ed + "/../share/odyssey3d/calib");
+    bases.push_back(ed + "/../share/odysseyvk/calib");
     bases.push_back(ed + "/../calib");
   }
-  bases.push_back("/usr/share/odyssey3d/calib");
-  bases.push_back("/usr/local/share/odyssey3d/calib");
+  bases.push_back("/usr/share/odysseyvk/calib");
+  bases.push_back("/usr/local/share/odysseyvk/calib");
   for (const std::string &b : bases) {
     std::string p = b + "/" + name;
     if (fileExists(p)) return p;
@@ -1461,6 +1464,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--eye-y") { if (!need("eye-y")) return false; o.eyeY = atof(argv[++i]); }
     else if (a == "--eye-z") { if (!need("eye-z")) return false; o.eyeZ = atof(argv[++i]); }
     else if (a == "--track") o.track = true;
+    else if (a == "--legado") o.legado = true;
     else if (a == "--track-fixed") o.trackFixed = true;
     else if (a == "--track-flip-x") o.trackFlipX = true;
     else if (a == "--track-flip-y") o.trackFlipY = true;
@@ -1614,13 +1618,13 @@ static int cmdPlanos(int argc, char **argv) {
     else if (a == "--out" && i + 1 < argc) out = argv[++i];
     else if (a == "--hist") hist = true;
     else if (a == "--ayuda" || a == "-h") {
-      std::printf("odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--muestras 1] "
+      std::printf("odysseyvk planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--muestras 1] "
                   "[--out lamina.pgm] [--hist]\n");
       return 0;
     } else ficheros.push_back(a);
   }
   if (ficheros.empty()) {
-    std::fprintf(stderr, "uso: odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--muestras 1] "
+    std::fprintf(stderr, "uso: odysseyvk planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--muestras 1] "
                          "[--out lamina.pgm] [--hist]\n");
     return 2;
   }
@@ -1733,7 +1737,7 @@ static int cmdPlanos(int argc, char **argv) {
 /* Pasar fotos reales por la red de profundidad y dejar el mapa en un PGM, sin abrir el panel. Con
    esto se monta el banco de pruebas de lo que hace el conversor con una pelicula de verdad: se
    sacan cuadros con ffmpeg (`ffmpeg -i pelicula.mkv -vf fps=2 cuadro%%04d.png`), se pasan por aqui
-   en orden y la salida se mira con `odyssey3d planos cuadro*-mapa.pgm`. La red suaviza en el tiempo
+   en orden y la salida se mira con `odysseyvk planos cuadro*-mapa.pgm`. La red suaviza en el tiempo
    igual que en la sesion, asi que la secuencia se comporta como en la pelicula. */
 /* Leida en glutil.h; se vuelve a declarar aqui para no arrastrar las cabeceras de OpenGL a este
    archivo. Sin libpng devuelve false y ya esta. */
@@ -1747,12 +1751,12 @@ static int cmdMapa(int argc, char **argv) {
     if ((a == "--modelo" || a == "--model") && i + 1 < argc) modelo = argv[++i];
     else if (a == "--red" && i + 1 < argc) gpu = std::max(0, std::atoi(argv[++i]));
     else if (a == "--ayuda" || a == "-h") {
-      std::printf("odyssey3d mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
+      std::printf("odysseyvk mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
       return 0;
     } else ficheros.push_back(a);
   }
   if (ficheros.empty()) {
-    std::fprintf(stderr, "uso: odyssey3d mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
+    std::fprintf(stderr, "uso: odysseyvk mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
     return 2;
   }
   DepthNet net;
@@ -1760,7 +1764,7 @@ static int cmdMapa(int argc, char **argv) {
   char bufTmp[128];
   if (!net.init(modelo, &err, gpu)) {
     std::fprintf(stderr, "no se pudo abrir la red: %s\n", err.c_str());
-    std::fprintf(stderr, "(las .onnx viven en ~/.local/share/odyssey3d/modelos/)\n");
+    std::fprintf(stderr, "(las .onnx viven en ~/.local/share/odysseyvk/modelos/)\n");
     return 1;
   }
   std::printf("[mapa] red %s por %s · salida %d x %d\n", net.modelPath().c_str(), net.device().c_str(),
@@ -1831,7 +1835,7 @@ static int cmdTexto(int argc, char **argv) {
     }
   }
   if (foto.empty()) {
-    std::fprintf(stderr, "uso: odyssey3d texto-detect FOTO.ppm [--plano 0,45] [--celda 8] "
+    std::fprintf(stderr, "uso: odysseyvk texto-detect FOTO.ppm [--plano 0,45] [--celda 8] "
                          "[--mapa MAPA.pgm] [--out ROTULOS.pgm]\n");
     return 2;
   }
@@ -1947,7 +1951,7 @@ static int cmdWeavePng(const ViewerOpts &o) {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
   glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-  GLFWwindow *win = glfwCreateWindow(64, 64, "odyssey3d-weave", nullptr, nullptr);
+  GLFWwindow *win = glfwCreateWindow(64, 64, "odysseyvk-weave", nullptr, nullptr);
   if (!win) {
     std::fprintf(stderr, "[error] no se pudo crear un contexto GL\n");
     glfwTerminate();
@@ -2035,7 +2039,7 @@ static int cmdWeavePng(const ViewerOpts &o) {
    habla con el por ficheros. Estos verbos son la misma puerta desde la terminal: sirven para mandar
    un numero o una red sin abrir la ventana, y para leer lo que el visor esta usando y lo que se fue
    cambiando (que es lo que despues se puede repasar en voz alta). No hay socket: son tres ficheros
-   en ~/.local/state/odyssey3d, y el visor los mira una vez cada decima de segundo. */
+   en ~/.local/state/odysseyvk, y el visor los mira una vez cada decima de segundo. */
 static void imprimirAjusteYEstado() {
   const std::string ajuste = ajuste::textoAjuste();
   if (ajuste.empty())
@@ -2055,9 +2059,9 @@ static void imprimirModelos() {
   std::vector<std::string> dirs;
   const char *home = std::getenv("HOME");
   const std::string h(home ? home : "/home");
-  dirs.push_back(h + "/.local/share/odyssey3d/modelos");
+  dirs.push_back(h + "/.local/share/odysseyvk/modelos");
   dirs.push_back("/run/media/rodolfo/067ABD417ABD2DF5/AnalisisOdyssey/modelos");
-  if (const char *e = std::getenv("ODYSSEY3D_MODELOS")) {
+  if (const char *e = entornoOdyssey("ODYSSEYVK_MODELOS")) {
     std::string d;
     for (char c : std::string(e)) {
       if (c == ':') { if (!d.empty()) dirs.push_back(d); d.clear(); } else d += c;
@@ -2232,7 +2236,7 @@ static int cmdEscritorio(int argc, char **argv) {
   if (uno == "estado" || uno == "status" || uno == "info") {
     const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
     if (hub.empty()) {
-      std::printf("el vigilante no ha escrito nada en %s: no hay `odyssey3d serve` corriendo, o es una\n"
+      std::printf("el vigilante no ha escrito nada en %s: no hay `odysseyvk serve` corriendo, o es una\n"
                   "version vieja que aun no cuenta lo suyo (instala la nueva con `make install`)\n",
                   ajuste::rutaHub().c_str());
       return 1;
@@ -2247,7 +2251,7 @@ static int cmdEscritorio(int argc, char **argv) {
                                    std::filesystem::file_time_type::clock::now() - mt).count();
       std::printf("  %-10s %lld segundos\n", "hace", viejos);
       if (viejos > 5)
-        std::printf("  (viene viejo: el servicio se paro; lo arrancas con `systemctl --user restart odyssey3d-serve`)\n");
+        std::printf("  (viene viejo: el servicio se paro; lo arrancas con `systemctl --user restart odysseyvk-serve`)\n");
     }
     return 0;
   }
@@ -2255,7 +2259,7 @@ static int cmdEscritorio(int argc, char **argv) {
   if (uno == "poner" || uno == "montar" || uno == "1" || uno == "si") valor = 1.0;
   else if (uno == "quitar" || uno == "bajar" || uno == "0" || uno == "no") valor = 0.0;
   else {
-    std::printf("uso: odyssey3d ctl escritorio [poner|quitar|estado]\n");
+    std::printf("uso: odysseyvk ctl escritorio [poner|quitar|estado]\n");
     return 2;
   }
   std::string err;
@@ -2289,7 +2293,7 @@ static int cmd3D(int argc, char **argv) {
   else if (uno == "encender" || uno == "poner" || uno == "1" || uno == "si" || uno == "on") valor = "encender";
   else if (uno == "alternar" || uno == "toggle") valor = "alternar";
   else {
-    std::printf("uso: odyssey3d ctl 3d [encender|apagar|alternar|estado]\n");
+    std::printf("uso: odysseyvk ctl 3d [encender|apagar|alternar|estado]\n");
     return 2;
   }
   std::string err;
@@ -2299,6 +2303,53 @@ static int cmd3D(int argc, char **argv) {
   }
   std::printf("orden enviada al visor: 3D %s (con el visor enfocado es Ctrl+Shift+1, o picar el"
               " interruptor de la pastilla)\n", valor.c_str());
+  return 0;
+}
+
+/* El modo de legado, por fichero. Es la misma puerta que el interruptor de la pestana General de la
+   ventana de ajustes: la trama pasa a los numeros de fabrica, el conversor que saca dos vistas de una
+   queda cerrado y la pastilla se queda con lo justo (interruptor, salida 3D y plano de apoyo). No
+   cierra ni abre nada: la sesion que estuviera abierta sigue, solo cambia como se arma la imagen.
+   El valor queda escrito en serve.conf, asi que la siguiente sesion arranca igual. */
+static int cmdLegado(int argc, char **argv) {
+  const std::string uno = argc > 0 ? strLower(argv[0]) : "alternar";
+  if (uno == "estado" || uno == "status" || uno == "info") {
+    const std::map<std::string, std::string> conf = ajuste::leerServeConf();
+    const auto itC = conf.find("legado");
+    std::printf("modo de legado pedido en serve.conf: %s\n",
+                itC == conf.end() ? "no (los numeros finos de siempre mandan)" : itC->second.c_str());
+    const std::map<std::string, std::string> est = ajuste::leerEstado();
+    const auto itV = est.find("legado");
+    if (itV != est.end())
+      std::printf("modo de legado en el visor que esta en la pantalla: %s\n", itV->second.c_str());
+    else
+      std::printf("modo de legado en el visor: no hay visor leyendo el canal (o es de otra version)\n");
+    return 0;
+  }
+  std::string valor;
+  if (uno == "apagar" || uno == "quitar" || uno == "0" || uno == "no" || uno == "off") valor = "apagar";
+  else if (uno == "encender" || uno == "poner" || uno == "1" || uno == "si" || uno == "on") valor = "encender";
+  else if (uno == "alternar" || uno == "toggle") valor = "alternar";
+  else {
+    std::printf("uso: odysseyvk ctl legado [encender|apagar|alternar|estado]\n");
+    return 2;
+  }
+  std::string err;
+  if (!ajuste::escribir(std::map<std::string, double>(), std::string(), {{"legado", valor}}, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  /* que quede escrito para la proxima sesion: el vigilante lee serve.conf al arrancar cada visor */
+  if (valor != "alternar") {
+    if (!ajuste::fijarEnServeConf("legado", valor == "encender" ? "si" : "no", &err))
+      std::fprintf(stderr, "[legado] en el visor si, pero no se pudo escribir serve.conf: %s\n", err.c_str());
+    else
+      std::printf("ademas queda escrito en serve.conf (legado = %s) para la proxima sesion\n",
+                  valor == "encender" ? "si" : "no");
+  } else {
+    std::printf("(con `alternar` no se escribe serve.conf: di encender o apagar para que quede para siempre)\n");
+  }
+  std::printf("orden enviada al visor: legado %s\n", valor.c_str());
   return 0;
 }
 
@@ -2328,7 +2379,7 @@ static int cmdCapa(int argc, char **argv) {
   else if (uno == "mostrar" || uno == "poner" || uno == "1" || uno == "si" || uno == "on") valor = "mostrar";
   else if (uno == "alternar" || uno == "toggle") valor = "alternar";
   else {
-    std::printf("uso: odyssey3d ctl capa [ocultar|mostrar|alternar|estado]\n");
+    std::printf("uso: odysseyvk ctl capa [ocultar|mostrar|alternar|estado]\n");
     return 2;
   }
   std::string err;
@@ -2356,6 +2407,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().rastreoVivo = true;
   hud.state().rastreoEstudio = true;   /* como si fuera la camara del monitor */
   hud.state().rastreoNota = "1280x480 MJPG @ 60 · cara a la vista";
+  hud.state().legado = o.legado;   /* `--legado` en la prueba: la pastilla sale sencilla */
   hud.setInfo("prueba de la interfaz");
   hud.begin(W, H);
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
@@ -2388,9 +2440,12 @@ static int cmdHudSelfTest(int argc, char **argv) {
     const float cajaEstudio = hud.mideTexto("3D Studio", 14.0f) + 24.0f;   /* 12 px de aire por lado */
     const float cajaExterna = hud.mideTexto("fallback", 14.0f) + 24.0f;
     const float usado = 18.0f + etiqueta + 14.0f + cajaEstudio + 10.0f + cajaExterna;
-    std::printf("  fila Facetracking %.0f px (etiqueta %.0f + cajas %.0f + %.0f) de 824 · quedan %.0f para"
-                " la nota  %s\n", (double)usado, (double)etiqueta, (double)cajaEstudio, (double)cajaExterna,
-                (double)(824.0f - 20.0f - usado), usado + 20.0f <= 824.0f ? "cabe" : "SE SALE");
+    const float nota = hud.mideTexto("1280x480 MJPG @ 60 · cara a la vista", 11.0f);
+    const float panel = hud.panelW();   /* 824 de normal, 648 en modo de legado */
+    std::printf("  fila Facetracking %.0f px (etiqueta %.0f + cajas %.0f + %.0f) de %.0f · quedan %.0f para"
+                " la nota, que mide %.0f  %s\n", (double)usado, (double)etiqueta, (double)cajaEstudio,
+                (double)cajaExterna, (double)panel, (double)(panel - 20.0f - usado), (double)nota,
+                usado + 20.0f + nota <= panel ? "cabe" : "SE SALE");
   }
 
   /* Rotulos de la pastilla, con la caja real donde se dibujan (ancho del boton menos el aire a cada
@@ -2399,20 +2454,36 @@ static int cmdHudSelfTest(int argc, char **argv) {
     const char *texto;
     float px, caja;
   };
-  /* el interruptor: la letra va entre la bola y el borde de la pista (88 px de aire, que es lo
-     peor de los dos lados: con OFF hay tres letras) */
-  static const Medida med[] = {{"ON", 15.0f, 88.0f},                 {"OFF", 15.0f, 88.0f},
+  /* el interruptor: la letra va entre la bola y el borde de la pista (70 px de aire con la pista
+     de 112 px, que es lo peor de los dos lados: con OFF hay tres letras) */
+  static const Medida med[] = {{"ON", 15.0f, 70.0f},                 {"OFF", 15.0f, 70.0f},
                                {"Ctrl+Shift+1  el 3D", 11.0f, 160.0f},
                                {"Ctrl+Shift+F1", 12.0f, 166.0f},     {"oculta o muestra la pastilla", 11.0f, 166.0f},
                                {"Red 1 · Samsung", 14.0f, 136.0f},   {"Red 2 · nativa", 14.0f, 136.0f},
                                {"Red sin conversor", 14.0f, 136.0f}, {"1 / 2  cambia de red", 11.0f, 160.0f},
                                {"teclas 1 / 2", 11.0f, 160.0f},      {"Tab  entrega la pantalla", 11.0f, 272.0f},
-                               {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},  {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
-                               {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
+                               {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},  {"Ctrl+Shift+5 / 6", 11.0f, 120.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
     std::printf("  letra  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w, (double)m.caja,
                 w <= m.caja ? "cabe" : "SE SALE");
+  }
+
+  /* de cuanto salio la pastilla de verdad: 824 x 134 de siempre y 648 en modo de legado (la altura es
+     la misma: lo que quito el modo de legado es el boton de la red y el deslizador de la profundidad
+     del conversor, no filas). Si la ventana se queda angosta, la pastilla se encoge con ella. */
+  std::printf("  pastilla dibujada: %.0f x %.0f px en ventana de %dx%d (%s)\n", (double)hud.panelW(),
+              (double)hud.panelH(), W, H, o.legado ? "modo de legado" : "modo completo");
+
+  /* letras que solo salen en el modo de legado: los dos deslizadores se llaman alli de otra manera y
+     el aviso del hardware habla solo de la lente (ahi el scaler del monitor no se toca) */
+  static const Medida medLegado[] = {{"Plano de apoyo", 12.0f, 120.0f}, {"3D Salida", 12.0f, 120.0f},
+                                     {"Ctrl+Shift+3 / 4", 11.0f, 120.0f}, {"Tab  entrega la pantalla", 11.0f, 272.0f},
+                                     {"lente activa", 11.0f, 220.0f},   {"sin lente", 11.0f, 220.0f}};
+  for (const Medida &m : medLegado) {
+    const float w = hud.mideTexto(m.texto, m.px);
+    std::printf("  letra legado  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w,
+                (double)m.caja, w <= m.caja ? "cabe" : "SE SALE");
   }
 
   const int d0 = hud.state().depth, p0 = hud.state().popout;
@@ -2521,7 +2592,7 @@ static int cmdDoctor(const ViewerOpts &o, const std::string &waylandSock) {
       std::printf("  sincron. adap.: %s\n", st.vrr.empty() ? "(sin dato)" : st.vrr.c_str());
       int idx = Panel::pickMode(st, o.hz);
       std::printf("  modo elegido  : %s\n", idx < 0 ? "(ninguno 3840x2160)" : Panel::modeName(st, idx).c_str());
-      if (st.scale != 1.0 || !Panel::isLandscape(st.rotation)) { std::printf("  ! el panel no esta a pixel a pixel: usa `odyssey3d ctl panel apply`\n"); }
+      if (st.scale != 1.0 || !Panel::isLandscape(st.rotation)) { std::printf("  ! el panel no esta a pixel a pixel: usa `odysseyvk ctl panel apply`\n"); }
     }
   }
 
@@ -2557,6 +2628,11 @@ struct ServeCfg {
                                    user.ini, FaceWidth_mm=140). Ojo: el hub pasa este valor al visor, asi que
                                    mientras estuviera en 150 la correccion del visor no llegaba a ninguna sesion. */
   std::string texto = "auto";  /* rotulos apoyados en la pantalla: si / no / auto (auto = si) */
+  /* Modo de legado: el video ya llega en dos vistas, asi que la trama trabaja con los numeros de
+     fabrica, no entra el conversor que saca dos vistas de una y la pastilla sale sencilla (interruptor,
+     salida 3D y plano de apoyo). Se enciende y se apaga desde la pestana General de la ventana de
+     ajustes o con `ctl legado`, y queda escrito en serve.conf para la siguiente sesion. */
+  bool legado = false;
   /* Ajuste de la trama contra la lente de ESTA unidad: son los mismos numeros que se mueven en
      marcha con las teclas, pero aqui quedan guardados y se pasan a todas las sesiones. */
   double fase = 0.0;        /* desfase de la trama, en ciclos (flechas izquierda y derecha) */
@@ -2605,7 +2681,7 @@ struct ServeCfg {
 static void guardarAutoEnDisco(const std::string &appId, const std::string &modo) {
   const char *home = std::getenv("HOME");
   if (!home || appId.empty()) return;
-  const std::string dir = std::string(home) + "/.config/odyssey3d";
+  const std::string dir = std::string(home) + "/.config/odysseyvk";
   ::mkdir(dir.c_str(), 0700);
   FILE *f = std::fopen((dir + "/serve.conf").c_str(), "ae");
   if (!f) return;
@@ -2636,14 +2712,14 @@ static std::string expansionRuta(std::string r) {
   return r;
 }
 
-/* ~/.config/odyssey3d/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=,
+/* ~/.config/odysseyvk/serve.conf: lineas clave=valor (ignore=, espera=, modo=, pantalla=,
    modelo= la red del boton 1, nuestra= la nativa del boton 2, rastreo= si/no, suavizado= 0,35,
    calib= carpeta de los mapas de correccion de este panel, fase= paso= filtro= ajuste de la trama). */
 static void loadServeCfg(ServeCfg &cfg) {
   const char *home = std::getenv("HOME");
   if (!home) return;
   std::string txt;
-  if (!readSmallFile(std::string(home) + "/.config/odyssey3d/serve.conf", txt)) return;
+  if (!readSmallFile(std::string(home) + "/.config/odysseyvk/serve.conf", txt)) return;
   std::string line;
   auto eat = [&](bool last) {
     std::string l = strTrim(line);
@@ -2669,6 +2745,10 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "texto") {
       const std::string t = strLower(v);
       cfg.texto = (t == "si" || t == "no" || t == "auto") ? t : "auto";
+    }
+    else if (k == "legado") {
+      const std::string s = strLower(v);
+      cfg.legado = (s == "si" || s == "on" || s == "1" || s == "encendido" || s == "puesto");
     }
     else if (k == "devolver_fullscreen") {
       const std::string s = strLower(v);
@@ -2750,7 +2830,7 @@ static void loadServeCfg(ServeCfg &cfg) {
 static std::string selfPath() {
   char buf[4096];
   ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-  if (n <= 0) return "odyssey3d";
+  if (n <= 0) return "odysseyvk";
   buf[n] = 0;
   return buf;
 }
@@ -2774,7 +2854,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (pid != 0) return pid;
   /* `escritorio = true` es el overlay FORZADO sobre el escritorio del monitor: no hay ventana de
      video que capturar (capturar la salida del monitor se morderia la cola: tejeria su propia trama),
-     asi que el visor teje su patron de trama de siempre. Es el mismo camino de `odyssey3d test`:
+     asi que el visor teje su patron de trama de siempre. Es el mismo camino de `odysseyvk test`:
      panel a 3D, lente, pastilla y rastreo incluidos, solo que sin imagen de video detras. */
   std::vector<std::string> args =
       escritorio ? std::vector<std::string>{exe, "test", "--siempre"}
@@ -2783,9 +2863,22 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
-  if (pila) {
+  /* el modo de legado: el visor arma la trama con los numeros de fabrica, no abre el conversor que
+     saca dos vistas de una y pinta la pastilla sencilla. Aqui arriba no se pasan a proposito ni la
+     fase, ni el paso, ni el filtro, ni los planos: ahi la trama lleva lo de fabrica. */
+  const bool legadoPuesto = pila && pila->legado;
+  if (legadoPuesto) {
+    args.push_back("--legado");
+    if (modo == "conv")
+      std::fprintf(stderr, "[serve] modo de legado: `modo = conv` no va ahi (aqui el video ya llega en"
+                           " dos vistas); se pregunta el formato al arrancar\n");
+    else
+      std::fprintf(stderr, "[serve] modo de legado puesto: trama de fabrica, sin conversor y pastilla sencilla\n");
+  }
+  if (pila && !legadoPuesto) {
     char valor[32];
-    /* el ajuste fino de la trama contra la lente de esta unidad, si esta en serve.conf */
+    /* el ajuste fino de la trama contra la lente de esta unidad, si esta en serve.conf.
+       En modo de legado esto no se pasa: alli la trama lleva los numeros de fabrica. */
     if (pila->fase != 0.0) {
       std::snprintf(valor, sizeof valor, "%.6f", pila->fase);
       args.push_back("--align");
@@ -2817,6 +2910,10 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       args.push_back(vm);
       std::fprintf(stderr, "[serve] muestras intermedias = %s (0 = rampa continua)\n", vm.c_str());
     }
+  }
+  if (pila) {
+    /* la carpeta de los mapas de correccion de este panel y el volcado de depuracion si van en
+       serve.conf: esos dos no son numeros de la trama, asi que tambien van en modo de legado */
     if (!pila->calib.empty()) { args.push_back("--calib-dir"); args.push_back(pila->calib); }
     if (!pila->volcado.empty()) {
       /* `volcado = /tmp/chk` en serve.conf: el visor guarda la trama, el mapa de profundidad y
@@ -2837,8 +2934,13 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       args.push_back(valor);
     }
     if (pila) {
+      if (!pila->camara.empty()) { args.push_back("--track-dev"); args.push_back(pila->camara); }
+    }
+    if (pila && !legadoPuesto) {
       /* con webcam normal la distancia sale del tamano de la cara: el campo y el
-         ancho de cara se pueden ajustar desde serve.conf sin recompilar */
+         ancho de cara se pueden ajustar desde serve.conf sin recompilar. En modo de
+         legado nada de esto se pasa: ahi la cara se mide con las dos vistas de la
+         camara del monitor, con el margen de error de reproyeccion ancho. */
       if (!pila->camara.empty()) { args.push_back("--track-dev"); args.push_back(pila->camara); }
       if (!pila->mono.empty() && pila->mono != "auto") { args.push_back("--track-mono"); args.push_back(pila->mono); }
       char valor[32];
@@ -2875,38 +2977,38 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   std::vector<char *> av;
   for (std::string &a : args) av.push_back(const_cast<char *>(a.c_str()));
   av.push_back(nullptr);
-  ::setenv("GLFW_APPLICATION_ID", "odyssey3d", 1);
+  ::setenv("GLFW_APPLICATION_ID", "odysseyvk", 1);
   if (pila) {
     /* los numeros de medicion van por entorno porque el visor ya los lee asi; no hace falta
         recompilar ni lanzar el visor a mano para probar un A/B en el panel */
     char valor[32];
     if (pila->relieve >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->relieve);
-      ::setenv("ODYSSEY3D_RELIEVE", valor, 1);
+      ::setenv("ODYSSEYVK_RELIEVE", valor, 1);
     }
     if (pila->temblor >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->temblor);
-      ::setenv("ODYSSEY3D_DITHER", valor, 1);
+      ::setenv("ODYSSEYVK_DITHER", valor, 1);
     }
     if (pila->canto > 0.0) {
       std::snprintf(valor, sizeof valor, "%.5f", pila->canto);
-      ::setenv("ODYSSEY3D_CANTO", valor, 1);
+      ::setenv("ODYSSEYVK_CANTO", valor, 1);
     }
     if (pila->faseTemblor >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->faseTemblor);
-      ::setenv("ODYSSEY3D_FASE_TEMBLOR", valor, 1);
+      ::setenv("ODYSSEYVK_FASE_TEMBLOR", valor, 1);
     }
     /* `rampa_x` / `rampa_y`: aprieta o afloja el paso de la rejilla escrita, en ciclos por pixel
        de panel. Vale para cuadradlo con el paso real de la lente de ESTE panel; el valor medido
        para el nuestro es -0,00283 (ver tools/paso_rejilla.py). No es lo mismo que `paso`. */
     if (pila->rampaX < 900.0) {
       std::snprintf(valor, sizeof valor, "%.6f", pila->rampaX);
-      ::setenv("ODYSSEY3D_RAMPA_X", valor, 1);
+      ::setenv("ODYSSEYVK_RAMPA_X", valor, 1);
       std::fprintf(stderr, "[serve] rampa_x = %s ciclos por pixel de panel\n", valor);
     }
     if (pila->rampaY < 900.0) {
       std::snprintf(valor, sizeof valor, "%.6f", pila->rampaY);
-      ::setenv("ODYSSEY3D_RAMPA_Y", valor, 1);
+      ::setenv("ODYSSEYVK_RAMPA_Y", valor, 1);
       std::fprintf(stderr, "[serve] rampa_y = %s ciclos por pixel de panel\n", valor);
     }
     /* `fondo` / `frente`: cuanto se estira el relieve a cada lado del plano de apoyo (1 = como
@@ -2914,12 +3016,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
        pareja que en el programa de Windows viene por dentro, en las bandas de su config. */
     if (pila->ganFondo >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.3f", pila->ganFondo);
-      ::setenv("ODYSSEY3D_GAN_FONDO", valor, 1);
+      ::setenv("ODYSSEYVK_GAN_FONDO", valor, 1);
       std::fprintf(stderr, "[serve] capa fondo = %s (1 = sin cambiar)\n", valor);
     }
     if (pila->ganFrente >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.3f", pila->ganFrente);
-      ::setenv("ODYSSEY3D_GAN_FRENTE", valor, 1);
+      ::setenv("ODYSSEYVK_GAN_FRENTE", valor, 1);
       std::fprintf(stderr, "[serve] capa frente = %s (1 = sin cambiar)\n", valor);
     }
     /* `empuje_fondo` / `empuje_frente`: desplazamiento fijo de cada capa, en puntos de panel. Es
@@ -2927,12 +3029,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
        de graficos superpuestos: llevar una banda entera a un plano concreto. */
     if (pila->empFondo <= 15.0) {
       std::snprintf(valor, sizeof valor, "%.3f", pila->empFondo);
-      ::setenv("ODYSSEY3D_EMP_FONDO", valor, 1);
+      ::setenv("ODYSSEYVK_EMP_FONDO", valor, 1);
       std::fprintf(stderr, "[serve] empuje fondo = %s puntos (0 = sin cambiar)\n", valor);
     }
     if (pila->empFrente <= 15.0) {
       std::snprintf(valor, sizeof valor, "%.3f", pila->empFrente);
-      ::setenv("ODYSSEY3D_EMP_FRENTE", valor, 1);
+      ::setenv("ODYSSEYVK_EMP_FRENTE", valor, 1);
       std::fprintf(stderr, "[serve] empuje frente = %s puntos (0 = sin cambiar)\n", valor);
     }
   }
@@ -3027,7 +3129,7 @@ static int cmdVentana(int argc, char **argv) {
    respuesta a la tecla PB cuando el que manda es el video: ninguna tecla nuestra le llega al
    visor, pero el hub si puede ordenarle al compositor que devuelva la ventana. Se puede atar a un
    atajo global del escritorio (Ajustes del sistema -> Atajos de teclado -> accion nueva) con el
-   comando `odyssey3d ctl aparece`. */
+   comando `odysseyvk ctl aparece`. */
 static int cmdAparece(int, char **) {
   WindowMonitor wm;
   std::string err;
@@ -3039,7 +3141,7 @@ static int cmdAparece(int, char **) {
   WindowInfo nuestra{};
   bool encontrada = false;
   for (const WindowInfo &w : wm.windows()) {
-    if (w.appId != "odyssey3d" || w.title != "Odyssey 3D") continue;  /* el visor, no la tarjeta */
+    if (w.appId != "odysseyvk" || w.title != NOMBRE_APP) continue;  /* el visor, no la tarjeta */
     nuestra = w;
     encontrada = true;
   }
@@ -3311,7 +3413,7 @@ static int cmdOverlay(int argc, char **argv) {
 
 /* El visor no puede ver lo que hace el gestor de ventanas con su propia ventana: ese protocolo solo
    lo admite un cliente a la vez y lo tiene el hub. Se lo contamos por un archivo en
-   ~/.local/state/odyssey3d con la hora del reloj monotono; caduca, asi que si el hub se va el visor
+   ~/.local/state/odysseyvk con la hora del reloj monotono; caduca, asi que si el hub se va el visor
    vuelve a dibujar por su cuenta. Con "oculta" el visor deja de dibujar y de pedir fotogramas, y al
    pasar a "visible" reengancha la captura, que es lo que quita los trozos mal colocados. */
 static void escribirMarcaVentana(const char *estado, double ahora) {
@@ -3365,7 +3467,7 @@ static int cmdServe(int argc, char **argv) {
   return 1;
 #else
   ServeCfg cfg;
-  cfg.ignore = {"odyssey3d", "plasmashell", "plasma", "kscreen", "polkit", "xwayland", "krunner", "dolphin"};
+  cfg.ignore = {"odysseyvk", "plasmashell", "plasma", "kscreen", "polkit", "xwayland", "krunner", "dolphin"};
   loadServeCfg(cfg);
   bool dry = hasFlag(argc, argv, "--dry");
   bool unaVez = hasFlag(argc, argv, "--once");
@@ -3411,7 +3513,7 @@ static int cmdServe(int argc, char **argv) {
     wm.settle(120, 12);
     bool visorVivo = false;
     for (const WindowInfo &w : wm.windows())
-      if (w.mapped && w.appId == "odyssey3d") visorVivo = true;
+      if (w.mapped && w.appId == "odysseyvk") visorVivo = true;
     if (!visorVivo) devolverPanelHuerfano("el monitor seguia en modo 3D de una sesion anterior");
   }
   /* La tarjeta propia va por encima del video a pantalla completa; el portal de
@@ -3437,7 +3539,7 @@ static int cmdServe(int argc, char **argv) {
     std::printf("[serve] tarjeta superpuesta en %s (escala %.2f)\n", ov->outputName().c_str(), ov->scale());
     if (!ov->pantallaReconocida())
       std::printf("[serve] OJO: esa no parece la pantalla del Odyssey. Fija cual es con "
-                  "pantalla=DP-4 en ~/.config/odyssey3d/serve.conf\n");
+                  "pantalla=DP-4 en ~/.config/odysseyvk/serve.conf\n");
   }
   else
     std::fprintf(stderr, "[serve] sin capa superpuesta: %s\n", err.c_str());
@@ -3500,7 +3602,7 @@ static int cmdServe(int argc, char **argv) {
   bool fullAvisado = false;       /* el aviso de "el navegador la vuelve a poner" va una sola vez */
 
   /* El overlay FORZADO en el escritorio del monitor. Lo pide la ventana de ajustes (el boton escribe
-     `overlay = 1` en el fichero de ajuste) o `odyssey3d ctl escritorio poner`: el panel pasa a 3D y el
+     `overlay = 1` en el fichero de ajuste) o `odysseyvk ctl escritorio poner`: el panel pasa a 3D y el
      visor teje su patron de trama, sin video detras. Sirve para mirar y afinar la trama, las franjas y
      las rampas con el escritorio por delante, sin tener que abrir ningun video. Es una ORDEN, no la
      verdad: solo hacemos algo cuando el numero CAMBIA en el fichero y cuando lo que pide no esta hecho
@@ -3521,7 +3623,7 @@ static int cmdServe(int argc, char **argv) {
     int hechas = 0;
     for (const WindowInfo &w : wm.windows()) {
       if (!w.mapped || w.minimized() || w.uuid == hijoUuid) continue;
-      if (w.appId == "odyssey3d") continue;              /* el visor y la tarjeta, no */
+      if (w.appId == "odysseyvk") continue;              /* el visor y la tarjeta, no */
       if (w.states & (WindowInfo::KeepBelow | WindowInfo::KeepAbove)) continue;  /* ya tiene orden propio */
       std::string e7;
       if (wm.setState(w.uuid, WindowInfo::KeepBelow, true, &e7)) {
@@ -3555,7 +3657,7 @@ static int cmdServe(int argc, char **argv) {
   /* Las dos redes del boton 1 / 2 del visor, cada una en su boton segun el nombre del archivo:
      1 = las que trajo el programa de Samsung (mde_*, Disp_*), 2 = la nativa (Depth Anything).
      Si en modelo= se puso la nativa se reconoce y se mueve sola al boton 2. La eleccion que hizo
-     el usuario la guarda el visor en ~/.config/odyssey3d/red-elegida y aca se lee para arrancar con esa. */
+     el usuario la guarda el visor en ~/.config/odysseyvk/red-elegida y aca se lee para arrancar con esa. */
   auto disponible = [](const std::string &r) { return !r.empty() && fileExists(r); };
   std::string rSamsung = cfg.modelo, rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
   if (!rSamsung.empty() && slotRed(rSamsung) == 2) {
@@ -3710,9 +3812,9 @@ static int cmdServe(int argc, char **argv) {
       }
     }
 
-    /* La ventana de ajustes (o `odyssey3d ctl escritorio poner`) puede pedir el overlay montado EN EL
+    /* La ventana de ajustes (o `odysseyvk ctl escritorio poner`) puede pedir el overlay montado EN EL
        ESCRITORIO del monitor, sin esperar a que nadie se ponga a pantalla completa: el panel pasa a 3D
-       y el visor teje su patron de trama (el mismo camino de `odyssey3d test`), asi se ven y se afinan
+       y el visor teje su patron de trama (el mismo camino de `odysseyvk test`), asi se ven y se afinan
        la trama, las franjas y las rampas con el escritorio por delante. NO capturamos la salida del
        monitor: ahi estaria nuestra propia ventana y la trama se tejeria a si misma. Un segundo clic en
        el boton escribe `overlay = 0` y lo quita; si ya esta como lo pide, no hacemos nada mas. */
@@ -3855,14 +3957,14 @@ static int cmdServe(int argc, char **argv) {
        activa (se queda DETRAS del video) y la coloca en la salida que le place: por eso pedimos
        tambien el "encima de todo", la pantalla completa y la salida del panel. La unica
        minimizacion que dejamos en paz es la nuestra, la de Tab, que el visor avisa escribiendo
-       ~/.local/state/odyssey3d/entregada con su numero de proceso. */
+       ~/.local/state/odysseyvk/entregada con su numero de proceso. */
     if (hijo > 0) {
       const std::string panelSalida =
           !cfg.pantalla.empty() ? cfg.pantalla : (hayTarjeta && ov ? ov->outputName() : std::string());
       WindowInfo visor{};
       bool hayVisor = false;
       for (const WindowInfo &w : wm.windows()) {
-        if (w.appId != "odyssey3d" || w.title != "Odyssey 3D") continue;   /* el visor, no la tarjeta */
+        if (w.appId != "odysseyvk" || w.title != NOMBRE_APP) continue;   /* el visor, no la tarjeta */
         visor = w;
         hayVisor = true;
       }
@@ -4330,7 +4432,7 @@ static int cmdServe(int argc, char **argv) {
             std::printf("[serve] el compositor no llego a poner la tarjeta: %s\n", ov->lastError().c_str());
           std::fflush(stdout);
         } else if (cfg.modo == "ask") {
-          std::string id = "odyssey3d-" + w.uuid.substr(0, 8);
+          std::string id = "odysseyvk-" + w.uuid.substr(0, 8);
           std::vector<std::pair<std::string, std::string>> botones = {
               {"sbs", "3D lado a lado"}, {"tb", "3D arriba y abajo"}, {"conv", "Vídeo normal a 3D"},
               {"flat", "2D plano"}};
@@ -4432,6 +4534,9 @@ int main(int argc, char **argv) {
     std::fputs(kUsage, stdout);
     return 2;
   }
+  /* Desde v0.57 el proyecto se llama OdysseyVK: si el usuario todavia tiene sus datos en la
+     carpeta del nombre viejo, los copiamos antes de tocar nada (no borramos lo viejo). */
+  migrarDatosDeViejoNombre();
   /* Las órdenes de panel hablán con KWin por Wayland: aseguramos el socket en el entorno. */
   const std::string waylandSocket = ensureWaylandEnv();
 
@@ -4478,6 +4583,7 @@ int main(int argc, char **argv) {
     if (sub == "escritorio") return cmdEscritorio(argc - 3, argv + 3);
     if (sub == "capa") return cmdCapa(argc - 3, argv + 3);
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
+    if (sub == "legado") return cmdLegado(argc - 3, argv + 3);
     if (sub == "mapa") return cmdMapa(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;
@@ -4499,7 +4605,7 @@ int main(int argc, char **argv) {
     return cmdWeavePng(o);
   }
   if (cmd == "--version" || cmd == "-v" || cmd == "version") {
-    std::printf("odyssey3d %s\n", ODYSSEY3D_VERSION);
+    std::printf("odysseyvk %s\n", ODYSSEYVK_VERSION);
     return 0;
   }
   if (cmd == "serve") return cmdServe(argc - 1, argv + 1);
@@ -4526,7 +4632,7 @@ int main(int argc, char **argv) {
     if (cmd == "doctor") return cmdDoctor(o, waylandSocket);
     if (cmd == "play") {
       if (o.file.empty()) {
-        std::fprintf(stderr, "falta el archivo: odyssey3d play ARCHIVO\n");
+        std::fprintf(stderr, "falta el archivo: odysseyvk play ARCHIVO\n");
         return 2;
       }
       return runViewer(o, SourceKind::Mpv);

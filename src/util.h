@@ -15,11 +15,27 @@ std::string toHexUpper(const std::vector<uint8_t> &v);
 /* Lee un archivo pequeño (sysfs, config) en una cadena. False si no existe. */
 bool readSmallFile(const std::string &path, std::string &out);
 
-/* Preferencia de la red del conversor 2D a 3D, guardada en ~/.config/odyssey3d/red-elegida:
+/* Como nos llamamos nosotros: el titulo de la ventana del visor y el app_id con el que el hub
+   reconoce su propia ventana (GLFW saca el app_id del nombre del ejecutable, y el ejecutable se
+   llama igual). Las dos cosas viven juntas aqui para que no se desafinen: el titulo se compara
+   literal contra lo que reporta el compositor, asi que va sin acentos ni espacios. */
+inline constexpr const char *NOMBRE_APP = "OdysseyVK";
+
+/* Copia la carpeta de datos del nombre viejo (odyssey3d) a la nueva (odysseyvk) si es que la nueva
+   todavia no tiene nada: la calibracion, las redes, los perfiles y el canal de ajuste siguen ahi
+   despues del cambio de nombre. No borra ni toca lo que ya existe, y solo trabaja una vez por
+   proceso. Devuelve cuantos archivos copio (0 si no habia nada que copiar). */
+int migrarDatosDeViejoNombre();
+
+/* Lee una variable de entorno nuestra: primero el nombre nuevo (ODYSSEYVK_...) y, si no esta
+   puesta, la del nombre viejo (ODYSSEY3D_...), por los atajos y los scripts de siempre. */
+const char *entornoOdyssey(const char *nombre);
+
+/* Preferencia de la red del conversor 2D a 3D, guardada en ~/.config/odysseyvk/red-elegida:
    1 = la red de Samsung (mde_*.onnx), 2 = la nativa (depth_anything_v2_small.onnx).
    leerRedPreferida() devuelve 0 si todavia no se eligio ninguna. */
 std::string rutaConfigOdyssey(const char *nombre);
-/* Ruta dentro de ~/.local/state/odyssey3d: lo que esta pasando ahora mismo (la instantanea del
+/* Ruta dentro de ~/.local/state/odysseyvk: lo que esta pasando ahora mismo (la instantanea del
    panel, la senal de que entregamos la pantalla a proposito), no una preferencia. */
 std::string rutaEstadoOdyssey(const char *nombre);
 int leerRedPreferida();

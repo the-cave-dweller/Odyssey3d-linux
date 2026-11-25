@@ -54,7 +54,7 @@ public:
   /* Preferencia de pantalla para la tarjeta (nombre o modelo, sin distinguir
      mayúsculas; por ejemplo "DP-4"). Sin esto se elige solo, y por defecto se buscan
      las palabras odyssey / syncmaster / g90 en el monitor que anuncia el compositor.
-     Vale también la variable de entorno ODYSSEY3D_PANTALLA. */
+     Vale también la variable de entorno ODYSSEYVK_PANTALLA. */
   void setPantalla(const std::string &pista);
   /* Cierto si la pantalla elegida se reconoció como el panel del Odyssey (o la pediste
      tú a propósito). Si es false, avisa: puede que la tarjeta caiga en otro monitor. */

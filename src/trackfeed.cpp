@@ -178,7 +178,7 @@ void TrackFeed::run() {
     }
     /* Cada 20 cuadros (3 o 4 por segundo) nos quedamos con el cuadro crudo tal como lo
        solto la camara: es un memcpy de unos 100 KB y solo lo pide el bucle de dibujado,
-       que lo vuelca a ~/.local/state/odyssey3d/camara.jpg. Asi la ventana de ajustes
+       que lo vuelca a ~/.local/state/odysseyvk/camara.jpg. Asi la ventana de ajustes
        ensena lo que se esta viendo sin abrir ella el dispositivo, que estaria ocupado. */
     if (cam_.mjpeg() && ++contados % 20 == 0) {
       std::lock_guard<std::mutex> guard(mu_);

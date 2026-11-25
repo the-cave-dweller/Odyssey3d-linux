@@ -2,7 +2,7 @@
 """Mide de dónde salen las franjas verticales del 3D, con los volcados del visor.
 
 Uso:
-    odyssey3d capture3d ... --dump /tmp/chk --volcado-seguir     # o `volcado = /tmp/chk` en serve.conf
+    odysseyvk capture3d ... --dump /tmp/chk --volcado-seguir     # o `volcado = /tmp/chk` en serve.conf
     python3 tools/mide_franjas.py /tmp/chk
 
 Mira tres cosas y las compara:

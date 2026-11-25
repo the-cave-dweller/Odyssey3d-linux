@@ -17,6 +17,6 @@
    si hoyos es no nula, recibe alli el mismo numero). */
 int rellenarVistas(const uint8_t *mapa, int n, float ganMapPx, float plano, uint8_t *rg, int *hoyos);
 
-/* si hay que rellenar: ODYSSEY3D_HOYOS=0 lo apaga (y entonces los dos canales llevan el mapa en
+/* si hay que rellenar: ODYSSEYVK_HOYOS=0 lo apaga (y entonces los dos canales llevan el mapa en
    crudo, que es el comportamiento de la v0.35 y anteriores) */
 bool hoyosActivo();

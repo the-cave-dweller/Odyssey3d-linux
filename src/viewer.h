@@ -30,7 +30,7 @@ struct ViewerOpts {
   bool noPassthrough = false;
   bool no3d = false;       /* arrancar en pase 2D */
   /* conversor de video normal (2D) a 3D: la red de profundidad dice cuanto desplazar cada ojo.
-     vacio = el modelo que esta en ~/.local/share/odyssey3d/modelos */
+     vacio = el modelo que esta en ~/.local/share/odysseyvk/modelos */
   bool conver = false;
   std::string modelPath;
   /* la otra red de profundidad, la del boton 1 / 2 de la pastilla (--alterno RUTA) */
@@ -79,6 +79,13 @@ struct ViewerOpts {
   int trackMono = -1;
   double trackCampo = 65.0;  /* campo horizontal de la webcam, en grados */
   double trackCara = 140.0;  /* ancho de cara de oreja a oreja, en milimetros (Samsung usa 140) */
+
+  /* Modo de legado (--legado, `legado = si` en serve.conf): la forma de siempre de ver un video que
+     YA viene en dos vistas. Sin conversor 2D a 3D, sin los numeros finos de la trama (se quedan en
+     los de fabrica), con la camara del monitor y nada de webcam, y con la pastilla reducida a lo que
+     ese camino puede tocar: el 3D, la salida y el plano de apoyo. Si la camara no ve la cara, la
+     imagen vuelve a 2D y la lente se apaga, en vez de seguir tejiendo con una pose prestada. */
+  bool legado = false;
 
   /* rotulos y subtitulos: 1 los apoya en el plano de la pantalla (asi no se deslizan con la
      cabeza), 0 los deja con la profundidad que les da la red, -1 = apoyados (lo de fabrica) */

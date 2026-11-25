@@ -59,9 +59,10 @@ bool esOrden(const std::string &nombre) {
 /* Las ordenes del fichero que llevan palabra o ruta en vez de numero: las recoge `leer`
    en su mapa de texto. `camara` y `mono` las atiende el vigilante; `capa` la atiende el VISOR
    (`capa = ocultar|mostrar|alternar` es la tecla Ctrl+Shift+F1 mandada por fichero, para cuando el
-   teclado de la pantalla lo tiene otra ventana a pantalla completa). */
+   teclado de la pantalla lo tiene otra ventana a pantalla completa), y `legado` tambien la atiende el
+   VISOR (modo de legado: trama de fabrica, sin conversor y pastilla sencilla). */
 static bool esOrdenTexto(const std::string &nombre) {
-  return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d";
+  return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d" || nombre == "legado";
 }
 
 static std::string recortar(std::string s) {
@@ -152,9 +153,9 @@ bool escribir(const std::map<std::string, double> &numeros, const std::string &m
      sin arrastrar lo de mandatos anteriores. Si se arrastrara, un numero que alguien toco despues con
      las teclas dentro del visor volveria atras al reenviar otro numero distinto. */
   std::string texto = "# Ajuste vivo del visor: lo escribe la ventana de ajustes o"
-                      " `odyssey3d ctl ajuste`, y lo lee el visor cada decima de segundo.\n"
+                      " `odysseyvk ctl ajuste`, y lo lee el visor cada decima de segundo.\n"
                       "# Son numeros sueltos, en las mismas palabras que serve.conf; se quita todo con"
-                      " `odyssey3d ctl ajuste limpiar`.\n";
+                      " `odysseyvk ctl ajuste limpiar`.\n";
   for (const auto &kv : numeros) {
     if (kv.first == "modelo") continue;
     texto += kv.first + " = " + std::to_string(kv.second) + "\n";
@@ -302,7 +303,7 @@ std::string rutaServeConf() {
   /* la misma ruta que lee el vigilante (src/main.cpp), para que "de fabrica" signifique lo mismo aqui
      y alla: lo que trae el programa, corregido con lo que el usuario puso en serve.conf. */
   const char *home = std::getenv("HOME");
-  return std::string(home ? home : "") + "/.config/odyssey3d/serve.conf";
+  return std::string(home ? home : "") + "/.config/odysseyvk/serve.conf";
 }
 
 std::map<std::string, double> valoresFabrica() {

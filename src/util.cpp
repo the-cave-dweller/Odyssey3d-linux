@@ -70,19 +70,80 @@ bool readSmallFile(const std::string &path, std::string &out) {
   return true;
 }
 
+/* ------ del nombre viejo (odyssey3d) al nuevo (odysseyvk) ------ */
+
+/* Copia `de` dentro de `a` sin pisar lo que ya esta. Solo archivos: los directorios se crean. */
+static int copiarArbol(const std::filesystem::path &de, const std::filesystem::path &a) {
+  std::error_code ec;
+  if (!std::filesystem::is_directory(de, ec)) return 0;
+  int n = 0;
+  for (std::filesystem::recursive_directory_iterator it(de, std::filesystem::directory_options::skip_permission_denied, ec), fin;
+       it != fin; it.increment(ec)) {
+    if (ec) break;
+    const std::filesystem::path &orig = it->path();
+    if (!it->is_regular_file(ec) || ec) continue;
+    std::filesystem::path destino = a / std::filesystem::relative(orig, de, ec);
+    if (ec) continue;
+    if (std::filesystem::exists(destino, ec)) continue;   /* lo nuevo manda: no se pisa nada */
+    std::filesystem::create_directories(destino.parent_path(), ec);
+    std::filesystem::copy_file(orig, destino, std::filesystem::copy_options::skip_existing, ec);
+    if (!ec) n++;
+  }
+  return n;
+}
+
+int migrarDatosDeViejoNombre() {
+  static int hecho = -1;
+  if (hecho >= 0) return hecho;
+  const char *home = std::getenv("HOME");
+  const std::string h = home ? home : "/home";
+  const char *xdgState = std::getenv("XDG_STATE_HOME");
+  struct Pareja { std::string viejo, nuevo; };
+  const Pareja carpetas[] = {
+      {h + "/.config/odyssey3d", h + "/.config/odysseyvk"},
+      {(xdgState && *xdgState ? std::string(xdgState) + "/odyssey3d" : h + "/.local/state/odyssey3d"),
+       (xdgState && *xdgState ? std::string(xdgState) + "/odysseyvk" : h + "/.local/state/odysseyvk")},
+      {h + "/.local/share/odyssey3d", h + "/.local/share/odysseyvk"},
+  };
+  int tot = 0;
+  for (const Pareja &c : carpetas) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(c.viejo, ec)) continue;
+    const int n = copiarArbol(c.viejo, c.nuevo);
+    if (n > 0) {
+      std::printf("[nombre] copiados %d archivos de %s a %s (lo del nombre viejo se deja intacto)\n", n,
+                  c.viejo.c_str(), c.nuevo.c_str());
+      tot += n;
+    }
+  }
+  hecho = tot;
+  return hecho;
+}
+
+const char *entornoOdyssey(const char *nombre) {
+  if (!nombre || !*nombre) return nullptr;
+  if (const char *v = std::getenv(nombre)) return v;
+  /* el nombre viejo es el mismo con ODYSSEY3D_ en lugar de ODYSSEYVK_ */
+  static const std::string pref = "ODYSSEYVK_", viejo = "ODYSSEY3D_";
+  if (std::string(nombre).compare(0, pref.size(), pref) != 0) return nullptr;
+  static std::string altern;   /* getenv necesita que la cadena siga viva */
+  altern = viejo + (nombre + pref.size());
+  return std::getenv(altern.c_str());
+}
+
 std::string rutaConfigOdyssey(const char *nombre) {
   const char *home = std::getenv("HOME");
-  return std::string(home ? home : "/home") + "/.config/odyssey3d/" + nombre;
+  return std::string(home ? home : "/home") + "/.config/odysseyvk/" + nombre;
 }
 
 std::string rutaEstadoOdyssey(const char *nombre) {
   const char *xdg = std::getenv("XDG_STATE_HOME");
   std::string dir;
   if (xdg && *xdg)
-    dir = std::string(xdg) + "/odyssey3d";
+    dir = std::string(xdg) + "/odysseyvk";
   else {
     const char *home = std::getenv("HOME");
-    dir = std::string(home ? home : "/home") + "/.local/state/odyssey3d";
+    dir = std::string(home ? home : "/home") + "/.local/state/odysseyvk";
   }
   std::error_code ec;
   std::filesystem::create_directories(std::filesystem::path(dir), ec);
@@ -91,7 +152,7 @@ std::string rutaEstadoOdyssey(const char *nombre) {
 
 std::string rutaRedNuestra() {
   const char *home = std::getenv("HOME");
-  return std::string(home ? home : "/home") + "/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx";
+  return std::string(home ? home : "/home") + "/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx";
 }
 
 int slotRed(const std::string &ruta) {

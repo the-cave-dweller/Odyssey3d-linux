@@ -38,7 +38,7 @@ std::string defaultModelPath() { return rutaRedNuestra(); }
    CUDA y de cuDNN que el proceso ya pago, y eso es lo que hay que tener en cuenta.
    Con el numero viejo (1100 + 450 = 1550 fijos) el boton 1 casi nunca devolvia a la Samsung: con
    1291 MB libres pediamos 1550, no abria, y al volver atras hasta la red que si estaba andando se
-   iba a la CPU (179 ms por mapa en lugar de 16). El colchon se mueve con ODYSSEY3D_COLCHON (MB)
+   iba a la CPU (179 ms por mapa en lugar de 16). El colchon se mueve con ODYSSEYVK_COLCHON (MB)
    por alguna vez se viera un abort por la tarjeta llena. */
 const long kSamsungMiB = 700;   /* lo que ocupa mde_* / disp_* en la grafica (medido 678) */
 const long kNativaMiB = 480;    /* lo que ocupa depth_anything_v2_small (medido unos 400) */
@@ -61,7 +61,7 @@ bool esRedDeSamsung(const std::string &ruta) {
    de Samsung o la nativa, mas el colchon. Cada red es un mundo, por eso se mira el nombre. */
 long requisitoMiB(const std::string &ruta) {
   long colchon = kColchonMiB;
-  if (const char *c = std::getenv("ODYSSEY3D_COLCHON")) {   /* por si la tarjeta anda muy llena */
+  if (const char *c = entornoOdyssey("ODYSSEYVK_COLCHON")) {   /* por si la tarjeta anda muy llena */
     const long v = std::atol(c);
     if (v >= 0 && v <= 2000) colchon = v;
   }
@@ -319,7 +319,7 @@ struct OrtImpl {
   Ort::AllocatorWithDefaultOptions alloc;
   std::string inN, outN;   /* nombres de la entrada y la salida, copiados: viven lo que nosotros */
   std::vector<float> in;
-  OrtImpl() : env(ORT_LOGGING_LEVEL_ERROR, "odyssey3d") {}
+  OrtImpl() : env(ORT_LOGGING_LEVEL_ERROR, "odysseyvk") {}
   ~OrtImpl() { delete ses; }
 };
 }  // namespace
@@ -388,13 +388,13 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   }
   const std::string path = model.empty() ? defaultModelPath() : model;
   gpu_ = gpu < 0 ? 0 : gpu;
-  if (const char *lim = std::getenv("ODYSSEY3D_LIMPIEZA"))   /* 0 deja el mapa en crudo: para comparar */
+  if (const char *lim = entornoOdyssey("ODYSSEYVK_LIMPIEZA"))   /* 0 deja el mapa en crudo: para comparar */
     limpieza_ = lim[0] != '0';
   struct stat stt {};
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
       *err = "no esta el modelo de profundidad en " + path +
-             "\n    bajarlo con:  mkdir -p ~/.local/share/odyssey3d/modelos && curl -fLo \"" + path +
+             "\n    bajarlo con:  mkdir -p ~/.local/share/odysseyvk/modelos && curl -fLo \"" + path +
              "\" https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/model.onnx";
     return false;
   }
@@ -412,7 +412,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
      mentira: medido el 23-nov, con 1,2 GB anunciados como libres la creacion de la sesion abortó
      dentro de ONNX Runtime y el visor se fue arriba dejando el monitor en modo 3D sin video. */
   bool sinGpu = false;
-  if (const char *g = std::getenv("ODYSSEY3D_GPU"))   /* -1 fuerza la CPU: para probar ese camino */
+  if (const char *g = entornoOdyssey("ODYSSEYVK_GPU"))   /* -1 fuerza la CPU: para probar ese camino */
     gpu_ = std::atoi(g);
   if (gpu_ < 0)
     sinGpu = true;
@@ -740,7 +740,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   const auto tFiltro0 = std::chrono::steady_clock::now();
   /* limpiar el mapa siguiendo los bordes de la foto y dilatar lo cercano unos puntos: con esto los
      cantos de los objetos quedan en su sitio y el relieve deja de temblar cuadro a cuadro. Con
-     ODYSSEY3D_LIMPIEZA=0 se apaga, para comparar en el panel la misma red con el mapa en crudo. */
+     ODYSSEYVK_LIMPIEZA=0 se apaga, para comparar en el panel la misma red con el mapa en crudo. */
   if (limpieza_) {
     filtroGuiado(guia_.data(), limpio.data(), salida.data(), sz_, 8, 0.04f, trabajo.data());
     dilatar(salida.data(), mapa.data(), sz_, 3);
@@ -817,7 +817,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       pFrente_ = -1.0f;
       fracFrente_ = 0.0f;
     }
-    static const bool medirPl = std::getenv("ODYSSEY3D_MEDIR") != nullptr;
+    static const bool medirPl = entornoOdyssey("ODYSSEYVK_MEDIR") != nullptr;
     static long npl = 0;
     if (medirPl && ++npl % 30 == 1) {
       if (muestras_ >= 1)
@@ -848,10 +848,10 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   msFilt_ = std::chrono::duration<double, std::milli>(tPlano0 - tFiltro0).count();
   msPlano_ = std::chrono::duration<double, std::milli>(tPlano1 - tPlano0).count();
   msSubida_ = std::chrono::duration<double, std::milli>(tfin - tPlano1).count();
-  /* ODYSSEY3D_MEDIR=1 enseña el reparto del cuadro sin sentarse delante del panel: hace falta
+  /* ODYSSEYVK_MEDIR=1 enseña el reparto del cuadro sin sentarse delante del panel: hace falta
      para decidir si conviene bajar el lienzo de disparidad (ellos trabajan el mapa a 384x160) o si
      lo que manda es la red y el resto da igual. */
-  static const bool medir = std::getenv("ODYSSEY3D_MEDIR") != nullptr;
+  static const bool medir = entornoOdyssey("ODYSSEYVK_MEDIR") != nullptr;
   static long nmed = 0;
   if (medir && ++nmed % 30 == 1)
     std::printf("[medir] mapa %d x %d por %s · red %.1f · suavizado %.1f · limpiar y dilatar %.1f · "
@@ -874,18 +874,18 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
    texto se queda donde esta y ademas se ve mejor, porque deja de estar desparejado entre los ojos.
 
    Los umbrales van en unidades del mapa (518 x 518), no de la pantalla: a esa escala una linea de
-   subtitulo mide de 6 a 14 puntos y el trazo 2 o 3. ODYSSEY3D_TEXTO_CONTRASTE y
-   ODYSSEY3D_TEXTO_FINO sirven para comparar en el panel sin recompilar. */
+   subtitulo mide de 6 a 14 puntos y el trazo 2 o 3. ODYSSEYVK_TEXTO_CONTRASTE y
+   ODYSSEYVK_TEXTO_FINO sirven para comparar en el panel sin recompilar. */
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
                   int celdaPx, std::vector<uint8_t> *mascara, int *cwOut, int *chOut) {
   if (!rgba || w < 32 || h < 32 || mapa.size() != (size_t)w * (size_t)h)
     return 0.0f;
   static const float kContraste = [] {
-    const char *e = std::getenv("ODYSSEY3D_TEXTO_CONTRASTE");
+    const char *e = entornoOdyssey("ODYSSEYVK_TEXTO_CONTRASTE");
     return e ? (float)std::atof(e) : 55.0f;
   }();
   static const float kFino = [] {
-    const char *e = std::getenv("ODYSSEY3D_TEXTO_FINO");
+    const char *e = entornoOdyssey("ODYSSEYVK_TEXTO_FINO");
     return e ? (float)std::atof(e) : 0.26f;
   }();
   const float kDensidad = 0.13f;      // parte de la celda que son bordes

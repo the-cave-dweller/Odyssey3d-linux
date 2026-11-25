@@ -710,16 +710,16 @@ void VkWeave::fillUbo(uint8_t *dst) {
      pantalla una al lado de la otra, que es lo primero que se notaba al encender el conversor. */
   t4[3] = (convOn_ && !depthUsable_) ? 2.0f : 0.0f;
   /* conversor fino: lo que el programa de Samsung hace despues del mapa y aqui faltaba.
-     ODYSSEY3D_DITHER  temblor del desplazamiento en pixeles (por defecto 0,35; 0 lo apaga).
+     ODYSSEYVK_DITHER  temblor del desplazamiento en pixeles (por defecto 0,35; 0 lo apaga).
                        El de ellos es 0,25 px (dither_strength 0,01 sobre 25 px de recorrido).
-     ODYSSEY3D_TOPE    por defecto limita cada ojo a lo que limita el de ellos: +12,67 px
+     ODYSSEYVK_TOPE    por defecto limita cada ojo a lo que limita el de ellos: +12,67 px
                        hacia afuera y -9,98 px hacia adentro (fraccion del ancho, leido del config
                        oficial: virt.max_disparity 0,0033 / min_disparity -0,0026). Con
-                       ODYSSEY3D_TOPE=0 se quita el tope. */
+                       ODYSSEYVK_TOPE=0 se quita el tope. */
   float *t5 = (float *)(dst + kOffTun5);
   /* Desde v0.51 estos dos numeros son miembros del visor, no constantes leidas una vez: la ventana
-     de desarrollo (`odyssey3d-ajustes`, o `ctl ajuste`) los mueve con la trama en marcha. */
-  /* ODYSSEY3D_CANTO  ancho del puente del canto (0,004 de fabrica). Cuanto mas chico, menos se le
+     de desarrollo (`odysseyvk-ajustes`, o `ctl ajuste`) los mueve con la trama en marcha. */
+  /* ODYSSEYVK_CANTO  ancho del puente del canto (0,004 de fabrica). Cuanto mas chico, menos se le
      quita desplazamiento a un canto donde el mapa cambia mucho: con el relleno de huecos el mapa
      pone mas filo, asi que este numero es el que manda cuanto relieve conserva el borde de un
      objeto. 0 en el shader significa "el de fabrica", por eso se manda siempre positivo. */
@@ -727,14 +727,14 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t5[1] = conTope_ ? 12.67f : 0.0f;
   t5[2] = conTope_ ? 9.98f : 0.0f;
   t5[3] = cantoS_;
-  /* ODYSSEY3D_FASE_TEMBLOR  temblor de la propia fase de la trama, en ciclos de la lente.
+  /* ODYSSEYVK_FASE_TEMBLOR  temblor de la propia fase de la trama, en ciclos de la lente.
      Por defecto 0 (como venia). Con 0,1 la franja de 4,3 px de la trama baja unas cinco veces
      (medido en tools/mide_franjas.py sobre la propia formula del shader) y el 3D casi no se
      mueve, porque la fundamental pierde solo un 7%. Sirve para ver si las franjas finas que
      quedan con el releve apagado salen del corte brusco del filtro. */
   float *t6 = (float *)(dst + kOffTun6);
   t6[0] = faseTemblor_;
-  /* ODYSSEY3D_RAMPA_X y ODYSSEY3D_RAMPA_Y  rampa limpia de fase en ciclos por pixel de panel,
+  /* ODYSSEYVK_RAMPA_X y ODYSSEYVK_RAMPA_Y  rampa limpia de fase en ciclos por pixel de panel,
      la misma para los tres canales. Mueve el paso de la rejilla escrita sin tocar nada mas.
      Medido sobre el cuadro escrito (tools/paso_rejilla.py, `weave --solid`, cuadro solido
      3840x2160; el blanco es lo que escribe el conversor de Windows, kx 0,4501 = 2,2217 px =
@@ -753,38 +753,38 @@ void VkWeave::fillUbo(uint8_t *dst) {
   const float rrY = topaRampa(rampaBaseY_ + tune_.rampaDY);
   t6[1] = rrX;
   t6[2] = rrY;
-  /* Sonda de taller (ODYSSEY3D_PRUEBA): hueco libre del bloque, 0 = normal. El sombreador con
+  /* Sonda de taller (ODYSSEYVK_PRUEBA): hueco libre del bloque, 0 = normal. El sombreador con
      1 saca la muestra del ojo izquierdo, con 3 la misma textura pero con la coordenada del pase
      2D, con 4 el peso del filtro y con 6 la fase base. Sirve para ver en que punto del calculo
      una imagen con contenido se vuelve una lama de un solo color. */
   static const float kPruebaSombra = [] {
-    const char *e = std::getenv("ODYSSEY3D_PRUEBA");
+    const char *e = entornoOdyssey("ODYSSEYVK_PRUEBA");
     return e ? (float)std::atof(e) : 0.0f;
   }();
   t6[3] = kPruebaSombra;
   /* Capas por profundidad. `tun7.x` cuanto se estira lo que queda DETRAS del plano de apoyo y
      `tun7.y` lo que sale DELANTE; 0 en el hueco = sin escalar (lo de siempre). El visor arranca
-     estos valores de ODYSSEY3D_GAN_FONDO / ODYSSEY3D_GAN_FRENTE (que vienen de `fondo` y
+     estos valores de ODYSSEYVK_GAN_FONDO / ODYSSEYVK_GAN_FRENTE (que vienen de `fondo` y
      `frente` en serve.conf) y las teclas `j`/`k` y `u`/`i` los mueven en marcha, de 0,05 en 0,05.
      El escalado va antes de los topes por ojo (+12,67 fuera / 9,98 dentro), asi que por mucho que
      se suba el fondo nunca se sale del presupuesto de Samsung. */
   static const float ganBaseFondo = [] {
-    const char *e = std::getenv("ODYSSEY3D_GAN_FONDO");
+    const char *e = entornoOdyssey("ODYSSEYVK_GAN_FONDO");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v >= 0.2f && v <= 2.0f) ? v : 0.0f;
   }();
   static const float ganBaseFrente = [] {
-    const char *e = std::getenv("ODYSSEY3D_GAN_FRENTE");
+    const char *e = entornoOdyssey("ODYSSEYVK_GAN_FRENTE");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v >= 0.2f && v <= 2.0f) ? v : 0.0f;
   }();
   static const float empBaseFondo = [] {
-    const char *e = std::getenv("ODYSSEY3D_EMP_FONDO");
+    const char *e = entornoOdyssey("ODYSSEYVK_EMP_FONDO");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v >= -15.0f && v <= 15.0f) ? v : 0.0f;
   }();
   static const float empBaseFrente = [] {
-    const char *e = std::getenv("ODYSSEY3D_EMP_FRENTE");
+    const char *e = entornoOdyssey("ODYSSEYVK_EMP_FRENTE");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v >= -15.0f && v <= 15.0f) ? v : 0.0f;
   }();
@@ -1302,7 +1302,7 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
      warp.hole_edge e inpaint.push/pull). Aqui se rellena el MAPA en el sitio de destino y con la
      guarda de que gana la superficie mas cercana, que es lo que quita el borde babbeado. Ver
      src/hoyos.cpp y tools/prueba_hoyos.cpp, que lo mide sin mirar el panel.
-     ODYSSEY3D_HOYOS=0 lo apaga: los dos canales llevan entonces el mapa en crudo, que es
+     ODYSSEYVK_HOYOS=0 lo apaga: los dos canales llevan entonces el mapa en crudo, que es
      exactamente lo que hacia la v0.35. */
   static const bool conHoyos = hoyosActivo();
   mapRG_.resize((size_t)nrg);
@@ -1316,7 +1316,7 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
     for (VkDeviceSize i = 0; i < n; i++) { mapRG_[2 * i] = g[i]; mapRG_[2 * i + 1] = g[i]; }
   }
   msHoyos_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tHoyos0).count();
-  if (std::getenv("ODYSSEY3D_MEDIR") && (++mapasContados_ % 30 == 1))
+  if (entornoOdyssey("ODYSSEYVK_MEDIR") && (++mapasContados_ % 30 == 1))
     std::fprintf(stderr, "[medir] huecos rellenados %d de %lld puntos (%.2f%%) en %.1f ms\n", huecos,
                  (long long)(2 * n), 100.0 * (double)huecos / (double)(2 * n), msHoyos_);
   if (!depth_.valid() || depthW_ != w || depthH_ != h) {

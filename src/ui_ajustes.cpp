@@ -5,15 +5,15 @@
    profundidad esta puesta (la de Samsung, la nuestra, la de desplazamiento...). Esta ventana es un
    programa independiente que habla con el visor por los tres ficheros de src/ajuste.h:
 
-     escribe  ~/.local/state/odyssey3d/ajuste          (los numeros y el .onnx que el visor aplica)
-     lee      ~/.local/state/odyssey3d/estado          (lo que el visor esta usando de verdad)
-     lee      ~/.local/state/odyssey3d/preferencias.log(que se toco, cuando y con que red puesta)
+     escribe  ~/.local/state/odysseyvk/ajuste          (los numeros y el .onnx que el visor aplica)
+     lee      ~/.local/state/odysseyvk/estado          (lo que el visor esta usando de verdad)
+     lee      ~/.local/state/odysseyvk/preferencias.log(que se toco, cuando y con que red puesta)
 
    No enlaza con el visor ni con Vulkan: si esta ventana se cierra o se cuelga, la trama no se entera
    y el 3D sigue igual. Por eso tambien sirve para probar redes raras (los .onnx que la pastilla del
    visor no ofrece) sin tocar el codigo del visor.
 
-   Se compila solo si hay Qt6 (ver CMakeLists.txt, opcion ODYSSEY3D_UI). Sin pantalla se puede probar
+   Se compila solo si hay Qt6 (ver CMakeLists.txt, opcion ODYSSEYVK_UI). Sin pantalla se puede probar
    con QT_QPA_PLATFORM=offscreen. */
 #include "ajuste.h"
 #include "camera.h"
@@ -38,6 +38,7 @@
 #include <QGroupBox>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -90,9 +91,9 @@ static int alDeslizador(const ajuste::Clave &c, double v) {
 /* ---------------- las redes que hay en el disco ---------------- */
 
 /* Una red y como se llama en la lista. `nativa` es la que esta instalada en la maquina
-   (~/.local/share/odyssey3d/modelos, o la carpeta `modelos` del propio programa): son las que hemos
+   (~/.local/share/odysseyvk/modelos, o la carpeta `modelos` del propio programa): son las que hemos
    probado aqui y las que usa el conversor por defecto. Lo demas —la memoria USB, carpetas sueltas, lo
-   que diga ODYSSEY3D_MODELOS— sale bajo `Otros`, por si acaso: no sabemos si abren ni como calzan. */
+   que diga ODYSSEYVK_MODELOS— sale bajo `Otros`, por si acaso: no sabemos si abren ni como calzan. */
 struct Red {
   QString ruta;
   bool nativa = false;
@@ -131,8 +132,8 @@ static QStringList carpetasNativas() {
   const char *home = std::getenv("HOME");
   const std::string h(home ? home : "/home");
   return QStringList()
-         << QString::fromStdString(h + "/.local/share/odyssey3d/modelos")
-         << QString::fromStdString(h + "/Documentos/LU agent/odyssey3d-linux/modelos");
+         << QString::fromStdString(h + "/.local/share/odysseyvk/modelos")
+         << QString::fromStdString(h + "/Documentos/LU agent/odysseyvk-linux/modelos");
 }
 
 /* Las rutas de las redes, ordenadas y con el grupo marcado, para la lista desplegable. */
@@ -140,7 +141,7 @@ static QList<Red> redesDelDisco(const std::string &modeloEnUso) {
   const QStringList nativas = carpetasNativas();
   QStringList dirs = nativas;
   dirs << "/run/media/rodolfo/067ABD417ABD2DF5/AnalisisOdyssey/modelos";
-  if (const char *e = std::getenv("ODYSSEY3D_MODELOS"))
+  if (const char *e = entornoOdyssey("ODYSSEYVK_MODELOS"))
     for (const QString &d : QString(e).split(':', Qt::SkipEmptyParts)) dirs << d;
   if (!modeloEnUso.empty()) {
     const std::string r = modeloEnUso;
@@ -303,7 +304,8 @@ struct Fila {
 
 int main(int argc, char **argv) {
   QApplication app(argc, argv);
-  QApplication::setApplicationName("odyssey3d-ajustes");
+  QApplication::setApplicationName("odysseyvk-ajustes");
+  migrarDatosDeViejoNombre();   /* si los datos siguen en la carpeta del nombre viejo, los copiamos */
 
   /* `--prueba` sirve para comprobar la ventana sin pantalla (por ssh, o con QT_QPA_PLATFORM=offscreen):
      cuenta lo que ve en el disco y en los ficheros del visor y sale sin abrir nada. */
@@ -328,7 +330,7 @@ int main(int argc, char **argv) {
                   r.aviso.isEmpty() ? "" : r.aviso.toUtf8().constData());
     const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
     if (hub.empty())
-      std::printf("vigilante: %s esta vacio, osea que no hay `odyssey3d serve` corriendo\n",
+      std::printf("vigilante: %s esta vacio, osea que no hay `odysseyvk serve` corriendo\n",
                   ajuste::rutaHub().c_str());
     else {
       std::printf("vigilante (%s)\n", ajuste::rutaHub().c_str());
@@ -390,19 +392,157 @@ int main(int argc, char **argv) {
 
   QWidget ventana;
   ventana.setWindowTitle(QString::fromUtf8("Ajustes del visor 3D (proceso aparte)"));
-  /* desde v0.54 la ventana tiene dos hojas: la de siempre (trama, redes, guardados, log) y la de la
-     camara que hace el Facetracking. Todo lo demas queda exactamente como estaba. */
+  /* el icono de la ventana: si `install.sh` se corrio, el del tema (hicolor) es el mismo que el del
+     lanzador del escritorio; si no, se busca el png de la carpeta assets. Sin esto Qt pone su gota. */
+  {
+    QIcon icono = QIcon::fromTheme(QString::fromUtf8("odysseyvk"));
+    if (icono.isNull()) {
+      const char *h = std::getenv("HOME");
+      const std::string casa(h ? h : "/home");
+      const QStringList sitios = QStringList()
+                                 << QString::fromUtf8("/usr/share/icons/hicolor/256x256/apps/odysseyvk.png")
+                                 << QString::fromUtf8("/usr/share/pixmaps/odysseyvk.png")
+                                 << QString::fromStdString(casa + "/Documentos/LU agent/odysseyvk-linux/assets/icono-odysseyvk.png")
+                                 << QString::fromStdString(casa + "/Documentos/LU agent/odyssey3d-linux/assets/icono-odysseyvk.png");
+      for (const QString &s : sitios)
+        if (QFileInfo(s).exists()) {
+          icono = QIcon(s);
+          break;
+        }
+    }
+    if (!icono.isNull()) ventana.setWindowIcon(icono);
+  }
+  /* desde v0.54 la ventana tiene hojas: la de siempre (trama, redes, guardados, log) y la de la
+     camara que hace el Facetracking. Desde v0.57 la primera es "General": ahi va lo breve de la app,
+     el modo de legado y toda la camara. La hoja de siempre se llama "Edicion avanzada" y se apaga
+     entera mientras el visor esta en modo de legado. */
   auto *cajaVentana = new QVBoxLayout(&ventana);
   auto *pestanas = new QTabWidget(&ventana);
+  auto *hojaGeneral = new QWidget(pestanas);
+  auto *cajaGeneral = new QVBoxLayout(hojaGeneral);
+  pestanas->addTab(hojaGeneral, QString::fromUtf8("General"));
   auto *hojaTrama = new QWidget(pestanas);
   auto *principal = new QVBoxLayout(hojaTrama);
-  pestanas->addTab(hojaTrama, QString::fromUtf8("Trama y redes"));
+  pestanas->addTab(hojaTrama, QString::fromUtf8("Edicion avanzada"));
   cajaVentana->addWidget(pestanas);
 
   /* ---- arriba: con quien estamos hablando ---- */
   auto *estado = new QLabel(&ventana);
   estado->setTextInteractionFlags(Qt::TextSelectableByMouse);
   principal->addWidget(estado);
+
+  /* ---- hoja General: el estado breve, el modo y la sesion que esta abierta ---- */
+  auto *tituloGeneral = new QLabel(hojaGeneral);
+  tituloGeneral->setTextFormat(Qt::RichText);
+  tituloGeneral->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  tituloGeneral->setWordWrap(true);
+  tituloGeneral->setText(QString::fromUtf8(
+      "<b>General</b><br>El visor pone la trama estereo encima del video y manda la lente y el escalador"
+      " del monitor. Aqui esta lo que se usa siempre; los numeros finos de la trama y las redes de"
+      " conversion estan en <b>Edicion avanzada</b>."));
+  cajaGeneral->addWidget(tituloGeneral);
+  auto *estadoGeneral = new QLabel(hojaGeneral);
+  estadoGeneral->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  estadoGeneral->setWordWrap(true);
+  cajaGeneral->addWidget(estadoGeneral);
+
+  auto *grupoModo = new QGroupBox(QString::fromUtf8("Modo de la app"), hojaGeneral);
+  auto *cajaModo = new QVBoxLayout(grupoModo);
+  /* la casilla del modo: el cuadro de verificacion no ensena HTML, asi que la letra se pone en negrita
+     con la propia fuente */
+  auto *checkLegado = new QCheckBox(QString::fromUtf8("modo de legado"), grupoModo);
+  {
+    QFont fuenteModo = checkLegado->font();
+    fuenteModo.setBold(true);
+    checkLegado->setFont(fuenteModo);
+  }
+  cajaModo->addWidget(checkLegado);
+  auto *notaModo = new QLabel(grupoModo);
+  notaModo->setTextFormat(Qt::RichText);
+  notaModo->setWordWrap(true);
+  notaModo->setText(QString::fromUtf8(
+      "Puesto: la trama va derecho, sin redes de conversion, y la pastilla solo lleva el interruptor"
+      " ON/OFF con dos deslizadores (<b>3D Salida</b> y <b>Plano de apoyo</b>). El rastreo se saca de las"
+      " dos vistas de la camara del monitor; si pierdes la cara de vista se sueltan la trama y la lente"
+      " hasta que vuelves a mirarla. Quitado: el visor completo, con las redes y los numeros finos en la"
+      " hoja <b>Edicion avanzada</b>, que mientras el legado esta puesto queda apagada."));
+  cajaModo->addWidget(notaModo);
+  auto *estadoModo = new QLabel(grupoModo);
+  estadoModo->setTextFormat(Qt::RichText);
+  estadoModo->setWordWrap(true);
+  estadoModo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  cajaModo->addWidget(estadoModo);
+  auto *notaCambioModo = new QLabel(grupoModo);
+  notaCambioModo->setWordWrap(true);
+  cajaModo->addWidget(notaCambioModo);
+  cajaGeneral->addWidget(grupoModo);
+
+  auto *grupoSesion = new QGroupBox(QString::fromUtf8("La sesion abierta"), hojaGeneral);
+  auto *cajaSesion = new QVBoxLayout(grupoSesion);
+  auto *filaSesion = new QHBoxLayout();
+  auto *boton3D = new QPushButton(QString::fromUtf8("3D"), grupoSesion);
+  auto *botonCapa = new QPushButton(QString::fromUtf8("pastilla"), grupoSesion);
+  filaSesion->addWidget(boton3D);
+  filaSesion->addWidget(botonCapa);
+  filaSesion->addStretch(1);
+  cajaSesion->addLayout(filaSesion);
+  auto *checkRastreo = new QCheckBox(QString::fromUtf8("Facetracking (la trama sigue la cabeza)"),
+                                     grupoSesion);
+  cajaSesion->addWidget(checkRastreo);
+  auto *notaSesion = new QLabel(grupoSesion);
+  notaSesion->setWordWrap(true);
+  notaSesion->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  cajaSesion->addWidget(notaSesion);
+  cajaGeneral->addWidget(grupoSesion);
+
+  /* el modo se escribe en el ajuste de siempre (serve.conf) y, si hay un visor abierto, se le manda la
+     orden por el canal: lo cambia en caliente, sin cerrar la sesion */
+  QObject::connect(checkLegado, &QCheckBox::clicked, &ventana, [&]() {
+    const bool querido = checkLegado->isChecked();
+    std::string err;
+    const bool escrito = ajuste::fijarEnServeConf("legado", querido ? "si" : "no", &err);
+    const bool orden = ajuste::escribir(std::map<std::string, double>(), std::string(),
+                                        {{"legado", std::string(querido ? "encender" : "apagar")}}, &err);
+    notaCambioModo->setText(QString::fromUtf8(
+        escrito ? "Ajuste escrito en %1%2"
+                : "No se pudo escribir el ajuste: %2")
+                .arg(QString::fromStdString(ajuste::rutaServeConf()))
+                .arg(escrito ? (orden ? "; la orden ya va camino del visor abierto"
+                                      : "; el visor abierto no la acepto")
+                             : QString::fromStdString(err)));
+  });
+
+  /* la trama y la pastilla de la sesion que esta delante: la misma tecla Ctrl+Shift+1 y Ctrl+Shift+F1
+     del visor, pero desde aqui, sin tener que enfocar su ventana */
+  const auto ordenCanal = [](const char *clave, const char *valor, std::string *err) {
+    return ajuste::escribir(std::map<std::string, double>(), std::string(),
+                            {{std::string(clave), std::string(valor)}}, err);
+  };
+  QObject::connect(boton3D, &QPushButton::clicked, &ventana, [&]() {
+    std::string err;
+    notaSesion->setText(ordenCanal("3d", "alternar", &err)
+                            ? QString::fromUtf8("Orden mandada al visor: la trama enciende o apaga.")
+                            : QString::fromUtf8("No se pudo mandar la orden: %1")
+                                  .arg(QString::fromStdString(err)));
+  });
+  QObject::connect(botonCapa, &QPushButton::clicked, &ventana, [&]() {
+    std::string err;
+    notaSesion->setText(ordenCanal("capa", "alternar", &err)
+                            ? QString::fromUtf8("Orden mandada al visor: la pastilla aparece o se oculta.")
+                            : QString::fromUtf8("No se pudo mandar la orden: %1")
+                                  .arg(QString::fromStdString(err)));
+  });
+
+  /* el Facetracking de la proxima sesion: lo lee el vigilante al armar la sesion, por eso no se manda
+     por el canal, se escribe en el ajuste */
+  QObject::connect(checkRastreo, &QCheckBox::clicked, &ventana, [&]() {
+    std::string err;
+    const bool ok = ajuste::fijarEnServeConf("rastreo", checkRastreo->isChecked() ? "si" : "no", &err);
+    notaSesion->setText(ok ? QString::fromUtf8("Ajuste escrito: la proxima sesion abre con el rastreo %1.")
+                                 .arg(checkRastreo->isChecked() ? "puesto" : "apagado")
+                           : QString::fromUtf8("No se pudo escribir el ajuste: %1")
+                                 .arg(QString::fromStdString(err)));
+  });
 
   /* ---- de fabrica y puestas: de donde se parte y con que red estamos hablando ---- */
   const std::map<std::string, double> fabrica = ajuste::valoresFabrica();
@@ -647,14 +787,14 @@ int main(int argc, char **argv) {
       " siempre, sin ningun video detras. Sirve para ver y afinar la trama, las franjas y las rampas con"
       " el escritorio por delante, y para mirar el 3D sin abrir nada. Otro clic lo quita. No capturamos"
       " lo que hay en la pantalla: ahi estaria nuestra propia ventana y la trama se tejeria a si misma."
-      " La orden va al vigilante (`odyssey3d serve`); deja el fichero de ajuste solo con ella, los numeros"
+      " La orden va al vigilante (`odysseyvk serve`); deja el fichero de ajuste solo con ella, los numeros"
       " que estuvieran escritos se llevan (el visor ya los aplico)."));
   cajaEscritorio->addWidget(botonEscritorio);
   cajaEscritorio->addWidget(notaEscritorio, 1);
   principal->addWidget(grupoEscritorio);
 
   /* que sesion tiene abierta el vigilante: `escritorio` (la forzada con este boton), `video` o
-     `ninguna`. Lo cuenta el hub en ~/.local/state/odyssey3d/hub, una vez por segundo. */
+     `ninguna`. Lo cuenta el hub en ~/.local/state/odysseyvk/hub, una vez por segundo. */
   QString sesionHub;
   QObject::connect(botonEscritorio, &QPushButton::clicked, &ventana, [&]() {
     const bool quiere = (sesionHub != "escritorio");
@@ -745,8 +885,10 @@ int main(int argc, char **argv) {
      y su puerto de control UVC se pone terco si lo toca otro proceso, asi que el visor, que es
      el unico que la abre, vuelca el ultimo cuadro crudo a `camara.jpg` cada dos segundos y esta
      ventana lo ensena. Si el visor no esta, no hay vista y la hoja lo dice con letras. */
-  auto *hojaCamara = new QWidget(pestanas);
-  auto *cajaCamara = new QVBoxLayout(hojaCamara);
+  /* desde v0.57 la camara del Facetracking ya no tiene hoja propia: vive al fondo de la hoja General,
+     asi que la variable apunta a esa misma hoja y todo lo demas queda igual que estaba */
+  QWidget *hojaCamara = hojaGeneral;
+  QVBoxLayout *cajaCamara = cajaGeneral;
   auto *tituloCamara = cabecita(hojaCamara, QString::fromUtf8(
       "<b>Camara del Facetracking</b><br>Facetracking = la trama sigue la cabeza. Con <b>3D Studio</b>"
       " (la camara estereo integrada del monitor, USB 04e8:20d7) la distancia sale de las dos vistas;"
@@ -803,7 +945,6 @@ int main(int argc, char **argv) {
   notaCamara->setTextInteractionFlags(Qt::TextSelectableByMouse);
   cajaCamara->addWidget(notaCamara);
   cajaCamara->addStretch(1);
-  pestanas->addTab(hojaCamara, QString::fromUtf8("Camara"));
 
   /* las camaras del sistema, con su nombre y si estan ocupadas. Se vuelven a mirar poco (cada 4 s
      o al pulsar el boton): `describe` abre cada nodo para leerle el nombre y los modos, y a la
@@ -1073,7 +1214,7 @@ int main(int argc, char **argv) {
   });
   QObject::connect(buscarModelo, &QPushButton::clicked, &ventana, [&]() {
     const QString ruta = QFileDialog::getOpenFileName(&ventana, QString::fromUtf8("Red .onnx"),
-                                                      QDir::homePath() + "/.local/share/odyssey3d/modelos",
+                                                      QDir::homePath() + "/.local/share/odysseyvk/modelos",
                                                       "*.onnx");
     if (ruta.isEmpty()) return;
     const QString absoluta = QFileInfo(ruta).absoluteFilePath();
@@ -1156,7 +1297,7 @@ int main(int argc, char **argv) {
     ts << "# lo que se salio de fabrica va suelto; lo demas va comentado, para que se vea el conjunto\n";
     ts << "# para que sea la base de esa red: pega estas lineas en "
          << QString::fromStdString(ajuste::rutaServeConf()) << "\n";
-    ts << "# o mandalas vivas: odyssey3d ctl ajuste clave valor\n";
+    ts << "# o mandalas vivas: odysseyvk ctl ajuste clave valor\n";
     ts << "modelo = " << ruta << "\n\n";
     for (const ajuste::Clave &c : ajuste::claves()) {
       const auto v = valores.find(c.nombre);
@@ -1211,10 +1352,10 @@ int main(int argc, char **argv) {
     if (hub.empty() || hubViejo > 5) {
       botonEscritorio->setEnabled(false);
       notaEscritorio->setText(hub.empty()
-          ? QString::fromUtf8("El vigilante (odyssey3d serve) no escribe en %1: no hay servicio corriendo "
+          ? QString::fromUtf8("El vigilante (odysseyvk serve) no escribe en %1: no hay servicio corriendo "
                               "que pueda montar el overlay.").arg(QString::fromStdString(ajuste::rutaHub()))
           : QString::fromUtf8("El vigilante dejo de escribir hace %1 segundos: el servicio se fue, hay que "
-                              "arrancarlo otra vez (`systemctl --user restart odyssey3d-serve`).").arg(hubViejo));
+                              "arrancarlo otra vez (`systemctl --user restart odysseyvk-serve`).").arg(hubViejo));
     } else {
       botonEscritorio->setEnabled(true);
       const bool puesto = (sesionHub == "escritorio");
@@ -1299,6 +1440,47 @@ int main(int argc, char **argv) {
       }
     }
     estado->setText(cab);
+    estadoGeneral->setText(cab);
+
+    /* ---- la hoja General: que modo esta puesto y los botones de la sesion ----
+       El modo de verdad es el del visor abierto; si no lo hay, manda el ajuste escrito. Con el modo de
+       legado puesto, la hoja "Edicion avanzada" se apaga entera: ahi ya no hay que tocar nada. */
+    const std::map<std::string, std::string> conf = ajuste::leerServeConf();
+    const auto confBool = [&conf](const char *k, bool porDefecto) {
+      const auto it = conf.find(k);
+      if (it == conf.end()) return porDefecto;
+      const std::string v = it->second;
+      return v == "si" || v == "on" || v == "1" || v == "encendido" || v == "puesto";
+    };
+    const bool legadoAjustado = confBool("legado", false);
+    const bool legadoPuesto = dato("legado").isEmpty() ? legadoAjustado : dato("legado") == "si";
+    const bool rastreoAjustado = confBool("rastreo", false);
+    if (checkLegado->isChecked() != legadoAjustado) checkLegado->setChecked(legadoAjustado);
+    if (checkRastreo->isChecked() != rastreoAjustado) checkRastreo->setChecked(rastreoAjustado);
+    pestanas->setTabEnabled(1, !legadoPuesto);
+    QString textoModo = QString::fromUtf8(
+        legadoPuesto ? "El visor que esta abierto esta en <b>modo de legado</b>: la hoja"
+                       " <b>Edicion avanzada</b> esta apagada y la pastilla lleva solo el interruptor,"
+                       " <b>3D Salida</b> y <b>Plano de apoyo</b>."
+                     : "El visor que esta abierto esta en <b>modo completo</b>, con las redes y los"
+                       " numeros finos a la vista.");
+    if (est.empty())
+      textoModo = QString::fromUtf8(
+          "No hay visor abierto: el modo guardado para la proxima sesion es <b>%1</b>.")
+          .arg(legadoAjustado ? "modo de legado" : "modo completo");
+    else if (legadoPuesto != legadoAjustado)
+      textoModo += QString::fromUtf8("<br>Ojo: el visor abierto esta en <b>%1</b> y el ajuste para la"
+                                     " proxima sesion dice <b>%2</b>.")
+                       .arg(legadoPuesto ? "modo de legado" : "modo completo",
+                            legadoAjustado ? "modo de legado" : "modo completo");
+    estadoModo->setText(textoModo);
+    const bool hayVisor = !est.empty();
+    boton3D->setEnabled(hayVisor);
+    botonCapa->setEnabled(hayVisor);
+    boton3D->setText(dato("trama") == "activa" ? QString::fromUtf8("3D: apagar la trama")
+                                               : QString::fromUtf8("3D: encender la trama"));
+    botonCapa->setText(dato("capa") == "oculta" ? QString::fromUtf8("pastilla: mostrar")
+                                                : QString::fromUtf8("pastilla: ocultar"));
     /* la hoja de la camara, con el estado y el hub que ya leimos en esta vuelta */
     if (++conteoCamaras % 8 == 0) mirarCamaras();
     refrescarCamara(est, hub);

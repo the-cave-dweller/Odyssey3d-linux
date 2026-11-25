@@ -135,7 +135,7 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
 
-  GLFWwindow *win = glfwCreateWindow(W, H, "Odyssey 3D", opts.windowed ? nullptr : mon, nullptr);
+  GLFWwindow *win = glfwCreateWindow(W, H, NOMBRE_APP, opts.windowed ? nullptr : mon, nullptr);
   if (!win) {
     const char *desc = nullptr;
     int code = glfwGetError(&desc);

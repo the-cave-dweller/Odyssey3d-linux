@@ -9,6 +9,7 @@
 #include "vkdev.h"
 #include "vkui.h"
 #include "weave.h"
+#include "util.h"
 
 #include <cstddef>
 #include <cstdlib>
@@ -75,7 +76,7 @@ public:
   float converterGain() const { return convGain_; }
   float converterRef() const { return convRef_; }
   /* El temblor del desplazamiento, el ancho del puente del canto y el temblor de la fase venian de
-     una variable de entorno leida UNA sola vez al arrancar (ODYSSEY3D_DITHER / _CANTO /
+     una variable de entorno leida UNA sola vez al arrancar (ODYSSEYVK_DITHER / _CANTO /
      _FASE_TEMBLOR). Ahora son miembros, para que la ventana de desarrollo pueda moverlos con el
      visor abierto; el valor de arranque es exactamente el de siempre. */
   void setTemblor(float px) { temblorPx_ = px; }
@@ -170,7 +171,7 @@ private:
   VkDescriptorSet smallSet_ = VK_NULL_HANDLE;
   VkImg depth_{};          /* mapa de profundidad (R8G8: un canal por ojo) que lee el shader */
   std::vector<uint8_t> mapRG_;   /* el mapa ya partido por ojo, antes de subirlo */
-  double msHoyos_ = 0.0;         /* lo que tarda rellenar los huecos (medible con ODYSSEY3D_MEDIR=1) */
+  double msHoyos_ = 0.0;         /* lo que tarda rellenar los huecos (medible con ODYSSEYVK_MEDIR=1) */
   long mapasContados_ = 0;
   bool depthUsable_ = false;
   int smallW_ = 0, smallH_ = 0;
@@ -181,34 +182,34 @@ private:
   float convGain_ = 0.0f, convRef_ = 0.5f;
   bool convOn_ = false;
   /* Leidos del entorno una sola vez, al armar el objeto: son los valores de siempre y siguen
-     pudiendo forzarse con ODYSSEY3D_DITHER / _CANTO / _FASE_TEMBLOR. Ahora son miembros porque la
+     pudiendo forzarse con ODYSSEYVK_DITHER / _CANTO / _FASE_TEMBLOR. Ahora son miembros porque la
      ventana de desarrollo los mueve con el visor abierto (ver setTemblor mas arriba). */
   float temblorPx_ = [] {
-    const char *e = std::getenv("ODYSSEY3D_DITHER");
+    const char *e = entornoOdyssey("ODYSSEYVK_DITHER");
     return e ? (float)std::atof(e) : 0.25f;   /* 0,01 de dither_strength sobre los 25 px de recorrido */
   }();
   float cantoS_ = [] {
-    const char *e = std::getenv("ODYSSEY3D_CANTO");
+    const char *e = entornoOdyssey("ODYSSEYVK_CANTO");
     const float v = e ? (float)std::atof(e) : 0.004f;
     return v > 0.0f ? v : 0.004f;
   }();
   float faseTemblor_ = [] {
-    const char *e = std::getenv("ODYSSEY3D_FASE_TEMBLOR");
+    const char *e = entornoOdyssey("ODYSSEYVK_FASE_TEMBLOR");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return v > 0.0f && v < 1.0f ? v : 0.0f;
   }();
   float rampaBaseX_ = [] {
-    const char *e = std::getenv("ODYSSEY3D_RAMPA_X");
+    const char *e = entornoOdyssey("ODYSSEYVK_RAMPA_X");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v > -0.05f && v < 0.05f) ? v : 0.0f;
   }();
   float rampaBaseY_ = [] {
-    const char *e = std::getenv("ODYSSEY3D_RAMPA_Y");
+    const char *e = entornoOdyssey("ODYSSEYVK_RAMPA_Y");
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v > -0.05f && v < 0.05f) ? v : 0.0f;
   }();
   bool conTope_ = [] {
-    const char *e = std::getenv("ODYSSEY3D_TOPE");
+    const char *e = entornoOdyssey("ODYSSEYVK_TOPE");
     return !e || e[0] != '0';
   }();
   std::vector<HudVertex> hud_;

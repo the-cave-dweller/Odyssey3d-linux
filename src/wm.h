@@ -53,7 +53,7 @@ public:
 
   /* Conecta con el compositor y enlaza el gestor de ventanas. Devuelve false si el
      compositor no ofrece el protocolo (todo lo demás del servicio puede seguir usando
-     `odyssey3d play`). */
+     `odysseyvk play`). */
   bool open(std::string *err = nullptr);
   bool available() const;
 

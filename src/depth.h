@@ -65,7 +65,7 @@ float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza, int muest
 class DepthNet {
 public:
   ~DepthNet();
-  /* ruta del modelo .onnx; vacio = ~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx */
+  /* ruta del modelo .onnx; vacio = ~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx */
   bool init(const std::string &model, std::string *err, int gpu = 0);   /* gpu: tarjeta NVIDIA a usar */
 
   /* Cambiar de red con el visor en marcha: primero se suelta la sesion vieja (que es lo que
@@ -107,7 +107,7 @@ public:
   bool lastCut() const { return corte_; }    /* hubo cambio de plano en la ultima estimacion */
   long cutCount() const { return cortes_; }  /* cambios de plano contados desde el arranque */
 
-  /* limpieza del mapa (filtro guiado + dilatar). Se apaga con ODYSSEY3D_LIMPIEZA=0 para comparar en
+  /* limpieza del mapa (filtro guiado + dilatar). Se apaga con ODYSSEYVK_LIMPIEZA=0 para comparar en
      el panel la misma red con el mapa en crudo. */
   void setCleaning(bool on) { limpieza_ = on; }
   bool cleaning() const { return limpieza_; }

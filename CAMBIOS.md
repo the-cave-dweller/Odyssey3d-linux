@@ -1,6 +1,136 @@
-# Cambios de odyssey3d
+# Cambios de OdysseyVK (hasta v0.56: odyssey3d)
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
+Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
+
+## Todo se llama OdysseyVK y aparece el «modo de legado» (v0.57)
+
+- Pedido de Rodolfo: «renombra todo el proyecto a OdysseyVK, quita el texto sobre el overlay que habla
+  sobre los clicks al video de atrás, haz el botón de on y off un poco menos ancho, quita el pequeño
+  cuadrado de la esquina superior izquierda», «crea una sección general de la app, mete todo lo de
+  webcam ahí, pero en el inicio mete opciones generales breves, pon un toggle llamado modo legacy o de
+  Legado (clona o imita el método de Macdissey y ponlo ahí), que activar ese toggle desactive por
+  completo la pestaña de edición avanzada (el nombre de la antigua pantalla de desarrollo» y «que el
+  overlay en modo legacy también pase a ser más básico, solo con lo que ocuparía de acuerdo a sus
+  funciones». **En la interfaz el modo se llama solo «modo de legado»** y su texto no menciona al
+  cliente de Mac; la explicación de dónde viene está en `docs/metodo-legado.md` y en esta entrada.
+
+### Renombrado, con migración de datos
+
+- Nombre en todos lados: `NOMBRE_APP = "OdysseyVK"` (`src/util.h`), binarios `odysseyvk` y
+  `odysseyvk-ajustes`, carpeta del repo `~/Documentos/LU agent/odysseyvk-linux` (antes
+  `odyssey3d-linux`), unidad `odysseyvk-serve.service`, regla udev `70-odysseyvk.rules`, lanzador
+  `odysseyvk.desktop` (`Name=OdysseyVK`, `Icon=odysseyvk`, `StartupWMClass=odysseyvk`). Los ficheros
+  moved con `git mv`, así que el historial sigue su rastro.
+- **Datos**: `~/.config/odysseyvk`, `~/.local/state/odysseyvk` y `~/.local/share/odysseyvk`. La primera
+  vez que arranca un binario nuevo, `migrarDatosDeViejoNombre()` (`src/util.cpp`) **copia** lo de las
+  carpetas viejas con `copy_options::skip_existing` (memoizado por proceso, una vez). Medido aquí: la
+  copia de los modelos son **237 MB duplicados** (`~/.local/share/odyssey3d/modelos` y la nueva igual);
+  se puede borrar la vieja cuando todo funcione.
+- **Entorno**: `entornoOdyssey("ODYSSEYVK_...")` prueba la variable nueva y si no, la vieja
+  `ODYSSEY3D_...`. Reescritos los **26 sitios** que leían variables; `ODYSSEY_CONV`, `ODYSSEY_UBO`,
+  `ODYSSEY_GOLPE` y `ODYSSEY_HWDEC` se quedaron como estaban porque nunca llevaron el nombre del
+  proyecto.
+- `install.sh` (69 → ~110 líneas): instala el icono y el lanzador, y **limpia el nombre viejo** (apaga y
+  borra `odyssey3d-serve.service`, quita `odyssey3d.desktop` y `/etc/udev/rules.d/70-odyssey-3d.rules`,
+  y mueve los binarios viejos a `/usr/local/bin/viejo-odyssey3d/` en vez de borrarlos). Los
+  `gtk-update-icon-cache` y `update-desktop-database` van protegidos con `command -v` porque el script
+  corre con `set -euo pipefail`.
+- **Icono**: `assets/icono-odysseyvk.png`, recorte cuadrado 608x608 sacado del PNG que pasó Rodolfo
+  (1408x768 con fondo transparente; la caja de alfa medía `(400,88)-(1008,688)`), más ocho tallas en
+  `assets/hicolor/{16,24,32,48,64,128,256,512}x…/apps/odysseyvk.png` (de 706 B a 294.888 B). La ventana
+  de ajustes lo pilla del tema (`QIcon::fromTheme("odysseyvk")`) con reserva a la ruta del repo, y el
+  visor lo pone como título de ventana (`NOMBRE_APP`, en `src/viewer.cpp:138` y `src/vkview.cpp:909`).
+  El SVG que llegó primero venía truncado y se descartó.
+
+### La pastilla, más limpia
+
+- **Interruptor más corto**: `sw3D_` pasa de 130 a **112 px** de ancho (`src/vkui.cpp:315`). Medido en la
+  autoprueba: `ON` gasta 22,5 px y `OFF` 28,8 px sobre 70 px de hueco; cabe la letra y sobra aire.
+- **Fuera el cuadrito de la esquina** (el de color de lente/scaler, `solid(x0+8, y0+8, 6, 6, …)`) y
+  **fuera el aviso escrito de «clic fuera de la pastilla manda sobre el vídeo de atrás»**. El estado del
+  hardware se sigue diciendo solo con texto arriba de la pastilla: `lente y scaler activos` /
+  `hardware parcial` / `sin lente ni scaler`, y en legado `lente activa` / `sin lente` (los bits son
+  `lensOk = 1`, `scalerOn = 2` en `src/session.h:29`).
+
+### La hoja General de la ventana de ajustes
+
+- Pestañas: **General** y **Edición avanzada** (antes *Trama y redes*; la hoja *Cámara* desaparece como
+  tal y **todo lo de la webcam se muda a General**, intacto: combos de `/dev/video*`, sello verde
+  `FACETRACKING ACTIVO · Stereo (3D Studio, camara integrada del monitor)`, «Cómo la lee el rastreo»,
+  «Usar esta camara en el rastreo» y su sello de `serve.conf`).
+- General lleva, en orden: título y estado del visor; grupo **Modo de la app** con la casilla
+  **«modo de legado»**, la nota que explica qué hace y una línea viva que el temporizador de 0,5 s
+  refresca («El visor que está abierto está en modo completo…» / «…en modo de legado: la hoja Edición
+  avanzada está apagada y la pastilla lleva solo el interruptor, 3D Salida y Plano de apoyo») y avisa
+  si lo pedido y lo vivo no coinciden; grupo **La sesión abierta** con `3D: encender la trama` /
+  `3D: apagar la trama`, `pastilla: mostrar` / `pastilla: ocultar` y la casilla de Facetracking.
+- La casilla escribe **las dos cosas**: la orden viva por el canal (`legado = encender|apagar`) y
+  `legado = si|no` en `serve.conf` (`ajuste::fijarEnServeConf`). Con el modo puesto,
+  `pestanas->setTabEnabled(1, false)` **atiene la pestaña Edición avanzada**. Comprobado con captura
+  real de la ventana (spectacle, recorte de la zona 1338..3782 px): con `legado = si` la casilla sale
+  marcada en negrita y la pestaña atenuada; con `legado = no`, desmarcada y la pestaña viva.
+  Ojo: aquí no hay inyector de teclas ni de clics en Wayland, así que el clic **no se probó de
+  verdad**; se probó escribiendo la config y mirando la ventana.
+- Dos detalles corregidos por lo que se vio en la captura: `QCheckBox` **no pinta HTML** (la casilla
+  decía literalmente `<b>modo de legado</b>`), así que el texto va plano y la negrita con
+  `QFont::setBold(true)`.
+
+### El modo de legado (por dentro)
+
+- Estado `legado` en `Hud::State` (`src/vkui.h`), y cuatro formas de moverlo: la casilla,
+  `odysseyvk play --legado`, `odysseyvk ctl legado encender|apagar|alternar|estado` (nuevo, en
+  `src/main.cpp`) y `legado = si` en `serve.conf` (`ServeCfg::legado`, y el hub pasa `--legado` al
+  lanzar el visor). El visor lo publica en `estado` con la línea `legado = si|no`.
+- **No toca la sesión**: `cambioLegado()` (`src/vkview.cpp:251-276`) guarda los números de la trama,
+  aplica los de `ajuste::valoresFabrica()` **excepto `relieve` y `apoyo`** (`src/ajuste.cpp:309-333`) y
+  al apagar el modo los devuelve. Se puede cambiar en caliente sin cerrar nada.
+- **Puerta a los números finos**: `aplicarAjuste()` ignora cualquier clave que no sea `relieve` o
+  `apoyo` (`src/vkview.cpp:202-210`); están negadas con aviso por consola las teclas de sintonía fina
+  (`src/vkview.cpp:596-603`), la del conversor (`C`, `:545-546`) y el cambio de red (`1`/`2`,
+  `:582-585`). El hub tampoco pasa `--track-campo` / `--track-cara` cuando el modo viene puesto.
+- **Rastreo heredado**: `fo.fuerzaMono = 0` (las dos vistas de la cámara del monitor, siempre) y
+  `fo.set.maxReprojectionPx = 40.0` (`src/vkview.cpp:1374-1380`), que son los mismos números de la
+  referencia: `minimumDepth: 200` / `maximumError: 40` en `StereoTracking.swift:82` y `minDepth` 200 ya
+  igual en `src/track.h:19`. Fuera del legado el error admitido sigue en 10 px (`src/track.h:16`).
+- **La cámara manda**: si deja de ver la cara se suelta la trama a los **0,5 s** y se apaga la lente a
+  los **0,75 s**, y vuelven al recuperar la cara (`src/vkview.cpp:2488-2510` y la puerta
+  `caraPerdida` en `:2219-2222`). El vídeo se ve tal cual mientras tanto.
+- **Uniformes fijos comprobados en la referencia**: `r = .0128535`, `m = .05`, `s = 10`, `z = 1` en
+  `Sources/OdysseyGL/Renderer.cpp:68-71`.
+- **Diferencia deliberada**: aquí el modo de legado **sí** sigue mandando el comando del scaler del
+  monitor. En el cliente de Mac no hace falta; en Linux, sin ese comando el panel no entra en 3D.
+- Pendiente declarado: la ruta **`--gl` no implementa el modo de legado** (acepta la bandera y no hace
+  nada), y quedan sin copiar los 16 formatos estéreo de aquel cliente y sus curvas de la interfaz a
+  uniformes. También sigue pendiente el `0x07` fijo de `src/lens.cpp:203,209` (va el byte 14 del
+  `SEChipID`), que aplica a los dos modos.
+
+### La pastilla en modo de legado, medida
+
+`./odysseyvk ctl hud --w 1440 --h 900 [--legado]` (autoprueba sin pantalla, en la máquina):
+
+| | modo completo | modo de legado |
+|---|---|---|
+| pastilla dibujada | **824 x 134 px** | **648 x 134 px** |
+| vértices de la interfaz | 2784 | **2580** (−204) |
+| casillas de ratón del botón de red | 1458 | **0** (no existe) |
+| deslizadores (primera casilla, x de la ventana) | 1116 y 1266 | 1110 y 1260 |
+| casillas de cada deslizador | 923 y 923 | 923 y 923 |
+
+En legado los deslizadores se reetiquetan **«Plano de apoyo»** (es `apoyo`, la `3D Depth` del panel) y
+**«3D Salida»** (es `relieve`); el botón de red y su bloque de zonas de ratón se van (`btnRed_ =
+{-10,-10,0,0}`) y el aviso largo de `Tab` pasa a la nota corta `Tab  entrega la pantalla`. Letras
+medidas dentro de su hueco (usado / hueco): `Plano de apoyo` 96,9 / 120 · `3D Salida` 60,0 / 120 ·
+`Ctrl+Shift+3 / 4` 92,2 / 120 · `Tab  entrega la pantalla` 140,0 / 272 · `lente activa` 66,0 / 220 ·
+`sin lente` 48,7 / 220. La fila del Facetracking gasta 306 px y deja 498 px (completo) / 322 px
+(legado), así que la nota de 224 px cabe en los dos modos.
+
+### Lo que se tocó fuera del repo
+
+- `Master/maestro.sh`: `REPO` apunta a `../odysseyvk-linux` (con `ODYSSEYVK_REPO` por delante de la
+  variable vieja), `haySesion` mira las dos unidades, y `guardar` mete en el bulto `install.sh`,
+  `odysseyvk.desktop`, `systemd/`, `udev/`, `assets/` y `config/`, leyendo la config y el estado de la
+  carpeta nueva **y** de la vieja.
 
 ## La pastilla deja de ser redonda y el 3D se apaga con un interruptor (v0.56)
 - Pedido de Rodolfo: «quita el botón de apagar 3D y el de ocultar capa, cambia el de apagar por un botón

@@ -5,15 +5,15 @@ kscreen-doctor numera la rotación con la enum de KScreen (none=1, left=2, inver
 right=8), no con la transformación de Wayland (donde 1 = 90°). El port solía interpretar
 el 1 como "left" y al restaurar el panel ponía el monitor en vertical.
 
-Escribe instantáneas sintéticas en ~/.local/state/odyssey3d/panel.state y comprueba que
+Escribe instantáneas sintéticas en ~/.local/state/odysseyvk/panel.state y comprueba que
 `ctl panel restore --dry` genera la palabra correcta. No toca la pantalla.
 """
 import os
 import subprocess
 import sys
 
-BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "odyssey3d")
-STATE = os.path.expanduser("~/.local/state/odyssey3d/panel.state")
+BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "odysseyvk")
+STATE = os.path.expanduser("~/.local/state/odysseyvk/panel.state")
 
 CASOS = [(1, "none"), (2, "left"), (4, "inverted"), (8, "right"), (0, None)]
 

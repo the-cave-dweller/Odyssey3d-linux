@@ -39,7 +39,7 @@ bool loadFactoryCalib(const std::string &dir, CameraCalibration *cam, TrackerTra
                       std::string *err);
 
 /* Ruta del directorio de calibracion (busca en el arbol del ejecutable y en
-   /usr/share/odyssey3d/calib). Vacio si no hay nada. */
+   /usr/share/odysseyvk/calib). Vacio si no hay nada. */
 std::string defaultCalibDir();
 
 #endif

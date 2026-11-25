@@ -55,7 +55,7 @@ void Rig::bringUp(const ViewerOpts &o) {
             else
               std::fprintf(stderr,
                            "[aviso] hay un estado del panel sin restaurar de otra sesion (modo %d %s, escala %g, "
-                           "rotacion %s). Si quieres recuperarlo: odyssey3d ctl panel restore\n",
+                           "rotacion %s). Si quieres recuperarlo: odysseyvk ctl panel restore\n",
                            stale.modeIndex, stale.modeRes.c_str(), stale.scale, rotW(stale.rotation));
           }
           /* Sitios de las otras salidas. Al pasar el panel a escala 1 su area logica crece
@@ -63,9 +63,9 @@ void Rig::bringUp(const ViewerOpts &o) {
              dos areas se montan 1280 px logicos: esa franja se ve en los dos monitores a la vez y
              KWin le cambia el tamano a la ventana del video a media sesion. Movemos el otro monitor
              en la MISMA orden atomica del modo y lo devolvemos al salir.
-             Puerta: ODYSSEY3D_LAYOUT=0 o --sin-despejar dejan el escritorio intacto. */
+             Puerta: ODYSSEYVK_LAYOUT=0 o --sin-despejar dejan el escritorio intacto. */
           std::vector<Placement> movidas, originales;
-          const char *noLayout = std::getenv("ODYSSEY3D_LAYOUT");
+          const char *noLayout = entornoOdyssey("ODYSSEYVK_LAYOUT");
           const bool dejar = o.noLayout || (noLayout && !std::strcmp(noLayout, "0"));
           if (!dejar) {
             std::vector<PanelState> todos;
@@ -167,8 +167,8 @@ void Rig::shutDown() {
       Panel::clearSnapshot();
     } else {
       std::fprintf(stderr, "[aviso] no se pudo restaurar el panel: %s\n", err.c_str());
-      std::fprintf(stderr, "[aviso] el estado guardado sigue en ~/.local/state/odyssey3d/panel.state: "
-                           "recuperelo con `odyssey3d ctl panel restore`\n");
+      std::fprintf(stderr, "[aviso] el estado guardado sigue en ~/.local/state/odysseyvk/panel.state: "
+                           "recuperelo con `odysseyvk ctl panel restore`\n");
     }
     panelApplied = false;
   }

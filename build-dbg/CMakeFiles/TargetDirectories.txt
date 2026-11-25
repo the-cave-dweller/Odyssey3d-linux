@@ -1,8 +1,0 @@
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/shaders.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/odyssey3d.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/edit_cache.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/rebuild_cache.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/list_install_components.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/install.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/install/local.dir
-/home/rodolfo/Documentos/LU agent/odyssey3d-linux/build-dbg/CMakeFiles/install/strip.dir

@@ -35,9 +35,9 @@ int main(int argc, char **argv) {
               net.device().c_str(), net.lastMs());
   std::fflush(stdout);
   if (argc > 3)
-    setenv("ODYSSEY3D_GPU", "-1", 1);   /* a partir de aqui: que la nueva red vaya por CPU */
-  std::printf("[paso 2] cambio a %s (ODYSSEY3D_GPU=%s)\n", argv[2] ? argv[2] : "?",
-              getenv("ODYSSEY3D_GPU") ? getenv("ODYSSEY3D_GPU") : "sin");
+    setenv("ODYSSEYVK_GPU", "-1", 1);   /* a partir de aqui: que la nueva red vaya por CPU */
+  std::printf("[paso 2] cambio a %s (ODYSSEYVK_GPU=%s)\n", argv[2] ? argv[2] : "?",
+              getenv("ODYSSEYVK_GPU") ? getenv("ODYSSEYVK_GPU") : "sin");
   std::fflush(stdout);
   if (!net.cambiar(argv[2] ? argv[2] : "", &err)) {
     std::fprintf(stderr, "[paso 2] %s\n", err.c_str());

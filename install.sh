@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila e instala odyssey3d (binario, regla udev y datos de calibración).
+# Compila e instala odysseyvk (binario, regla udev y datos de calibración).
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -39,31 +39,76 @@ sudo udevadm control --reload-rules
 prefix=$(sed -n 's/^CMAKE_INSTALL_PREFIX:INTERNAL=//p' "$here/build/CMakeCache.txt")
 prefix=${prefix:-/usr/local}
 unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
-conf_dir=${XDG_CONFIG_HOME:-$HOME/.config}/odyssey3d
+conf_dir=${XDG_CONFIG_HOME:-$HOME/.config}/odysseyvk
 
 mkdir -p "$unit_dir" "$conf_dir"
-sed "s|@BINDIR@|$prefix/bin|g" "$here/systemd/odyssey3d-serve.service" > "$unit_dir/odyssey3d-serve.service"
+sed "s|@BINDIR@|$prefix/bin|g" "$here/systemd/odysseyvk-serve.service" > "$unit_dir/odysseyvk-serve.service"
 [ -f "$conf_dir/serve.conf" ] || cp "$here/config/serve.conf" "$conf_dir/serve.conf"
 systemctl --user daemon-reload
-systemctl --user enable odyssey3d-serve.service
-echo "servicio instalado y activado para la próxima sesión: $unit_dir/odyssey3d-serve.service"
+systemctl --user enable odysseyvk-serve.service
+echo "servicio instalado y activado para la próxima sesión: $unit_dir/odysseyvk-serve.service"
+
+# --- el icono y el lanzador del menú (por usuario, sin sudo) ------------------
+datos=${XDG_DATA_HOME:-$HOME/.local/share}
+for carpeta in "$here"/assets/hicolor/*x*/apps; do
+  if [ -d "$carpeta" ]; then
+    tam=$(basename "$(dirname "$carpeta")")
+    mkdir -p "$datos/icons/hicolor/$tam/apps"
+    cp -f "$carpeta/odysseyvk.png" "$datos/icons/hicolor/$tam/apps/odysseyvk.png"
+  fi
+done
+mkdir -p "$datos/applications"
+cp -f "$here/odysseyvk.desktop" "$datos/applications/odysseyvk.desktop"
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -q -t -f "$datos/icons/hicolor" || true
+fi
+update-desktop-database "$datos/applications" 2>/dev/null || true
+echo "icono y lanzador del menú puestos en $datos (Icon=odysseyvk)"
+
+# --- lo del nombre viejo (odyssey3d): apagar y quitar lo que estorba ----------
+# Desde v0.57 todo se llama odysseyvk. El servicio viejo hay que apagarlo: dos vigilantes
+# mirando las mismas ventanas pelean por la lente y el panel. Lo demas se guarda aparte.
+if [ -f "$unit_dir/odyssey3d-serve.service" ]; then
+  systemctl --user disable --now odyssey3d-serve.service >/dev/null 2>&1 || true
+  rm -f "$unit_dir/odyssey3d-serve.service"
+  echo "servicio viejo apagado y quitado: odyssey3d-serve.service"
+fi
+rm -f "$datos/applications/odyssey3d.desktop"
+if [ -e "$prefix/bin/odyssey3d" ] || [ -e "$prefix/bin/odyssey3d-ajustes" ]; then
+  sudo mkdir -p "$prefix/bin/viejo-odyssey3d"
+  for b in odyssey3d odyssey3d-ajustes; do
+    if [ -e "$prefix/bin/$b" ]; then
+      sudo mv "$prefix/bin/$b" "$prefix/bin/viejo-odyssey3d/$b"
+    fi
+  done
+  echo "los binarios del nombre viejo se guardaron en $prefix/bin/viejo-odyssey3d"
+fi
+if [ -f /etc/udev/rules.d/70-odyssey-3d.rules ]; then
+  sudo rm -f /etc/udev/rules.d/70-odyssey-3d.rules
+  echo "regla udev del nombre viejo quitada (la nueva es 70-odysseyvk.rules)"
+fi
 
 cat <<'EOF'
 
-Instalado. Para que los permisos surtan efecto:
+Instalado. Los datos del nombre viejo (config/odyssey3d, .local/state/odyssey3d y
+.local/share/odyssey3d, con la calibración, las redes y los perfiles) se copian solos la
+primera vez que arranca odysseyvk: a partir de ahí viven en las carpetas .../odysseyvk.
+Lo del nombre viejo no se borra, por si quieres volver atrás.
+
+Para que los permisos surtan efecto:
 
   * NO ejecutes `udevadm trigger` sobre el monitor: reinicializa su hub interno y
     desconecta la lente, el scaler y la cámara hasta que vuelvas a conectar el USB.
   * En su lugar, desenchufa y vuelve a enchufar el cable USB-B del monitor
     (o apágalo y enciéndelo).
 
-Comprueba con:  odyssey3d doctor
-Reproduce con:  odyssey3d play tu_video_sbs.mkv
+Comprueba con:  odysseyvk doctor
+Reproduce con:  odysseyvk play tu_video_sbs.mkv
 
 Servicio de ventanas (avisa cuando algo se pone a pantalla completa y lo pone en 3D):
-  systemctl --user start odyssey3d-serve      # arrancarlo ahora
-  systemctl --user stop odyssey3d-serve       # pararlo
-  systemctl --user disable odyssey3d-serve    # que no arranque con la sesión
-  journalctl --user -u odyssey3d-serve -f     # ver lo que hace
-  ~/.config/odyssey3d/serve.conf              # ignorar apps, tiempo del aviso, modo
+  systemctl --user start odysseyvk-serve      # arrancarlo ahora
+  systemctl --user stop odysseyvk-serve       # pararlo
+  systemctl --user disable odysseyvk-serve    # que no arranque con la sesión
+  journalctl --user -u odysseyvk-serve -f     # ver lo que hace
+  ~/.config/odysseyvk/serve.conf              # ignorar apps, tiempo del aviso, modo
 EOF

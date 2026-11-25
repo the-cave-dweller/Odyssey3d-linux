@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """verifica_weave.py — comprueba el entrelazado del C++ contra el oráculo Python.
 
-Renderiza `odyssey3d weave --solid` (fuente plana: mitad izquierda roja, derecha verde)
+Renderiza `odysseyvk weave --solid` (fuente plana: mitad izquierda roja, derecha verde)
 y reproduce en numpy el mismo cálculo (atributos de esquina del oráculo paramétrico,
 interpolación bilineal como la GPU, mapas de corrección muestreados como GL lineal,
 filtro triangular y crosstalk). Deben coincidir a pocos LSB.
@@ -51,7 +51,7 @@ def sample_gray(path, u, v):
 
 def main():
     use_corr = "--corr" in sys.argv
-    args = [os.path.join(ROOT, "build", "odyssey3d"), "weave", "--solid"]
+    args = [os.path.join(ROOT, "build", "odysseyvk"), "weave", "--solid"]
     if not use_corr:
         args.append("--no-corr")
     subprocess.run(args + ["--out", PNG], check=True, cwd=ROOT)

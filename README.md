@@ -1,4 +1,4 @@
-# odyssey3d — 3D sin gafas en el Samsung Odyssey 3D (G90XF) bajo Wayland
+# odysseyvk — 3D sin gafas en el Samsung Odyssey 3D (G90XF) bajo Wayland
 
 Port a Linux del visor/reproductor **macdissey-3d** (Swift/Metal para macOS), hecho desde
 cero en C++17 para funcionar en **Wayland** (KDE Plasma / CachyOS) con el monitor
@@ -55,13 +55,30 @@ cmake --build build -j"$(nproc)"
 sudo cmake --install build
 ```
 
-El binario queda en `build/odyssey3d` (o `/usr/local/bin/odyssey3d` si se instala) y busca los
-mapas de corrección del panel en `./calib`, junto al ejecutable o en `/usr/share/odyssey3d/calib`.
+El binario queda en `build/odysseyvk` (o `/usr/local/bin/odysseyvk` si se instala) y busca los
+mapas de corrección del panel en `./calib`, junto al ejecutable o en `/usr/share/odysseyvk/calib`.
+
+**Desde v0.57 el proyecto se llama OdysseyVK** (antes `odyssey3d`): el repo es
+`~/Documentos/LU agent/odysseyvk-linux`, los binarios `odysseyvk` y `odysseyvk-ajustes`, la unidad
+`odysseyvk-serve.service`, la regla udev `70-odysseyvk.rules` y los datos
+`~/.config/odysseyvk`, `~/.local/state/odysseyvk` y `~/.local/share/odysseyvk`. `install.sh` además de
+compilar e instalar mete el **icono** (`assets/hicolor/…/apps/odysseyvk.png`, ocho tamaños de 16 a 512)
+y el lanzador `odysseyvk.desktop` en `~/.local/share/applications`, y **limpia lo del nombre viejo**:
+apaga y borra `odyssey3d-serve.service`, quita `odyssey3d.desktop` y la regla
+`/etc/udev/rules.d/70-odyssey-3d.rules`, y mueve los binarios viejos a
+`/usr/local/bin/viejo-odyssey3d/` en vez de borrarlos.
+
+La migración de datos la hace el propio programa al arrancar: copia (no mueve) lo que haya en las
+carpetas viejas a las nuevas, sin pisar lo que ya exista. Por eso, mientras no se borre lo viejo, los
+modelos están duplicados: aquí son **237 MB en `~/.local/share/odyssey3d/modelos` y los mismos
+237 MB en `~/.local/share/odysseyvk/modelos`**. Cuando todo funcione con el nombre nuevo se puede
+quitar la carpeta vieja. Los nombres de entorno antiguos (`ODYSSEY3D_*`) siguen valiendo: la reserva
+está en `entornoOdyssey()` (`src/util.cpp`), probada también con la variable nueva.
 
 ### Permisos (una sola vez)
 
 La lente es un puerto serie (`/dev/ttyACM0`), el scaler es un dispositivo SCSI vendor
-(`/dev/sgN`) y la cámara es un V4L2. La regla `udev/70-odyssey-3d.rules` (instalada por
+(`/dev/sgN`) y la cámara es un V4L2. La regla `udev/70-odysseyvk.rules` (instalada por
 `install.sh`) los abre con `TAG+="uaccess"`, así que no hace falta añadir el usuario a grupos.
 
 > **Importante:** tras instalar la regla **no** se debe hacer
@@ -73,7 +90,7 @@ La lente es un puerto serie (`/dev/ttyACM0`), el scaler es un dispositivo SCSI v
 Compruébalo con:
 
 ```sh
-./build/odyssey3d doctor
+./build/odysseyvk doctor
 ```
 
 Debe listar lente (`/dev/ttyACM0`), scaler (`/dev/sgN` con vendor `GCREADER`), cámara
@@ -82,31 +99,31 @@ Debe listar lente (`/dev/ttyACM0`), scaler (`/dev/sgN` con vendor `GCREADER`), c
 ## Uso
 
 ```sh
-odyssey3d doctor                       # diagnóstico de hardware, permisos y panel
-odyssey3d test                         # patrón de calibración a pantalla completa
-odyssey3d play pelicula_sbs.mkv        # reproduce un vídeo estéreo
-odyssey3d ctl lens auth                # sólo autenticar la lente
-odyssey3d ctl scaler off               # sólo apagar el modo 3D del scaler
-odyssey3d ctl panel status             # ver modos del panel (kscreen-doctor)
-odyssey3d ctl panel snapshot           # guardar el estado actual del panel en disco
-odyssey3d ctl panel restore            # devolver el panel al estado guardado
-odyssey3d serve                        # vigilar ventanas a pantalla completa (el servicio)
-odyssey3d ctl overlay                    # enseña la tarjeta de pregunta en la esquina
-odyssey3d ctl windows                    # lista las ventanas y detecta la pantalla completa
-odyssey3d ctl salidas                    # cada pantalla con su posición y tamaño lógicos
-odyssey3d ctl apilamiento                # el orden arriba/abajo que ve el compositor
-odyssey3d ctl ventana sobre --uuid <id>  # encima de todo / debajo / libre / salida DP-4
-odyssey3d capture3d --uuid <id>        # trama en 3D la ventana que captura KWin
-odyssey3d ctl flujo --uuid <id>        # medir si el compositor manda fotogramas de esa ventana
+odysseyvk doctor                       # diagnóstico de hardware, permisos y panel
+odysseyvk test                         # patrón de calibración a pantalla completa
+odysseyvk play pelicula_sbs.mkv        # reproduce un vídeo estéreo
+odysseyvk ctl lens auth                # sólo autenticar la lente
+odysseyvk ctl scaler off               # sólo apagar el modo 3D del scaler
+odysseyvk ctl panel status             # ver modos del panel (kscreen-doctor)
+odysseyvk ctl panel snapshot           # guardar el estado actual del panel en disco
+odysseyvk ctl panel restore            # devolver el panel al estado guardado
+odysseyvk serve                        # vigilar ventanas a pantalla completa (el servicio)
+odysseyvk ctl overlay                    # enseña la tarjeta de pregunta en la esquina
+odysseyvk ctl windows                    # lista las ventanas y detecta la pantalla completa
+odysseyvk ctl salidas                    # cada pantalla con su posición y tamaño lógicos
+odysseyvk ctl apilamiento                # el orden arriba/abajo que ve el compositor
+odysseyvk ctl ventana sobre --uuid <id>  # encima de todo / debajo / libre / salida DP-4
+odysseyvk capture3d --uuid <id>        # trama en 3D la ventana que captura KWin
+odysseyvk ctl flujo --uuid <id>        # medir si el compositor manda fotogramas de esa ventana
 ```
 
 Al arrancar, `test` y `play` hacen todo solos: ponen el panel en `3840x2160@120`, escala 1 y
 rotación normal, autentican y encienden la lente y activan el 3D del scaler. Al salir (ESC) lo
 deshacen y restauran el modo, la escala y la rotación previos.
 
-Antes de tocar el panel guardan el estado que había en `~/.local/state/odyssey3d/panel.state` y lo
+Antes de tocar el panel guardan el estado que había en `~/.local/state/odysseyvk/panel.state` y lo
 borran al restaurarlo. Si el programa muere a mitad (señal, cuelgue, Kill), el fichero se queda ahí
-y la siguiente arrancada avisa; se recupera con `odyssey3d ctl panel restore`. Añade `--dry` a
+y la siguiente arrancada avisa; se recupera con `odysseyvk ctl panel restore`. Añade `--dry` a
 `apply` o `restore` para ver el comando `kscreen-doctor` que se ejecutaría sin tocar la pantalla.
 
 ### Formatos de vídeo
@@ -135,24 +152,24 @@ así que se equivoca en reflejos, vallas y pelo suelto, y hay que calcularla, as
 aparece una fracción de segundo después que el vídeo.
 
 ```sh
-odyssey3d capture3d --uuid '<id>' --conver            # video normal, con la red en la GPU 0
-odyssey3d capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si la 0 esta llena)
+odysseyvk capture3d --uuid '<id>' --conver            # video normal, con la red en la GPU 0
+odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si la 0 esta llena)
 ```
 
 * `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
   tecla `C` o con la cuarta tarjeta («Vídeo normal · 2D a 3D»).
 * `--modelo RUTA` cambia la red. La por defecto es *Depth Anything V2 Small* en ONNX,
-  `~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx` (99 MB). Si falta, el visor lo dice
+  `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx` (99 MB). Si falta, el visor lo dice
   y el resto del 3D sigue funcionando sin conversión; el registro trae el `curl` para bajarla:
 
   ```sh
-  mkdir -p ~/.local/share/odyssey3d/modelos && curl -fLo ~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx \
+  mkdir -p ~/.local/share/odysseyvk/modelos && curl -fLo ~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx \
       https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/model.onnx
   ```
 * `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
   conviene 2; si la GPU va justa, 4 o 5.
 * `--texto-panel si|no` pega o suelta los rótulos del plano de la pantalla (por defecto pegados;
-  en marcha es la tecla `R`, y `ODYSSEY3D_TEXTO=0` lo apaga para comparar sin recompilar).
+  en marcha es la tecla `R`, y `ODYSSEYVK_TEXTO=0` lo apaga para comparar sin recompilar).
 * `--red N` pone la red en la GPU `N` (`0` por defecto). El programa mira cuánta memoria libre tiene
   cada tarjeta: si en la pedida no caben ~1,1 GB la manda a la que más tenga y lo avisa. Si en ninguna
   cabe, la red **se va a la CPU** (tarda 150 ms en vez de 9) y entonces la profundidad se recalcula
@@ -173,7 +190,7 @@ menos. Aquí hay ahora lo mismo: el conversor puede cerrar el mapa en **dos lám
 detrás y otra delante, y el deslizador de relieve las separa.
 
 ```sh
-odyssey3d capture3d --uuid '<id>' --conver --planos 0,6    # dos planos desde arrancar
+odysseyvk capture3d --uuid '<id>' --conver --planos 0,6    # dos planos desde arrancar
 ```
 
 * `--planos 0..1` (o `planos = 0,6` en `serve.conf`) es la **dureza**: `0` es el valor de arranque y
@@ -208,12 +225,12 @@ odyssey3d capture3d --uuid '<id>' --conver --planos 0,6    # dos planos desde ar
 Se comprueba sin mirar el panel:
 
 ```sh
-odyssey3d mapa foto.png            # foto real -> mapa PGM, sin panel y sin visor
-odyssey3d planos mapa.pgm          # donde estan los dos planos y cuanto parpadean
-ODYSSEY3D_MEDIR=1 odyssey3d ...    # imprime [planos] dureza · atras · delante · % del cuadro por delante
+odysseyvk mapa foto.png            # foto real -> mapa PGM, sin panel y sin visor
+odysseyvk planos mapa.pgm          # donde estan los dos planos y cuanto parpadean
+ODYSSEYVK_MEDIR=1 odysseyvk ...    # imprime [planos] dureza · atras · delante · % del cuadro por delante
 ```
 
-`odyssey3d planos` acepta varios mapas seguidos (una secuencia) y con `--hist` imprime las 32 casillas
+`odysseyvk planos` acepta varios mapas seguidos (una secuencia) y con `--hist` imprime las 32 casillas
 del histograma con barras, que es la forma rápida de ver si un cuadro tiene realmente dos planos o solo
 uno; `--dureza 0,6` escribe el mapa ya cerrado en láminas (`--out`) para compararlo byte a byte. Con
 `--mapa-fijo MAPA.pgm --apoyo 0,4 --relieve 50` el visor arranca con ese mapa puesto y sin red, así que
@@ -226,7 +243,7 @@ panel y la red metan ruido.
 |-------|--------|
 | `ESC` | salir (restaura panel, apaga lente y scaler) |
 | `Tab` | **entregar la pantalla**: apaga el 3D del panel y minimiza esta ventana, así que el ratón y el teclado vuelven a lo de detrás. Devolverle el foco (`Meta+Alt+Tab`, que sí lista las minimizadas, o un clic en la barra de tareas) vuelve a poner lente, scaler y modo 3D |
-| `PB` (Pausa/Break) | **la pastilla siempre a la vista** (desde v0.23): si estaba ocultada vuelve, y si el gestor de ventanas nos minimizó la ventana, se devuelve. Si el foco lo tiene el vídeo la tecla no llega al visor: ata `odyssey3d ctl aparece` a un atajo global (abajo, en «El ratón atraviesa el visor») |
+| `PB` (Pausa/Break) | **la pastilla siempre a la vista** (desde v0.23): si estaba ocultada vuelve, y si el gestor de ventanas nos minimizó la ventana, se devuelve. Si el foco lo tiene el vídeo la tecla no llega al visor: ata `odysseyvk ctl aparece` a un atajo global (abajo, en «El ratón atraviesa el visor») |
 | `P` | pausar / reanudar el vídeo del navegador (por MPRIS, sin quitar la capa) |
 | `3` | pase 2D (sin tramar) / 3D |
 | `F` | invertir profundidad (si se ve pseudoscópico: lo de dentro fuera) |
@@ -248,7 +265,7 @@ panel y la red metan ruido.
 | `n` `x` | **muestras intermedias** entre las dos láminas (v0.50): `n` agrega un nivel clavado a mitad de camino, con su meseta, para que el centro se vea sólido en vez de degradado (hasta 3); `x` lo quita y a 0 vuelve la rampa continua. Pide primero la dureza subida con `g` |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
-| `Ctrl+Shift+F1` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre. Sigue valiendo `Ctrl+Shift+2`; si el teclado lo tiene otra ventana a pantalla completa, `odyssey3d ctl capa ocultar` hace lo mismo por fichero |
+| `Ctrl+Shift+F1` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre. Sigue valiendo `Ctrl+Shift+2`; si el teclado lo tiene otra ventana a pantalla completa, `odysseyvk ctl capa ocultar` hace lo mismo por fichero |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
 | `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |
 | `Ctrl+Shift+7` `8` | achican / agrandan la pastilla (0,5× … 3×, útil al pasar del escritorio al modo 3D) |
@@ -261,7 +278,7 @@ Cada cambio imprime una línea con los valores actuales; puedes arrancar desde e
 
 ### Cómo alinear
 
-1. `odyssey3d test` y colócate a la distancia normal de trabajo (la altura de los ojos sobre el
+1. `odysseyvk test` y colócate a la distancia normal de trabajo (la altura de los ojos sobre el
    centro del panel es `--eye-y` ≈ 8.4 cm, distancia `--eye-z` ≈ 65 cm).
 2. Mira la fila de nueve cuadros con disparidad del patrón: deben verse **flotando a distinta
    profundidad, sin duplicados ni bordes dobles**.
@@ -329,31 +346,32 @@ las dos (sale de la trama), y de cuántos píxeles son las mesetas del mapa.
 
 El visor se queda el teclado de la pantalla del panel, así que hasta v0.50 los números solo se movían
 con las teclas de esa ventana o tocando `serve.conf` y reiniciando el servicio. Ahora hay una ventana
-aparte, `odyssey3d-ajustes`, que **no comparte nada con el visor**: no enlaza sus librerías, no tiene
-socket, no puede tocar la trama. Habla con él por ficheros en `~/.local/state/odyssey3d`:
+aparte, `odysseyvk-ajustes`, que **no comparte nada con el visor**: no enlaza sus librerías, no tiene
+socket, no puede tocar la trama. Habla con él por ficheros en `~/.local/state/odysseyvk`:
 
 | fichero | qué es |
 | --- | --- |
 | `ajuste` | la **orden**: números sueltos y una línea `modelo = /ruta.onnx`. El visor lo mira cada 0,1 s y solo actúa si el fichero cambió |
 | `estado` | la **verdad del visor**, reescrito cada 0,5 s: versión, trama y conversor puestos o no, qué red y en qué tarjeta, y los 20 números |
 | `preferencias.log` | la **cuenta de lo cambiado**: hora, valor antes → después, red puesta y quién lo pidió |
-| `hub` | la **verdad del vigilante** (`odyssey3d serve`), reescrito cada 1 s: si hay sesión, si es de `video` o de `escritorio`, en qué pantalla, con qué modo y qué red. Lo escribe el hub y lo borra al pararse |
+| `hub` | la **verdad del vigilante** (`odysseyvk serve`), reescrito cada 1 s: si hay sesión, si es de `video` o de `escritorio`, en qué pantalla, con qué modo y qué red. Lo escribe el hub y lo borra al pararse |
 | `camara.jpg` | el **último cuadro crudo** de la cámara del rastreo, volcado por el que la tiene abierta (el visor, o `ctl track`) cada 2 s para que la ventana de ajustes pueda enseñar la vista sin abrir la cámara una segunda vez |
 
 ```sh
-odyssey3d-ajustes                       # la ventana (la puedes tener en el otro monitor)
-odyssey3d ctl ajuste                    # ver el canal y el estado del visor
-odyssey3d ctl ajuste planos 0,6 fase 0,004     # mandar números a mano (también sirve fase=0,004)
-odyssey3d ctl ajuste modelo=/ruta/mde_large_fp32.onnx   # cambiar de red en vivo
-odyssey3d ctl ajuste limpiar            # quita la orden: vuelven a mandar las teclas
-odyssey3d ctl estado                    # lo que el visor está usando ahora
-odyssey3d ctl modelos                   # los .onnx que hay en el disco, con la puesta marcada
-odyssey3d ctl preferencias --ultimos 20 # lo que se fue cambiando
-odyssey3d ctl escritorio poner          # la trama ENCIMA DEL ESCRITORIO, sin vídeo (mismo botón de la ventana)
-odyssey3d ctl escritorio quitar         # y abajo: el visor se despide devolviendo el panel
-odyssey3d ctl escritorio estado         # qué sesión tiene abierta el vigilante ahora mismo
-odyssey3d ctl capa ocultar               # ocultar / mostrar / alternar la pastilla por fichero (estado: `ctl capa`)
-odyssey3d ctl 3d apagar                 # lo mismo que el interruptor ON/OFF de la pastilla (estado: `ctl 3d`)
+odysseyvk-ajustes                       # la ventana (la puedes tener en el otro monitor)
+odysseyvk ctl ajuste                    # ver el canal y el estado del visor
+odysseyvk ctl ajuste planos 0,6 fase 0,004     # mandar números a mano (también sirve fase=0,004)
+odysseyvk ctl ajuste modelo=/ruta/mde_large_fp32.onnx   # cambiar de red en vivo
+odysseyvk ctl ajuste limpiar            # quita la orden: vuelven a mandar las teclas
+odysseyvk ctl estado                    # lo que el visor está usando ahora
+odysseyvk ctl modelos                   # los .onnx que hay en el disco, con la puesta marcada
+odysseyvk ctl preferencias --ultimos 20 # lo que se fue cambiando
+odysseyvk ctl escritorio poner          # la trama ENCIMA DEL ESCRITORIO, sin vídeo (mismo botón de la ventana)
+odysseyvk ctl escritorio quitar         # y abajo: el visor se despide devolviendo el panel
+odysseyvk ctl escritorio estado         # qué sesión tiene abierta el vigilante ahora mismo
+odysseyvk ctl capa ocultar               # ocultar / mostrar / alternar la pastilla por fichero (estado: `ctl capa`)
+odysseyvk ctl 3d apagar                 # lo mismo que el interruptor ON/OFF de la pastilla (estado: `ctl 3d`)
+odysseyvk ctl legado encender           # el modo de legado, por fichero (apagar / alternar / estado)
 ```
 
 Números que admite el canal (con topes, los mismos que ajustan las teclas): `fase`, `paso`, `filtro`,
@@ -366,7 +384,7 @@ escritorio del monitor**, sin esperar a que nadie se ponga a pantalla completa, 
 la atiende el visor sino el hub (es el único que puede lanzar y despachar una sesión), y el botón de la
 ventana la pone y la quita con un clic cada uno:
 
-- Un clic lanza `odyssey3d test --siempre`: panel a 3D, escala, lente, pastilla, rastreo y rampas como en
+- Un clic lanza `odysseyvk test --siempre`: panel a 3D, escala, lente, pastilla, rastreo y rampas como en
   una sesión normal, pero tejiendo su **patrón de trama** en vez de un vídeo. Sirve para mirar y afinar la
   trama, las franjas y las rampas sin abrir nada, y para dejar el 3D puesto mientras trabajas.
 - Otro clic (o `ctl escritorio quitar`, o ESC/Tab sobre el visor) manda SIGTERM al visor, que devuelve el
@@ -377,8 +395,28 @@ ventana la pone y la quita con un clic cada uno:
 - La orden solo actúa cuando el número **cambia** en el fichero; la primera lectura al arrancar el servicio
   se ignora, para que un `overlay = 1` olvidado de cuando el equipo se apagó no monte la trama solo.
 
-Desde v0.54 la ventana tiene **dos hojas**. La de siempre, *Trama y redes*, es la de arriba tal cual. La
-nueva, *Cámara*, enseña el rastreo de cara en vez de ofrecerlo a encender:
+Desde v0.57 la ventana tiene **dos hojas**: *General* y **Edición avanzada** (así se llama lo que hasta
+ahora era *Trama y redes*, la de arriba tal cual). En *General* está lo breve de la app —el modo, la
+sesión abierta y la **cámara**, que se mudó entera desde la hoja que había de *Cámara*— y en *Edición
+avanzada* los 20 números y las redes. Con el **modo de legado** puesto, la hoja *Edición avanzada*
+**sale atenuada**: ahí no hay nada que mover.
+
+El grupo *Modo de la app* de *General* lleva la casilla **«modo de legado»** con su explicación y una
+línea que el temporizador de 0,5 s refresca con la verdad: en qué modo está el visor abierto, y si lo
+pedido para la próxima sesión no coincide con lo vivo, avisa (`Ojo: …`). Abajo, el grupo *La sesión
+abierta* resume en tres controles lo que antes estaba repartido: `3D: encender la trama` /
+`3D: apagar la trama`, `pastilla: mostrar` / `pastilla: ocultar` y la casilla de Facetracking. Los dos
+botones se deshabilitan si no hay visor abierto.
+
+El modo de legado se entiende entero en `docs/metodo-legado.md`. En corto: la trama se queda con sus
+**números de fábrica** (solo se pueden mover *3D Salida* y *Plano de apoyo*), no se abre red de
+profundidad ni conversor 2D→3D, la cara se mide siempre con las dos vistas de la cámara del monitor
+(error de reproyección admitido 40 px, como en la referencia), y si la cámara deja de ver la cara se
+suelta la trama a los 0,5 s y se apaga la lente a los 0,75 s. La pastilla se recorta a lo justo (ver
+*La interfaz*). Se pone también con `odysseyvk play --legado`, con `ctl legado` o con `legado = si` en
+`serve.conf`. **En la ruta `--gl` no está implementado** (se acepta la bandera y no hace nada).
+
+Desde v0.54 la ventana enseñaba el rastreo de cara en su propia hoja:
 
 - un sello de color con la verdad del momento: `FACETRACKING ACTIVO · Stereo (3D Studio, camara integrada
   del monitor)`, o `· Externa (webcam aparte, via fallback por el ancho de la cara)`, o
@@ -413,13 +451,17 @@ Tres cosas que conviene saber:
   el encargo se queda escrito en `ajuste` y la red se abre sola en la siguiente sesión. El visor lo dice
   por registro y en la pastilla.
 
-Sin Qt instalado la ventana simplemente no se compila (`cmake -DODYSSEY3D_UI=OFF` o sin `Qt6Widgets`) y
+Sin Qt instalado la ventana simplemente no se compila (`cmake -DODYSSEYVK_UI=OFF` o sin `Qt6Widgets`) y
 todo lo demás —visor, hub, verbos `ctl`— queda igual.
 
 ## Cuál es el indicador de la esquina
 
-En modo 3D se dibuja un pequeño cuadrado arriba a la izquierda: **verde** = lente y scaler
-activos; **naranja** = sólo uno de los dos; **rojo** = ninguno (no hay 3D).
+**Ya no hay cuadrado.** Desde v0.57 se quitó de la pastilla el cuadrito de color de arriba a la
+izquierda (verde/naranja/rojo según lente y scaler) y también el aviso escrito de «clic fuera de la
+pastilla manda sobre el vídeo de atrás». El estado del hardware se sigue diciendo, pero solo con
+texto, arriba de la pastilla: `lente y scaler activos`, `hardware parcial` o `sin lente ni scaler`
+(en modo de legado, `lente activa` / `sin lente`, porque ahí no se consulta el scaler). Si hace falta
+el detalle completo, `odysseyvk ctl estado` o `tail -f ~/.local/state/odysseyvk/estado`.
 
 ## La interfaz (pastilla con ratón)
 
@@ -432,7 +474,8 @@ de flecha visible y controlables con el ratón:
   curvas son la pista y la bola del interruptor:
   * **interruptor ON/OFF del 3D** (`Ctrl+Shift+1`): pista verde con la bola a la izquierda y la letra
     `ON` cuando la trama está puesta, pista gris con la bola a la derecha y `OFF` cuando está apagada.
-    Se pica en cualquier punto de la pista, no solo en la bola;
+    Se pica en cualquier punto de la pista, no solo en la bola. Desde v0.57 la pista mide **112 px de
+    ancho** (antes 130), que es lo que gastan la bola de 26 px y la letra;
   * debajo, escrito, `Ctrl+Shift+F1  oculta o muestra la pastilla`;
   * **3D Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — desplaza la separación de las dos vistas;
   * **3D Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
@@ -442,14 +485,24 @@ de flecha visible y controlables con el ratón:
     vista`. `T` deja de seguir la cara y vuelve a la posición de fábrica. Hubo un deslizador de ángulo de
     −15° a +15° (v0.31) para enfocar el relieve sin moverse; se quitó en v0.34: hacía duplicado con lo
     que mide la cámara y lo que se quería era el comportamiento de siempre.
-  * un punto de estado: verde = lente y scaler activos, naranja = uno de los dos, rojo = ninguno.
+  * escrito arriba de la pastilla, el estado del hardware: `lente y scaler activos`, `hardware parcial`
+    o `sin lente ni scaler` (en v0.57 se quitó el cuadrito de color que había antes).
 * aviso abajo a la derecha, casi negro, con tres teselas (**Lado a lado**, **Arriba y abajo**,
   **2D plano**) y la casilla «no volver a preguntar», que es lo que manda el servicio cuando
   detecta un vídeo a pantalla completa.
 
+**La pastilla en modo de legado** (v0.57) lleva solo lo de verdad se usa ahí: el interruptor
+ON/OFF, los dos deslizadores reetiquetados como **3D Salida** y **Plano de apoyo**, la fila
+Facetracking y la nota corta `Tab  entrega la pantalla`. No hay botón de red ni aviso de `Tab` largo,
+y el texto del hardware habla solo de la lente (`lente activa` / `sin lente`). Medido con
+`odysseyvk ctl hud --w 1440 --h 900 [--legado]`: la pastilla pasa de **824x134 px a 648x134 px**, los
+vértices de la interfaz de **2784 a 2580** y las casillas de ratón del botón de red de **1458 a 0**;
+los deslizadores quedan en x = 1110 y x = 1260 (en el modo completo, x = 1116 y x = 1266), con 923
+casillas cada uno en los dos modos.
+
 La pastilla se calcula en un lienzo virtual de 1080 px de alto y se escala con la altura del panel,
 así que conserva las proporciones de la aplicación oficial a 3840x2160. Se apaga arrancando con
-`--sin-interfaz`, o en cualquier momento con `Ctrl+Shift+F1` (`odyssey3d ctl capa ocultar` si el
+`--sin-interfaz`, o en cualquier momento con `Ctrl+Shift+F1` (`odysseyvk ctl capa ocultar` si el
 teclado se lo quedó otra ventana). Las teclas finas de alineado (`3`, `F`, flechas, `RePag`…)
 siguen funcionando igual.
 
@@ -475,10 +528,10 @@ es 2× alto, se intenta la vía calibrada; si no, la de la cara).
 Para comprobarlo sin sentarse delante:
 
 ```
-odyssey3d ctl track --mono-simulacro              # la cuenta, sin cámara: debe decir "la cuenta cuadra"
-odyssey3d ctl track --dev /dev/video0 --segundos 8  # en vivo: cara si · panel x y z en cm
-odyssey3d ctl track --foto cuadro.jpg --dump anotado.jpg   # un cuadro guardado, sin tocar la cámara
-odyssey3d ctl track --segundos 5 --volcar-crudo /tmp/ab     # vuelca cuadro crudo + anotado + A/B
+odysseyvk ctl track --mono-simulacro              # la cuenta, sin cámara: debe decir "la cuenta cuadra"
+odysseyvk ctl track --dev /dev/video0 --segundos 8  # en vivo: cara si · panel x y z en cm
+odysseyvk ctl track --foto cuadro.jpg --dump anotado.jpg   # un cuadro guardado, sin tocar la cámara
+odysseyvk ctl track --segundos 5 --volcar-crudo /tmp/ab     # vuelca cuadro crudo + anotado + A/B
 ```
 
 El sondeo en vivo cierra con la cuenta de por qué no salió la pose, que son tres cosas distintas:
@@ -535,9 +588,9 @@ se ve hundido o el relieve de una zona con mucha letra se corta, suéltalos con 
 Para ajustar los umbrales sin sentarse delante del panel (con una foto del `--volcado`, o cualquiera):
 
 ```
-odyssey3d texto-detect foto.ppm                                  # que cree que es texto, en ASCII
-odyssey3d texto-detect foto.ppm --mapa mapa.pgm --plano 0.45     # y como queda el mapa
-ODYSSEY3D_TEXTO_CONTRASTE=45 ODYSSEY3D_TEXTO_FINO=0.20 odyssey3d texto-detect foto.ppm
+odysseyvk texto-detect foto.ppm                                  # que cree que es texto, en ASCII
+odysseyvk texto-detect foto.ppm --mapa mapa.pgm --plano 0.45     # y como queda el mapa
+ODYSSEYVK_TEXTO_CONTRASTE=45 ODYSSEYVK_TEXTO_FINO=0.20 odysseyvk texto-detect foto.ppm
 ```
 
 Con `--mapa` escribe `mapa-apoyado.pgm` y dice cuántos puntos movió y cuánto; sin él sólo imprime la
@@ -574,16 +627,16 @@ Sobre X11 no hay regiones de entrada: el visor se queda los clics y lo avisa
 * **El servicio vigila la ventana.** Si hay una sesión abierta y su ventana aparece minimizada sin que `Tab`
   la haya entregado, el servicio le ordena al compositor que la devuelva
   (`[ventana] el gestor minimizo el visor: lo devolvemos`). El visor anuncia sus minimizaciones voluntarias
-  escribiendo `~/.local/state/odyssey3d/entregada` con su número de proceso —mientras ese proceso viva, el
+  escribiendo `~/.local/state/odysseyvk/entregada` con su número de proceso —mientras ese proceso viva, el
   servicio deja la ventana escondida todo el tiempo que quieras—. Esto es lo que corta el caso de «la imagen se
   esfumó y el monitor se quedó en malla 3D»: la trama vuelve, o se sale con `ESC` y queda todo restaurado.
 
 Si el foco lo tiene el vídeo, `PB` no le llega al visor (el teclado se lo queda la ventana activa). Para que la
 tecla funcione desde cualquier ventana, ata un atajo global: **Ajustes del sistema → Atajos de teclado → Añadir
 nueva… → acción personalizada**, con nombre «traer la pastilla», comando
-`/usr/local/bin/odyssey3d ctl aparece`, y como disparador pulsar `Pausa`. Este Protocolo de KWin no trae orden
+`/usr/local/bin/odysseyvk ctl aparece`, y como disparador pulsar `Pausa`. Este Protocolo de KWin no trae orden
 de activar ventanas, así que la ventana vuelve a la vista pero sin el foco; un clic en la pastilla devuelve el
-mando al visor. Por consola se prueba con `odyssey3d ctl aparece`, y se puede jugar con el estado de cualquier
+mando al visor. Por consola se prueba con `odysseyvk ctl aparece`, y se puede jugar con el estado de cualquier
 ventana en `ctl ventana [minimizar|aparecer|sobre|debajo|libre|salida DP-4] --uuid …`.
 
 ### El visor vuelve delante del vídeo y sin gráficos rotos (desde v0.24)
@@ -599,7 +652,7 @@ trozos sueltos. Son dos cosas distintas, y cada una tiene su arreglo.
 * **Los gráficos rotos.** GLFW no se entera en Wayland de que la ventana fue minimizada, así que el visor seguía
   presentando cuadros contra un intercambio sin superficie; al volver, la ventana estaba achicada y en otra
   salida (en el registro: 3840×2160 → 2560×1440 → 2015×869) y la trama dejaba de ser pixel a pixel. El servicio
-  escribe `~/.local/state/odyssey3d/ventana` con `oculta`/`visible` y su reloj; con `oculta` el visor **deja de
+  escribe `~/.local/state/odysseyvk/ventana` con `oculta`/`visible` y su reloj; con `oculta` el visor **deja de
   trazar**, y al volver pide la pantalla completa en su salida,
   rehace el intercambio y rearma la captura. El panel solo se devuelve a 2D si el servicio dejó de escribir la
   marca (hub caído); mientras el servicio respire, la ventana vuelve sola y el monitor no parpadea 3D→2D→3D.
@@ -625,10 +678,10 @@ Para ver lo que ve el compositor, sin adivinar: `ctl salidas` (nombres y rectán
 queda esperando (sin ventana, sin consumir GPU):
 
 ```sh
-systemctl --user status odyssey3d-serve      # debe decir "active (running)"
-journalctl --user -u odyssey3d-serve -f      # ver lo que hace en vivo
-systemctl --user stop odyssey3d-serve        # pausarlo
-systemctl --user edit odyssey3d-serve        # cambiarlo si hace falta
+systemctl --user status odysseyvk-serve      # debe decir "active (running)"
+journalctl --user -u odysseyvk-serve -f      # ver lo que hace en vivo
+systemctl --user stop odysseyvk-serve        # pausarlo
+systemctl --user edit odysseyvk-serve        # cambiarlo si hace falta
 ```
 
 Qué hace: escucha `org_kde_plasma_window_management` de KWin; cuando una ventana pasa a **pantalla
@@ -637,7 +690,7 @@ Va en una capa `overlay` de `zwlr_layer_shell_v1`, así que **se ve por encima d
 completa**, cosa que las notificaciones de KDE no logran (KWin las dibuja detrás, y con «No molestar»
 ni siquiera aparecen). Si el compositor no expone ese protocolo se vuelve al aviso de KDE. Al pulsar un
 botón lanza
-`odyssey3d capture3d --uuid …`, que pone lente + scaler + modo del panel y trama en 3D el
+`odysseyvk capture3d --uuid …`, que pone lente + scaler + modo del panel y trama en 3D el
 fotograma que captura el propio compositor (**DMA-BUF** de KWin → imagen Vulkan, sin copia por
 CPU). El botón **2D plano no lanza nada**: deja el vídeo tal cual (sin lente, sin scaler y sin cambiar
 el modo del panel) y, si había una sesión 3D abierta, la cierra devolviendo el panel a su modo normal.
@@ -654,7 +707,7 @@ trama y la pantalla se veía otra vez en 2D (`ctl apilamiento` lo comprueba: el 
 abajo). Al terminar la sesión le quita esa marca y el vídeo vuelve a su sitio. Si el visor se muere de
 golpe (o se detiene el servicio), el servicio recupera el panel con la copia que quedó guardada.
 
-Se configura en `~/.config/odyssey3d/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
+Se configura en `~/.config/odysseyvk/serve.conf`: `ignore` (aplicaciones que nunca se ofrecen),
 `espera` (segundos que queda la tarjeta), `modo` (`ask`, `sbs`, `tb`, `flat`, `conv`), `red` (en qué
 GPU corre la red del conversor), `cada` (cada cuántos fotogramas se calcula la profundidad),
 `rastreo` (`si` para que la cámara IR del monitor siga tus ojos y la trama se recalcule; `no` para la
@@ -666,7 +719,7 @@ y `cara` (ancho de cara de oreja a oreja en milímetros, por defecto 150); para 
 redes de profundidad se eligen con `modelo` (botón **1**, la de Samsung: cualquier `.onnx` llamada
 `mde_*` o `disp_*`) y `nuestra` (botón **2**, la nuestra: `depth_anything_v2_small.onnx`); en el visor
 se cambia de una a otra con el botón de la pastilla o con las teclas sueltas `1` y `2` sin cerrar nada,
-y la elección queda en `~/.config/odyssey3d/red-elegida`, aunque **al arrancar se vuelve siempre a la
+y la elección queda en `~/.config/odysseyvk/red-elegida`, aunque **al arrancar se vuelve siempre a la
 de Samsung** (desde v0.34): el archivo recuerda tu último cambio, pero el arranque empieza por la 1.
 
 Y para la trama, cuatro claves más (desde v0.40), que son lo mismo que se mueve en marcha con las
@@ -766,7 +819,7 @@ misma orden atómica** del cambio de modo y se devuelve al salir (`[panel] DP-7 
 DP-7 devuelta a 2560,624`). Sin esto la zona derecha del panel se veía duplicada en las dos pantallas y KWin
 le cambiaba el tamaño a la ventana del vídeo a media sesión. `ctl panel status` imprime el sitio de cada
 salida y `ctl panel apply --dry` imprime el comando completo, con las posiciones incluidas. Si no quieres que
-se mueva nada: `--sin-despejar` en el visor o `ODYSSEY3D_LAYOUT=0`. En este equipo el panel ya quedó **a
+se mueva nada: `--sin-despejar` en el visor o `ODYSSEYVK_LAYOUT=0`. En este equipo el panel ya quedó **a
 escala 1 de forma permanente** y el otro monitor a la derecha, así que en sesión normal no cambia nada.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
@@ -774,18 +827,18 @@ línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de g
 el instalador eran de otra unidad: midiendo, la media del mapa A coincidía más o menos (31 frente
 a 23 niveles) pero la correlación era 0,39 y había zonas con 237 niveles de diferencia —0,93
 ciclos de fase, casi un periodo entero de trama en una esquina—. Ahora el visor busca
-`~/.config/odyssey3d/calib` **antes** que los instalados, y en la salida dice de dónde salieron y
+`~/.config/odysseyvk/calib` **antes** que los instalados, y en la salida dice de dónde salieron y
 cómo son:
 
 ```
-[correccion] de /home/rodolfo/.config/odyssey3d/calib/3DStackCorrection_A.png y …B.png
+[correccion] de /home/rodolfo/.config/odysseyvk/calib/3DStackCorrection_A.png y …B.png
 [correccion] mapas 480x270 y 480x270
 [correccion] mapa A: 0..255 media 23,5
 [correccion] mapa B: 117..136 media 127,2
 ```
 
 Si esos números no coinciden con los de tu unidad, tienes los mapas equivocados: saque los tuyos
-en Windows de `C:\ProgramData\Simulated Reality\Devices\` y ponlos en `~/.config/odyssey3d/calib/`.
+en Windows de `C:\ProgramData\Simulated Reality\Devices\` y ponlos en `~/.config/odysseyvk/calib/`.
 
 **El botón 1 con la gráfica justa** (arreglado en v0.33): la red de Samsung **solo** arranca en la
 gráfica. Pedirla por CPU no llega a crear la sesión —medido el 24-nov con `mde_large.onnx`: más de
@@ -793,8 +846,8 @@ gráfica. Pedirla por CPU no llega a crear la sesión —medido el 24-nov con `m
 VRAM llena mataba el visor y dejaba el panel en 3D sin vídeo. Ahora, si en ninguna tarjeta hay
 1550 MB libres (1100 MB que pide la red + 450 de colchón), la red de Samsung se rechaza con un aviso
 claro y **sigue funcionando la red anterior**; al arrancar, si la red pedida no abre se prueba la
-nuestra, que sí va por CPU (1 s en abrir y 190 ms por mapa). Para experimentar: `ODYSSEY3D_GPU=-1`
-fuerza la CPU y `ODYSSEY3D_GPU=1` obliga a la segunda tarjeta.
+nuestra, que sí va por CPU (1 s en abrir y 190 ms por mapa). Para experimentar: `ODYSSEYVK_GPU=-1`
+fuerza la CPU y `ODYSSEYVK_GPU=1` obliga a la segunda tarjeta.
 
 Si se
 marca la casilla de la tarjeta y se pulsa un botón, se guarda una línea `auto = app:modo` en ese
@@ -803,13 +856,13 @@ mano). `conv` es el vídeo normal pasado a 3D: con `auto = zen:conv` el navegado
 conversión. Si no aparece la
 tarjeta:
 
-1. `systemctl --user is-active odyssey3d-serve` → tiene que estar `active`;
+1. `systemctl --user is-active odysseyvk-serve` → tiene que estar `active`;
 2. la ventana tiene que ser **pantalla completa de verdad** (no maximizada) y su `app_id` no debe
    estar en `ignore` (los reproductores bajo XWayland aparecen como `xwayland` y están ignorados
    por defecto: quítalos de la lista si quieres usarlos);
 3. en `journalctl` debe aparecer `[serve] tarjeta puesta por <app_id> | <título>` y luego
    `[serve] tarjeta -> <modo>`; para probar la tarjeta sin ningún vídeo:
-   `odyssey3d ctl overlay --segundos 8` (acepta `--dump CARDEN.png` para volcarla a un archivo).
+   `odysseyvk ctl overlay --segundos 8` (acepta `--dump CARDEN.png` para volcarla a un archivo).
 
 Si durante una sesión **la imagen se queda congelada**, el visor lo dice en el registro y eso permite
 saber de quién es la culpa:
@@ -820,7 +873,7 @@ saber de quién es la culpa:
   flujo solo hasta cuatro veces;
 * `la ventana del video cerro` → la sesión se cierra y el panel vuelve a 2D.
 
-Para mirar el flujo sin abrir nada encima: `odyssey3d ctl flujo --uuid <id> --segundos 10` imprime
+Para mirar el flujo sin abrir nada encima: `odysseyvk ctl flujo --uuid <id> --segundos 10` imprime
 cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25).
 
 > KWin 6.8 sólo expone el portal propio de KDE (`zkde_screencast_unstable_v1`, versión 6). Es lo
@@ -831,7 +884,7 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
 * Capturar **otra aplicación** sólo es posible por el portal de captura de KDE
   (`zkde_screencast_unstable_v1` + PipeWire), que es inestable entre versiones de Plasma: si
   KWin cambia el interfaz, `serve` deja de ver los fotogramas (lo avisa
-  `journalctl --user -u odyssey3d-serve`). El reproductor interno (`play`, basado en libmpv) sigue
+  `journalctl --user -u odysseyvk-serve`). El reproductor interno (`play`, basado en libmpv) sigue
   siendo la ruta más directa; mpv por ahora se dibuja con OpenGL aunque su fotograma se trama en
   Vulkan.
 * El **seguimiento de mirada está activo** si en `serve.conf` pone `rastreo = si` (el hub lo avisa al
@@ -851,13 +904,13 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   calibración de fábrica que lee `SR+CALCAM`), pero necesita dos cosas de la cámara:
   * **la calibración en disco**. Si falta, el log dice `calibracion: sin SR+CALCAM.bin en ...` y no
     llega ningún fotograma (`0/0 cuadros`), aunque la cámara esté bien. Se saca del propio monitor con
-    `odyssey3d ctl calib --out /usr/local/share/odyssey3d/calib` (habla con `/dev/ttyACM0`, no toca la
+    `odysseyvk ctl calib --out /usr/local/share/odysseyvk/calib` (habla con `/dev/ttyACM0`, no toca la
     pantalla) y deja `SR+CALCAM.bin`, `SR+CALET.bin` y `SR+CAL3D.bin`.
   * que le contesten los controles UVC: si `ctl camera` falla con `VIDIOC_S_FMT ... Input/output
     error`, en `dmesg` verás `Failed to set UVC probe control : -110`: la interfaz de flujo de la
     cámara dejó de responder a los controles UVC. Suele empezar por una suspensión USB (el kernel la
     suspenda a los 2 s y el resume no llega detras de los hubs del cable del monitor), por eso la regla
-    `udev/70-odyssey-3d.rules` pone `power/control=on` en la cámara y en la lente. `odyssey3d doctor`
+    `udev/70-odysseyvk.rules` pone `power/control=on` en la cámara y en la lente. `odysseyvk doctor`
     y `ctl camera` dicen el estado (`control=... estado=...`).
     Desde v0.44 el hilo de rastreo **reabre el dispositivo solo** si dejan de llegar fotogramas durante
     3 s, y suelta el flujo si no puede arrancar (un flujo montado y sin lector es lo que deja el
@@ -877,25 +930,35 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   volverá a 1.5.
 * `kscreen-doctor` de Plasma 6 no expone VRR: si lo tienes activado, desactívalo en
   Ajustes → Pantalla antes del 3D (el entrelazado con tasa variable produce bandas).
+* **El modo de legado (v0.57) solo existe en la ruta Vulkan.** Con `--gl` la bandera `--legado` se
+  acepta y no hace nada; la hoja *Edición avanzada* de la ventana tampoco se apaga ahí, porque el
+  visor OpenGL no escribe `legado` en `estado`. Queda pendiente, igual que los **16 formatos estéreo**
+  que usa el cliente de referencia (aquí seguimos con lado a lado, arriba y abajo y 2D plano) y las
+  curvas exactas con las que aquel cliente convierte el número de su interfaz en uniformes. Lo que sí
+  está copiado y medido: los uniformes fijos `r = 0,0128535`, `m = 0,05`, `s = 10`
+  (`Sources/OdysseyGL/Renderer.cpp:68-71`) y el par `minimumDepth: 200` / `maximumError: 40` al
+  triangular la cara (`Sources/OdysseyCore/StereoTracking.swift:82`). Y una diferencia **deliberada**:
+  aquí el modo de legado **sí** sigue mandando el comando del scaler del monitor, porque en Linux sin
+  ese comando el panel no entra en 3D.
 * La autenticación de la lente usa la clave fija del firmware y **persiste hasta apagar el
   monitor**, así que `ctl lens auth` basta una vez por sesión de encendido.
 
 ## Diagnóstico
 
 ```sh
-odyssey3d doctor                      # qué ve, qué toca, qué falta
-odyssey3d weave [--solid] [--out f.png]  # escribe un PNG con la trama (no toca el panel)
-odyssey3d attrs                       # atributos de la trama (para depurar el modelo)
-odyssey3d ctl hud --w 1920 --h 1080   # prueba la interfaz sin abrir ventana ( atlas, raton )
-odyssey3d ctl estado                  # qué red, qué tarjeta y qué números está usando el visor vivo
-odyssey3d ctl ajuste fase 0,004       # mandarle un número al visor sin tocar el panel
-odyssey3d ctl preferencias            # la cuenta de lo que se fue cambiando (preferencias.log)
-odyssey3d ctl escritorio estado       # qué sesión tiene el vigilante: ninguna, de vídeo o del escritorio
-odyssey3d ctl capa estado             # pastilla puesta u oculta; `ctl 3d estado`, la trama
-odyssey3d ctl capture-gl --out p.png  # captura real de la ventana, para ver la interfaz sin mirar la pantalla
-odyssey3d-ajustes --prueba            # la ventana sin pantalla: redes con su marca, estado, vigilante, camaras y su vista
-odyssey3d ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
-odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
+odysseyvk doctor                      # qué ve, qué toca, qué falta
+odysseyvk weave [--solid] [--out f.png]  # escribe un PNG con la trama (no toca el panel)
+odysseyvk attrs                       # atributos de la trama (para depurar el modelo)
+odysseyvk ctl hud --w 1920 --h 1080   # prueba la interfaz sin abrir ventana ( atlas, raton )
+odysseyvk ctl estado                  # qué red, qué tarjeta y qué números está usando el visor vivo
+odysseyvk ctl ajuste fase 0,004       # mandarle un número al visor sin tocar el panel
+odysseyvk ctl preferencias            # la cuenta de lo que se fue cambiando (preferencias.log)
+odysseyvk ctl escritorio estado       # qué sesión tiene el vigilante: ninguna, de vídeo o del escritorio
+odysseyvk ctl capa estado             # pastilla puesta u oculta; `ctl 3d estado`, la trama
+odysseyvk ctl capture-gl --out p.png  # captura real de la ventana, para ver la interfaz sin mirar la pantalla
+odysseyvk-ajustes --prueba            # la ventana sin pantalla: redes con su marca, estado, vigilante, camaras y su vista
+odysseyvk ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
+odysseyvk play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
                                       # guarda chk-trama.png y chk-origen.png y sale
 ```
 
@@ -912,12 +975,12 @@ problema son los números de la trama (contraste, pendiente del filtro o un núm
 captura ni la red. Para verlo sin tocar el panel:
 
 ```sh
-odyssey3d test --windowed --no-panel --no-lens --no-scaler --dump /tmp/prueba
+odysseyvk test --windowed --no-panel --no-lens --no-scaler --dump /tmp/prueba
 ```
 
 Si aparece `[aviso] algo pise los numeros de la trama entre cuadros` hay una escritura fuera de su
 sitio: di qué campo dice el aviso y se busca ahí. Para seguir el paso del cálculo dentro del
-sombreador, `ODYSSEY3D_PRUEBA=1..11` saca en claro de pantalla una pieza concreta del cálculo (1 ojo
+sombreador, `ODYSSEYVK_PRUEBA=1..11` saca en claro de pantalla una pieza concreta del cálculo (1 ojo
 izquierdo, 2 ojo derecho, 3 coordenada 2D, 4 peso del filtro, 5 crosstalk, 6 fase base, 7 cuadrícula,
 8 esquinas, 9 correcciones y paso, 10 y 11 la mezcla); `0` o sin la variable es lo normal. Para ver
 los números que salen hacia la tarjeta, `ODYSSEY_UBO=1` imprime una línea `[ubo …]` por cuadro.
@@ -944,7 +1007,7 @@ Si se te ha quedado vertical y no quieres andar por los ajustes de KDE:
 
 ```sh
 kscreen-doctor output.DP-4.rotation.none     # sustituye DP-4 por el nombre de tu salida
-odyssey3d ctl panel status                   # debe decir "rotacion: 1 (none)"
+odysseyvk ctl panel status                   # debe decir "rotacion: 1 (none)"
 ```
 
 ### Se ve sólo la rejilla del panel, sin el vídeo
@@ -952,7 +1015,7 @@ odyssey3d ctl panel status                   # debe decir "rotacion: 1 (none)"
 Síntoma: entras en 3D y no aparece el vídeo, sólo la trama del panel; o al salir se ven unos
 segundos horribles antes de que se cierre.
 
-Causa, medida el 23-nov en el journal de `odyssey3d-serve`:
+Causa, medida el 23-nov en el journal de `odysseyvk-serve`:
 
     [vulkan] intercambio 3840x2160 · 3 imágenes
     [conversor] no hay 1100 MB libres en ninguna grafica: la red se hara con la CPU, mas despacio
@@ -980,7 +1043,7 @@ Qué se cambió en v0.30:
   deja de trazar (antes la trama se quedaba 2,5 s rayada sobre el escritorio) y la espera de cierre
   baja de 2,5 s a 1,2 s.
 
-Para comprobarlo: `journalctl --user -u odyssey3d-serve | grep conversor` y `nvidia-smi`. Con las dos
+Para comprobarlo: `journalctl --user -u odysseyvk-serve | grep conversor` y `nvidia-smi`. Con las dos
 tarjetas por debajo de ~1,6 GB libres el conversor se queda apagado a propósito.
 
 ### Se congela el vídeo del navegador mientras el visor está encima
@@ -1000,7 +1063,7 @@ deja de producir fotogramas, y sin fotogramas nuevos no hay nada que entrelazar.
 visor**: con mpv, VLC o reproductores parecidos el flujo no se corta nunca, y con vídeos locales en el
 navegador (1080p y 4K60 probados) tampoco.
 
-Antes de tocar nada del navegador, comprobar quién está roto: `odyssey3d ctl flujo --uuid <id> --segundos 5`
+Antes de tocar nada del navegador, comprobar quién está roto: `odysseyvk ctl flujo --uuid <id> --segundos 5`
 mide el flujo con una conexión nueva. En KWin 6.8 esa medición dio **65,6 fotogramas por segundo** en una
 ventana tapada por completo por el visor, así que si el aviso aparece con `flujo: sin estado` o
 `flujo: paused` el cortado es el nuestro, no el del navegador (así estaba el caso arreglado en v0.24).
@@ -1008,8 +1071,8 @@ ventana tapada por completo por el visor, así que si el aviso aparece con `fluj
 Se comprueba en dos segundos, sin abrir la capa:
 
 ```sh
-odyssey3d ctl windows                                  # localiza la ventana del vídeo
-odyssey3d ctl flujo --uuid '{...}' --segundos 5        # fotogramas por segundo que manda KWin
+odysseyvk ctl windows                                  # localiza la ventana del vídeo
+odysseyvk ctl flujo --uuid '{...}' --segundos 5        # fotogramas por segundo que manda KWin
 ```
 
 Si marca 0 fotogramas/s con el vídeo sonando, el que dejó de pintar es el navegador. Tiene arreglo del lado
@@ -1024,7 +1087,7 @@ del navegador:
   es el que hay que dejar.
 - **Chrome o Chromium**: arrancarlos con `--disable-gpu-vsync` (sin probar en esta máquina).
 - **mpv, VLC, haruna, toc**: no necesitan tocar nada. Recomendado para ver en 3D:
-  `odyssey3d play archivo.mp4` usa mpv y el flujo se mantiene (60-63 f/s con el hardware en marcha).
+  `odysseyvk play archivo.mp4` usa mpv y el flujo se mantiene (60-63 f/s con el hardware en marcha).
 
 Lo segundo que hace el navegador es **pausar el vídeo él solo** al cambiar el modo del monitor o al quedar
 tapado: el flujo de KWin sigue llegando (se midieron 51 f/s) pero la imagen no avanza. Para no depender de
@@ -1035,7 +1098,7 @@ Chrome publican un reproductor en la sesión):
   video (Paused): se reanuda solo`);
 - **`P` o espacio** pausan y reanudan el vídeo sin quitar la capa (hace falta que el visor tenga el foco:
   un clic en la pastilla se lo devuelve);
-- desde una terminal, en cualquier momento: `odyssey3d ctl video status|pause|play|toggle`.
+- desde una terminal, en cualquier momento: `odysseyvk ctl video status|pause|play|toggle`.
 
 Si hace falta usar el ratón sobre el reproductor (cambiar la calidad, buscar en la línea de tiempo), desde
 v0.22 basta con pinchar **fuera de la pastilla**: el clic atraviesa el visor y lo recibe la ventana de atrás,
@@ -1068,7 +1131,7 @@ Hub de Dimenco y el port X11, así que se deja tal cual.
 monitor en vertical al salir). No cambia nada: escribe una instantánea falsa y mira el comando que
 `ctl panel restore --dry` generaría.
 
-`odyssey3d ctl hud --w 1920 --h 1080` comprueba la interfaz sin abrir ventana: construye el atlas
+`odysseyvk ctl hud --w 1920 --h 1080` comprueba la interfaz sin abrir ventana: construye el atlas
 de fuentes, cuenta los vértices y barre la pantalla entera de 2 px para comprobar que el ratón
 golpea el botón, el deslizador o la tesela que toca, y luego mueve los deslizadores y los botones.
 
@@ -1076,15 +1139,15 @@ Trama Vulkan contra trama OpenGL, mismo patrón y mismos parámetros (`--cpu-pat
 fuente sea idéntica en las dos rutas):
 
 ```sh
-./build/odyssey3d weave --w 1350 --h 900 --cpu-patron --out /tmp/glc      # OpenGL
-./build/odyssey3d test --windowed --no-panel --no-lens --no-scaler \
+./build/odysseyvk weave --w 1350 --h 900 --cpu-patron --out /tmp/glc      # OpenGL
+./build/odysseyvk test --windowed --no-panel --no-lens --no-scaler \
     --w 900 --h 600 --sin-interfaz --dump /tmp/vkn                        # Vulkan (leido de GPU)
 python3 -c "d=[[abs(a-b) for a,b in zip(x,y)] for x,y in zip(__import__('PIL.Image',fromlist=['x']).open('/tmp/glc').convert('RGB').load(),__import__('PIL.Image',fromlist=['x']).open('/tmp/vkn-trama-vulkan.png').convert('RGB').load())]"
 ```
 
 Las dos tramas coinciden (diferencia media ~10/255, concentrada en los mapas de corrección).
 
-También se puede mirar la trama a mano: `odyssey3d weave --solid` produce una imagen 3840x2160
+También se puede mirar la trama a mano: `odysseyvk weave --solid` produce una imagen 3840x2160
 en la que la mitad izquierda del archivo es roja y la derecha verde; midiendo con
 autocorrelación sale un paso de **1.806 px** y una inclinación de **0.29 px por fila**, que son
 los valores nominales del G90XF.
@@ -1111,8 +1174,10 @@ src/wm.*       vigilancia de ventanas a pantalla completa (plasma-window-managem
 src/capture.*  fotogramas de KWin por zkde-screencast + PipeWire (DMA-BUF)
 src/notify.*   avisos de KDE por el portal de notificaciones (sd-bus)
 src/vkprobe.*  diagnóstico: importar un DMA-BUF y dibujarlo en Vulkan
-systemd/       unidad `odyssey3d-serve.service` (arranca con la sesion)
-config/        `serve.conf`, plantilla de ~/.config/odyssey3d/serve.conf
+systemd/       unidad `odysseyvk-serve.service` (arranca con la sesion)
+assets/        icono de la app: `icono-odysseyvk.png` (608x608) y las ocho tallas de `hicolor/`
+docs/          `odyssey-3d-hub-ui.md` (la interfaz oficial analizada) y `metodo-legado.md` (el modo de legado)
+config/        `serve.conf`, plantilla de ~/.config/odysseyvk/serve.conf
 src/main.*     subcomandos y banderas
 tools/         verificación numérica de la trama contra el oráculo
 calib/         mapas de corrección del panel (3DStackCorrection_A/B.png)

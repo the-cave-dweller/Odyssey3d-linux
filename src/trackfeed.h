@@ -55,7 +55,7 @@ public:
 
   /* Copia el ultimo cuadro tal como lo solto la camara (JPEG crudo) y limpia la marca. Falso si no
      hay ninguno o si la camara no manda MJPG. Lo usa el visor para volcar una vista previa en
-     ~/.local/state/odyssey3d/camara.jpg y que la ventana de ajustes la ensene sin tener que abrir
+     ~/.local/state/odysseyvk/camara.jpg y que la ventana de ajustes la ensene sin tener que abrir
      ella la camara (que estaria ocupada). */
   bool ultimoCuadro(std::vector<uint8_t> *out);
 

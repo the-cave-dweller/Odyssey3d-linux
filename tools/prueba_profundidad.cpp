@@ -1,7 +1,7 @@
 /* prueba_profundidad.cpp — comprobar que el modelo de profundidad cabe en el presupuesto de
    cuadros: mide cuanto tarda una inferencia con la tarjeta NVIDIA y con la CPU.
    g++ -O2 tools/prueba_profundidad.cpp -I/usr/include/onnxruntime -lonnxruntime -o /tmp/pp
-   /tmp/pp ~/.local/share/odyssey3d/modelos/depth_anything_v2_small.onnx [cuda|cpu]           */
+   /tmp/pp ~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx [cuda|cpu]           */
 #include <onnxruntime_cxx_api.h>
 
 #include <chrono>
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   const bool cuda = argc < 3 || std::strcmp(argv[2], "cuda") == 0;
-  Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "odyssey3d");
+  Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "odysseyvk");
   Ort::SessionOptions so{};
   so.SetIntraOpNumThreads(4);
   so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);

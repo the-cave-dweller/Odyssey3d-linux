@@ -12,7 +12,7 @@ layout(set = 0, binding = 1) uniform sampler2D uCorrA;  /* mapa de corrección A
 layout(set = 0, binding = 2) uniform sampler2D uCorrB;  /* mapa de corrección B (R8) */
 layout(set = 0, binding = 4) uniform sampler2D uDepth;  /* profundidad (R8G8: .r ojo izq, .g ojo der, 255 = cerca).
    Cada canal es el mismo mapa puesto ya en el sitio de destino de ese ojo y con el hueco que deja
-   el desplazamiento relleno; lo hace src/hoyos.cpp. Con ODYSSEY3D_HOYOS=0 los dos canales traen el
+   el desplazamiento relleno; lo hace src/hoyos.cpp. Con ODYSSEYVK_HOYOS=0 los dos canales traen el
    mapa en crudo y el resultado es el de la v0.35. */
 
 layout(set = 0, binding = 3) uniform WeaveParams {
@@ -132,7 +132,7 @@ void main()
     float rsq = inversesqrt(1.0 + dot(v3, v3));
     float base = v2.x * rsq - 2.0 * v2.y * (corrB - 0.5) + corrA;
 
-    /* Sonda de taller (ODYSSEY3D_PRUEBA, hueco tun6.w; 0 = normal, no cambia nada). Sirve para ver
+    /* Sonda de taller (ODYSSEYVK_PRUEBA, hueco tun6.w; 0 = normal, no cambia nada). Sirve para ver
        en que punto del calculo una imagen con contenido se vuelve una lama de un solo color:
        1 muestra del ojo izquierdo · 2 muestra del derecho · 3 la misma textura con la coordenada
        del pase 2D · 4 peso del filtro · 6 fase base · 7 campo v2 y base · 8 rampa v4 · 9 corrA,
@@ -163,7 +163,7 @@ void main()
            el canto se queda en su sitio en vez de babearse. CantoSuave es cuanto cambio de mapa por
            punto hace falta para no podar nada: por debajo de ahi el recorte cae en proportion, y el
            tope de 0,10 es que un canto nunca conserva menos de una decima del relieve. Viene por
-           tun5.w (ODYSSEY3D_CANTO); 0 significa el de fabrica. Ojo con la pareja: el relleno de huecos
+           tun5.w (ODYSSEYVK_CANTO); 0 significa el de fabrica. Ojo con la pareja: el relleno de huecos
            (src/hoyos.cpp) pone el mapa mas filo en el canto, y un mapa con mas filo hace que esta
            poda corte mas. CantoSuave bajo = canto con mas relieve; alto = canto mas quieto. */
         const float CantoSuave = P.tun5.w > 0.0 ? P.tun5.w : 0.004;
@@ -255,7 +255,7 @@ void main()
     if (P.tun6.w == 11.0) { o = vec4(Rp, 1.0); return; }
 
     vec3 outc;
-    /* Temblor de la propia fase (ODYSSEY3D_FASE_TEMBLOR, en ciclos; 0 = como antes).
+    /* Temblor de la propia fase (ODYSSEYVK_FASE_TEMBLOR, en ciclos; 0 = como antes).
        Con la pendiente de filtro de fabrica (10) el paso entre las dos vistas es casi un
        escalon, y sus armonicas caen por aliasing a 4,34 · 8,17 · 10,73 px de panel, o sea
        0,75 · 1,4 · 1,9 mm: unas franjas verticales finisimas por toda la pantalla, que se
@@ -265,7 +265,7 @@ void main()
     float jr = 0.0;
     if (P.tun6.x != 0.0)
         jr = (fract(sin(dot(floor(px), vec2(39.3467, 11.1355))) * 24634.6345) - 0.5) * P.tun6.x;
-    /* Rampa fina aparte (ODYSSEY3D_RAMPA_X / _Y, ciclos de porteadora por pixel de panel).
+    /* Rampa fina aparte (ODYSSEYVK_RAMPA_X / _Y, ciclos de porteadora por pixel de panel).
        Apretar o aflojar el paso de la rejilla escrita sin tocar lo demas. La rampa de la lente
        (v4) lleva metidos tambien los desfases entre los canales rojo, verde y azul, y escalarla
        entera con "paso" corre esos desfases y afloja un poco la inclinacion. Midiendo el cuadro

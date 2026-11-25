@@ -272,10 +272,10 @@ bool Panel::restore(const PanelState &st, std::string *err, const std::vector<Pl
 
 static std::string stateDir() {
   const char *xdg = std::getenv("XDG_STATE_HOME");
-  if (xdg && *xdg) return std::string(xdg) + "/odyssey3d";
+  if (xdg && *xdg) return std::string(xdg) + "/odysseyvk";
   const char *home = std::getenv("HOME");
   std::string base = (home && *home) ? std::string(home) : std::string(".");
-  return base + "/.local/state/odyssey3d";
+  return base + "/.local/state/odysseyvk";
 }
 
 static std::string snapshotPath() { return stateDir() + "/panel.state"; }

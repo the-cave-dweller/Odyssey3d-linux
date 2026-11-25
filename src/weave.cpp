@@ -1,4 +1,5 @@
 #include "weave.h"
+#include "util.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -47,7 +48,7 @@ void main(){
     float xt = ((1.0 + dot(v3, v3)) * v2.y*v2.y) * uXTalkDyn + uXTalkFac;
     xt = xt/(1.0 - xt);
     vec3 Lp = L - xt*dRL; vec3 Rp = R + xt*dRL;
-    /* Rampa fina de fase, igual para los tres canales (ODYSSEY3D_RAMPA_X / _Y, ciclos por pixel
+    /* Rampa fina de fase, igual para los tres canales (ODYSSEYVK_RAMPA_X / _Y, ciclos por pixel
        de panel). Mueve solo el paso de la rejilla escrita; los numeros y el por que estan en
        shaders/weave.frag y tools/paso_rejilla.py. El signo va al reves del ajuste que se busca en
        la porteadora medida: la que sale por la pantalla es el espejo de la escrita, asi que para
@@ -230,8 +231,8 @@ void Weave::draw(GLuint srcTex) {
   /* el visor real pasa la rampa por el bloque uniforme (src/vkweave.cpp); esta copia GL es el
      instrumento de laboratorio, asi que lee el mismo ajuste del entorno */
   {
-    static const float rx = [] { const char *e = std::getenv("ODYSSEY3D_RAMPA_X"); return e ? (float)std::atof(e) : 0.0f; }();
-    static const float ry = [] { const char *e = std::getenv("ODYSSEY3D_RAMPA_Y"); return e ? (float)std::atof(e) : 0.0f; }();
+    static const float rx = [] { const char *e = entornoOdyssey("ODYSSEYVK_RAMPA_X"); return e ? (float)std::atof(e) : 0.0f; }();
+    static const float ry = [] { const char *e = entornoOdyssey("ODYSSEYVK_RAMPA_Y"); return e ? (float)std::atof(e) : 0.0f; }();
     const float dx = rx + tune_.rampaDX, dy = ry + tune_.rampaDY;
     if (uRampaX_ >= 0) glUniform1f(uRampaX_, dx);
     if (uRampaY_ >= 0) glUniform1f(uRampaY_, dy);

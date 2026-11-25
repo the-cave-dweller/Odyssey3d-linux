@@ -170,7 +170,7 @@ struct WindowCapture::Impl {
   bool startPipeWire() {
     if (loop) return core != nullptr;
     initPipeWireOnce();
-    loop = pw_thread_loop_new("odyssey3d-captura", nullptr);
+    loop = pw_thread_loop_new("odysseyvk-captura", nullptr);
     if (!loop) {
       setNote("no se pudo crear el bucle de PipeWire");
       return false;
@@ -212,7 +212,7 @@ struct WindowCapture::Impl {
                                              PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_NODE_DONT_RECONNECT, "true",
                                              nullptr);
     if (!target.empty()) pw_properties_set(props, PW_KEY_TARGET_OBJECT, target.c_str());
-    pwStream = pw_stream_new(core, "odyssey3d", props);
+    pwStream = pw_stream_new(core, "odysseyvk", props);
     if (!pwStream) {
       pw_thread_loop_unlock(loop);
       setNote("no se pudo crear el flujo de PipeWire");

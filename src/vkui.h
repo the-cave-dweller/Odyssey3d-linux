@@ -7,7 +7,7 @@
    Desde v0.56 la pastilla es RECTA: sin esquinas redondeadas en el panel, los botones, las cajas
    del Facetracking ni las tarjetas del aviso. Unicas curvas: el propio interruptor ON/OFF (asi lo
    pidio Rodolfo, con su bola) y las cabecitas de los deslizadores. La fila de ocultar la pastilla
-   ya no existe como boton: se oculta y se muestra con Ctrl+Shift+F1 (o con `odyssey3d ctl capa`,
+   ya no existe como boton: se oculta y se muestra con Ctrl+Shift+F1 (o con `odysseyvk ctl capa`,
    que es la misma orden por fichero y sirve cuando el teclado lo tiene otra ventana). */
 #ifndef ODYSSEY_VKUI_H
 #define ODYSSEY_VKUI_H
@@ -37,6 +37,10 @@ public:
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
     bool redViva = false;  /* hay conversor abierto (si no, el boton de la red se apaga) */
+    /* Modo de legado: la pastilla se queda solo con lo que ese camino puede tocar (el 3D, la salida
+       y el plano de apoyo). Se cae el boton de la red, el deslizador de la profundidad del conversor y
+       los avisos de las teclas que alli no existen. La pastilla mide 648 px en vez de 824. */
+    bool legado = false;
     /* La fila de abajo de la pastilla: Facetracking. Solo la enseña el visor (el hub no
        rastrea), asi que la pastilla del hub no crece. No es un boton: el rastreo no se ofrece
        a encender ni a apagar, la pastilla dice con que camara se esta siguiendo la trama. */
@@ -91,6 +95,10 @@ public:
   float scale() const { return sc_; }
   const std::vector<HudVertex> &vertices() const { return v_; }
   int vertexCount() const { return (int)v_.size(); }
+  /* de cuanto es la pastilla que se dibujo en el ultimo `begin`: 824 de normal, 648 en modo de legado
+     (o menos si la ventana es angosta). Lo mide la prueba de `ctl hud`. */
+  float panelW() const { return panelW_; }
+  float panelH() const { return panelH_; }
   Hit hit(float mx, float my) const;
   void dragTo(Hit which, float mx);    /* arrastre sobre un control deslizante */
   void toggle3D();
@@ -176,6 +184,7 @@ private:
   /* sw3D_ es la pista del interruptor ON/OFF y swKnob_ la bola blanca de dentro (la bola es lo unico
      redondo de la pastilla: asi lo queria Rodolfo). btnOv_ ya no esta: ocultar la pastilla es tecla. */
   Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
+  float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
 };
 

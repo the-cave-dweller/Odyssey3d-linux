@@ -71,7 +71,7 @@ public:
   /* Palabra que acepta kscreen-doctor; nullptr si el valor no se reconoce. */
   static const char *rotationWord(int r);
   static bool isLandscape(int r) { return r == RotNone; }
-  /* Guarda / recupera el estado en ~/.local/state/odyssey3d/panel.state, para poder
+  /* Guarda / recupera el estado en ~/.local/state/odysseyvk/panel.state, para poder
      deshacer el cambio aunque el programa muera antes de restaurar. `otras` son los sitios
      originales de las demas salidas, para devolverlas a su lugar. */
   static bool saveSnapshot(const PanelState &st, std::string *path = nullptr, std::string *err = nullptr,

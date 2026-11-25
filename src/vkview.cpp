@@ -117,8 +117,8 @@ struct VkUi {
   int redPedida = 0;
   std::string rutaRed[3];    /* [1] y [2]: ruta .onnx de cada red; vacia = esa red no esta disponible */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
-  /* La ventana de ajustes (un proceso APARTE) y `odyssey3d ctl ajuste` escriben numeros y una ruta
-     .onnx en ~/.local/state/odyssey3d/ajuste; el bucle los lee de ahi. redRutaPedida es el cambio de
+  /* La ventana de ajustes (un proceso APARTE) y `odysseyvk ctl ajuste` escriben numeros y una ruta
+     .onnx en ~/.local/state/odysseyvk/ajuste; el bucle los lee de ahi. redRutaPedida es el cambio de
      modelo encargado, que se atiende con la red parada, igual que las teclas 1 y 2, y se queda
      encargado hasta que el conversor este encendido. */
   std::string redRutaPedida;
@@ -142,7 +142,7 @@ void printTuning(const VkUi &ui, const char *what) {
 
 /* ---- el canal de ajuste vivo -------------------------------------------------------------
    El visor se queda el teclado de la pantalla del panel, asi que los numeros solo se podian mover
-   con las teclas de esa ventana. La ventana de ajustes (otro proceso) y `odyssey3d ctl ajuste` los
+   con las teclas de esa ventana. La ventana de ajustes (otro proceso) y `odysseyvk ctl ajuste` los
    mueven por ficheros: ver src/ajuste.h. Aqui esta la otra mitad: la foto de lo que el visor usa de
    verdad (el fichero `estado`) y la cuenta de lo que va cambiando (`preferencias.log`). */
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
@@ -199,6 +199,17 @@ static std::map<std::string, double> ajusteActual(const VkUi &ui, const VkWeave 
 static void aplicarAjuste(VkUi &ui, VkWeave &wv, const std::string &k, double v) {
   WeaveTuning &t = ui.tune;
   Hud::State &st = ui.hud.state();
+  /* en modo de legado la trama usa los numeros de fabrica y nada mas: ahi el video ya llega en dos
+     vistas, asi que los unicos dos numeros que se mueven son los de la pastilla (relieve y apoyo).
+     La pestaña de edicion avanzada de la ventana queda apagada mientras dura el modo. */
+  if (st.legado && k != "relieve" && k != "apoyo") {
+    const double ahora = ajusteActual(ui, wv)[k];
+    if (std::fabs(ahora - v) > 1e-9)
+      std::printf("[legado] `%s` no se mueve en modo de legado (esta en %s): para eso hay que apagar el modo\n",
+                  k.c_str(), fmtNumero(ahora).c_str());
+    std::fflush(stdout);
+    return;
+  }
   std::string antes;
   if (k == "fase") { antes = fmtNumero(t.align); t.align = (float)v; }
   else if (k == "paso") { antes = fmtNumero(t.pitch); t.pitch = (float)v; }
@@ -233,6 +244,37 @@ static void aplicarAjuste(VkUi &ui, VkWeave &wv, const std::string &k, double v)
   printTuning(ui, "ajuste");
 }
 
+/* Numero que habia en la trama antes de entrar en el modo de legado, para poder volver atras. */
+static std::map<std::string, double> previoLegado;
+static bool previoLegadoPuesto = false;
+
+/* El modo de legado cambia COMO se arma la imagen, no la sesion: el video, la pantalla, la lente y
+   el ON/OFF se quedan donde estaban. Lo que hace es dejar la trama con los numeros de fabrica (que
+   son los que le corresponden a un video que ya llega en dos vistas), cerrar la puerta al conversor
+   que saca dos vistas de una, quitar el boton de la red de la pastilla y recortarla a lo justo. Al
+   apagarlo vuelven los numeros que uno estaba usando. */
+static void cambioLegado(VkUi &ui, VkWeave &wv, bool querido, const char *origen) {
+  Hud::State &st = ui.hud.state();
+  if (st.legado == querido) return;
+  if (querido) {
+    previoLegado = ajusteActual(ui, wv);
+    previoLegadoPuesto = true;
+    st.legado = true;   /* a partir de aqui `aplicarAjuste` ya no deja mover los numeros finos */
+    for (const auto &kv : ajuste::valoresFabrica())
+      if (kv.first != "relieve" && kv.first != "apoyo") aplicarAjuste(ui, wv, kv.first, kv.second);
+    std::printf("[legado] modo de legado ACTIVADO (%s): trama con los numeros de fabrica, sin conversor"
+                " de video normal y pastilla sencilla\n", origen);
+  } else {
+    st.legado = false;
+    if (previoLegadoPuesto)
+      for (const auto &kv : previoLegado) aplicarAjuste(ui, wv, kv.first, kv.second);
+    previoLegadoPuesto = false;
+    std::printf("[legado] modo de legado APAGADO (%s): vuelven los numeros que estabas usando\n", origen);
+  }
+  std::fflush(stdout);
+  printTuning(ui, "legado");
+}
+
 /* Lo que el visor esta usando de verdad, escrito cada medio segundo: la ventana de ajustes lee de
    ahi para no tener que adivinar. Son claves `clave = valor`, con coma decimal como en serve.conf. */
 static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
@@ -244,11 +286,13 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
   std::string s;
   s += "# estado real del visor: lo escribe el propio visor, lo lee la ventana de ajustes\n";
   s += std::string("hora = ") + hora + "\n";
-  s += std::string("visor = ") + ODYSSEY3D_VERSION + "\n";
+  s += std::string("visor = ") + ODYSSEYVK_VERSION + "\n";
   s += std::string("trama = ") + (ui.tune.weave && ui.hud.state().weaveOn ? "activa" : "apagada") + "\n";
   /* si la pastilla esta a la vista o ocultada (Ctrl+Shift+F1 / `ctl capa`): lo lee `ctl capa estado`
      y la ventana de ajustes. Con la pastilla oculta la trama sigue igual, solo se quita la interfaz. */
   s += std::string("capa = ") + (ui.hud.overlayVisible() ? "puesta" : "oculta") + "\n";
+  /* el modo de legado: trama con numeros de fabrica, sin conversor y con la pastilla recortada */
+  s += std::string("legado = ") + (ui.hud.state().legado ? "si" : "no") + "\n";
 #ifdef HAVE_ORT
   s += std::string("conversor = ") + (wv.converterOn() ? "puesto" : "apagado") + "\n";
   s += std::string("modelo = ") + (g_modeloEnUso.empty() ? "(ninguno)" : g_modeloEnUso) + "\n";
@@ -296,7 +340,7 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
 /* slotRed() vive en util.h: es la misma regla para el hub y para el visor. */
 const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativa"; }
 
-/* ocultar o mostrar la pastilla. Mandan ahi la tecla Ctrl+Shift+F1, el `odyssey3d ctl capa` (que
+/* ocultar o mostrar la pastilla. Mandan ahi la tecla Ctrl+Shift+F1, el `odysseyvk ctl capa` (que
    llega por fichero) y el rincon pinchable del que habla Hud::huecoDeLaPastilla. Lo unico que se quita
    es la interfaz: la trama sigue tejiendose y el rastreo sigue mirando los ojos, que es lo que uno
    quiere mientras ve algo a pantalla completa. La region de entrada se rehace con `inputChanged`,
@@ -317,7 +361,7 @@ static void cambioCapa(VkUi &ui, bool puesta, const char *fuente) {
 }
 
 /* apagar o encender el 3D desde fuera: es el interruptor ON/OFF de la pastilla mandado por fichero
-   (`odyssey3d ctl 3d`), lo mismo que picar la pista con el raton o pulsar Ctrl+Shift+1. Con el 3D
+   (`odysseyvk ctl 3d`), lo mismo que picar la pista con el raton o pulsar Ctrl+Shift+1. Con el 3D
    apagado la ventana sigue ahí y el panel vuelve a 2D; al encenderlo vuelve la trama. */
 static void cambio3D(VkUi &ui, bool puesto, const char *fuente) {
   const bool antes = ui.hud.state().weaveOn;
@@ -498,6 +542,12 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      pantalla ampliada al doble, o sea una imagen enorme y cortada por los bordes. Los tres estados
      del ciclo son lado a lado, arriba y abajo, y 2D plano (el video tal cual). */
   if (key == GLFW_KEY_C) {
+    if (ui->hud.state().legado) {
+      std::printf("[legado] en modo de legado no se sacan dos vistas de una: no hay conversor que"
+                  " encender ni apagar\n");
+      std::fflush(stdout);
+      return;
+    }
     ui->convToggle = true;   /* el bucle del visor enciende o apaga el conversor */
     return;
   }
@@ -528,8 +578,14 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   }
   /* 1 y 2 sin modificar: cambiar la red de profundidad del conversor. La 1 es la de Samsung
      (mde_large.onnx, la que usa su programa) y la 2 la nuestra (Depth Anything). Se puede hacer en
-     marcha: el bucle cambia la red cuando el hilo de la estimacion esta libre. */
+     marcha: el bucle cambia la red cuando el hilo de la estimacion esta libre.
+     En modo de legado no hay red que elegir: ahi el video ya llega con sus dos vistas. */
   if (key == GLFW_KEY_1 || key == GLFW_KEY_2) {
+    if (ui->hud.state().legado) {
+      std::printf("[legado] en modo de legado no hay red de profundidad que cambiar\n");
+      std::fflush(stdout);
+      return;
+    }
     ui->redPedida = key == GLFW_KEY_1 ? 1 : 2;
     return;
   }
@@ -537,6 +593,18 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      esta abierta, manda lo que mide; si no la encuentra, la trama se queda en la
      pose de fabrica y la pastilla lo dice. */
   const char *tag = nullptr;
+  if (ui->hud.state().legado) {
+    /* las teclas finas de la trama (fase, paso, crosstalk, conv, muestras...) no van en el modo de
+       legado: alli la trama trabaja con los numeros de fabrica. Se avisa una sola vez por sesion. */
+    static bool avisado = false;
+    if (tuningKey(ui->tune, key, &tag) && tag && !avisado) {
+      avisado = true;
+      std::printf("[legado] la tecla de `%s` no se usa en modo de legado: ahi la trama lleva los numeros"
+                  " de fabrica (se apaga el modo en la ventana de ajustes, pestana General)\n", tag);
+      std::fflush(stdout);
+    }
+    return;
+  }
   if (tuningKey(ui->tune, key, &tag)) {
     if (key == GLFW_KEY_0 || key == GLFW_KEY_9) ui->convBase = ui->tune.conv; /* la tecla gana sobre el deslizador */
     if (tag) printTuning(*ui, tag);
@@ -547,15 +615,15 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
    El recorrido nuevo es el presupuesto del programa de Samsung, medido de su config:
    +12,67 px por ojo hacia afuera y 9,98 px hacia adentro (fraccion del ancho), o sea
    ~22,6 px de separacion entre ojos con el deslizador a 50 y a 3840 px de ancho. El
-   recorrido viejo llegaba a ~65 px, 2,9 veces mas; ODYSSEY3D_RELIEVE=2.9 lo devuelve. */
+   recorrido viejo llegaba a ~65 px, 2,9 veces mas; ODYSSEYVK_RELIEVE=2.9 lo devuelve. */
 bool topesPorOjoActivos() {
-  const char *e = std::getenv("ODYSSEY3D_TOPE");
+  const char *e = entornoOdyssey("ODYSSEYVK_TOPE");
   return !e || e[0] != '0';
 }
 
 float gananciaRelieve(int popout) {
   static const float escala = [] {
-    const char *e = std::getenv("ODYSSEY3D_RELIEVE");
+    const char *e = entornoOdyssey("ODYSSEYVK_RELIEVE");
     return e ? (float)std::atof(e) : 1.0f;
   }();
   return (0.00104f + (float)popout / 100.0f * 0.00972f) * escala;
@@ -867,7 +935,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     std::fprintf(stderr,
                  "[error] el reproductor mpv sigue por OpenGL. Reproducemelo con Vulkan asi:\n"
                  "           mpv --fullscreen <video>   y deja que el servicio te pregunte\n"
-                 "         (o usa el visor de siempre: odyssey3d weave ... --gl)\n");
+                 "         (o usa el visor de siempre: odysseyvk weave ... --gl)\n");
     return 2;
   }
 
@@ -906,7 +974,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
 
-  GLFWwindow *win = glfwCreateWindow(W, H, "Odyssey 3D", (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
+  GLFWwindow *win = glfwCreateWindow(W, H, NOMBRE_APP, (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
   if (!win) {
     const char *desc = nullptr;
     int code = glfwGetError(&desc);
@@ -1007,6 +1075,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     std::printf("[pastilla] tamano fijo x%.2f (Ctrl+Shift+7 mas pequena, Ctrl+Shift+8 mas grande)\n",
                 opts.uiScale);
   }
+  /* el modo de legado puede venir del arranque (`--legado`, lo pasa el hub con `legado = si` en
+     serve.conf) o mandarse en marcha con `ctl legado`. En ambos casos la pastilla se encoge. */
+  ui.hud.state().legado = opts.legado;
+  if (opts.legado) {
+    std::printf("[legado] modo de legado desde el arranque: la trama lleva los numeros de fabrica, no"
+                " hay conversor de video normal y la pastilla sale sencilla\n");
+    std::fflush(stdout);
+  }
   glfwSetWindowUserPointer(win, &ui);
   glfwSetKeyCallback(win, onKeyVK);
   glfwSetCursorPosCallback(win, onCursorVK);
@@ -1072,9 +1148,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   DepthNet red;
   std::vector<uint8_t> chico, mapa;
   bool convActivo = opts.conver;
-  /* rotulos y subtitulos apoyados en el plano de la pantalla (ODYSSEY3D_TEXTO=0 para apagarlo) */
+  /* rotulos y subtitulos apoyados en el plano de la pantalla (ODYSSEYVK_TEXTO=0 para apagarlo) */
   bool textoAncla = opts.textoPanel != 0;
-  if (const char *e = std::getenv("ODYSSEY3D_TEXTO"))
+  if (const char *e = entornoOdyssey("ODYSSEYVK_TEXTO"))
     textoAncla = !(e[0] == '0' || e[0] == 'n' || e[0] == 'N');
   /* Capas por profundidad: `fondo` y `frente` de serve.conf llegan como entorno y son el punto de
      arranque de las teclas `j`/`k` (lo de atras) y `u`/`i` (lo de delante), para que el primer
@@ -1088,8 +1164,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::printf("[conversor] capa %s = %.2f\n", strstr(nombre, "FONDO") ? "fondo" : "frente", (double)v);
     }
   };
-  ganArranque("ODYSSEY3D_GAN_FONDO", ui.tune.ganFondo);
-  ganArranque("ODYSSEY3D_GAN_FRENTE", ui.tune.ganFrente);
+  ganArranque("ODYSSEYVK_GAN_FONDO", ui.tune.ganFondo);
+  ganArranque("ODYSSEYVK_GAN_FRENTE", ui.tune.ganFrente);
   /* Empuje por capa (`empuje_fondo` / `empuje_frente` en serve.conf), en puntos de panel: mismo
      arreglo, punto de arranque de las teclas `h`/`l` (lo de atras) y `y`/`o` (lo de delante). */
   const auto empArranque = [](const char *nombre, float &destino) {
@@ -1102,8 +1178,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   strstr(nombre, "FONDO") ? "fondo" : "frente", (double)v);
     }
   };
-  empArranque("ODYSSEY3D_EMP_FONDO", ui.tune.empFondo);
-  empArranque("ODYSSEY3D_EMP_FRENTE", ui.tune.empFrente);
+  empArranque("ODYSSEYVK_EMP_FONDO", ui.tune.empFondo);
+  empArranque("ODYSSEYVK_EMP_FRENTE", ui.tune.empFrente);
   int convSalto = 0;
   long long convHechas = 0, convFallos = 0;
   double convMs = 0.0, ultimaEstim = 0.0;
@@ -1295,6 +1371,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     fo.fuerzaMono = opts.trackMono;
     fo.set.hFovDegrees = opts.trackCampo;
     fo.set.faceWidthMillimetres = opts.trackCara;
+    if (opts.legado) {
+      /* en modo de legado la cara se mide siempre con las dos vistas de la camara del monitor y con
+         el margen de error de reproyeccion ancho (40 px en vez de 10): asi la pose sigue sirviendo
+         aunque la cara salga movida o torcida, que es lo que uno espera de este modo. Con las dos
+         vistas no hace falta la calibracion ni el tamano de cara a medida, asi que el hub no las pasa. */
+      fo.fuerzaMono = 0;   /* 0 = las dos vistas de la camara del monitor, siempre */
+      fo.set.maxReprojectionPx = 40.0;
+    }
     std::string trk;
     if (!feed.start(fo, &trk))
       std::fprintf(stderr, "[rastreo] no arranco: %s\n", trk.c_str());
@@ -1410,6 +1494,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
   double ultimoCuadroVisto = 0.0;   /* cuando volcamos por ultima vez la vista de la camara */
+  /* modo de legado: ahi la camara manda. Si deja de ver la cara se suelta la trama (el video se ve
+     tal cual, sin relieve) y medio segundo despues se apaga la lente; al recuperar la cara vuelven
+     las dos. Son los unicos dos segundos que este modo decide por su cuenta. */
+  double ultimoPoseFresca = -1.0;
+  bool tramaCortada = false;
+  bool lenteViva = true;
   int frames = 0, errStreak = 0, reintentos = 0;
   bool dumpHecho = false;
   /* Vigia de la ventana (el bloque esta mas abajo en el bucle): si el compositor nos esconde,
@@ -1477,7 +1567,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     glfwPollEvents();
     /* ---- el canal de ajuste vivo: la ventana de ajustes (proceso aparte) y `ctl ajuste` ----
-       Una vez cada decima de segundo se mira el fichero ~/.local/state/odyssey3d/ajuste y, solo si
+       Una vez cada decima de segundo se mira el fichero ~/.local/state/odysseyvk/ajuste y, solo si
        CAMBIO, se aplican los numeros pedidos. Es importante el "solo si cambio": los numeros escritos
        son una ORDEN, no la verdad, y si se volvieran a aplicar cuadro tras cuadro una tecla pulsada
        despues se anularia sola. Ademas el visor deja en `estado` lo que esta usando de verdad (la
@@ -1545,6 +1635,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             else
               std::printf("[3d] no entiendo `3d = %s`: vale encender, apagar o alternar\n", v.c_str());
             cambio3D(ui, puesto, "ctl 3d");
+          }
+          /* `legado = encender|apagar|alternar`: el modo de legado, por fichero. Es la misma puerta que
+             el interruptor de la ventana de ajustes; el hub lo recuerda en serve.conf y lo pasa al
+             arrancar, asi que se puede cambiar sin cerrar la sesion. */
+          const auto ordenLegado = palabras.find("legado");
+          if (ordenLegado != palabras.end()) {
+            const std::string v = strLower(ordenLegado->second);
+            bool querido = ui.hud.state().legado;
+            if (v == "apagar" || v == "quitar" || v == "0" || v == "no" || v == "off")
+              querido = false;
+            else if (v == "encender" || v == "poner" || v == "1" || v == "si" || v == "on")
+              querido = true;
+            else if (v == "alternar" || v == "toggle")
+              querido = !querido;
+            else
+              std::printf("[legado] no entiendo `legado = %s`: vale encender, apagar o alternar\n", v.c_str());
+            cambioLegado(ui, wv, querido, "ctl legado");
           }
           if (!modeloPedido.empty()) {
             ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
@@ -1662,7 +1769,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     if (!ui.redRutaPedida.empty()) {
       if (red.quemada()) {
         /* Un .onnx que no abrio deja ONNX Runtime inservible en este proceso (v0.33). No insistimos:
-           el encargo sigue escrito en ~/.local/state/odyssey3d/ajuste y la proxima sesion arranca con
+           el encargo sigue escrito en ~/.local/state/odysseyvk/ajuste y la proxima sesion arranca con
            esa red, que es lo que se puede hacer sin arriesgarse a que el visor reviente sin devolver
            el panel. */
         std::printf("[conversor] en esta sesion ya no se puede abrir otra red (%s): la pedida %s queda "
@@ -1768,7 +1875,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        simplemente deja de mandarnos sincronismo, y el bucle se queda presentando cuadros contra un
        intercambio que ya no tiene superficie -> el panel muestra trozos sueltos y ya no hay forma de
        responder a las teclas. El hub, que si ve el estado de la ventana por el protocolo de ventanas
-       de KWin, escribe ~/.local/state/odyssey3d/ventana con "oculta" o "visible" y su reloj: mientras
+       de KWin, escribe ~/.local/state/odysseyvk/ventana con "oculta" o "visible" y su reloj: mientras
        estemos ocultos no trazamos nada (y si dura, devolvemos el panel a 2D), y al volver pedimos
        otra vez la pantalla completa en NUESTRA salida, porque KWin devuelve la ventana donde le place
        y sin pixel a pixel la trama sale rota. */
@@ -1989,7 +2096,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             if (pareceNavegador(est) && avisosFlujo == 1 && flujo.rfind("streaming", 0) == 0) {
               std::printf("[captura] el navegador dejo de pintar porque el compositor ya no le manda el sincronismo"
                           " (la tapamos por completo).\n"
-                          "            primero descartar lo nuestro: odyssey3d ctl flujo --uuid <id> --segundos 5\n"
+                          "            primero descartar lo nuestro: odysseyvk ctl flujo --uuid <id> --segundos 5\n"
                           "            (si ahi si llegan fotogramas, el flujo del visor es el que no arranca)\n"
                           "            Firefox o Zen: about:config -> gfx.vsync.compositor.unobserve-count = 0"
                           " y reiniciar el navegador\n"
@@ -2082,7 +2189,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     primeraVez = false;
     /* --mapa-fijo: medir el relieve con un mapa que ya conocemos (el que escribe --dump, o el que sale
-       de `odyssey3d mapa foto.png`), sin red y sin sentarse delante del panel. Se sube una sola vez y
+       de `odysseyvk mapa foto.png`), sin red y sin sentarse delante del panel. Se sube una sola vez y
        se deja quieto: asi la diferencia entre dos pasadas de la misma orden es solo lo que se cambi. */
     if (!opts.mapaFijo.empty()) {
       static std::vector<uint8_t> mfMapa;
@@ -2109,7 +2216,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         else std::fprintf(stderr, "[mapa fijo] no se pudo subir: %s\n", errmf.c_str());
       }
     }
-    t.weave = ui.tune.weave && ui.hud.state().weaveOn;
+    /* en modo de legado, si la camara perdio la cara se suelta la trama y el video se ve tal cual:
+       sin alguien mirando, el relieve no sirve de nada y lo que molesta es la trama encima. */
+    const bool caraPerdida = opts.legado && ui.hud.state().legado && tramaCortada;
+    t.weave = ui.tune.weave && ui.hud.state().weaveOn && !caraPerdida;
     t.swapLR = ui.tune.swapLR;
     t.topBottom = ui.tune.topBottom;
     t.filterSlope = ui.tune.filterSlope;
@@ -2375,6 +2485,32 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       const bool dentro = fs.sample.panelCentimetres[1] >= -50.0 && fs.sample.panelCentimetres[1] <= 50.0 &&
                           fs.sample.panelCentimetres[2] >= 50.0 && fs.sample.panelCentimetres[2] <= 130.0;
       fresco = fs.seen && fs.age >= 0.0 && fs.age <= 0.15 && dentro;
+      if (opts.legado) {
+        if (fresco) ultimoPoseFresca = now;
+        const double sinCara = ultimoPoseFresca < 0.0 ? 1e9 : now - ultimoPoseFresca;
+        const bool corte = sinCara > 0.5;   /* medio segundo sin cara: el video se ve tal cual */
+        if (corte != tramaCortada) {
+          tramaCortada = corte;
+          std::printf("[legado] %s\n", corte ? "la camara ya no ve la cara: el video se ve tal cual, sin trama"
+                                             : "cara recuperada: vuelve la trama");
+          std::fflush(stdout);
+        }
+        /* la lente se apaga tres cuartos de segundo despues (un poco despues que la trama, para que
+           no se note el salto) y se vuelve a poner en cuanto la cara esta otra vez a la vista */
+        if (lenteViva && sinCara > 0.75 && rig.lensOk) {
+          if (rig.lens.off()) {
+            lenteViva = false;
+            std::printf("[legado] lente apagada hasta volver a ver la cara\n");
+            std::fflush(stdout);
+          }
+        } else if (!lenteViva && fresco && rig.lensOk) {
+          if (rig.lens.on()) {
+            lenteViva = true;
+            std::printf("[legado] lente encendida de nuevo\n");
+            std::fflush(stdout);
+          }
+        }
+      }
       if (fresco && !opts.trackFixed) {
         const TrackSample &m = fs.sample;
         double x = m.panelCentimetres[0], y = m.panelCentimetres[1], z = m.panelCentimetres[2];

@@ -69,11 +69,11 @@ static std::vector<std::string> calibBases() {
   std::string ed = exeDirForCalib();
   if (!ed.empty()) {
     bases.push_back(ed + "/calib");
-    bases.push_back(ed + "/../share/odyssey3d/calib");
+    bases.push_back(ed + "/../share/odysseyvk/calib");
     bases.push_back(ed + "/../calib");
   }
-  bases.push_back("/usr/share/odyssey3d/calib");
-  bases.push_back("/usr/local/share/odyssey3d/calib");
+  bases.push_back("/usr/share/odysseyvk/calib");
+  bases.push_back("/usr/local/share/odysseyvk/calib");
   return bases;
 }
 

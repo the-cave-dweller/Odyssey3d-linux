@@ -17,6 +17,7 @@
 
 #include "glutil.h"
 #include "vkui.h"
+#include "util.h"
 
 #include "xdg-output-unstable-v1-client-protocol.h"
 
@@ -149,10 +150,10 @@ struct Overlay::Impl {
   static Bloque *nuevoBloque(wl_shm *shm, int w, int h, std::string *err) {
     const int stride = w * 4;
     const size_t tam = (size_t)stride * (size_t)h;
-    char plantilla[] = "/dev/shm/odyssey3d-XXXXXX";
+    char plantilla[] = "/dev/shm/odysseyvk-XXXXXX";
     int fd = ::mkstemp(plantilla);
     if (fd < 0) {
-      char plantilla2[] = "/tmp/odyssey3d-XXXXXX";
+      char plantilla2[] = "/tmp/odysseyvk-XXXXXX";
       fd = ::mkstemp(plantilla2);
       if (fd < 0) {
         if (err) *err = "no se pudo crear el mapa de memoria";
@@ -295,7 +296,7 @@ struct Overlay::Impl {
                   escalaGeom, hud.scale());
       ajustaGeometria();
     }
-    if (std::getenv("ODYSSEY3D_DEBUG_UI"))
+    if (entornoOdyssey("ODYSSEYVK_DEBUG_UI"))
       std::printf("[depurar capa] al dibujar: hud %.2f | recorte ox=%.0f buf=%dx%d\n",
                   hud.scale(), ox, bufAncho, bufAlto);
     std::vector<HudVertex> vv = hud.vertices();
@@ -481,7 +482,7 @@ struct Overlay::Impl {
      con dos pantallas conectadas (o cuando el compositor vuelve a anunciar la salida
      después de cambiar el modo de la lente) eso ponía la tarjeta en el monitor
      equivocado. Estas palabras reconocen el panel; si no cuadran, se arregla con
-     pantalla=DP-4 en ~/.config/odyssey3d/serve.conf o con ODYSSEY3D_PANTALLA=DP-4. */
+     pantalla=DP-4 en ~/.config/odysseyvk/serve.conf o con ODYSSEYVK_PANTALLA=DP-4. */
   static bool esPanelOdyssey(const Monitor &m) {
     const std::string n = minusc(m.nombre), d = minusc(m.modelo);
     for (const char *aguja : {"odyssey", "syncmaster", "g90xf", "g90xc", "g90"})
@@ -496,7 +497,7 @@ struct Overlay::Impl {
 
   void eligeMonitor() {
     if (pistaMonitor.empty()) {
-      if (const char *e = std::getenv("ODYSSEY3D_PANTALLA"); e && e[0]) pistaMonitor = e;
+      if (const char *e = entornoOdyssey("ODYSSEYVK_PANTALLA"); e && e[0]) pistaMonitor = e;
     }
     Monitor *porPista = nullptr, *porPanel = nullptr, *elGrande = nullptr;
     for (Monitor *m : monitores) {
@@ -916,14 +917,14 @@ void Overlay::showAsk(const std::string &titulo, const std::string &cuerpo) {
 
   s.hud.begin(s.anchoE, s.altoE, s.altoLogico());   /* por si el monitor cambio de tamano */
   if (!s.ajustaGeometria()) return;
-  if (std::getenv("ODYSSEY3D_DEBUG_UI"))
+  if (entornoOdyssey("ODYSSEYVK_DEBUG_UI"))
     std::printf("[depurar capa] lienzo %dx%d escala %.2f hud %.2f | recorte ox=%.0f oy=%.0f buf=%dx%d | ventana %dx%d\n",
                 s.anchoE, s.altoE, s.escala, s.hud.scale(), s.ox, s.oy, s.bufAncho, s.bufAlto,
                 s.supAncho, s.supAlto);
 
   if (!s.layer) {
     s.layer = zwlr_layer_shell_v1_get_layer_surface(s.shell, s.surf, s.elegido ? s.elegido->obj : nullptr,
-                                                    ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "odyssey3d");
+                                                    ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "odysseyvk");
     if (!s.layer) {
       d->aviso = "el compositor rechazó la capa superpuesta";
       return;

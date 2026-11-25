@@ -4,6 +4,7 @@
    push-pull de dos dimensiones (que es lo que hace el inpaint.push/pull de Samsung) ni dos
    texturas mas en la grafica. */
 #include "hoyos.h"
+#include "util.h"   /* entornoOdyssey: la variable de entorno vale con el nombre nuevo y con el viejo */
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +13,7 @@
 
 bool hoyosActivo() {
   static const bool activo = [] {
-    const char *e = std::getenv("ODYSSEY3D_HOYOS");
+    const char *e = entornoOdyssey("ODYSSEYVK_HOYOS");
     return !e || e[0] != '0';
   }();
   return activo;
