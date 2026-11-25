@@ -53,7 +53,13 @@ std::string rutaHistorial() { return rutaEstadoOdyssey("preferencias.log"); }
 std::string rutaHub() { return rutaEstadoOdyssey("hub"); }
 
 bool esOrden(const std::string &nombre) {
-  return nombre == "overlay";
+  return nombre == "overlay" || nombre == "camara" || nombre == "mono";
+}
+
+/* Las ordenes del fichero que llevan palabra o ruta en vez de numero: las recoge `leer`
+   en su mapa de texto y las atiende el vigilante. */
+static bool esOrdenTexto(const std::string &nombre) {
+  return nombre == "camara" || nombre == "mono";
 }
 
 static std::string recortar(std::string s) {
@@ -77,9 +83,11 @@ static std::string expandir(const std::string &ruta) {
   return ruta;
 }
 
-bool leer(std::map<std::string, double> &numeros, std::string &modelo) {
+bool leer(std::map<std::string, double> &numeros, std::string &modelo,
+          std::map<std::string, std::string> *texto) {
   numeros.clear();
   modelo.clear();
+  if (texto) texto->clear();
   std::string contenido;
   if (!readSmallFile(rutaAjuste(), contenido)) return false;   /* sin canal no hay nada que aplicar */
   size_t inicio = 0;
@@ -98,6 +106,10 @@ bool leer(std::map<std::string, double> &numeros, std::string &modelo) {
       continue;
     }
     if (k == "borrar" || k == "limpiar") continue;   /* no es un numero: es una orden */
+    if (esOrdenTexto(k)) {
+      if (texto) (*texto)[k] = v;
+      continue;   /* `camara`, `mono`: palabra, no numero */
+    }
     double d = std::strtod(numeroADouble(v).c_str(), nullptr);
     if (const Clave *c = buscarClave(k)) {
       if (d < c->minimo) d = c->minimo;
@@ -109,21 +121,31 @@ bool leer(std::map<std::string, double> &numeros, std::string &modelo) {
   return true;
 }
 
-bool Lector::cambio(std::map<std::string, double> &numeros, std::string &modelo) {
+bool Lector::cambio(std::map<std::string, double> &numeros, std::string &modelo,
+                    std::map<std::string, std::string> *texto) {
   std::error_code ec;
   const std::string ruta = rutaAjuste();
   const auto tam = (long long)std::filesystem::file_size(ruta, ec);
-  if (ec) { marca_ = -1; numeros.clear(); modelo.clear(); return false; }   /* no hay fichero */
+  if (ec) {
+    marca_ = -1; numeros.clear(); modelo.clear();
+    if (texto) texto->clear();
+    return false;   /* no hay fichero */
+  }
   const auto mt = std::filesystem::last_write_time(ruta, ec);
   if (ec) { marca_ = -1; return false; }
   const long long mtime = (long long)std::chrono::duration_cast<std::chrono::nanoseconds>(mt.time_since_epoch()).count();
   const long long marca = mtime * 1024 + tam;
   if (marca == marca_) return false;
   marca_ = marca;
-  return leer(numeros, modelo);
+  return leer(numeros, modelo, texto);
 }
 
 bool escribir(const std::map<std::string, double> &numeros, const std::string &modelo, std::string *err) {
+  return escribir(numeros, modelo, std::map<std::string, std::string>(), err);
+}
+
+bool escribir(const std::map<std::string, double> &numeros, const std::string &modelo,
+              const std::map<std::string, std::string> &ordenes, std::string *err) {
   /* El fichero es una ORDEN, no la memoria del visor: se reescribe ENTERO con lo que se mando ahora,
      sin arrastrar lo de mandatos anteriores. Si se arrastrara, un numero que alguien toco despues con
      las teclas dentro del visor volveria atras al reenviar otro numero distinto. */
@@ -140,6 +162,8 @@ bool escribir(const std::map<std::string, double> &numeros, const std::string &m
   for (const auto &kv : numeros)
     if (kv.first == "modelo") pedido = kv.second;
   if (!pedido.empty()) texto += "modelo = " + pedido + "\n";
+  for (const auto &kv : ordenes)
+    if (esOrdenTexto(kv.first) && !kv.second.empty()) texto += kv.first + " = " + kv.second + "\n";
 
   const std::string destino = rutaAjuste();
   const std::string temporal = destino + ".tmp";
@@ -217,6 +241,34 @@ static std::map<std::string, std::string> paresDe(const std::string &ruta) {
 }
 
 std::map<std::string, std::string> leerEstado() { return paresDe(rutaEstado()); }
+
+std::string rutaCamaraVista() { return rutaEstadoOdyssey("camara.jpg"); }
+
+bool escribirCamaraVista(const std::vector<uint8_t> &jpeg, std::string *err) {
+  /* el cuadro tal cual lo solto la camara (MJPG): no se reencodifica, para que la ventana
+     ensene exactamente lo que esta viendo el rastreo. Se deja atomicamente, como todo aqui. */
+  if (jpeg.empty() || jpeg.size() > 8u * 1024u * 1024u) return false;
+  const std::string destino = rutaCamaraVista();
+  const std::string temporal = destino + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "wb");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  const size_t escritos = std::fwrite(jpeg.data(), 1, jpeg.size(), f);
+  std::fclose(f);
+  if (escritos != jpeg.size()) {
+    if (err) *err = "cuadro truncado en " + temporal;
+    return false;
+  }
+  if (std::rename(temporal.c_str(), destino.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + destino + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
+}
+
+std::map<std::string, std::string> leerServeConf() { return paresDe(rutaServeConf()); }
 std::map<std::string, std::string> leerEstadoHub() { return paresDe(rutaHub()); }
 
 std::string textoAjuste() {
@@ -277,6 +329,59 @@ std::map<std::string, double> valoresFabrica() {
     v[par.first] = d;
   }
   return v;
+}
+
+bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::string *err) {
+  /* serve.conf es donde vive de verdad la eleccion de camara y demas ajustes de arranque: se cambia
+     UNA linea y se deja el resto tal cual, comentarios incluidos. Si la clave no estaba, se anade al
+     final. Antes de tocarlo se deja una copia en `serve.conf.auterior`, por si la eleccion nueva
+     deja el rastreo sin camara y hay que volver. */
+  const std::string ruta = rutaServeConf();
+  std::string contenido;
+  const bool existia = readSmallFile(ruta, contenido);
+  std::vector<std::string> lineas;
+  size_t inicio = 0;
+  while (inicio <= contenido.size()) {
+    size_t fin = contenido.find('\n', inicio);
+    const bool ultimo = (fin == std::string::npos);
+    if (ultimo) fin = contenido.size();
+    lineas.push_back(contenido.substr(inicio, fin - inicio));
+    inicio = fin + 1;
+    if (ultimo) break;
+  }
+  bool puesto = false;
+  for (std::string &l : lineas) {
+    const std::string limpio = recortar(l);
+    if (limpio.empty() || limpio[0] == '#') continue;
+    const size_t eq = limpio.find('=');
+    if (eq == std::string::npos) continue;
+    if (strLower(recortar(limpio.substr(0, eq))) != clave) continue;
+    l = clave + " = " + valor;
+    puesto = true;
+  }
+  if (!puesto) lineas.push_back(clave + " = " + valor);
+  std::string salida;
+  for (const std::string &l : lineas) salida += l + "\n";
+
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(ruta).parent_path(), ec);
+  if (existia) {
+    std::filesystem::copy_file(ruta, ruta + ".anterior",
+                               std::filesystem::copy_options::overwrite_existing, ec);
+  }
+  const std::string temporal = ruta + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  std::fputs(salida.c_str(), f);
+  std::fclose(f);
+  if (std::rename(temporal.c_str(), ruta.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + ruta + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
 }
 
 int diferencias(const std::map<std::string, double> &numeros, const std::map<std::string, double> &base,

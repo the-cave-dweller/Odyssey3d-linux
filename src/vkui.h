@@ -31,12 +31,15 @@ public:
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
     bool redViva = false;  /* hay conversor abierto (si no, el boton de la red se apaga) */
-    /* La fila de abajo de la pastilla: el boton del rastreo. Solo la enseña el visor (el hub no
-       rastrea), asi que la pastilla del hub no crece. El angulo a mano de la linea de vision se quito
-       (v0.34): sin camara la trama usa la pose de fabrica, que es lo de siempre. */
+    /* La fila de abajo de la pastilla: Facetracking. Solo la enseña el visor (el hub no
+       rastrea), asi que la pastilla del hub no crece. No es un boton: el rastreo no se ofrece
+       a encender ni a apagar, la pastilla dice con que camara se esta siguiendo la trama. */
     bool controlOjo = false;
-    bool rastreoPuesto = true;  /* se usa la pose que mide la camara; apagado = pose de fabrica */
-    bool rastreoVivo = false;   /* hay hilo de camara abierto (si no, el boton se apaga) */
+    bool rastreoVivo = false;    /* hay hilo de camara abierto (si no, la fila sale apagada) */
+    bool rastreoEstudio = false; /* la camara es la integrada del monitor: "3D Studio" */
+    bool rastreoCara = false;    /* en el ultimo cuadro habia una cara delante */
+    std::string rastreoNota;     /* lo que la camara reporta: "sin cara", "sin pose valida"... */
+    std::string rastreoCamara;   /* lo que anuncia el conductor: "3D Stereo WebCam" */
   };
 
   enum Hit {
@@ -51,8 +54,7 @@ public:
     HitAskFlat,
     HitAskConv,
     HitAskDont,
-    HitAskClose,
-    HitTrack      /* boton de la pastilla: usar o no la pose de la camara */
+    HitAskClose
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -92,10 +94,6 @@ public:
   void showOverlay() { st_.overlayOn = true; }
   void nudgeDepth(int delta);
   void nudgePopout(int delta);
-  /* el rastreo se puede quitar con el boton de la pastilla o con la tecla T: la
-     trama se queda entonces con la pose de fabrica (la del arranque) */
-  void toggleTrack() { st_.rastreoPuesto = !st_.rastreoPuesto; }
-  bool rastreoPuesto() const { return st_.rastreoPuesto; }
   /* el raton llega en pixeles reales de la ventana y se pasa al espacio virtual */
   void setMouse(float x, float y) { mx_ = x / sc_, my_ = y / sc_; }
   bool interactive() const { return st_.overlayOn || st_.ask; }
@@ -120,15 +118,6 @@ public:
     return true;
   }
   bool pillBounds(float *x, float *y, float *w, float *h) const;
-  /* caja del boton del rastreo, para poder pulsarlo en las pruebas sin raton */
-  bool trackBounds(float *x, float *y, float *w, float *h) const {
-    if (btnTrack_.w <= 0.0f) return false;
-    if (x) *x = btnTrack_.x;
-    if (y) *y = btnTrack_.y;
-    if (w) *w = btnTrack_.w;
-    if (h) *h = btnTrack_.h;
-    return true;
-  }
   /* La punta derecha de la caja que ocuparia la pastilla, aun estando ocultada. Es el rincon que
      el visor deja pinchable para que el raton pueda devolver la pastilla sin usar el teclado. */
   bool huecoDeLaPastilla(float *x, float *y, float *w, float *h) const;
@@ -174,7 +163,6 @@ private:
   float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
   Rect pillPanel_, btn3D_, btnOv_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
-  Rect btnTrack_;
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
 };
 

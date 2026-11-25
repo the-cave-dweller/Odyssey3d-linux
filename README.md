@@ -247,7 +247,6 @@ panel y la red metan ruido.
 | `g` `v` | **dureza de los dos planos** (0…1, de 0,1 en 0,1): 0 deja el relieve continuo de siempre; al subirlo el cuadro se queda en dos láminas planas, una detrás y otra delante, como la Nintendo 3DS (v0.48). Solo tiene efecto con el conversor de vídeo normal puesto |
 | `n` `x` | **muestras intermedias** entre las dos láminas (v0.50): `n` agrega un nivel clavado a mitad de camino, con su meseta, para que el centro se vea sólido en vez de degradado (hasta 3); `x` lo quita y a 0 vuelve la rampa continua. Pide primero la dureza subida con `g` |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
-| `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
 | `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
@@ -339,6 +338,7 @@ socket, no puede tocar la trama. Habla con él por ficheros en `~/.local/state/o
 | `estado` | la **verdad del visor**, reescrito cada 0,5 s: versión, trama y conversor puestos o no, qué red y en qué tarjeta, y los 20 números |
 | `preferencias.log` | la **cuenta de lo cambiado**: hora, valor antes → después, red puesta y quién lo pidió |
 | `hub` | la **verdad del vigilante** (`odyssey3d serve`), reescrito cada 1 s: si hay sesión, si es de `video` o de `escritorio`, en qué pantalla, con qué modo y qué red. Lo escribe el hub y lo borra al pararse |
+| `camara.jpg` | el **último cuadro crudo** de la cámara del rastreo, volcado por el que la tiene abierta (el visor, o `ctl track`) cada 2 s para que la ventana de ajustes pueda enseñar la vista sin abrir la cámara una segunda vez |
 
 ```sh
 odyssey3d-ajustes                       # la ventana (la puedes tener en el otro monitor)
@@ -375,12 +375,31 @@ ventana la pone y la quita con un clic cada uno:
 - La orden solo actúa cuando el número **cambia** en el fichero; la primera lectura al arrancar el servicio
   se ignora, para que un `overlay = 1` olvidado de cuando el equipo se apagó no monte la trama solo.
 
-Las redes de la lista desplegable vienen separadas en **NATIVAS** (las instaladas en la máquina:
-`~/.local/share/odyssey3d/modelos` y el `modelos/` del programa: `mde_large`, `mde_large_fp32`,
-`depth_anything_v2_small`, la de la cara…) y **OTROS** (la memoria USB, carpetas sueltas y lo que diga
-`ODYSSEY3D_MODELOS`: `Disp_Disp_1008_ver1`, `mde_small`, `mde_tiny`…). Las dos líneas de título son
-separadores y no se pueden elegir, y cada red lleva detrás lo que sabemos de ella —`mde_tiny` avisa de que
-aquí no abrió, y `face_detection_yunet` de que no es de profundidad sino la cara del rastreo—.
+Desde v0.54 la ventana tiene **dos hojas**. La de siempre, *Trama y redes*, es la de arriba tal cual. La
+nueva, *Cámara*, enseña el rastreo de cara en vez de ofrecerlo a encender:
+
+- un sello de color con la verdad del momento: `FACETRACKING ACTIVO · Stereo (3D Studio, camara integrada
+  del monitor)`, o `· Externa (webcam aparte, via fallback por el ancho de la cara)`, o
+  `FACETRACKING PARADO: …` con el motivo. Sale de las claves nuevas que el visor escribe en `estado`:
+  `facetracking`, `camara`, `camara_tipo`, `camara_cara` y `camara_nota`.
+- el combo de las `/dev/video*` que dan cuadro: nombre que anuncia el conductor, id USB (`04e8:20d7` es la
+  del Odyssey), si es la estereo del monitor (anuncia un modo 2×alto, 1280x480), el modo de captura que
+  daría, y si lo tiene abierto otro proceso. El nodo de *metadata* de la cámara del monitor (`/dev/video1`)
+  no aparece: no da cuadro. La lista se vuelve a contar cada 4 s, no veinte veces por segundo.
+- la **vista**: el JPEG crudo de `camara.jpg` decodificado por Qt (1280x480 con las dos vistas una al lado
+  de la otra, medidas en la máquina de la cámara). La ventana no abre la cámara: el monitor no admite dos
+  aperturas y su puerto UVC se pone terco si lo toca un segundo proceso.
+- el botón `Usar esta camara en el rastreo`, que escribe `camara = /dev/videoN` (y `mono = si|no` si se
+  eligió cómo leerla) en `serve.conf` —la línea anterior queda en `serve.conf.auterior`— y manda la misma
+  orden viva por el canal de siempre. Vale para la **próxima** sesión: la cámara que tiene abierta la sesión
+  en curso no se le cierra a nadie.
+
+Las redes vienen en **una sola lista**, sin separadores, y cada una lleva su marca según el nombre del
+fichero: las de Samsung se reconocen por cómo se llaman (`mde_*` y `Disp_*`) y salen como
+**Samsung replicate**; el resto, **Native**. Los nombres siguen simples (el nombre del fichero, con su
+tamaño y lo que sabemos de él —`mde_tiny` avisa de que aquí no abrió, y `face_detection_yunet` de que no es
+de profundidad sino la cara del rastreo—). Medido con `--prueba` en esta máquina: 10 redes,
+`mde_large.onnx → Samsung replicate`, `depth_anything_v2_small.onnx → Native`.
 
 Tres cosas que conviene saber:
 
@@ -788,7 +807,15 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   siendo la ruta más directa; mpv por ahora se dibuja con OpenGL aunque su fotograma se trama en
   Vulkan.
 * El **seguimiento de mirada está activo** si en `serve.conf` pone `rastreo = si` (el hub lo avisa al
-  arrancar: `rastreo activo (la camara IR sigue los ojos)`). Sin él, la trama se calcula para la
+  arrancar: `rastreo activo (la camara IR sigue los ojos)`).
+  La pastilla del overlay lo dice desde v0.54 sin ofrecer nada a pulsar: la palabra `Facetracking` y al lado
+  las dos pastillitas `3D Studio` y `fallback`; la que está alimentando el rastreo va tintada y con un punto,
+  la otra en gris. `3D Studio` es la cámara integrada del monitor (USB `04e8:20d7`, "3D Stereo WebCam": dos
+  vistas en un cuadro de 1280x480 MJPG @ 60, la distancia sale de las dos vistas); `fallback` es la webcam
+  aparte, que mide la distancia por el ancho de la cara. Debajo sale la nota con el modo y si hay cara. **No
+  hay botón ni tecla para apagarlo** (se quitó el botón `Rastreo` y la tecla `T`): si `serve.conf` dice
+  `rastreo = si` y la cámara abre, manda la cámara; si no abre, la fila lo dice y la trama va con la pose de
+  fábrica. Sin él, la trama se calcula para la
   posición de ojo nominal (los valores de fábrica del G90XF), igual que el modo "static" del port
   X11, y por eso el punto dulce es la posición de trabajo normal. Mover la cabeza en horizontal da un
   cambio de fase que puedes seguir con `←`/`→`.
@@ -836,7 +863,7 @@ odyssey3d ctl estado                  # qué red, qué tarjeta y qué números e
 odyssey3d ctl ajuste fase 0,004       # mandarle un número al visor sin tocar el panel
 odyssey3d ctl preferencias            # la cuenta de lo que se fue cambiando (preferencias.log)
 odyssey3d ctl escritorio estado       # qué sesión tiene el vigilante: ninguna, de vídeo o del escritorio
-odyssey3d-ajustes --prueba            # la ventana de ajustes sin pantalla: redes (nativas/otras), estado y vigilante
+odyssey3d-ajustes --prueba            # la ventana sin pantalla: redes con su marca, estado, vigilante, camaras y su vista
 odyssey3d ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
 odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk
                                       # guarda chk-trama.png y chk-origen.png y sale

@@ -16,6 +16,8 @@
    Se compila solo si hay Qt6 (ver CMakeLists.txt, opcion ODYSSEY3D_UI). Sin pantalla se puede probar
    con QT_QPA_PLATFORM=offscreen. */
 #include "ajuste.h"
+#include "camera.h"
+#include "util.h"
 #include <cstdio>
 #include <cstring>
 
@@ -51,6 +53,9 @@
 #include <QStringList>
 #include <QTextStream>
 #include <QTimer>
+#include <QImage>
+#include <QPixmap>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -104,6 +109,14 @@ static QString avisoConocido(const QString &nombre) {
   if (n.contains("face_detection") || n.contains("yunet"))
     return QString::fromUtf8("no es de profundidad: es la cara para el rastreo");
   return QString();
+}
+
+/* Quien hizo la red: se mira el NOMBRE del fichero, no la carpeta donde este. Las de Samsung son
+   las que vienen con su conversor (mde_*, Disp_*); todo lo demas es nativo (nuestro .onnx o el que
+   sea). La carpeta no dice nada: la USB y la carpeta de la casa tienen las dos clases. */
+static QString deQuienEs(const QString &nombreArchivo) {
+  return slotRed(nombreArchivo.toStdString()) == 1 ? QString::fromUtf8("Samsung replicate")
+                                                   : QString::fromUtf8("Native");
 }
 
 static bool esNativa(const QString &ruta, const QStringList &carpetasNativas) {
@@ -307,17 +320,12 @@ int main(int argc, char **argv) {
         std::printf("  %-16s %s\n", kv.first.c_str(), kv.second.c_str());
     }
     const QList<Red> redes = redesDelDisco(est.count("modelo") ? est.at("modelo") : std::string());
-    std::printf("redes que tendria la lista de disponibles: %d\n", (int)redes.size());
-    std::printf("· NATIVAS: instaladas en la maquina, las de siempre ·\n");
+    std::printf("redes que tendria la lista de disponibles: %d (una sola lista, sin separaciones)\n",
+                (int)redes.size());
     for (const Red &r : redes)
-      if (r.nativa)
-        std::printf("  %s%s%s\n", r.ruta.toUtf8().constData(),
-                    r.aviso.isEmpty() ? "" : "   —  ", r.aviso.toUtf8().constData());
-    std::printf("· OTROS: en la USB o en carpetas sueltas (sin probar aqui) ·\n");
-    for (const Red &r : redes)
-      if (!r.nativa)
-        std::printf("  %s%s%s\n", r.ruta.toUtf8().constData(),
-                    r.aviso.isEmpty() ? "" : "   —  ", r.aviso.toUtf8().constData());
+      std::printf("  %-34s %-17s %s\n", QFileInfo(r.ruta).fileName().toUtf8().constData(),
+                  deQuienEs(QFileInfo(r.ruta).fileName()).toUtf8().constData(),
+                  r.aviso.isEmpty() ? "" : r.aviso.toUtf8().constData());
     const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
     if (hub.empty())
       std::printf("vigilante: %s esta vacio, osea que no hay `odyssey3d serve` corriendo\n",
@@ -325,6 +333,38 @@ int main(int argc, char **argv) {
     else {
       std::printf("vigilante (%s)\n", ajuste::rutaHub().c_str());
       for (const auto &kv : hub) std::printf("  %-10s %s\n", kv.first.c_str(), kv.second.c_str());
+    }
+    const std::vector<Camera::Info> cams = Camera::listar();
+    std::printf("camaras que ensenara la hoja de camara: %d\n", (int)cams.size());
+    for (const Camera::Info &c : cams) {
+      std::printf("  %-13s %-20s %-9s %-8s %d modo(s)", c.path.c_str(), c.nombre.c_str(),
+                  c.usb.c_str(), c.esMonitor ? "estereo" : "aparte", (int)c.modos.size());
+      if (!c.modos.empty())
+        std::printf(" · mejor %dx%d %s @ %d", c.modos.front().width, c.modos.front().height,
+                    c.modos.front().fourcc.c_str(), c.modos.front().fps);
+      std::printf("  %s\n", c.ocupada ? "· la tiene otro proceso" : "");
+    }
+    {
+      const QFileInfo fi(QString::fromStdString(ajuste::rutaCamaraVista()));
+      std::printf("vista de la camara (%s): %s\n", ajuste::rutaCamaraVista().c_str(),
+                  fi.exists() ? (fi.absoluteFilePath() + " " + QString::number(fi.size() / 1024) +
+                                 " KB, hace " + QString::number(fi.lastModified().secsTo(QDateTime::currentDateTimeUtc())) +
+                                 " s").toUtf8().constData()
+                              : "todavia no la volco ningun visor");
+      if (fi.exists()) {   /* la decodifica igual que la hoja de camara, para probarla sin pantalla */
+        QFile f(fi.absoluteFilePath());
+        QImage cuadro;
+        if (f.open(QIODevice::ReadOnly)) cuadro.loadFromData(f.readAll());
+        std::printf("  decodificada por Qt: %s\n",
+                    cuadro.isNull() ? "NO, el decodificador la rechazo"
+                                    : (QString("%1x%2")
+                                           .arg(cuadro.width()).arg(cuadro.height()).toUtf8().constData()));
+      }
+      const std::map<std::string, std::string> conf = ajuste::leerServeConf();
+      for (const char *k : {"camara", "mono", "rastreo"}) {
+        const auto it = conf.find(k);
+        std::printf("  serve.conf %-8s %s\n", k, it == conf.end() ? "(sin poner)" : it->second.c_str());
+      }
     }
     const auto fabrica = ajuste::valoresFabrica();
     std::printf("de fabrica (%d numeros, la tabla del programa corregida con %s):\n", (int)fabrica.size(),
@@ -350,7 +390,14 @@ int main(int argc, char **argv) {
 
   QWidget ventana;
   ventana.setWindowTitle(QString::fromUtf8("Ajustes del visor 3D (proceso aparte)"));
-  auto *principal = new QVBoxLayout(&ventana);
+  /* desde v0.54 la ventana tiene dos hojas: la de siempre (trama, redes, guardados, log) y la de la
+     camara que hace el Facetracking. Todo lo demas queda exactamente como estaba. */
+  auto *cajaVentana = new QVBoxLayout(&ventana);
+  auto *pestanas = new QTabWidget(&ventana);
+  auto *hojaTrama = new QWidget(pestanas);
+  auto *principal = new QVBoxLayout(hojaTrama);
+  pestanas->addTab(hojaTrama, QString::fromUtf8("Trama y redes"));
+  cajaVentana->addWidget(pestanas);
 
   /* ---- arriba: con quien estamos hablando ---- */
   auto *estado = new QLabel(&ventana);
@@ -489,7 +536,10 @@ int main(int argc, char **argv) {
   };
   const auto etiquetaRed = [&](const QString &ruta, bool puesta) {
     const QFileInfo fi(ruta);
-    QString texto = fi.fileName() + "  (" + QString::number(fi.size() / 1024) + " KB)";
+    /* el nombre tal cual, y detras quien la hizo: Native o Samsung replicate. Sin separaciones ni
+       encabezaos en la lista: solo una marca al final de cada renglon. */
+    QString texto = fi.fileName() + "  (" + QString::number(fi.size() / 1024) + " KB)  ·  " +
+                    deQuienEs(fi.fileName());
     const QString aviso = avisoConocido(fi.fileName());
     if (!aviso.isEmpty()) texto += "   —  " + aviso;
     if (!fi.exists()) texto += "   (ya no esta en el disco)";
@@ -501,11 +551,6 @@ int main(int argc, char **argv) {
     const QString previa = seleccionDe(listaDispo);
     listaDispo->clear();
     const QList<Red> redes = redesDelDisco(redPuesta);
-    int hayNativas = 0, hayOtras = 0;
-    for (const Red &r : redes) {
-      if (r.nativa) ++hayNativas;
-      else ++hayOtras;
-    }
     const auto poneRed = [&](const Red &r) {
       QString texto = etiquetaRed(r.ruta, !redPuesta.empty() && r.ruta.toStdString() == redPuesta);
       if (yaPuestas.contains(r.ruta)) texto = "(esta a la derecha) " + texto;
@@ -513,21 +558,14 @@ int main(int argc, char **argv) {
       it->setData(Qt::UserRole, r.ruta);
       it->setToolTip(r.ruta + (r.aviso.isEmpty() ? QString() : QString::fromUtf8("\n") + r.aviso));
     };
-    if (hayNativas > 0) {
-      itemFijo(listaDispo, QString::fromUtf8("· NATIVAS: instaladas en la maquina, las de siempre ·"));
-      for (const Red &r : redes)
-        if (r.nativa) poneRed(r);
-    }
-    if (hayOtras > 0 || !extras.isEmpty()) {
-      itemFijo(listaDispo, QString::fromUtf8("· OTROS: en la USB o en carpetas sueltas (sin probar aqui) ·"));
-      for (const Red &r : redes)
-        if (!r.nativa) poneRed(r);
-      for (const QString &r : extras) {
-        bool esta = false;
-        for (const Red &d : redes)
-          if (d.ruta == r) { esta = true; break; }
-        if (!esta) poneRed(Red{r, false, QString::fromUtf8("elegida a mano")});
-      }
+    /* una sola lista, sin dividir en "las de siempre" y "las otras": lo unico que importa de una
+       red es si es de Samsung o nativa, y eso va escrito en el renglon. */
+    for (const Red &r : redes) poneRed(r);
+    for (const QString &r : extras) {
+      bool esta = false;
+      for (const Red &d : redes)
+        if (d.ruta == r) { esta = true; break; }
+      if (!esta) poneRed(Red{r, false, QString::fromUtf8("elegida a mano")});
     }
     if (redes.isEmpty() && extras.isEmpty())
       itemFijo(listaDispo, QString::fromUtf8("(no hay .onnx en las carpetas de siempre)"));
@@ -695,6 +733,251 @@ int main(int argc, char **argv) {
   log->setFont(mono);
   cajaLog->addWidget(log);
   principal->addWidget(grupoLog, 1);
+
+  /* ================= la hoja de la camara (v0.54) =========================================
+     Con que camara se esta siguiendo la cara, y que esta viendo esa camara. Dos nombres fijos:
+     `3D Studio` es la integrada del Odyssey (USB 04e8:20d7, "3D Stereo WebCam": dos vistas
+     calibradas de fabrica, 1280x480 = 2x240 para que cada mitad sea una vista) y `fallback` es
+     cualquier webcam aparte, que mide la distancia por el ancho de la cara. No se ofrece
+     encender ni apagar el rastreo: si la camara abre, manda la camara.
+
+     La vista NO la saca esta ventana. La camara del monitor no se puede tener abierta dos veces
+     y su puerto de control UVC se pone terco si lo toca otro proceso, asi que el visor, que es
+     el unico que la abre, vuelca el ultimo cuadro crudo a `camara.jpg` cada dos segundos y esta
+     ventana lo ensena. Si el visor no esta, no hay vista y la hoja lo dice con letras. */
+  auto *hojaCamara = new QWidget(pestanas);
+  auto *cajaCamara = new QVBoxLayout(hojaCamara);
+  auto *tituloCamara = cabecita(hojaCamara, QString::fromUtf8(
+      "<b>Camara del Facetracking</b><br>Facetracking = la trama sigue la cabeza. Con <b>3D Studio</b>"
+      " (la camara estereo integrada del monitor, USB 04e8:20d7) la distancia sale de las dos vistas;"
+      " con una webcam aparte (via <b>fallback</b>) sale del ancho de la cara. La hoja ensena cual se"
+      " esta usando ahora y con cual se abrira la proxima sesion."));
+  cajaCamara->addWidget(tituloCamara);
+
+  auto *filaSelCam = new QHBoxLayout();
+  filaSelCam->addWidget(new QLabel(QString::fromUtf8("Camaras en la maquina:"), hojaCamara));
+  auto *comboCam = new QComboBox(hojaCamara);
+  comboCam->setMinimumWidth(520);
+  filaSelCam->addWidget(comboCam, 1);
+  auto *refrescarCamaras = new QPushButton(QString::fromUtf8("Volver a mirar"), hojaCamara);
+  filaSelCam->addWidget(refrescarCamaras);
+  cajaCamara->addLayout(filaSelCam);
+
+  auto *selloCamara = new QLabel(hojaCamara);
+  selloCamara->setTextFormat(Qt::RichText);
+  selloCamara->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  selloCamara->setWordWrap(true);
+  cajaCamara->addWidget(selloCamara);
+
+  auto *filaVista = new QHBoxLayout();
+  auto *vistaCamara = new QLabel(hojaCamara);
+  vistaCamara->setFrameShape(QFrame::StyledPanel);
+  vistaCamara->setMinimumSize(660, 264);   /* 1280x480 entre 2 = 640x240, con su aire */
+  vistaCamara->setAlignment(Qt::AlignCenter);
+  vistaCamara->setText(QString::fromUtf8("(sin vista)"));
+  filaVista->addWidget(vistaCamara, 3);
+  auto *estadoCamara = new QLabel(hojaCamara);
+  estadoCamara->setTextFormat(Qt::RichText);
+  estadoCamara->setWordWrap(true);
+  estadoCamara->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  filaVista->addWidget(estadoCamara, 2);
+  cajaCamara->addLayout(filaVista);
+
+  auto *filaVia = new QHBoxLayout();
+  filaVia->addWidget(new QLabel(QString::fromUtf8("Como la lee el rastreo:"), hojaCamara));
+  auto *comboVia = new QComboBox(hojaCamara);
+  comboVia->addItem(QString::fromUtf8("auto (mirar que camara es)"), QString::fromUtf8("auto"));
+  comboVia->addItem(QString::fromUtf8("por las dos vistas (estereo del monitor)"), QString::fromUtf8("no"));
+  comboVia->addItem(QString::fromUtf8("por el ancho de la cara (mono)"), QString::fromUtf8("si"));
+  filaVia->addWidget(comboVia);
+  filaVia->addStretch(1);
+  cajaCamara->addLayout(filaVia);
+
+  auto *filaUsar = new QHBoxLayout();
+  auto *usarCamara = new QPushButton(QString::fromUtf8("Usar esta camara en el rastreo"), hojaCamara);
+  filaUsar->addWidget(usarCamara);
+  filaUsar->addStretch(1);
+  cajaCamara->addLayout(filaUsar);
+  auto *notaCamara = new QLabel(hojaCamara);
+  notaCamara->setWordWrap(true);
+  notaCamara->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  cajaCamara->addWidget(notaCamara);
+  cajaCamara->addStretch(1);
+  pestanas->addTab(hojaCamara, QString::fromUtf8("Camara"));
+
+  /* las camaras del sistema, con su nombre y si estan ocupadas. Se vuelven a mirar poco (cada 4 s
+     o al pulsar el boton): `describe` abre cada nodo para leerle el nombre y los modos, y a la
+     camara del monitor no hay que abrirla veinte veces por segundo. */
+  std::vector<Camera::Info> camaras;
+  std::string firmaCamaras;
+  const auto mirarCamaras = [&]() {
+    camaras = Camera::listar();
+    std::string firma;
+    for (const Camera::Info &c : camaras)
+      firma += c.path + "|" + c.nombre + "|" + (c.ocupada ? "ocupada" : "libre") + ";";
+    if (firma == firmaCamaras) return;
+    firmaCamaras = firma;
+    const QString previa = comboCam->currentData().toString();
+    const std::map<std::string, std::string> conf = ajuste::leerServeConf();
+    const auto itConf = conf.find("camara");
+    const QString puesta = itConf == conf.end() ? QString() : QString::fromStdString(itConf->second);
+    comboCam->blockSignals(true);
+    comboCam->clear();
+    if (camaras.empty()) {
+      comboCam->addItem(QString::fromUtf8("(no aparece ninguna /dev/video)"), QString());
+    }
+    for (const Camera::Info &c : camaras) {
+      QString modo;
+      if (!c.modos.empty()) {
+        char dim[48];
+        std::snprintf(dim, sizeof dim, "%dx%d %s @ %d", c.modos.front().width, c.modos.front().height,
+                      c.modos.front().fourcc.c_str(), c.modos.front().fps);
+        modo = QString::fromUtf8(dim);
+      }
+      QString texto = QString::fromStdString(c.nombre.empty() ? c.path : c.nombre) + "  ·  " +
+                      QString::fromStdString(c.path);
+      texto += c.esMonitor ? QString::fromUtf8("  ·  3D Studio (estereo del monitor)")
+                           : QString::fromUtf8("  ·  webcam aparte");
+      if (!modo.isEmpty()) texto += "  ·  " + modo;
+      if (c.ocupada) texto += QString::fromUtf8("  ·  LA TIENE ABIERTA OTRO PROCESO");
+      comboCam->addItem(texto, QString::fromStdString(c.path));
+    }
+    /* la elegida en serve.conf, si sigue existiendo; si no, la que este abierta ahora */
+    QString marcar = puesta;
+    if (marcar.isEmpty() || !std::any_of(camaras.begin(), camaras.end(),
+                                         [&](const Camera::Info &c) { return c.path == marcar.toStdString(); }))
+      marcar.clear();
+    if (marcar.isEmpty())
+      for (const Camera::Info &c : camaras)
+        if (c.esMonitor) { marcar = QString::fromStdString(c.path); break; }
+    for (int i = 0; i < comboCam->count(); ++i)
+      if (comboCam->itemData(i).toString() == (marcar.isEmpty() ? previa : marcar)) { comboCam->setCurrentIndex(i); break; }
+    comboCam->blockSignals(false);
+  };
+  mirarCamaras();
+
+  /* la hoja entera, dos veces por segundo, con lo que hay en `estado` y en serve.conf */
+  long long cuadrosVistos = -1;
+  QDateTime cuadroHora;
+  const auto refrescarCamara = [&](const std::map<std::string, std::string> &est,
+                                   const std::map<std::string, std::string> &hub) {
+    const QString vivo = est.count("facetracking") ? QString::fromStdString(est.at("facetracking")) : QString();
+    const QString ahora = est.count("camara") ? QString::fromStdString(est.at("camara")) : QString();
+    const QString tipo = est.count("camara_tipo") ? QString::fromStdString(est.at("camara_tipo")) : QString();
+    const QString cara = est.count("camara_cara") ? QString::fromStdString(est.at("camara_cara")) : QString();
+    const QString nota = est.count("camara_nota") ? QString::fromStdString(est.at("camara_nota")) : QString();
+    const std::map<std::string, std::string> conf = ajuste::leerServeConf();
+    const auto dame = [&conf](const char *k) -> QString {
+      const auto it = conf.find(k);
+      return it == conf.end() ? QString() : QString::fromStdString(it->second);
+    };
+    const QString pedida = dame("camara");
+    const QString rastreoPuesto = dame("rastreo");
+
+    /* el sello: Stereo (3D Studio) o Externa, en la boca de la hoja */
+    QString sello, color;
+    if (vivo == "abierto") {
+      if (tipo == "3D Studio") { sello = "FACETRACKING ACTIVO · Stereo (3D Studio, camara integrada del monitor)"; color = "#1f7a3d"; }
+      else if (tipo == "externa") { sello = "FACETRACKING ACTIVO · Externa (webcam aparte, via fallback por el ancho de la cara)"; color = "#8a6a12"; }
+      else { sello = "FACETRACKING ACTIVO · camara " + ahora; color = "#33507a"; }
+    } else if (vivo.isEmpty()) {
+      sello = "El visor no esta escribiendo su estado: no hay sesion 3D abierta";
+      color = "#6a6a6a";
+    } else {
+      sello = "FACETRACKING PARADO: la camara no abrio (" + (nota.isEmpty() ? QString::fromUtf8("sin detalle") : nota) + ")";
+      color = "#8a2a2a";
+    }
+    selloCamara->setText(QString::fromUtf8("<span style='background:%1;color:white;padding:4px 8px;'>"
+                                           "<b>%2</b></span>").arg(color, sello.toHtmlEscaped()));
+
+    /* que camara tiene cada cual: la puesta ahora y la pedida para la proxima */
+    QString detalle = QString::fromUtf8("<b>ahora</b> (lo que dice el visor): %1<br>").arg(
+        ahora.isEmpty() ? QString::fromUtf8("-") : ahora.toHtmlEscaped());
+    if (!tipo.isEmpty()) detalle += QString::fromUtf8("&nbsp;&nbsp;tipo: %1 · cara a la vista: %2<br>").arg(tipo, cara);
+    if (!nota.isEmpty()) detalle += QString::fromUtf8("&nbsp;&nbsp;%1<br>").arg(nota.toHtmlEscaped());
+    detalle += QString::fromUtf8("<br><b>para la proxima sesion</b> (%1):<br>").arg(
+        QString::fromStdString(ajuste::rutaServeConf()).toHtmlEscaped());
+    detalle += QString::fromUtf8("&nbsp;&nbsp;camara = %1<br>").arg(
+        pedida.isEmpty() ? QString::fromUtf8("(sin poner: el visor elige la mejor)") : pedida.toHtmlEscaped());
+    detalle += QString::fromUtf8("&nbsp;&nbsp;mono = %1 · rastreo = %2<br>").arg(
+        dame("mono").isEmpty() ? QString::fromUtf8("auto") : dame("mono"),
+        rastreoPuesto.isEmpty() ? QString::fromUtf8("(sin poner)") : rastreoPuesto);
+    const auto itSesion = hub.find("sesion");
+    if (itSesion != hub.end() && itSesion->second != "ninguna")
+      detalle += QString::fromUtf8("<br>Hay sesion abierta (%1): cambiar la camara aqui vale para la"
+                                   " proxima, la de ahora no se corta.").arg(
+          QString::fromStdString(itSesion->second).toHtmlEscaped());
+    estadoCamara->setText(detalle);
+
+    /* la vista: el JPEG crudo que volco el visor. Se vuelve a cargar solo si el fichero cambio. */
+    const QFileInfo fi(QString::fromStdString(ajuste::rutaCamaraVista()));
+    if (!fi.exists()) {
+      vistaCamara->setText(QString::fromUtf8("(sin vista: el visor no ha volcado ninguna camara)"));
+      cuadrosVistos = -1;
+    } else {
+      const QDateTime hora = fi.lastModified();
+      const long long viejos = hora.secsTo(QDateTime::currentDateTimeUtc());
+      if (cuadrosVistos != (long long)fi.size() || cuadroHora != hora) {
+        cuadroHora = hora;
+        cuadrosVistos = (long long)fi.size();
+        QFile f(fi.absoluteFilePath());
+        QImage cuadro;
+        if (f.open(QIODevice::ReadOnly) && cuadro.loadFromData(f.readAll())) {
+          vistaCamara->setPixmap(QPixmap::fromImage(
+              cuadro.scaled(vistaCamara->size(), Qt::KeepAspectRatio, Qt::FastTransformation)));
+        } else {
+          vistaCamara->setText(QString::fromUtf8("(el fichero de la vista no se pudo leer)"));
+        }
+      } else if (viejos > 10) {
+        vistaCamara->setText(QString::fromUtf8("la vista es de hace %1 s: el visor ya no esta"
+                                               " mandando cuadros").arg(viejos));
+      }
+    }
+    /* el combo de la via sigue lo que dice serve.conf, salvo que el usuario lo este tocando */
+    const QString viaConf = dame("mono");
+    if (!comboVia->hasFocus()) {
+      const QString wanting = viaConf.isEmpty() ? QString::fromUtf8("auto") : viaConf;
+      for (int i = 0; i < comboVia->count(); ++i)
+        if (comboVia->itemData(i).toString() == wanting) { comboVia->setCurrentIndex(i); break; }
+    }
+  };
+
+  QObject::connect(refrescarCamaras, &QPushButton::clicked, &ventana, [&]() {
+    firmaCamaras.clear();   /* la proxima pasada fuerza el recuento */
+    mirarCamaras();
+    notaCamara->setText(QString::fromUtf8("contadas de nuevo: %1 camaras en /dev/video*").arg(camaras.size()));
+  });
+  QObject::connect(usarCamara, &QPushButton::clicked, &ventana, [&]() {
+    const QString ruta = comboCam->currentData().toString();
+    if (ruta.isEmpty()) {
+      notaCamara->setText(QString::fromUtf8("No hay ninguna camara marcada en la lista."));
+      return;
+    }
+    std::string err;
+    /* 1) se escribe en serve.conf: ahi vive la eleccion y ahi sobrevive al reinicio del servicio.
+          La linea anterior queda en serve.conf.auterior. */
+    if (!ajuste::fijarEnServeConf("camara", ruta.toStdString(), &err)) {
+      notaCamara->setText(QString::fromUtf8(("no se pudo escribir serve.conf: " + err).c_str()));
+      return;
+    }
+    const QString via = comboVia->currentData().toString();
+    if (!via.isEmpty() && via != "auto" && !ajuste::fijarEnServeConf("mono", via.toStdString(), &err)) {
+      notaCamara->setText(QString::fromUtf8(("serve.conf escrito a medias (mono): " + err).c_str()));
+      return;
+    }
+    /* 2) y se manda viva por el canal de siempre, para que el vigilante la tome sin reiniciar.
+          La sesion en curso sigue con la camara que ya tiene abierta: no se le cierra. */
+    std::map<std::string, std::string> ordenes;
+    ordenes["camara"] = ruta.toStdString();
+    ordenes["mono"] = via.toStdString();
+    if (!ajuste::escribir(std::map<std::string, double>(), std::string(), ordenes, &err)) {
+      notaCamara->setText(QString::fromUtf8(("guardado en serve.conf pero no mandada la orden viva: " + err).c_str()));
+      return;
+    }
+    notaCamara->setText(QString::fromUtf8("puesta %1 en serve.conf (lo de antes quedó en serve.conf.auterior)"
+                                          " y mandada al vigilante: vale para la proxima sesion 3D, la de"
+                                          " ahora sigue con su camara.").arg(ruta));
+  });
 
   /* ---------------- la escritura al canal, con algo de calma ----------------
      Un deslizador suelto manda veinte valores por segundo; el visor lo lee una vez cada decima y
@@ -904,6 +1187,7 @@ int main(int argc, char **argv) {
   refresco.setInterval(500);
   std::string logVisto;
   std::string guardVisto;
+  int conteoCamaras = 0;   /* las camaras se vuelven a contar cada 4 s, no dos veces por segundo */
   QObject::connect(&refresco, &QTimer::timeout, &ventana, [&]() {
     const std::map<std::string, std::string> est = ajuste::leerEstado();
     const auto dato = [&est](const char *k) -> QString {
@@ -1015,6 +1299,9 @@ int main(int argc, char **argv) {
       }
     }
     estado->setText(cab);
+    /* la hoja de la camara, con el estado y el hub que ya leimos en esta vuelta */
+    if (++conteoCamaras % 8 == 0) mirarCamaras();
+    refrescarCamara(est, hub);
     /* el historial, por si acaso: solo lo volvemos a pintar si cambio */
     std::string actual;
     for (const std::string &l : ajuste::historial(40)) actual += l + "\n";

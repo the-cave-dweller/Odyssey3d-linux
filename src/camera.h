@@ -68,6 +68,25 @@ public:
   };
   static std::vector<Mode> modes(const std::string &device);
 
+  /* "04e8:20d7" con la id USB del aparato detras del nodo, subiendo de la
+     interfaz al dispositivo. False si el nodo no cuelga de un USB. */
+  static bool usbIds(const std::string &device, std::string *id);
+
+  /* Lo que hay detras de un /dev/videoN, sin abrirlo: asi la ventana de ajustes
+     puede ensenar la lista de camaras (el nombre que anuncia el conductor y si
+     es la estereo del monitor) sin pisarle la camara al visor. */
+  struct Info {
+    std::string path;        /* /dev/video0 */
+    std::string nombre;      /* "3D Stereo WebCam" */
+    std::string usb;         /* "04e8:20d7", vacio si no cuelga de un USB */
+    bool esMonitor = false;  /* la estereo integrada del Odyssey (lo que lamamos 3D Studio) */
+    bool ocupada = false;    /* alguien mas tiene el dispositivo abierto */
+    std::vector<Mode> modos;
+    int fpsMejor = 0;        /* la tasa mas alta que anuncia, en cualquier modo */
+  };
+  static bool describe(const std::string &device, Info *out);
+  static std::vector<Info> listar();   /* todos los /dev/videoN queannon modos */
+
 private:
   void freeBuffers();
 

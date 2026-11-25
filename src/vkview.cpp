@@ -255,6 +255,17 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
   s += "conversor = no compilado\n";
 #endif
   for (const auto &kv : ajusteActual(ui, wv)) s += kv.first + " = " + fmtNumero(kv.second) + "\n";
+  /* el Facetracking: con que camara se esta siguiendo la cara y que esta viendo. La ventana de
+     ajustes lo lee de aqui y de ahi sale tambien su pestaña de camara. */
+  {
+    const Hud::State &hs = ui.hud.state();
+    s += std::string("facetracking = ") + (hs.rastreoVivo ? "abierto" : "sin abrir") + "\n";
+    s += std::string("camara = ") + (hs.rastreoCamara.empty() ? "-" : hs.rastreoCamara) + "\n";
+    if (hs.rastreoVivo)
+      s += std::string("camara_tipo = ") + (hs.rastreoEstudio ? "3D Studio" : "externa") + "\n";
+    s += std::string("camara_cara = ") + (hs.rastreoCara ? "si" : "no") + "\n";
+    s += std::string("camara_nota = ") + (hs.rastreoNota.empty() ? "-" : hs.rastreoNota) + "\n";
+  }
   return s;
 }
 
@@ -299,13 +310,6 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       break;
     case Hud::HitRed:
       ui.redPedida = (st.red == 1) ? 2 : 1;   /* el boton pasa de una red a la otra */
-      break;
-    case Hud::HitTrack:
-      ui.hud.toggleTrack();
-      std::printf("[pastilla] rastreo %s: %s\n", ui.hud.rastreoPuesto() ? "puesto" : "apartado",
-                  ui.hud.rastreoPuesto() ? "la trama sigue lo que mide la camara"
-                                         : "la trama se queda en la pose de fabrica");
-      std::fflush(stdout);
       break;
     case Hud::HitAskSbs:
       st.ask = false;
@@ -484,13 +488,9 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     ui->redPedida = key == GLFW_KEY_1 ? 1 : 2;
     return;
   }
-  if (key == GLFW_KEY_T) {
-    ui->hud.toggleTrack();
-    std::printf("[rastreo] %s con la tecla T: %s\n", ui->hud.rastreoPuesto() ? "puesto" : "apartado",
-                ui->hud.rastreoPuesto() ? "manda la camara" : "manda la pose de fabrica");
-    std::fflush(stdout);
-    return;
-  }
+  /* La tecla T se quito (v0.54): el rastreo no se ofrece a apagar. Si la camara
+     esta abierta, manda lo que mide; si no la encuentra, la trama se queda en la
+     pose de fabrica y la pastilla lo dice. */
   const char *tag = nullptr;
   if (tuningKey(ui->tune, key, &tag)) {
     if (key == GLFW_KEY_0 || key == GLFW_KEY_9) ui->convBase = ui->tune.conv; /* la tecla gana sobre el deslizador */
@@ -1364,6 +1364,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::fflush(stdout);
 
   double t0 = glfwGetTime(), clock = t0, lastPoll = 0.0, ultimoAviso = 0.0, ultimoRastreo = 0.0;
+  double ultimoCuadroVisto = 0.0;   /* cuando volcamos por ultima vez la vista de la camara */
   int frames = 0, errStreak = 0, reintentos = 0;
   bool dumpHecho = false;
   /* Vigia de la ventana (el bloque esta mas abajo en el bucle): si el compositor nos esconde,
@@ -2250,12 +2251,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   "  (Ctrl+Shift+2 la oculta otra vez)\n");
       std::fflush(stdout);
     }
-    /* la fila del rastreo solo existe en el visor: el hub no rastrea */
+    /* la fila de Facetracking solo existe en el visor: el hub no rastrea. No es un
+       boton: dice con que camara se esta siguiendo la cara y que esta viendo. */
     ui.hud.state().controlOjo = true;
 #ifdef HAVE_OPENCV
-    ui.hud.state().rastreoVivo = rastreoVivo;
+    {
+      Hud::State &hs = ui.hud.state();
+      const TrackFeedState fs = feed.state();
+      hs.rastreoVivo = rastreoVivo;
+      hs.rastreoEstudio = fs.esMonitor;
+      hs.rastreoCara = fs.cara;
+      hs.rastreoCamara = fs.nombre.empty() ? fs.camera : fs.nombre;
+      if (!rastreoVivo)
+        hs.rastreoNota = "camara sin abrir: la trama va con la pose de fabrica";
+      else if (!fs.note.empty())
+        hs.rastreoNota = fs.note;
+      else
+        hs.rastreoNota = fs.mode + (fs.cara ? " · cara a la vista" : " · sin cara");
+    }
 #else
     ui.hud.state().rastreoVivo = false;
+    ui.hud.state().rastreoNota = "sin rastreo (compilado sin OpenCV)";
 #endif
     ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
     /* la pastilla cambio de sitio o se oculto: la caja que deja pasar el raton se actualiza aqui */
@@ -2280,7 +2296,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       const bool dentro = fs.sample.panelCentimetres[1] >= -50.0 && fs.sample.panelCentimetres[1] <= 50.0 &&
                           fs.sample.panelCentimetres[2] >= 50.0 && fs.sample.panelCentimetres[2] <= 130.0;
       fresco = fs.seen && fs.age >= 0.0 && fs.age <= 0.15 && dentro;
-      if (fresco && !opts.trackFixed && ui.hud.rastreoPuesto()) {
+      if (fresco && !opts.trackFixed) {
         const TrackSample &m = fs.sample;
         double x = m.panelCentimetres[0], y = m.panelCentimetres[1], z = m.panelCentimetres[2];
         if (opts.trackFlipX) x = -x;
@@ -2293,9 +2309,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         e.y = altoCm * 0.5 - y + opts.trackOffsetY;
         e.z = z + opts.trackOffsetZ;
         ui.ojoBase = e;
-      } else if (!ui.hud.rastreoPuesto()) {
-        /* el boton apartado: vuelta a la pose de siempre */
-        ui.ojoBase = EyePose{opts.eyeX, opts.eyeY, opts.eyeZ};
       }
       if (now - ultimoRastreo >= 1.0) {
         ultimoRastreo = now;
@@ -2307,6 +2320,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     fs.cameraFps, m.reprojectionPx, fs.age,
                     fresco ? "siguiendo" : (fs.note.empty() ? "sin pose valida" : fs.note.c_str()));
         std::fflush(stdout);
+      }
+      /* la vista de la camara, cada dos segundos: el cuadro crudo tal cual lo soltio, para que la
+         ventana de ajustes la ensene sin abrir el dispositivo (la camara del monitor no se puede
+         tener abierta dos veces). Si el rastreo no llego a abrir la camara, no hay nada que volcar
+         y la ventana lo dice con lo que hay en `estado`. */
+      if (now - ultimoCuadroVisto >= 2.0) {
+        ultimoCuadroVisto = now;
+        std::vector<uint8_t> crudo;
+        if (feed.ultimoCuadro(&crudo)) {
+          std::string err;
+          if (!ajuste::escribirCamaraVista(crudo, &err))
+            std::fprintf(stderr, "[camara] %s\n", err.c_str());
+        }
       }
     }
 #endif

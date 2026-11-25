@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 struct TrackFeedOptions {
   std::string device;    /* vacio = buscar la camara sola */
@@ -29,7 +30,11 @@ struct TrackFeedState {
   long long frames = 0;          /* cuadros leidos de la camara */
   long long good = 0;            /* cuadros con pose aceptada */
   double cameraFps = 0.0;        /* cuadros por segundo leidos */
-  std::string camera;            /* dispositivo en uso */
+  std::string camera;            /* dispositivo en uso (/dev/videoN) */
+  std::string nombre;            /* lo que anuncia el conductor: "3D Stereo WebCam" */
+  bool esMonitor = false;        /* la estereo integrada del Odyssey (lo que llamamos 3D Studio) */
+  bool cara = false;             /* en el ultimo cuadro habia una cara, se aceptara o no */
+  bool jpeg = false;             /* el ultimo cuadro llega como JPEG: se puede ensenar */
   bool mono = false;             /* se va por la cara en una sola vista (webcam normal) */
   std::string mode;              /* modo de la camara, ej. MJPG 1280x480 @ 60 */
   std::string note;              /* ultimo problema: sin cara, sin camara... */
@@ -47,6 +52,12 @@ public:
 
   /* Copia corta del estado mas reciente; se puede llamar cada cuadro. */
   TrackFeedState state() const;
+
+  /* Copia el ultimo cuadro tal como lo solto la camara (JPEG crudo) y limpia la marca. Falso si no
+     hay ninguno o si la camara no manda MJPG. Lo usa el visor para volcar una vista previa en
+     ~/.local/state/odyssey3d/camara.jpg y que la ventana de ajustes la ensene sin tener que abrir
+     ella la camara (que estaria ocupada). */
+  bool ultimoCuadro(std::vector<uint8_t> *out);
 
 private:
   void run();
@@ -67,4 +78,6 @@ private:
   bool mono_ = false;
   int modoW_ = 0, modoH_ = 0, modoFps_ = 0;   /* el modo que eligio start() */
   std::string modoCuatro_;
+  std::vector<uint8_t> ultimo_;              /* ultimo cuadro crudo (MJPG), para la vista previa */
+  bool ultimoNuevo_ = false;
 };

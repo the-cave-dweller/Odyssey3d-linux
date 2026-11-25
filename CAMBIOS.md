@@ -2,6 +2,55 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La pastilla dice Facetracking con 3D Studio y fallback, y la ventana tiene hoja de Cámara (v0.54)
+- Pedido de Rodolfo: «el comportamiento del software debe ser simple, ya no ofrecer activar o desactivar el
+  rastreo, sino en el overlay decir Facetracking y junto 3D Studio o fallback, que esté marcado el activo y
+  el texto del otro grayed out»; y «crea una pestaña con selección de webcam, debe venir indicador de un
+  use Stereo, o External, si puedes muestra una preview de lo que se observa». Con *Studio* se refiere a la
+  **cámara integrada del monitor**.
+- Qué se quitó: el botón `Rastreo (T)` de la pastilla, su área tocable (`trackBounds`) y la tecla `T`. El
+  rastreo ya no se ofrece a encender ni apagar: si `serve.conf` dice `rastreo = si` y la cámara abre, manda
+  la cámara; si la cámara no abre, la trama va con la pose de fábrica y la fila lo dice con letras.
+- Qué se puso en la pastilla: la palabra `Facetracking` y dos pastillitas, `3D Studio` y `fallback`. La viva
+  va tintada con el acento (92 %) y con un punto verde; la otra en gris (0,20 / 0,21 / 0,23 y el texto al
+  40 % de tinta). Con la integrada del monitor sale `3D Studio` marcada; con una webcam aparte sale
+  `fallback`, que es la vía que mide la distancia por el ancho de la cara (`mono = si`). La fila **informa,
+  no manda**: no tiene área tocable. La nota de la derecha se recorta contra el ancho de la pastilla
+  (824 px), medida en `test hud`.
+- Medido con la v0.54 instalada, sin montar el overlay: `ctl track --segundos 5` →
+  `energia control=on estado=active`, `camara /dev/video0 1280x480 MJPG @ 60`, **287 fotogramas en 5 s**
+  (≈57 fps) con YuNet a **4,4–6,3 ms** por cuadro, y **0 poses válidas**: los 287 dicen `sin cara` porque la
+  silla estaba vacía, como se ve en la propia vista. O sea que el rastreo está puesto y la cámara responde;
+  para ver la pastilla marcada hace falta una cara delante. Queda esa prueba tuya.
+- Hoja nueva `Cámara` en `odyssey3d-ajustes` (la ventana pasa a dos hojas: *Trama y redes* y *Cámara*): combo
+  con las `/dev/video*` que dan cuadro —nombre del conductor, id USB, si es la estereo del monitor, el modo
+  que daría y si lo tiene otro proceso—, sello de color con `FACETRACKING ACTIVO · Stereo (3D Studio…)` /
+  `· Externa…` / `FACETRACKING PARADO: motivo`, la vista, la comparación entre la cámara que usa la sesión
+  en curso (la dice `estado`) y la pedida en `serve.conf`, y el botón `Usar esta camara en el rastreo`, que
+  escribe `camara` (y `mono`) en `serve.conf` dejando copia en `serve.conf.auterior` **y** manda la orden
+  viva. La ventana re-cuenta las cámaras cada 4 s, no veinte veces por segundo, porque `Camera::describe`
+  abre cada nodo para leerle el nombre y los modos.
+- La preview no la saca la ventana: la cámara del monitor no admite dos aperturas y su puerto de control UVC
+  se pone terco si lo toca un segundo proceso (lo sufrimos con `VIDIOC_S_FMT ... Input/output error`). El que
+  la abre —el visor en sesión, o el sondeo `ctl track`— vuelca cada 2 s el último cuadro crudo a
+  `~/.local/state/odyssey3d/camara.jpg`, y la ventana lo decodifica y lo enseña. Medido: 150 KB escritos, y
+  `--prueba` lo decodifica con Qt a **1280x480**, las dos vistas una al lado de la otra. `Camera::describe`
+  descubre el `/dev/video1` de *Metadata Capture only* y lo deja fuera de la lista.
+- Claves nuevas en el fichero `estado`, escritas por el visor: `facetracking` (`abierto` / `sin abrir`),
+  `camara`, `camara_tipo` (`3D Studio` / `externa`), `camara_cara` (`si`/`no`) y `camara_nota`.
+- Lista de redes, pedido aparte: «con otros no me refiero a otros dispositivos, quita la separación, solo
+  marca como Native los que no son de samsung y Samsung replicate el que sí es, mantén los nombres simples».
+  Una sola lista plana y la marca sale del **nombre del fichero**: `mde_*` y `Disp_*` → `Samsung replicate`,
+  lo demás → `Native`. Medido con `--prueba`: 10 redes, `mde_large.onnx → Samsung replicate`,
+  `depth_anything_v2_small.onnx → Native`, `face_detection_yunet_2023mar.onnx → Native`.
+
+## Revertir por red, dos listas con flechas y globos en cada deslizador (v0.53)
+- `Revertir` deja los números de fábrica de la red puesta y borra su perfil guardado; los guardados se llenan
+  solos con las redes que se salieron de fábrica y se pueden exportar (un `.conf` comentado con lo suelto) o
+  borrar. Las redes pasan de una lista desplegable a dos listas con flechas (disponibles y seleccionadas) más
+  una tercera de guardados, y cada deslizador enseña un globo transparente con el nombre y el valor mientras
+  se arrastra.
+
 ## El botón que pone la trama encima del escritorio, y las redes separadas en nativas y otras (v0.52)
 - Pedido de Rodolfo: «añade un botón para cargar el overlay en el escritorio del monitor, el click lo
   fuerza y un segundo click lo quita; también, referente a los modelos, separa los nativos como modelos

@@ -355,30 +355,45 @@ void Hud::begin(int w, int h, float altoLogico) {
     slider(&depTrack_, &depKnob_, "3D Profundidad", "Ctrl+Shift+3 / 4", dfrac, std::to_string(st_.depth).c_str());
     slider(&popTrack_, &popKnob_, "3D Salida", "Ctrl+Shift+5 / 6", pfrac, std::to_string(st_.popout).c_str());
 
-    /* ---- fila del rastreo: el boton -------------------------------------------
-       El boton decide si la trama sigue la pose que mide la camara o si se queda en la
-       pose de fabrica. Antes habia aqui un deslizador para girar la linea de vision a
-       mano; se quito (v0.34) porque no hacia falta: con el rastreo puesto la camara hace
-       ese trabajo, y sin camara la pose de fabrica es la que calzo de serie. */
+    /* ---- fila del rastreo: Facetracking ---------------------------------
+       No es un boton: el rastreo no se ofrece a encender ni a apagar. La fila dice con que
+       camara se esta siguiendo la cara. `3D Studio` es la integrada del monitor (04e8:20d7,
+       dos vistas calibradas de fabrica); `fallback` es cualquier otra webcam, que va por el
+       ancho de la cara. La que alimenta la trama sale a color y la otra en gris, asi se ve de
+       un golpe de vista cual se esta usando. (Si no hay otra webcam conectada, la caja gris
+       solo dice que esa via esta libre, no que este estropeada.) */
     if (st_.controlOjo) {
       const float fila = y0 + 92.0f;
-      btnTrack_ = {x0 + 18.0f, fila, 180.0f, 30.0f};
-      const bool hovT = btnTrack_.inside(mx_, my_);
-      const float tbg = hovT ? 0.30f : 0.22f;
-      const bool siguiendo = st_.rastreoVivo && st_.rastreoPuesto;
-      mask9(btnTrack_, 1, 8.0f, siguiendo ? accent[0] : tbg, siguiendo ? accent[1] : tbg,
-            siguiendo ? accent[2] : tbg, 0.95f);
-      const char *ttxt = !st_.rastreoVivo   ? "Sin camara (T)"
-                       : st_.rastreoPuesto  ? "Rastreo puesto (T)" : "Rastreo a mano (T)";
-      text(ttxt, btnTrack_.x + 10.0f, btnTrack_.y + 7.0f, 14.0f, ink[0], ink[1], ink[2],
-           st_.rastreoVivo ? 1.0f : 0.55f);
-
-      const char *pose = !st_.rastreoVivo  ? "no hay camara: pose de fabrica"
-                     : st_.rastreoPuesto  ? "la trama sigue a la camara"
-                                          : "la trama queda en la pose de fabrica";
-      text(pose, x0 + 214.0f, fila + 8.0f, 13.0f, dim[0], dim[1], dim[2], st_.rastreoVivo ? 1.0f : 0.6f);
-    } else {
-      btnTrack_ = Rect{};
+      text("Facetracking", x0 + 18.0f, fila + 8.0f, 14.0f, dim[0], dim[1], dim[2], 1.0f);
+      float caje = x0 + 18.0f + textWidth("Facetracking", 14.0f) + 14.0f;
+      float punto = -1.0f;   /* el borde derecho de la caja activa, para marcarla con un punto */
+      auto chip = [&](const char *nombre, bool puesta) {
+        const float ancho = textWidth(nombre, 14.0f) + 24.0f;
+        const Rect caja{caje, fila, ancho, 30.0f};
+        if (puesta) {
+          mask9(caja, 1, 8.0f, accent[0], accent[1], accent[2], 0.92f);
+          punto = caja.x + ancho - 13.0f;
+        } else {
+          mask9(caja, 1, 8.0f, 0.20f, 0.21f, 0.23f, 0.95f);
+        }
+        text(nombre, caja.x + 12.0f, caja.y + 7.0f, 14.0f, ink[0], ink[1], ink[2], puesta ? 1.0f : 0.40f);
+        caje += ancho + 10.0f;
+      };
+      const bool estudio = st_.rastreoVivo && st_.rastreoEstudio;
+      const bool reserva = st_.rastreoVivo && !st_.rastreoEstudio;
+      chip("3D Studio", estudio);
+      chip("fallback", reserva);
+      /* el punto oscuro va dentro de la caja activa: sobre el verde de acento el relleno solo
+         no se distingue, y el gris de la inactiva ya dice por si solo que no se esta usando */
+      if (punto >= 0.0f)
+        mask9({punto, fila + 12.0f, 6.0f, 6.0f}, 0, 3.0f, 0.06f, 0.32f, 0.12f, 1.0f);
+      std::string nota = st_.rastreoNota;
+      if (!nota.empty()) {
+        const float tope = x0 + pw - 20.0f;
+        while (!nota.empty() && caje + 8.0f + textWidth(nota, 12.0f) > tope) nota.resize(nota.size() - 1);
+        if (!nota.empty())
+          text(nota, caje + 8.0f, fila + 9.0f, 12.0f, dim[0], dim[1], dim[2], st_.rastreoVivo ? 0.95f : 0.6f);
+      }
     }
 
     /* indicador pequeño del estado de la lente y el scaler */
@@ -538,7 +553,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (dt.inside(mx, my)) return HitDepth;
   if (pt.inside(mx, my)) return HitPopout;
   if (btnRed_.inside(mx, my)) return HitRed;
-  if (st_.controlOjo && btnTrack_.inside(mx, my)) return HitTrack;
+  /* la fila de Facetracking no se pica: informa, no manda */
   return HitNone;
 }
 

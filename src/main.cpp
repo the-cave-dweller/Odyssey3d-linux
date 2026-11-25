@@ -586,6 +586,7 @@ static int cmdTrack(int argc, char **argv) {
   auto t0 = std::chrono::steady_clock::now();
   int leidos = 0, aceptados = 0;
   bool dumpHecho = false;
+  double marcaCuadro = -10.0;   /* el ultimo cuadro crudo que se guardo para la vista */
   while (true) {
     const auto now = std::chrono::steady_clock::now();
     if (std::chrono::duration<double>(now - t0).count() >= (double)segundosLimite) break;
@@ -598,6 +599,16 @@ static int cmdTrack(int argc, char **argv) {
     }
     leidos++;
     std::vector<uint8_t> left, right;
+    /* el sondeo deja el ultimo cuadro crudo en el mismo sitio que el visor (camara.jpg), asi la
+       hoja de camara de la ventana tiene algo que ensenar sin tener que montar el overlay ni
+       abrir la camara del monitor dos veces */
+    const double vistos = std::chrono::duration<double>(now - t0).count();
+    if (vistos - marcaCuadro >= 2.0) {
+      marcaCuadro = vistos;
+      std::string errVista;
+      if (!ajuste::escribirCamaraVista(std::vector<uint8_t>(data, data + size), &errVista))
+        std::fprintf(stderr, "aviso: %s\n", errVista.c_str());
+    }
     int vw = 0, vh = 0;
     bool dec = false;
     if (mono) {
@@ -2227,33 +2238,40 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().ask = true;
   hud.state().controlOjo = true;   /* el visor ensena la fila del rastreo */
   hud.state().rastreoVivo = true;
+  hud.state().rastreoEstudio = true;   /* como si fuera la camara del monitor */
+  hud.state().rastreoNota = "1280x480 MJPG @ 60 · cara a la vista";
   hud.setInfo("prueba de la interfaz");
   hud.begin(W, H);
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
   static const char *nom[] = {"nada",              "boton 3D",   "boton capa",   "deslizador profundidad",
                               "deslizador salida", "boton red",  "tesela SxS",   "tesela arriba/abajo",
-                              "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso",
-                              "boton rastreo"};
+                              "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso"};
   int cuenta[14] = {0}, px0[14] = {0}, py0[14] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
-      if (h < 0 || h > 12) continue;
+      if (h < 0 || h > 11) continue;
       if (!cuenta[h]) {
         px0[h] = x;
         py0[h] = y;
       }
       cuenta[h]++;
     }
-  for (int h = 1; h <= 12; h++)
+  for (int h = 1; h <= 11; h++)
     std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
 
-  /* El boton del rastreo: que este dibujado y donde cae (las pruebas lo pulsan sin raton). */
+  /* La fila de Facetracking (v0.54): ya no es un boton, informa. Lo que hay que comprobar es que
+     la etiqueta y las dos cajas quepan SIEMPRE en la pastilla de 824 px; la nota se recorta sola
+     al dibujar, pero si las cajas no caben la fila se sale del recuadro. */
   {
-    float tx = 0.0f, ty = 0.0f, tw = 0.0f, th = 0.0f;
-    if (hud.trackBounds(&tx, &ty, &tw, &th))
-      std::printf("  boton de rastreo %.0fx%.0f en (%.0f,%.0f)\n", (double)tw, (double)th, (double)tx, (double)ty);
+    const float etiqueta = hud.mideTexto("Facetracking", 14.0f);
+    const float cajaEstudio = hud.mideTexto("3D Studio", 14.0f) + 24.0f;   /* 12 px de aire por lado */
+    const float cajaExterna = hud.mideTexto("fallback", 14.0f) + 24.0f;
+    const float usado = 18.0f + etiqueta + 14.0f + cajaEstudio + 10.0f + cajaExterna;
+    std::printf("  fila Facetracking %.0f px (etiqueta %.0f + cajas %.0f + %.0f) de 824 · quedan %.0f para"
+                " la nota  %s\n", (double)usado, (double)etiqueta, (double)cajaEstudio, (double)cajaExterna,
+                (double)(824.0f - 20.0f - usado), usado + 20.0f <= 824.0f ? "cabe" : "SE SALE");
   }
 
   /* Rotulos de la pastilla, con la caja real donde se dibujan (ancho del boton menos el aire a cada
@@ -2269,8 +2287,6 @@ static int cmdHudSelfTest(int argc, char **argv) {
                                {"teclas 1 / 2", 11.0f, 160.0f},           {"Tab  entrega la pantalla", 11.0f, 272.0f},
                                {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
                                {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
-                              {"Rastreo puesto (T)", 14.0f, 160.0f},   {"Rastreo a mano (T)", 14.0f, 160.0f},
-                              {"Sin camara (T)", 14.0f, 160.0f},
                               {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
@@ -3581,7 +3597,8 @@ static int cmdServe(int argc, char **argv) {
     {
       std::map<std::string, double> ordenes;
       std::string modeloCanal;
-      if (lectorOrden.cambio(ordenes, modeloCanal)) {
+      std::map<std::string, std::string> palabras;   /* las ordenes que llevan palabra: camara, mono */
+      if (lectorOrden.cambio(ordenes, modeloCanal, &palabras)) {
         const auto it = ordenes.find("overlay");
         /* La PRIMERA vez que miramos el fichero al arrancar el servicio no es un cambio: puede venir
            con una orden vieja de cuando el equipo se apago o de un servicio que ya no esta. Montar el
@@ -3623,6 +3640,45 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
             ::kill(hijo, SIGTERM);
           }
+        }
+        /* La camara del Facetracking: `camara = /dev/videoN` y, si hace falta, `mono = si|no|auto`.
+           La ventana de ajustes deja ademas la eleccion escrita en serve.conf, asi que aca solo hace
+           falta que el vigilante la recuerde para la proxima sesion: la camara la tiene abierta el
+           visor, y cambiarla en plena sesion seria cerrarla y abrir otra con el rastreo encima. */
+        bool elegida = false;
+        std::string antesCamara = cfg.camara, antesMono = cfg.mono;
+        const auto ic = palabras.find("camara");
+        if (ic != palabras.end() && ic->second != cfg.camara) { cfg.camara = ic->second; elegida = true; }
+        const auto im = palabras.find("mono");
+        if (im != palabras.end()) {
+          const std::string m = strLower(im->second);
+          const std::string fijo = (m == "si" || m == "no") ? m : "auto";
+          if (fijo != cfg.mono) { cfg.mono = fijo; elegida = true; }
+        }
+        if (elegida && !primerOrden) {
+          Camera::Info info;
+          const bool sabe = !cfg.camara.empty() && Camera::describe(cfg.camara, &info);
+          std::string como = cfg.camara.empty() ? "la que encuentre el visor" : cfg.camara;
+          if (sabe) {
+            como += " (" + (info.nombre.empty() ? std::string("sin nombre") : info.nombre);
+            if (!info.usb.empty()) como += " " + info.usb;
+            if (!info.modos.empty()) {
+              char dim[48];
+              std::snprintf(dim, sizeof dim, ", %dx%d", info.modos.front().width, info.modos.front().height);
+              como += dim;
+            }
+            como += info.esMonitor ? ", estereo del monitor)" : ", webcam aparte)";
+          } else if (!cfg.camara.empty()) {
+            como += " · ojo: no se pudo abrir)";
+          }
+          std::printf("[serve] camara del Facetracking ahora %s. Vale para la PROXIMA sesion: la actual"
+                      " sigue con la que tenia abierta (%s)\n", como.c_str(),
+                      cfg.rastreo ? "el visor la tiene cogida" : "sin rastreo pedido");
+          std::fflush(stdout);
+          ajuste::registrar("camara", antesCamara.empty() ? "-" : antesCamara,
+                            cfg.camara.empty() ? "-" : cfg.camara, redActiva, "la ventana de ajustes");
+          if (antesMono != cfg.mono)
+            ajuste::registrar("mono", antesMono, cfg.mono, redActiva, "la ventana de ajustes");
         }
         primerOrden = false;
       }

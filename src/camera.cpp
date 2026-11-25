@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
@@ -355,6 +356,82 @@ std::vector<Camera::Mode> Camera::modes(const std::string &device) {
 static std::string nombreNodo(const std::string &device) {
   const size_t barra = device.find_last_of('/');
   return barra == std::string::npos ? device : device.substr(barra + 1);
+}
+
+/* El nombre que anuncia el conductor de la camara estereo del monitor. */
+static bool nombreEsDelMonitor(const std::string &nombre) {
+  std::string bajo = nombre;
+  for (char &c : bajo) c = (char)std::tolower((unsigned char)c);
+  return bajo.find("stereo") != std::string::npos || bajo.find("3d") != std::string::npos;
+}
+
+bool Camera::usbIds(const std::string &device, std::string *id) {
+  std::string dir;
+  if (!usbSysfs(device, &dir)) return false;
+  std::string ruta = dir;
+  for (int subidas = 0; subidas < 8 && ruta != "/" && !ruta.empty(); subidas++) {
+    std::string v = leyerPequeno(ruta + "/idVendor"), p = leyerPequeno(ruta + "/idProduct");
+    if (!v.empty() && !p.empty()) {
+      if (id) *id = v + ":" + p;
+      return true;
+    }
+    const size_t barra = ruta.find_last_of('/');
+    ruta = barra == std::string::npos ? std::string() : ruta.substr(0, barra);
+  }
+  return false;
+}
+
+bool Camera::describe(const std::string &device, Info *out) {
+  Info i;
+  i.path = device;
+  i.nombre = leyerPequeno("/sys/class/video4linux/" + nombreNodo(device) + "/name");
+  while (!i.nombre.empty() && isspace((unsigned char)i.nombre.back())) i.nombre.pop_back();
+  usbIds(device, &i.usb);
+  /* Primero el nombre y la id: no hace falta abrir nada para saber si es la del
+     monitor, y abrir un nodo ocupado puede dar EBUSY. */
+  i.esMonitor = nombreEsDelMonitor(i.nombre) || i.usb == "04e8:20d7";
+  int fd = ::open(device.c_str(), O_RDWR | O_CLOEXEC | O_NONBLOCK);
+  if (fd < 0) {
+    /* Ocupada (el visor la tiene) o sin permiso. Si el nodo existe y tiene nombre
+       lo ensenamos igual: es el caso de "la camara la esta usando el visor". */
+    if (errno == EBUSY) i.ocupada = true;
+    else return false;
+  } else {
+    v4l2_capability cap{};
+    const bool capturar = ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0 &&
+                          ((cap.capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_CAPTURE_MPLANE)) ||
+                           (cap.device_caps & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_CAPTURE_MPLANE)));
+    ::close(fd);
+    if (!capturar) return false;   /* nodos de metadata: no dan cuadro */
+    i.modos = modes(device);
+    for (const Mode &m : i.modos) {
+      if (m.fps > i.fpsMejor) i.fpsMejor = m.fps;
+      if (m.height > 0 && m.width == 2 * m.height && m.width >= 1024) i.esMonitor = true;
+    }
+    if (i.modos.empty()) return false;   /* no anuncia ningun modo: no sirve para capturar */
+    /* el modo que de verdad usa el rastreo va el primero de la lista: la camara del monitor
+       anuncia tambien 640x480 y si no se ordena la ventana ensena ese en vez del 1280x480
+       que es el par de vistas (2 x 640x480 => alto 480 = 2 * 240? no: 1280x480 = 2 mitades). */
+    std::stable_sort(i.modos.begin(), i.modos.end(), [](const Mode &a, const Mode &b) {
+      const bool estereoA = (a.height > 0 && a.width == 2 * a.height && a.width >= 1024);
+      const bool estereoB = (b.height > 0 && b.width == 2 * b.height && b.width >= 1024);
+      if (estereoA != estereoB) return estereoA;
+      if (a.width * a.height != b.width * b.height) return a.width * a.height > b.width * b.height;
+      return a.fps > b.fps;
+    });
+  }
+  if (out) *out = i;
+  return true;
+}
+
+std::vector<Camera::Info> Camera::listar() {
+  std::vector<Info> out;
+  for (int i = 0; i < 10; i++) {
+    const std::string node = "/dev/video" + std::to_string(i);
+    Info info;
+    if (describe(node, &info)) out.push_back(info);
+  }
+  return out;
 }
 
 bool Camera::esEstereoDelMonitor(const std::string &device) {

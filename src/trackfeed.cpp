@@ -30,6 +30,15 @@ bool TrackFeed::start(const TrackFeedOptions &opts, std::string *err) {
     return false;
   }
   st_.camera = opts_.device;
+  /* Que camara es queda apuntado para la pastilla y para la ventana de ajustes:
+     la integrada del monitor es "3D Studio", cualquiera otra es la de reserva. */
+  {
+    Camera::Info info;
+    if (Camera::describe(opts_.device, &info)) {
+      st_.nombre = info.nombre;
+      st_.esMonitor = info.esMonitor;
+    }
+  }
   /* Que clase de camara es decide todo lo demas. La del monitor (04e8:20d7)
      entrega un cuadro de 1280x480 con las dos vistas pegadas y viene calibrada
      de fabrica: ahi se triangulan los dos ojos. Cualquier otra webcam que se
@@ -67,6 +76,7 @@ bool TrackFeed::start(const TrackFeedOptions &opts, std::string *err) {
     std::snprintf(texto, sizeof texto, "%s %dx%d @ %d%s", intento.fourcc, cam_.width(), cam_.height(),
                   intento.fps, mono_ ? " (una vista, por la cara)" : " (dos vistas, calibrada)");
     st_.mode = texto;
+    st_.jpeg = cam_.mjpeg();
     abierto = true;
     modoW_ = cam_.width();
     modoH_ = cam_.height();
@@ -133,7 +143,7 @@ void TrackFeed::run() {
   }
   std::vector<uint8_t> izquierda, derecha;
   int vw = 0, vh = 0;
-  int sinCuadro = 0, malDecodificados = 0;
+  int sinCuadro = 0, malDecodificados = 0, contados = 0;
   while (!stop_) {
     const uint8_t *datos = nullptr;
     size_t bytes = 0;
@@ -166,6 +176,15 @@ void TrackFeed::run() {
       decodificado = HeadTracker::decodeFrame(datos, bytes, cam_.width(), cam_.height(), cam_.mjpeg(),
                                               izquierda, derecha, vw, vh, &err);
     }
+    /* Cada 20 cuadros (3 o 4 por segundo) nos quedamos con el cuadro crudo tal como lo
+       solto la camara: es un memcpy de unos 100 KB y solo lo pide el bucle de dibujado,
+       que lo vuelca a ~/.local/state/odyssey3d/camara.jpg. Asi la ventana de ajustes
+       ensena lo que se esta viendo sin abrir ella el dispositivo, que estaria ocupado. */
+    if (cam_.mjpeg() && ++contados % 20 == 0) {
+      std::lock_guard<std::mutex> guard(mu_);
+      ultimo_.assign(datos, datos + bytes);
+      ultimoNuevo_ = true;
+    }
     cam_.release();
     {
       std::lock_guard<std::mutex> guard(mu_);
@@ -182,6 +201,7 @@ void TrackFeed::run() {
       tracker.process(izquierda.data(), derecha.data(), vw, vh, muestra, &err);
     const double t = reloj();
     std::lock_guard<std::mutex> guard(mu_);
+    st_.cara = muestra.detected;
     if (muestra.accepted) {
       st_.sample = muestra;
       st_.seen = true;
@@ -210,6 +230,14 @@ void TrackFeed::stop() {
   if (th_.joinable()) th_.join();
   cam_.close();
   running_ = false;
+}
+
+bool TrackFeed::ultimoCuadro(std::vector<uint8_t> *out) {
+  std::lock_guard<std::mutex> guard(mu_);
+  if (!ultimoNuevo_ || ultimo_.empty()) return false;
+  ultimoNuevo_ = false;
+  if (out) *out = ultimo_;
+  return true;
 }
 
 TrackFeedState TrackFeed::state() const {

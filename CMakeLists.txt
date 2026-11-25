@@ -244,7 +244,7 @@ option(ODYSSEY3D_UI "Ventana de ajustes por Qt (proceso aparte, habla con el vis
 if(ODYSSEY3D_UI)
   find_package(Qt6 COMPONENTS Widgets QUIET)
   if(Qt6_FOUND)
-    add_executable(odyssey3d-ajustes src/ui_ajustes.cpp src/ajuste.cpp src/util.cpp)
+    add_executable(odyssey3d-ajustes src/ui_ajustes.cpp src/ajuste.cpp src/util.cpp src/camera.cpp)
     target_include_directories(odyssey3d-ajustes PRIVATE src)
     target_link_libraries(odyssey3d-ajustes PRIVATE Qt6::Widgets)
     add_dependencies(odyssey3d-ajustes odyssey3d)   # primero el visor: la ventana sin visor no tiene nada que manejar

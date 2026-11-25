@@ -18,6 +18,7 @@
 #ifndef ODYSSEY_AJUSTE_H
 #define ODYSSEY_AJUSTE_H
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -38,16 +39,19 @@ const std::vector<Clave> &claves();
 const Clave *buscarClave(const std::string &nombre);
 
 /* Lee el fichero de ajuste. Devuelve los numeros que aparecen (con la clave tal cual esta escrita)
-   y en `modelo` la ruta .onnx pedida, si la hay. Falso si el fichero no existe (no es un error: el
-   canal es opcional). */
-bool leer(std::map<std::string, double> &numeros, std::string &modelo);
+   y en `modelo` la ruta .onnx pedida, si la hay. En `texto` (opcional) quedan las ORDENES que llevan
+   palabra o ruta en vez de numero: `camara = /dev/video0`, `mono = auto`. Falso si el fichero no
+   existe (no es un error: el canal es opcional). */
+bool leer(std::map<std::string, double> &numeros, std::string &modelo,
+          std::map<std::string, std::string> *texto = nullptr);
 
 /* El visor solo aplica el fichero cuando CAMBIO de verdad (hora de modificacion y tamano): si lo
    aplicara siempre, una tecla pulsada despues de escribir un numero se volveria a poner sola al
    valor que esta escrito. Los numeros del fichero son una orden, no la verdad. */
 class Lector {
  public:
-  bool cambio(std::map<std::string, double> &numeros, std::string &modelo);
+  bool cambio(std::map<std::string, double> &numeros, std::string &modelo,
+              std::map<std::string, std::string> *texto = nullptr);
 
  private:
   long long marca_ = -1;
@@ -55,8 +59,9 @@ class Lector {
 
 /* Hay lineas del fichero que no son un numero sino una ORDEN, y las atiende el vigilante (el hub),
    no el visor: `overlay = 1` pide el overlay montado EN EL ESCRITORIO del monitor, sin esperar a que
-   nadie se ponga a pantalla completa, y `overlay = 0` lo quita. El visor pasa de esas lineas en
-   silencio (si no, las reportaria como un numero que no conoce). */
+   nadie se ponga a pantalla completa, y `overlay = 0` lo quita; `camara = /dev/videoN` y
+   `mono = auto|si|no` eligen la camara del Facetracking para la proxima sesion. El visor pasa de esas
+   lineas en silencio (si no, las reportaria como un numero que no conoce). */
 bool esOrden(const std::string &nombre);
 
 /* El vigilante cuenta que sesion tiene abierta (ninguna / video / escritorio), en que pantalla y con
@@ -71,6 +76,10 @@ std::map<std::string, std::string> leerEstadoHub();
    usan `ctl ajuste`, `ctl escritorio` y la ventana de ajustes. */
 bool escribir(const std::map<std::string, double> &numeros, const std::string &modelo,
               std::string *err);
+/* Igual, pero pudiendo mandar tambien las ORDENES de palabra (`camara`, `mono`). La ventana de
+   ajustes la usa para decir con que camara quiere el Facetracking de la proxima sesion. */
+bool escribir(const std::map<std::string, double> &numeros, const std::string &modelo,
+              const std::map<std::string, std::string> &ordenes, std::string *err);
 
 /* El visor cuenta lo que esta usando ahora mismo (una linea por numero, mas la red y el reloj). */
 void escribirEstado(const std::string &texto);
@@ -100,6 +109,19 @@ std::vector<std::string> historial(int n);
    hay en el fichero de ajuste: ese es una orden de una vez y se vacia. */
 std::map<std::string, double> valoresFabrica();
 std::string rutaServeConf();
+
+/* La vista de la camara que esta usando el visor: el visor vuelca ahi el ultimo cuadro crudo
+   (JPEG tal cual lo solto la camara) una vez cada dos segundos, y la ventana de ajustes lo ensena.
+   Se hace asi porque la camara del monitor la tiene abierta el visor: si la abriera tambien la
+   ventana, la 04e8:20d7 dejarfa de responder. */
+std::string rutaCamaraVista();
+bool escribirCamaraVista(const std::vector<uint8_t> &jpeg, std::string *err = nullptr);
+
+/* serve.conf en crudo (para ensenar que camara esta puesta, que `rastreo` esta a `si`...).
+   `fijarEnServeConf` cambia UNA linea de ese fichero sin tocar el resto, y deja la anterior en
+   `serve.conf.auterior`: es lo que hace la ventana cuando se elige otra camara. */
+std::map<std::string, std::string> leerServeConf();
+bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::string *err);
 
 /* Cuantas claves de `numeros` se salen de `base`, y cuales son (para decirlo en la ventana). */
 int diferencias(const std::map<std::string, double> &numeros, const std::map<std::string, double> &base,
