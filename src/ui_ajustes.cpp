@@ -16,6 +16,8 @@
    Se compila solo si hay Qt6 (ver CMakeLists.txt, opcion ODYSSEY3D_UI). Sin pantalla se puede probar
    con QT_QPA_PLATFORM=offscreen. */
 #include "ajuste.h"
+#include <cstdio>
+#include <cstring>
 
 #include <QApplication>
 #include <QCheckBox>
@@ -111,6 +113,29 @@ struct Fila {
 int main(int argc, char **argv) {
   QApplication app(argc, argv);
   QApplication::setApplicationName("odyssey3d-ajustes");
+
+  /* `--prueba` sirve para comprobar la ventana sin pantalla (por ssh, o con QT_QPA_PLATFORM=offscreen):
+     cuenta lo que ve en el disco y en los ficheros del visor y sale sin abrir nada. */
+  for (int i = 1; i < argc; i++) {
+    if (std::strcmp(argv[i], "--prueba") != 0) continue;
+    const std::map<std::string, std::string> est = ajuste::leerEstado();
+    std::printf("fichero de orden : %s\n", ajuste::rutaAjuste().c_str());
+    std::printf("fichero de estado: %s\n", ajuste::rutaEstado().c_str());
+    if (est.empty()) {
+      std::printf("estado: el visor no ha escrito nada, osea que no hay sesion 3D abierta\n");
+    } else {
+      std::printf("estado del visor (%d numeros y nombres)\n", (int)est.size());
+      for (const auto &kv : est)
+        std::printf("  %-16s %s\n", kv.first.c_str(), kv.second.c_str());
+    }
+    const QStringList rutas = rutasDeModelos(est.count("modelo") ? est.at("modelo") : std::string());
+    std::printf("redes que tendria la lista desplegable: %d\n", (int)rutas.size());
+    for (const QString &r : rutas) std::printf("  %s\n", r.toUtf8().constData());
+    const std::vector<std::string> hist = ajuste::historial(5);
+    std::printf("ultimos %d cambios apuntados en %s\n", (int)hist.size(), ajuste::rutaHistorial().c_str());
+    for (const std::string &l : hist) std::printf("  %s\n", l.c_str());
+    return 0;
+  }
 
   QWidget ventana;
   ventana.setWindowTitle(QString::fromUtf8("Ajustes del visor 3D (proceso aparte)"));
