@@ -3472,9 +3472,16 @@ static int cmdServe(int argc, char **argv) {
     if (cfg.devolverFull && !seFueUuid.empty()) {
       WindowInfo v{};
       const bool viva = wm.find(seFueUuid, v) && v.mapped;
-      const bool yaFuera = now - seFueDesde > 12.0 || fullQuitadas >= 3;
-      if (!viva || !v.fullscreen()) {
-        seFueUuid.clear();     /* la ventana cerro o ya esta en su tamano normal: no insistimos */
+      /* Ojo: al cerrar la sesion la ventana YA esta en su tamano normal (por eso la cerramos), y un
+         segundo DESPUES la pagina se la vuelve a poner. Medido el 24/11 a las 20:53 con Firefox y
+         vuelto a medir a las 22:04 con mpv: si uno se rinde al primer vistazo porque "ya esta normal",
+         nunca llega a ver la reposicion de la pagina. Mientras dure la vigilia NO nos vamos porque este
+         normal: esperamos a ver si se la vuelve a poner. */
+      const bool yaFuera = now - seFueDesde > 20.0 || fullQuitadas >= 3;
+      if (!viva) {
+        seFueUuid.clear();     /* la ventana cerro: ya no hay nada que devolver */
+      } else if (!v.fullscreen()) {
+        /* de momento en su tamano normal: seguimos mirando un rato mas */
       } else if (yaFuera) {
         if (!fullAvisado) {
           fullAvisado = true;
