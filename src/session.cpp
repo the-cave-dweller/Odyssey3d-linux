@@ -91,14 +91,24 @@ void Rig::bringUp(const ViewerOpts &o) {
           } else if (!Panel::saveSnapshot(st, &snapPath, &err, movidas.empty() ? nullptr : &originales)) {
             std::fprintf(stderr, "[aviso] %s\n", err.c_str());
           }
-          if (Panel::apply(name, idx, 1.0, RotNone, true, &err, false, movidas.empty() ? nullptr : &movidas)) {
+          /* HDR en 3D (v0.71). De siempre se apagaba al entrar: con HDR el compositor convierte el
+             color con una matriz que mezcla los canales, y en la trama los tres subpixeles de un punto
+             pueden ser de ojos distintos. Pero Rodolfo lo probo en el panel el 25-nov (con
+             `kscreen-doctor output.DP-4.hdr.enable` en mitad de una sesion) y los colores dejan de
+             verse secos: `hdr_en_3d = si` en serve.conf (ODYSSEYVK_HDR_3D=1) lo deja como este en el
+             escritorio. Por defecto se sigue apagando. */
+          static const bool kHdrEn3d = [] {
+            const char *e = entornoOdyssey("ODYSSEYVK_HDR_3D");
+            return e && (e[0] == '1' || e[0] == 's');
+          }();
+          if (Panel::apply(name, idx, 1.0, RotNone, !kHdrEn3d, &err, false, movidas.empty() ? nullptr : &movidas)) {
             saved = st;
             /* En el caso residual los sitios de origen validos son los de la instantanea: lo que se
                ve ahora en el escritorio ya es el escritorio movido de la sesion que se corto. */
             otras = (residual && !staleOtras.empty()) ? staleOtras : originales;
             panelApplied = true;
-            std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR apagado\n", name.c_str(), idx,
-                        nombreModo.c_str());
+            std::printf("[panel] %s: modo %d %s, escala 1, rotacion normal, HDR %s\n", name.c_str(), idx,
+                        nombreModo.c_str(), kHdrEn3d ? "como en el escritorio (hdr_en_3d)" : "apagado");
             std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
                         saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));
             usleep(400000); /* que KWin asiente antes de crear la ventana */

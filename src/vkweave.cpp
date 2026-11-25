@@ -143,6 +143,16 @@ bool VkWeave::createSwapchain(int w, int h, std::string *err) {
   for (VkPresentModeKHR m : modes)
     if (m == VK_PRESENT_MODE_FIFO_KHR) haveFifo = true;
   if (!haveFifo && np) pm_ = modes[0];
+  /* ODYSSEYVK_SIN_VSYNC=1 (taller, v0.71): dibujar sin esperar al refresco, SOLO para medir cuantos
+     cuadros por segundo da el programa cuando el panel no lo frena. No sirve para mirar: sin el ritmo
+     del panel la trama se parte. */
+  if (entornoOdyssey("ODYSSEYVK_SIN_VSYNC")) {
+    for (VkPresentModeKHR m : modes)
+      if (m == VK_PRESENT_MODE_MAILBOX_KHR) pm_ = m;
+    if (pm_ == VK_PRESENT_MODE_FIFO_KHR)
+      for (VkPresentModeKHR m : modes)
+        if (m == VK_PRESENT_MODE_IMMEDIATE_KHR) pm_ = m;
+  }
 
   ext_ = caps.currentExtent;
   if (ext_.width == 0xFFFFFFFFu) {

@@ -2879,6 +2879,8 @@ struct ServeCfg {
   double paralaje = 999.0;  /* ganancia del paralaje de movimiento, -2..2; 999 = sin poner (apagado) (v0.67) */
   double detalle = -1.0;    /* fuerza del realce de detalle en el sujeto, 0..3; -1 = la de fabrica (0,4) (v0.68) */
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
+  std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
+  double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
   double temblor = -1.0;    /* pixeles de temblor del desplazamiento; -1 = el de fabrica (0,25) */
@@ -3014,6 +3016,11 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
+    else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
+    else if (k == "hz") {
+      const double d = std::atof(v.c_str());
+      cfg.hz = (d >= 50.0 && d <= 250.0) ? d : -1.0;
+    }
     else if (k == "pivote" || k == "relieve_local" || k == "paralaje" || k == "detalle" ||
              k == "mapas_por_segundo") {
       std::string numero = v;
@@ -3196,6 +3203,14 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     /* la carpeta de los mapas de correccion de este panel y el volcado de depuracion si van en
        serve.conf: esos dos no son numeros de la trama, asi que tambien van en modo de legado */
     if (!pila->calib.empty()) { args.push_back("--calib-dir"); args.push_back(pila->calib); }
+    /* frecuencia del panel durante el 3D: `hz = 165` en serve.conf (el visor elige el modo 4K que mas
+       se acerque sin pasarse). Sin la linea, 120 como siempre. */
+    if (pila->hz > 0.0) {
+      char hzTxt[24];
+      std::snprintf(hzTxt, sizeof hzTxt, "%.2f", pila->hz);
+      args.push_back("--hz");
+      args.push_back(hzTxt);
+    }
     if (!pila->volcado.empty()) {
       /* `volcado = /tmp/chk` en serve.conf: el visor guarda la trama, el mapa de profundidad y
          el origen, y NO sale: la sesion sigue en el panel mientras se mira. */
@@ -3269,6 +3284,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     }
     if (!pila->saliencia.empty())
       ::setenv("ODYSSEYVK_SALIENCIA", (pila->saliencia == "si" || pila->saliencia == "1") ? "1" : "0", 1);
+    if (!pila->hdrEn3d.empty())
+      ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
     if (pila->pivote >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->pivote);
       ::setenv("ODYSSEYVK_PIVOTE", valor, 1);

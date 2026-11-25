@@ -3,6 +3,57 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## HDR en 3D como opción, frecuencia configurable y cuánto margen tiene el dibujo (v0.71)
+
+- Rodolfo, con la 0.70: «mucho mejor, y HDR sí ayudó» (probó `kscreen-doctor output.DP-4.hdr.enable` en
+  mitad de una sesión). Y dos dudas: si se puede pasar de 120 cuadros, y si conviene dibujar la imagen
+  doble a otra resolución con un reescalado tipo FSR, o portar Python a Rust u OpenGL a Vulkan.
+
+### Lo que se añade
+
+- **`hdr_en_3d = si`** en `serve.conf` (`ODYSSEYVK_HDR_3D=1`): el visor ya no apaga el HDR al entrar en
+  3D (`src/session.cpp`). Por defecto se sigue apagando; en el `serve.conf` de Rodolfo queda en `si`.
+  Riesgo conocido, sin medir: con HDR el compositor mezcla los canales con una matriz de color, y en la
+  trama los subpíxeles de un punto pueden ser de ojos distintos (más imagen fantasma en los cantos).
+- **`hz`** en `serve.conf`: la frecuencia del panel durante el 3D (el vigilante pasa `--hz`). Sin la
+  línea, 120. El panel anuncia 3840x2160 a 164,98; en el `serve.conf` de Rodolfo queda comentado
+  (`# hz = 165`) para probarlo: no se sabe si la lente y el scaler aceptan 165 en modo 3D.
+- Taller: `ODYSSEYVK_SIN_VSYNC=1` dibuja sin esperar al refresco, solo para medir.
+
+### Cuánto margen tiene el dibujo (MEDIDO, RTX 4090, 3840x2160, conversor con `mde_large` a 6 mapas/s)
+
+| | cuadros por segundo |
+|---|---|
+| con el freno del panel (lo normal) | 119,8 |
+| sin freno, con todo (guiado, compresión, paralaje, realce) | **2.086 – 2.374** |
+| sin freno, sin realce | 2.178 – 2.345 |
+| sin freno, sin guiado ni realce | 5.458 – 5.516 |
+
+Con todo puesto la tarjeta va al 95 % y 390 W a 2.100 cuadros: el coste de un cuadro es ~0,45 ms de los
+8,3 que hay. **El límite es la frecuencia del panel, no el programa.**
+
+### Las respuestas (para no repetir el análisis)
+
+- **Pasar de 120**: solo subiendo la frecuencia del panel en 3D (`hz = 165`). Con video de 24-60 cuadros
+  no hay más cuadros de contenido; lo que mejora es cada cuánto se recoloca la trama a los ojos
+  (8,3 → 6,1 ms) y la suavidad del paralaje.
+- **Otra resolución + FSR**: no aplica como en un juego. No se dibujan dos imágenes: el sombreador lee
+  la fuente directamente en la coordenada desplazada de cada ojo, a la resolución del panel, y la trama
+  tiene que escribirse subpíxel a subpíxel. Lo equivalente (calcular el desplazamiento guiado a media
+  resolución en un pase aparte) ahorraría parte de esos 0,45 ms: no hace falta. DERIVADO: cada ojo ve
+  la mitad de los subpíxeles, o sea ~2715 × 1527 efectivos; un video de 1440p ya llena lo que cada ojo
+  puede resolver.
+- **Python → Rust**: el visor no ejecuta Python (hay 1.095 líneas, todas en `tools/`, de medición). El
+  tiempo se va en la tarjeta y en ONNX Runtime, que ya son C++/CUDA: reescribir en Rust no lo acorta.
+- **OpenGL → Vulkan**: el camino principal (vigilante, captura, `test`) ya es Vulkan. OpenGL queda en
+  `--gl` y en `odysseyvk play` (libmpv), que además **no tiene conversor** ni nada de v0.62–v0.70. Ese es
+  el único porte con sentido: llevar `play` al visor Vulkan.
+
+### No probado
+
+- `hdr_en_3d` desde el arranque de una sesión (lo probado fue encender el HDR a mano a mitad de sesión).
+- `hz = 165` en 3D.
+
 ## El temblor de la v0.69: tope de mapas por segundo (v0.70)
 
 - Rodolfo, con la 0.69 instalada: «sí tiembla más, una sacudida leve de lado a lado, no pareja, pero se
