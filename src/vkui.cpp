@@ -108,6 +108,7 @@ bool Hud::buildAtlas(std::string *err) {
     int x, y;
     if (!place(size, size, &x, &y)) { if (err) *err = "atlas sin sitio para las máscaras"; return false; }
     put(x, y, size, size, m.data());
+    maskRad_[which] = radius;
     Rect &dst = which == 0 ? pill_ : card_;
     uvOf(x, y, size, size, &dst);
     dst.x = (float)x;   /* guardamos píxeles del atlas: mask9 los convierte */
@@ -204,7 +205,10 @@ void Hud::mask9(Rect r, int which, float radius, float cr, float cg, float cb, f
   const Rect &m = which == 0 ? pill_ : card_;
   float msz = m.w;
   float rad = std::min(radius, std::min(r.w, r.h) * 0.5f);
-  float fr = std::min(rad / msz, 0.49f);           /* radio en unidades de la máscara */
+  /* la esquina se recorta de la mascara con el radio PROPIO de la mascara (un cuarto de circulo
+     completo en la píldora) y se estira hasta `rad` de pantalla; si se recortara con `rad / msz`
+     se sacaria una cuña del arco y la forma saldria puntiaguda */
+  float fr = std::min(maskRad_[which] / msz, 0.5f);   /* radio en unidades de la máscara */
   float u0 = m.x / (float)aw_, v0 = m.y / (float)ah_;
   float du = msz / (float)aw_, dv = msz / (float)ah_;
   float l = u0, m0 = u0 + fr * du, r1 = u0 + (1.0f - fr) * du;
@@ -297,24 +301,42 @@ void Hud::begin(int w, int h, float altoLogico) {
     float ph = st_.controlOjo ? 134.0f : 84.0f;
     float x0 = (float)vw - 24.0f - pw, y0 = 24.0f;
     pillPanel_ = {x0, y0, pw, ph};
-    mask9(pillPanel_, 0, 24.0f, 0.12f, 0.13f, 0.15f, 0.78f);
+    /* la pastilla RECTA: relleno plano, sin esquinas redondeadas (asi lo pidio Rodolfo: "se ve con
+       curvas, debe ser cuadrado"). Las unicas curvas que quedan son la pista y la bola del
+       interruptor, y las cabecitas de los deslizadores. */
+    solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.12f, 0.13f, 0.15f, 0.78f);
     /* acento verde arriba, como la app oficial cuando el 3D está puesto */
     float ac = st_.weaveOn ? 1.0f : 0.25f;
     solid(x0 + 18.0f, y0 + 8.0f, pw - 36.0f, 2.0f, accent[0], accent[1], accent[2], 0.55f * ac);
 
-    btn3D_ = {x0 + 18.0f, y0 + 26.0f, 150.0f, 34.0f};
-    btnOv_ = {x0 + 178.0f, y0 + 26.0f, 160.0f, 34.0f};
-    bool hov3 = btn3D_.inside(mx_, my_), hovO = btnOv_.inside(mx_, my_);
-    float bg = hov3 ? 0.30f : 0.22f;
-    mask9(btn3D_, 1, 8.0f, st_.weaveOn ? accent[0] : bg, st_.weaveOn ? accent[1] : bg, st_.weaveOn ? accent[2] : bg,
-          st_.weaveOn ? 0.92f : 0.95f);
-    mask9(btnOv_, 1, 8.0f, hovO ? 0.30f : 0.22f, hovO ? 0.32f : 0.24f, hovO ? 0.34f : 0.27f, 0.95f);
-    text(st_.weaveOn ? "Apagar 3D" : "Encender 3D", btn3D_.x + 12.0f, btn3D_.y + 8.0f, 15.0f, ink[0], ink[1], ink[2],
-         1.0f);
-    text(st_.overlayOn ? "Ocultar capa" : "Mostrar capa", btnOv_.x + 12.0f, btnOv_.y + 8.0f, 15.0f, ink[0], ink[1],
-         ink[2], 1.0f);
-    text("Ctrl+Shift+1", btn3D_.x, btn3D_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
-    text("Ctrl+Shift+2", btnOv_.x, btnOv_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+    /* ---- el interruptor del 3D ----
+       ON con la bola a la izquierda y la letra a su derecha; OFF con la bola a la derecha y la letra
+       a la izquierda: el dibujo que paso Rodolfo. Se pica en cualquier parte de la pista. */
+    sw3D_ = {x0 + 18.0f, y0 + 26.0f, 130.0f, 34.0f};
+    const bool hov3 = sw3D_.inside(mx_, my_);
+    if (st_.weaveOn) {
+      const float t = hov3 ? 1.12f : 1.0f;   /* al pasar el raton por encima, un poco mas viva */
+      mask9(sw3D_, 0, 17.0f, accent[0] * t, accent[1] * t, accent[2] * t, 0.95f);
+    } else {
+      const float g = hov3 ? 0.30f : 0.22f;
+      mask9(sw3D_, 0, 17.0f, g, g + 0.02f, g + 0.05f, 0.95f);
+    }
+    const float bola = 26.0f, aire = 4.0f;
+    const float bolaY = sw3D_.y + (sw3D_.h - bola) * 0.5f;
+    swKnob_ = st_.weaveOn ? Rect{sw3D_.x + aire, bolaY, bola, bola}
+                          : Rect{sw3D_.x + sw3D_.w - aire - bola, bolaY, bola, bola};
+    mask9(swKnob_, 0, bola * 0.5f, 0.96f, 0.97f, 0.99f, 1.0f);
+    const char *palabra = st_.weaveOn ? "ON" : "OFF";
+    const float anchoLetra = textWidth(palabra, 15.0f);
+    const float letraX = st_.weaveOn ? swKnob_.x + bola + 12.0f : swKnob_.x - 12.0f - anchoLetra;
+    text(palabra, letraX, sw3D_.y + 9.0f, 15.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+
+    /* el boton de ocultar la capa ya no esta: se oculta con Ctrl+Shift+F1 (o con `ctl capa`, que es la
+       misma orden por fichero y llega aunque el teclado lo tenga el video). El hueco que dejo el boton
+       lo ocupa el aviso de esa tecla. */
+    text("Ctrl+Shift+1  el 3D", sw3D_.x, sw3D_.y + 44.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
+    text("Ctrl+Shift+F1", x0 + 178.0f, y0 + 28.0f, 12.0f, dim[0], dim[1], dim[2], 1.0f);
+    text("oculta o muestra la pastilla", x0 + 178.0f, y0 + 46.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
     /* el aviso de Tab va en la pastilla: es la tecla que deja el raton y el teclado libres para
        lo que hay detras (nos minimizamos y el panel vuelve a 2D) */
     /* el aviso de Tab va abajo a la derecha, en el hueco libre que queda bajo los deslizadores:
@@ -326,14 +348,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     btnRed_ = {x0 + 352.0f, y0 + 26.0f, 160.0f, 34.0f};
     bool hovR = btnRed_.inside(mx_, my_);
     float rbg = hovR ? 0.30f : 0.22f;
-    mask9(btnRed_, 1, 8.0f, rbg, rbg + 0.02f, rbg + 0.05f, 0.95f);
+    solid(btnRed_.x, btnRed_.y, btnRed_.w, btnRed_.h, rbg, rbg + 0.02f, rbg + 0.05f, 0.95f);
     const char *rtxt = !st_.redViva ? "Red sin conversor"
                                     : (st_.red == 1 ? "Red 1 · Samsung" : "Red 2 · nativa");
     text(rtxt, btnRed_.x + 12.0f, btnRed_.y + 8.0f, 14.0f, ink[0], ink[1], ink[2], st_.redViva ? 1.0f : 0.55f);
     text(st_.redViva ? "1 / 2  cambia de red" : "teclas 1 / 2", btnRed_.x, btnRed_.y + 44.0f, 11.0f, dim[0], dim[1],
          dim[2], dim[3]);
     if (st_.redViva)   /* el punto de acento marca que hay una red abierta */
-      mask9({btnRed_.x + btnRed_.w - 14.0f, btnRed_.y + 14.0f, 6.0f, 6.0f}, 0, 3.0f, accent[0], accent[1],
+      solid(btnRed_.x + btnRed_.w - 14.0f, btnRed_.y + 14.0f, 6.0f, 6.0f, accent[0], accent[1],
             accent[2], 1.0f);
 
     auto slider = [&](Rect *track, Rect *knob, const char *label, const char *keys, float frac, const char *value) {
@@ -343,8 +365,8 @@ void Hud::begin(int w, int h, float altoLogico) {
       solid(tx, ty, track->w, 4.0f, 0.30f, 0.32f, 0.35f, 0.9f);
       float kx = tx + frac * track->w;
       solid(tx, ty, kx - tx, 4.0f, accent[0], accent[1], accent[2], 0.95f);
-      float kr = 9.0f;
-      mask9({kx - kr, ty + 2.0f - kr, 2.0f * kr, 2.0f * kr}, 0, kr, 0.95f, 0.96f, 0.98f, 1.0f);
+      float kr = 9.0f;   /* cabecita cuadrada, como el resto de la pastilla */
+      solid(kx - kr, ty + 2.0f - kr, 2.0f * kr, 2.0f * kr, 0.95f, 0.96f, 0.98f, 1.0f);
       *knob = {kx - kr, ty + 2.0f - kr, 2.0f * kr, 2.0f * kr};
       text(keys, tx, ty + 18.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
     };
@@ -371,10 +393,10 @@ void Hud::begin(int w, int h, float altoLogico) {
         const float ancho = textWidth(nombre, 14.0f) + 24.0f;
         const Rect caja{caje, fila, ancho, 30.0f};
         if (puesta) {
-          mask9(caja, 1, 8.0f, accent[0], accent[1], accent[2], 0.92f);
+          solid(caja.x, caja.y, caja.w, caja.h, accent[0], accent[1], accent[2], 0.92f);
           punto = caja.x + ancho - 13.0f;
         } else {
-          mask9(caja, 1, 8.0f, 0.20f, 0.21f, 0.23f, 0.95f);
+          solid(caja.x, caja.y, caja.w, caja.h, 0.20f, 0.21f, 0.23f, 0.95f);
         }
         text(nombre, caja.x + 12.0f, caja.y + 7.0f, 14.0f, ink[0], ink[1], ink[2], puesta ? 1.0f : 0.40f);
         caje += ancho + 10.0f;
@@ -386,7 +408,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       /* el punto oscuro va dentro de la caja activa: sobre el verde de acento el relleno solo
          no se distingue, y el gris de la inactiva ya dice por si solo que no se esta usando */
       if (punto >= 0.0f)
-        mask9({punto, fila + 12.0f, 6.0f, 6.0f}, 0, 3.0f, 0.06f, 0.32f, 0.12f, 1.0f);
+        solid(punto, fila + 12.0f, 6.0f, 6.0f, 0.06f, 0.32f, 0.12f, 1.0f);
       std::string nota = st_.rastreoNota;
       if (!nota.empty()) {
         const float tope = x0 + pw - 20.0f;
@@ -401,7 +423,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     float dotc[3] = {1.0f, 0.2f, 0.2f};
     if (st_.hud == 3) { dotc[0] = accent[0]; dotc[1] = accent[1]; dotc[2] = accent[2]; }
     else if (st_.hud != 0) { dotc[0] = 1.0f; dotc[1] = 0.6f; dotc[2] = 0.0f; }
-    mask9({x0 + 8.0f, y0 + 8.0f, 6.0f, 6.0f}, 0, 3.0f, dotc[0], dotc[1], dotc[2], 1.0f);
+    solid(x0 + 8.0f, y0 + 8.0f, 6.0f, 6.0f, dotc[0], dotc[1], dotc[2], 1.0f);
     text(hw, x0 + 20.0f, y0 - 16.0f, 11.0f, dim[0], dim[1], dim[2], dim[3]);
     /* como se maneja el raton: la pastilla se pica aqui arriba y el resto de la pantalla manda
        sobre lo que hay detras (el video, el navegador). La frase va en la misma linea. */
@@ -415,7 +437,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     float aw = std::min(660.0f, (float)vw - 48.0f), ah = 216.0f;
     float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
-    mask9(askPanel_, 1, 14.0f, 0.06f, 0.07f, 0.08f, 0.92f);
+    solid(askPanel_.x, askPanel_.y, askPanel_.w, askPanel_.h, 0.06f, 0.07f, 0.08f, 0.92f);
     /* el titulo lo pone el servicio (la pelicula que da pantalla completa); si viene
        vacio se usa el texto de la aplicacion oficial */
     auto encaja = [&](const std::string &s, float tam, float maxAncho) {
@@ -452,8 +474,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     const char *subs[3] = {"estéreo horizontal", "sin profundidad", "2D a 3D (el conversor)"};
     for (int i = 0; i < 3; i++) {
       bool hov = tiles[i].inside(mx_, my_);
-      mask9(tiles[i], 1, 10.0f, hov ? 0.20f : 0.15f, hov ? 0.22f : 0.16f, hov ? 0.24f : 0.18f, 0.98f);
-      if (hov) mask9(tiles[i], 1, 10.0f, accent[0], accent[1], accent[2], 0.35f);
+      solid(tiles[i].x, tiles[i].y, tiles[i].w, tiles[i].h, hov ? 0.20f : 0.15f, hov ? 0.22f : 0.16f,
+            hov ? 0.24f : 0.18f, 0.98f);
+      if (hov) solid(tiles[i].x, tiles[i].y, tiles[i].w, tiles[i].h, accent[0], accent[1], accent[2], 0.35f);
       /* muestra del formato: dos mitades separadas */
       float ix = tiles[i].x + tiles[i].w * 0.5f - 22.0f, iy = tiles[i].y + 14.0f;
       if (i == 0) {
@@ -473,7 +496,7 @@ void Hud::begin(int w, int h, float altoLogico) {
            dim[3]);
     }
     askDont_ = {ax + 24.0f, ay + 180.0f, 20.0f, 20.0f};
-    mask9(askDont_, 1, 5.0f, 0.25f, 0.27f, 0.30f, 1.0f);
+    solid(askDont_.x, askDont_.y, askDont_.w, askDont_.h, 0.25f, 0.27f, 0.30f, 1.0f);
     if (st_.remember)
       solid(askDont_.x + 4.0f, askDont_.y + 4.0f, 12.0f, 12.0f, accent[0], accent[1], accent[2], 1.0f);
     text("Guardar el tipo y no volver a preguntar", askDont_.x + 30.0f, askDont_.y + 2.0f, 13.0f, dim[0], dim[1],
@@ -520,7 +543,8 @@ bool Hud::pillBounds(float *x, float *y, float *w, float *h) const {
 
 bool Hud::huecoDeLaPastilla(float *x, float *y, float *w, float *h) const {
   /* La punta derecha de donde esta la pastilla, o de donde estaba si esta ocultada. Con la
-     pastilla oculta por Ctrl+Shift+2 la region de entrada del visor se quedaba vacia: sin region
+     pastilla oculta por Ctrl+Shift+F1 (o por `ctl capa ocultar`) la region de entrada del visor se
+   quedaba vacia: sin region
      no llega ni un movimiento del puntero y no habia forma de hacer volver la pastilla sin
      teclado. Dejamos este rinconcito pinchable y el visor lo vigila: en cuanto entra el puntero,
      la pastilla reaparece sola. */
@@ -545,8 +569,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
     if (askDont_.inside(mx, my)) return HitAskDont;
   }
   if (!st_.overlayOn) return HitNone;
-  if (btn3D_.inside(mx, my)) return Hit3D;
-  if (btnOv_.inside(mx, my)) return HitOverlay;
+  if (sw3D_.inside(mx, my)) return Hit3D;   /* el interruptor ON/OFF ; se pica en toda la pista */
   float pad = 10.0f;
   Rect dt = {depTrack_.x - pad, depTrack_.y - pad, depTrack_.w + 2.0f * pad, depTrack_.h + 2.0f * pad};
   Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};

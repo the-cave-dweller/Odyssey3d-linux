@@ -248,7 +248,7 @@ panel y la red metan ruido.
 | `n` `x` | **muestras intermedias** entre las dos láminas (v0.50): `n` agrega un nivel clavado a mitad de camino, con su meseta, para que el centro se vea sólido en vez de degradado (hasta 3); `x` lo quita y a 0 vuelve la rampa continua. Pide primero la dureza subida con `g` |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
-| `Ctrl+Shift+2` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre |
+| `Ctrl+Shift+F1` | ocultar / mostrar la pastilla de la interfaz (no libera el ratón: para eso es `Tab`). Ocultada, vuelve sola en cuanto el puntero entra en el rincón derecho de arriba de su sitio de siempre. Sigue valiendo `Ctrl+Shift+2`; si el teclado lo tiene otra ventana a pantalla completa, `odyssey3d ctl capa ocultar` hace lo mismo por fichero |
 | `Ctrl+Shift+3` `4` | bajan / suben **3D Profundidad** (0–100) |
 | `Ctrl+Shift+5` `6` | bajan / suben **3D Salida** (−50…+50) |
 | `Ctrl+Shift+7` `8` | achican / agrandan la pastilla (0,5× … 3×, útil al pasar del escritorio al modo 3D) |
@@ -352,6 +352,8 @@ odyssey3d ctl preferencias --ultimos 20 # lo que se fue cambiando
 odyssey3d ctl escritorio poner          # la trama ENCIMA DEL ESCRITORIO, sin vídeo (mismo botón de la ventana)
 odyssey3d ctl escritorio quitar         # y abajo: el visor se despide devolviendo el panel
 odyssey3d ctl escritorio estado         # qué sesión tiene abierta el vigilante ahora mismo
+odyssey3d ctl capa ocultar               # ocultar / mostrar / alternar la pastilla por fichero (estado: `ctl capa`)
+odyssey3d ctl 3d apagar                 # lo mismo que el interruptor ON/OFF de la pastilla (estado: `ctl 3d`)
 ```
 
 Números que admite el canal (con topes, los mismos que ajustan las teclas): `fase`, `paso`, `filtro`,
@@ -424,14 +426,20 @@ activos; **naranja** = sólo uno de los dos; **rojo** = ninguno (no hay 3D).
 Desde v0.5 el visor dibuja una superposición al estilo del **Odyssey 3D Hub** oficial, con cursor
 de flecha visible y controlables con el ratón:
 
-* pastilla gris translúcida arriba a la derecha, con la línea verde de acento:
-  * **Apagar 3D / Encender 3D** (`Ctrl+Shift+1`),
-  * **Ocultar capa / Mostrar capa** (`Ctrl+Shift+2`),
+* pastilla gris translúcida arriba a la derecha, con la línea verde de acento. Desde v0.56 todo lo
+  rectangular de la pastilla tiene las **esquinas cuadradas**: el panel, el botón rojo, las teselas y
+  casilla del aviso, los mandos de los deslizadores, los chips y los puntos de estado. Las únicas
+  curvas son la pista y la bola del interruptor:
+  * **interruptor ON/OFF del 3D** (`Ctrl+Shift+1`): pista verde con la bola a la izquierda y la letra
+    `ON` cuando la trama está puesta, pista gris con la bola a la derecha y `OFF` cuando está apagada.
+    Se pica en cualquier punto de la pista, no solo en la bola;
+  * debajo, escrito, `Ctrl+Shift+F1  oculta o muestra la pastilla`;
   * **3D Profundidad** 0…100 (`Ctrl+Shift+3` / `4`) — desplaza la separación de las dos vistas;
   * **3D Salida** −50…+50 (`Ctrl+Shift+5` / `6`) — acerca o aleja la imagen de la pantalla;
-  * **Rastreo puesto / apartado** (`T`). El botón dice en cada momento lo que está pasando:
-    **Rastreo puesto (T)**, **Rastreo a mano (T)** (apartado: manda la posición de fábrica) o
-    **Sin cámara (T)**, y al lado aparece escrito qué está mandando. Hubo un deslizador de ángulo de
+  * fila **Facetracking** (`T`) con un chip por cámara —en la foto salen **3D Studio** en verde, porque
+    la estéreo del monitor está mandando, y **fallback** en gris, la webcam de respaldo sin usar— y a la
+    derecha, escrito, cómo está alimentando: `MJPG 1280x480 @ 60 (dos vistas, calibrada) · cara a la
+    vista`. `T` deja de seguir la cara y vuelve a la posición de fábrica. Hubo un deslizador de ángulo de
     −15° a +15° (v0.31) para enfocar el relieve sin moverse; se quitó en v0.34: hacía duplicado con lo
     que mide la cámara y lo que se quería era el comportamiento de siempre.
   * un punto de estado: verde = lente y scaler activos, naranja = uno de los dos, rojo = ninguno.
@@ -440,8 +448,9 @@ de flecha visible y controlables con el ratón:
   detecta un vídeo a pantalla completa.
 
 La pastilla se calcula en un lienzo virtual de 1080 px de alto y se escala con la altura del panel,
-así que conserva las proporciones de la aplicación oficial a 3840x2160. Se apaga con
-`--sin-interfaz` (o `Ctrl+Shift+2`). Las teclas finas de alineado (`3`, `F`, flechas, `RePag`…)
+así que conserva las proporciones de la aplicación oficial a 3840x2160. Se apaga arrancando con
+`--sin-interfaz`, o en cualquier momento con `Ctrl+Shift+F1` (`odyssey3d ctl capa ocultar` si el
+teclado se lo quedó otra ventana). Las teclas finas de alineado (`3`, `F`, flechas, `RePag`…)
 siguen funcionando igual.
 
 ### Rastreo sin la cámara del monitor: cualquier webcam de respaldo (desde v0.31)
@@ -882,6 +891,8 @@ odyssey3d ctl estado                  # qué red, qué tarjeta y qué números e
 odyssey3d ctl ajuste fase 0,004       # mandarle un número al visor sin tocar el panel
 odyssey3d ctl preferencias            # la cuenta de lo que se fue cambiando (preferencias.log)
 odyssey3d ctl escritorio estado       # qué sesión tiene el vigilante: ninguna, de vídeo o del escritorio
+odyssey3d ctl capa estado             # pastilla puesta u oculta; `ctl 3d estado`, la trama
+odyssey3d ctl capture-gl --out p.png  # captura real de la ventana, para ver la interfaz sin mirar la pantalla
 odyssey3d-ajustes --prueba            # la ventana sin pantalla: redes con su marca, estado, vigilante, camaras y su vista
 odyssey3d ctl vkprobe                 # importa el fotograma de KWin y lo dibuja tal cual en Vulkan
 odyssey3d play clip.mp4 --windowed --no-panel --no-lens --no-scaler --dump chk

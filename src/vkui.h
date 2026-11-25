@@ -1,8 +1,14 @@
-/* vkui.h — la interfaz del hub: la pastilla gris de arriba a la derecha con el botón de
-   3D, el de superposición y los dos controles (profundidad y salida), más el aviso abajo a
-   la derecha que pregunta cómo ver la ventana a pantalla completa. Todo se dibuja con
-   cuadros sobre Vulkan (atlas R8 con fuentes y máscaras) y se maneja con el ratón y los
-   atajos de la aplicación oficial. No toca Vulkan: sólo geometría, texto y entradas. */
+/* vkui.h — la interfaz del hub: la pastilla gris de arriba a la derecha con el interruptor de
+   3D (ON/OFF), el boton de la red y los dos controles (profundidad y salida), mas el aviso abajo a
+   la derecha que pregunta como ver la ventana a pantalla completa. Todo se dibuja con
+   cuadros sobre Vulkan (atlas R8 con fuentes y mascaras) y se maneja con el raton y los
+   atajos de la aplicacion oficial. No toca Vulkan: solo geometria, texto y entradas.
+
+   Desde v0.56 la pastilla es RECTA: sin esquinas redondeadas en el panel, los botones, las cajas
+   del Facetracking ni las tarjetas del aviso. Unicas curvas: el propio interruptor ON/OFF (asi lo
+   pidio Rodolfo, con su bola) y las cabecitas de los deslizadores. La fila de ocultar la pastilla
+   ya no existe como boton: se oculta y se muestra con Ctrl+Shift+F1 (o con `odyssey3d ctl capa`,
+   que es la misma orden por fichero y sirve cuando el teclado lo tiene otra ventana). */
 #ifndef ODYSSEY_VKUI_H
 #define ODYSSEY_VKUI_H
 
@@ -44,8 +50,7 @@ public:
 
   enum Hit {
     HitNone = 0,
-    Hit3D,
-    HitOverlay,
+    Hit3D,             /* el interruptor ON/OFF del 3D */
     HitDepth,
     HitPopout,
     HitRed,
@@ -142,6 +147,12 @@ private:
 
   /* máscaras del atlas: 0 píxel blanco, 1 píldora, 2 tarjeta */
   Rect white_, pill_, card_;
+  /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
+     porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
+     mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
+     bola del interruptor. Antes se usaba el radio de pantalla para recortar la mascara, y salian
+     puntas de lente en vez de esquinas redondas. */
+  float maskRad_[2] = {48.0f, 8.0f};   /* {píldora, tarjeta} */
   Glyph glyphs_[256]{};
   /* unos pocos signos fuera del rango latino-1 (euro, raya, comillas tipograficas, puntos
      suspensivos): sin ellos el titulo de la tarjeta salta a "?" en mitad de la frase */
@@ -162,7 +173,9 @@ private:
   float sc_ = 1.0f;      /* escala de la interfaz: 1 en 1080, hasta 2 en 2160 */
   float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
-  Rect pillPanel_, btn3D_, btnOv_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
+  /* sw3D_ es la pista del interruptor ON/OFF y swKnob_ la bola blanca de dentro (la bola es lo unico
+     redondo de la pastilla: asi lo queria Rodolfo). btnOv_ ya no esta: ocultar la pastilla es tecla. */
+  Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_;
 };
 

@@ -40,8 +40,9 @@ const Clave *buscarClave(const std::string &nombre);
 
 /* Lee el fichero de ajuste. Devuelve los numeros que aparecen (con la clave tal cual esta escrita)
    y en `modelo` la ruta .onnx pedida, si la hay. En `texto` (opcional) quedan las ORDENES que llevan
-   palabra o ruta en vez de numero: `camara = /dev/video0`, `mono = auto`. Falso si el fichero no
-   existe (no es un error: el canal es opcional). */
+   palabra o ruta en vez de numero: `camara = /dev/video0`, `mono = auto`, `capa = ocultar` (esta la
+   atiende el visor, no el vigilante). Falso si el fichero no existe (no es un error: el canal es
+   opcional). */
 bool leer(std::map<std::string, double> &numeros, std::string &modelo,
           std::map<std::string, std::string> *texto = nullptr);
 

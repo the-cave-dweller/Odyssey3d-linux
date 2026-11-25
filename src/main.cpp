@@ -95,6 +95,10 @@ static const char *kUsage =
     "                                        poner la tarjeta del hub por encima de todo (capa superpuesta)\n"
     "  odyssey3d ctl escritorio [poner|quitar|estado]   el overlay FORZADO en el escritorio del monitor:\n"
     "                                        trama y lente encendidas con patron de prueba, sin video (lo mismo que el boton de la ventana de ajustes)\n"
+    "  odyssey3d ctl 3d     [encender|apagar|alternar|estado]  lo mismo que el interruptor ON/OFF de la\n"
+    "                                        pastilla (Ctrl+Shift+1 con el visor enfocado)\n"
+    "  odyssey3d ctl capa   [ocultar|mostrar|alternar|estado]  quitar o poner la pastilla sin tocar el\n"
+    "                                        teclado (es Ctrl+Shift+F1 mandado por fichero; la trama sigue)\n"
     "  odyssey3d ctl ajuste [clave valor ...]  mandar numeros vivos al visor (fase, paso, conv, planos, ...)\n"
     "  odyssey3d ctl ajuste limpiar | fabrica  vaciar el canal | mandar los numeros DE FABRICA (revertir)\n"
     "  odyssey3d-ajustes                la ventana de ajustes: redes disponibles/seleccionadas, guardados y sus numeros\n"
@@ -2263,6 +2267,80 @@ static int cmdEscritorio(int argc, char **argv) {
   return 0;
 }
 
+/* Apagar o encender el 3D desde fuera: es el interruptor ON/OFF de la pastilla mandado por fichero,
+   lo mismo que picar la pista con el raton o pulsar Ctrl+Shift+1 con el viso delante. Con la trama
+   apagada la ventana sigue en su sitio y el panel vuelve a 2D. */
+static int cmd3D(int argc, char **argv) {
+  const std::string uno = argc > 0 ? strLower(argv[0]) : "alternar";
+  if (uno == "estado" || uno == "status" || uno == "info") {
+    const std::map<std::string, std::string> est = ajuste::leerEstado();
+    if (est.empty()) {
+      std::printf("no hay visor abierto: %s esta vacio o no existe\n", ajuste::rutaEstado().c_str());
+      return 1;
+    }
+    for (const char *k : {"trama", "capa"}) {
+      const auto it = est.find(k);
+      if (it != est.end()) std::printf("  %-12s %s\n", k, it->second.c_str());
+    }
+    return 0;
+  }
+  std::string valor;
+  if (uno == "apagar" || uno == "quitar" || uno == "0" || uno == "no" || uno == "off") valor = "apagar";
+  else if (uno == "encender" || uno == "poner" || uno == "1" || uno == "si" || uno == "on") valor = "encender";
+  else if (uno == "alternar" || uno == "toggle") valor = "alternar";
+  else {
+    std::printf("uso: odyssey3d ctl 3d [encender|apagar|alternar|estado]\n");
+    return 2;
+  }
+  std::string err;
+  if (!ajuste::escribir(std::map<std::string, double>(), std::string(), {{"3d", valor}}, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("orden enviada al visor: 3D %s (con el visor enfocado es Ctrl+Shift+1, o picar el"
+              " interruptor de la pastilla)\n", valor.c_str());
+  return 0;
+}
+
+/* Mostrar u ocultar la pastilla sin tocar el teclado. Es la misma orden que hace la tecla
+   Ctrl+Shift+F1 dentro del visor, pero mandada por fichero, y por eso llega aunque el teclado de la
+   pantalla se lo haya quedado otra ventana (una pagina a pantalla completa que se apilo encima del
+   visor, un juego que hace grab del teclado, o el visor minimizado con `Tab`). La trama y el rastreo
+   siguen trabajando: lo unico que se quita es la interfaz. */
+static int cmdCapa(int argc, char **argv) {
+  const std::string uno = argc > 0 ? strLower(argv[0]) : "alternar";
+  if (uno == "estado" || uno == "status" || uno == "info") {
+    const std::map<std::string, std::string> est = ajuste::leerEstado();
+    if (est.empty()) {
+      std::printf("no hay visor abierto: %s esta vacio o no existe\n", ajuste::rutaEstado().c_str());
+      return 1;
+    }
+    for (const char *k : {"capa", "trama", "facetracking"}) {
+      const auto it = est.find(k);
+      if (it != est.end()) std::printf("  %-12s %s\n", k, it->second.c_str());
+    }
+    std::printf("  (se oculta y se muestra con Ctrl+Shift+F1 si el visor tiene el teclado, o con este"
+                " mismo comando)\n");
+    return 0;
+  }
+  std::string valor;
+  if (uno == "ocultar" || uno == "quitar" || uno == "0" || uno == "no" || uno == "off") valor = "ocultar";
+  else if (uno == "mostrar" || uno == "poner" || uno == "1" || uno == "si" || uno == "on") valor = "mostrar";
+  else if (uno == "alternar" || uno == "toggle") valor = "alternar";
+  else {
+    std::printf("uso: odyssey3d ctl capa [ocultar|mostrar|alternar|estado]\n");
+    return 2;
+  }
+  std::string err;
+  if (!ajuste::escribir(std::map<std::string, double>(), std::string(), {{"capa", valor}}, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  std::printf("orden enviada al visor: pastilla %s (la trama sigue tejiendose; con el viso enfocado es"
+              " la tecla Ctrl+Shift+F1)\n", valor.c_str());
+  return 0;
+}
+
 static int cmdHudSelfTest(int argc, char **argv) {
   ViewerOpts o{};
   if (!parseViewerFlags(argc, argv, o)) return 2;
@@ -2282,21 +2360,24 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.begin(W, H);
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
-  static const char *nom[] = {"nada",              "boton 3D",   "boton capa",   "deslizador profundidad",
-                              "deslizador salida", "boton red",  "tesela SxS",   "tesela arriba/abajo",
-                              "tesela plana",     "boton video normal", "casilla no preguntar", "cerrar el aviso"};
-  int cuenta[14] = {0}, px0[14] = {0}, py0[14] = {0};
+  /* desde v0.56 no hay boton de capa: la lista de golpes de raton es
+     nada, interruptor, dos deslizadores, boton de red y lo del aviso (11 casos) */
+  static const char *nom[] = {"nada",              "interruptor 3D",   "deslizador profundidad",
+                              "deslizador salida", "boton red",        "tesela SxS",
+                              "tesela arriba/abajo", "tesela plana",   "boton video normal",
+                              "casilla no preguntar", "cerrar el aviso"};
+  int cuenta[12] = {0}, px0[12] = {0}, py0[12] = {0};
   for (int y = 0; y < H; y += 2)
     for (int x = 0; x < W; x += 2) {
       int h = (int)hud.hit((float)x, (float)y);
-      if (h < 0 || h > 11) continue;
+      if (h < 0 || h > 10) continue;
       if (!cuenta[h]) {
         px0[h] = x;
         py0[h] = y;
       }
       cuenta[h]++;
     }
-  for (int h = 1; h <= 11; h++)
+  for (int h = 1; h <= 10; h++)
     std::printf("  %-24s %6d celdas de raton · primer golpe (%d,%d)\n", nom[h], cuenta[h], px0[h], py0[h]);
 
   /* La fila de Facetracking (v0.54): ya no es un boton, informa. Lo que hay que comprobar es que
@@ -2318,14 +2399,16 @@ static int cmdHudSelfTest(int argc, char **argv) {
     const char *texto;
     float px, caja;
   };
-  static const Medida med[] = {{"Apagar 3D", 15.0f, 126.0f},        {"Encender 3D", 15.0f, 126.0f},
-                               {"Ocultar capa", 15.0f, 136.0f},     {"Mostrar capa", 15.0f, 136.0f},
+  /* el interruptor: la letra va entre la bola y el borde de la pista (88 px de aire, que es lo
+     peor de los dos lados: con OFF hay tres letras) */
+  static const Medida med[] = {{"ON", 15.0f, 88.0f},                 {"OFF", 15.0f, 88.0f},
+                               {"Ctrl+Shift+1  el 3D", 11.0f, 160.0f},
+                               {"Ctrl+Shift+F1", 12.0f, 166.0f},     {"oculta o muestra la pastilla", 11.0f, 166.0f},
                                {"Red 1 · Samsung", 14.0f, 136.0f},   {"Red 2 · nativa", 14.0f, 136.0f},
-                               {"Red sin conversor", 14.0f, 136.0f},      {"1 / 2  cambia de red", 11.0f, 160.0f},
-                               {"teclas 1 / 2", 11.0f, 160.0f},           {"Tab  entrega la pantalla", 11.0f, 272.0f},
-                               {"Ctrl+Shift+1", 11.0f, 150.0f},              {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},
-                               {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
-                              {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
+                               {"Red sin conversor", 14.0f, 136.0f}, {"1 / 2  cambia de red", 11.0f, 160.0f},
+                               {"teclas 1 / 2", 11.0f, 160.0f},      {"Tab  entrega la pantalla", 11.0f, 272.0f},
+                               {"Ctrl+Shift+3 / 4", 11.0f, 120.0f},  {"Ctrl+Shift+5 / 6", 11.0f, 120.0f},
+                               {"clic fuera de la pastilla  manda sobre el video de atras", 11.0f, 650.0f}};
   for (const Medida &m : med) {
     const float w = hud.mideTexto(m.texto, m.px);
     std::printf("  letra  %-24s %4.0fpx %6.1f px de %5.0f  %s\n", m.texto, (double)m.px, (double)w, (double)m.caja,
@@ -2342,10 +2425,11 @@ static int cmdHudSelfTest(int argc, char **argv) {
   std::printf("  arrastre a la izquierda: profundidad %d · salida %d\n", hud.state().depth, hud.state().popout);
   const bool w0 = hud.state().weaveOn;
   hud.toggle3D();
-  std::printf("  boton 3D: tramado %s -> %s\n", w0 ? "activo" : "apagado", hud.state().weaveOn ? "activo" : "apagado");
+  std::printf("  interruptor ON/OFF: tramado %s -> %s\n", w0 ? "activo" : "apagado",
+              hud.state().weaveOn ? "activo" : "apagado");
   const bool o0 = hud.state().overlayOn;
-  hud.toggleOverlay();
-  std::printf("  boton capa: superposicion %s -> %s\n", o0 ? "visible" : "oculta",
+  hud.toggleOverlay();   /* la tecla Ctrl+Shift+F1 y `ctl capa` caen aqui dentro */
+  std::printf("  pastilla con Ctrl+Shift+F1: superposicion %s -> %s\n", o0 ? "visible" : "oculta",
               hud.state().overlayOn ? "visible" : "oculta");
   /* con la capa ocultada tiene que quedar un rincon pinchable en su sitio de siempre, si no, el que
      la oculto desde el video ya no tiene forma de traerla */
@@ -4392,6 +4476,8 @@ int main(int argc, char **argv) {
     if (sub == "modelos") return cmdModelos();
     if (sub == "preferencias") return cmdPreferencias(argc - 3, argv + 3);
     if (sub == "escritorio") return cmdEscritorio(argc - 3, argv + 3);
+    if (sub == "capa") return cmdCapa(argc - 3, argv + 3);
+    if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "mapa") return cmdMapa(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;

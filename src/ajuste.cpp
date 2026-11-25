@@ -57,9 +57,11 @@ bool esOrden(const std::string &nombre) {
 }
 
 /* Las ordenes del fichero que llevan palabra o ruta en vez de numero: las recoge `leer`
-   en su mapa de texto y las atiende el vigilante. */
+   en su mapa de texto. `camara` y `mono` las atiende el vigilante; `capa` la atiende el VISOR
+   (`capa = ocultar|mostrar|alternar` es la tecla Ctrl+Shift+F1 mandada por fichero, para cuando el
+   teclado de la pantalla lo tiene otra ventana a pantalla completa). */
 static bool esOrdenTexto(const std::string &nombre) {
-  return nombre == "camara" || nombre == "mono";
+  return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d";
 }
 
 static std::string recortar(std::string s) {

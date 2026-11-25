@@ -2,6 +2,49 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## La pastilla deja de ser redonda y el 3D se apaga con un interruptor (v0.56)
+- Pedido de Rodolfo: «quita el botón de apagar 3D y el de ocultar capa, cambia el de apagar por un botón
+  más o menos así» (foto: pista oscura con bola blanca y la letra `ON` / `OFF`), «el overlay se oculta y
+  muestra con Control+Shift+F1» y «el overlay no sea redondo, se ve con curvas, debe ser cuadrado».
+- **Interruptor en vez de botón.** `Hit3D` pica la pista entera (`sw3D_` de 130x34), no solo la bola:
+  pista verde (`accent`) con la bola de 26 px a la izquierda y `ON` a su derecha cuando la trama está
+  puesta; pista gris (0,22 / 0,30) con la bola a la derecha y `OFF` a su izquierda cuando está apagada.
+  Entre la bola y el borde quedan 4 px de aire. La letra va a 15 px, centrada con `textWidth`.
+- **Esquinas cuadradas de verdad.** El fallo no estaba en los botones sino en `Hud::mask9`: recortaba la
+  esquina con el radio del rectángulo (17 px) sobre una máscara de 96 px, así que a las teselas y al panel
+  les salía un arco raro —y al interruptor una lente puntiaguda. Ahora `mask9` guarda el radio propio de
+  cada máscara (`maskRad_[2] = {48, 8}`: píldora y tarjeta) y recorta con `min(maskRad_/msz, 0,5)`. Lo
+  rectangular se dibuja con `Hud::solid()`, sin máscara: panel, botón rojo, chips de Facetracking, punto
+  verde, punto de hardware, panel del aviso, teselas, casilla, mandos de los deslizadores (9 px) y puntos
+  de estado. Las únicas curvas que quedan son la pista y la bola del interruptor.
+- **Adiós al botón «Ocultar capa»; es tecla.** Se fue `HitOverlay`: la tabla de zonas de la autoprueba pasó de
+  12 nombres a **11** y barre **10** zonas de golpe de ratón; el interruptor ocupa **1188 celdas** y el
+  botón capa ya no existe. La tecla es
+  **`Ctrl+Shift+F1`** y `Ctrl+Shift+2` sigue valiendo. Se comprobado que KWin no la usa: su
+  «Switch to Desktop 1» está en `Ctrl+F1` / `Meta+F1`, así que `Ctrl+Shift+F1` está libre.
+- Y como el teclado se lo puede quedar una ventana a pantalla completa, la misma orden viaja por fichero:
+  **`odyssey3d ctl capa [ocultar|mostrar|alternar|estado]`** (y para el interruptor,
+  **`odyssey3d ctl 3d [encender|apagar|alternar|estado]`**). Son órdenes de palabra en el mismo fichero
+  `~/.local/state/odyssey3d/ajuste`, leídas cada décima de segundo; `capa` y `3d` las atiende el visor, no
+  el hub, por eso están en `esOrdenTexto` y no en `esOrden`. El fichero `estado` ahora dice también
+  `capa = puesta|oculta`, y cada cambio se anota en `preferencias.log`.
+- Medido con la autoprueba en cuatro tamaños (1920x1080, 1440x900, 1024x600, 800x600): todas las letras
+  caben —`oculta o muestra la pastilla` mide **157,4 px** en 166 de hueco, `OFF` **28,8 px** en 88—, la
+  fila de Facetracking ocupa **306 px** de 824 y el rincón pinchable sigue valiendo (`1726,24 170x134`).
+- Probado de verdad, con la trama encima del escritorio (`ctl escritorio poner`) y una captura de la
+  ventana (`ctl capture-gl`): al ocultar, la región de entrada del visor pasa de **2144,48 1648x268** a
+  **3452,48 340x268** (solo el rincón) y la pastilla desaparece de la imagen —la zona pasa de 90.756 a
+  **4.109 bytes**— mientras la trama sigue `activa`. Con `ctl 3d apagar` la pista sale gris, con la bola a
+  la derecha y la letra `OFF`, como en la foto.
+- **Lo que no se pudo probar aquí**: la pulsación física de `Ctrl+Shift+F1`. En esta máquina no hay
+  inyector de teclas para Wayland (no están `ydotool` ni `wtype`, `xdotool` no alcanza las superficies
+  nativas y Rodolfo no pertenece al grupo `input`), así que la tecla está escrita en el manejador y
+  verificada por su equivalente de fichero, que hace exactamente el mismo llamado.
+- Detalle honesto sobre el canal: si la orden se manda en los primeros ~3 segundos de una sesión, el visor
+  todavía está arrancando Vulkan y la cámara y puede no darle a leer el fichero a tiempo; la orden que
+  queda escrita se aplica cuando arranca, pero las intermedias se pierden. Esperar un poco y mandar la
+  orden funciona (y por eso la comprobación se hizo con `sleep 8`).
+
 ## El rastreo en vivo por fin ve la cara: las dos vistas se recortaban mal (v0.55)
 - Pedido de Rodolfo: «me siento ahora, sondea 8 s» y, después del informe, «sí: score 0,5, letterbox, CLAHE y
   reproyección ~10 px». El sondeo daba **0 poses con una cara delante**, así que se fue a medir en vez de adivinar.

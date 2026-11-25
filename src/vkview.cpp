@@ -246,6 +246,9 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
   s += std::string("hora = ") + hora + "\n";
   s += std::string("visor = ") + ODYSSEY3D_VERSION + "\n";
   s += std::string("trama = ") + (ui.tune.weave && ui.hud.state().weaveOn ? "activa" : "apagada") + "\n";
+  /* si la pastilla esta a la vista o ocultada (Ctrl+Shift+F1 / `ctl capa`): lo lee `ctl capa estado`
+     y la ventana de ajustes. Con la pastilla oculta la trama sigue igual, solo se quita la interfaz. */
+  s += std::string("capa = ") + (ui.hud.overlayVisible() ? "puesta" : "oculta") + "\n";
 #ifdef HAVE_ORT
   s += std::string("conversor = ") + (wv.converterOn() ? "puesto" : "apagado") + "\n";
   s += std::string("modelo = ") + (g_modeloEnUso.empty() ? "(ninguno)" : g_modeloEnUso) + "\n";
@@ -293,6 +296,44 @@ std::string infoLine(SourceKind kind, const Rig &rig, const Hud::State &st, int 
 /* slotRed() vive en util.h: es la misma regla para el hub y para el visor. */
 const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativa"; }
 
+/* ocultar o mostrar la pastilla. Mandan ahi la tecla Ctrl+Shift+F1, el `odyssey3d ctl capa` (que
+   llega por fichero) y el rincon pinchable del que habla Hud::huecoDeLaPastilla. Lo unico que se quita
+   es la interfaz: la trama sigue tejiendose y el rastreo sigue mirando los ojos, que es lo que uno
+   quiere mientras ve algo a pantalla completa. La region de entrada se rehace con `inputChanged`,
+   porque sin pastilla no hay nada que picar salvo el rincon de arriba a la derecha. */
+static void cambioCapa(VkUi &ui, bool puesta, const char *fuente) {
+  const bool antes = ui.hud.overlayVisible();
+  if (puesta == antes) {
+    std::printf("[capa] la pastilla ya estaba %s (%s)\n", puesta ? "a la vista" : "ocultada", fuente);
+    std::fflush(stdout);
+    return;
+  }
+  ui.hud.state().overlayOn = puesta;
+  ui.inputChanged = true;
+  ajuste::registrar("capa", antes ? "puesta" : "oculta", puesta ? "puesta" : "oculta",
+                    nombreCorto(g_modeloEnUso), fuente);
+  std::printf("[capa] la pastilla %s (%s)\n", puesta ? "a la vista" : "ocultada", fuente);
+  std::fflush(stdout);
+}
+
+/* apagar o encender el 3D desde fuera: es el interruptor ON/OFF de la pastilla mandado por fichero
+   (`odyssey3d ctl 3d`), lo mismo que picar la pista con el raton o pulsar Ctrl+Shift+1. Con el 3D
+   apagado la ventana sigue ahí y el panel vuelve a 2D; al encenderlo vuelve la trama. */
+static void cambio3D(VkUi &ui, bool puesto, const char *fuente) {
+  const bool antes = ui.hud.state().weaveOn;
+  if (puesto == antes) {
+    std::printf("[3d] la trama ya estaba %s (%s)\n", puesto ? "activa" : "apagada", fuente);
+    std::fflush(stdout);
+    return;
+  }
+  ui.hud.toggle3D();
+  ajuste::registrar("trama", antes ? "activa" : "apagada", puesto ? "activa" : "apagada",
+                    nombreCorto(g_modeloEnUso), fuente);
+  std::printf("[3d] trama %s (%s)\n", puesto ? "activa" : "apagada", fuente);
+  std::fflush(stdout);
+  printTuning(ui, fuente);
+}
+
 void applyHit(VkUi &ui, Hud::Hit hit) {
   Hud::State &st = ui.hud.state();
   WeaveTuning &t = ui.tune;
@@ -301,9 +342,7 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       ui.hud.toggle3D();
       printTuning(ui, "3D/2D");
       break;
-    case Hud::HitOverlay:
-      ui.hud.toggleOverlay();
-      break;
+    /* ya no hay boton de capa: la pastilla se oculta con Ctrl+Shift+F1 o con `ctl capa` */
     case Hud::HitDepth:
     case Hud::HitPopout:
       ui.dragging = hit;
@@ -398,13 +437,19 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     std::fflush(stdout);
     return;
   }
-  /* atajos del hub oficial: Ctrl+Shift+1 3D · 2 superposición · 3/4 profundidad · 5/6 relieve
-     y 7/8, que son nuestros: achicar o agrandar la pastilla */
+  /* atajos del hub oficial: Ctrl+Shift+1 3D · 3/4 profundidad · 5/6 relieve y 7/8, que son
+     nuestros: achicar o agrandar la pastilla. Ocultar o mostrar la pastilla es Ctrl+Shift+F1;
+     Ctrl+Shift+2 era la tecla del boton que ya no esta y sigue valiendo por costumbre.
+     Ninguna de las dos choca con el escritorio: lo que tiene KWin asignado es Ctrl+F1 (cambiar de
+     escritorio) y Meta+F1, no Ctrl+Shift+F1. F1 con Ctrl+Shift tampoco la pide el navegador. */
   if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT)) {
     const char *tag = nullptr;
     switch (key) {
       case GLFW_KEY_1: ui->hud.toggle3D(); tag = "3D/2D"; break;
-      case GLFW_KEY_2: ui->hud.toggleOverlay(); tag = "superposicion"; break;
+      case GLFW_KEY_F1:
+      case GLFW_KEY_2:
+        cambioCapa(*ui, !ui->hud.overlayVisible(), key == GLFW_KEY_F1 ? "Ctrl+Shift+F1" : "Ctrl+Shift+2");
+        break;
       case GLFW_KEY_3: ui->hud.nudgeDepth(-5); tag = "profundidad -"; break;
       case GLFW_KEY_4: ui->hud.nudgeDepth(+5); tag = "profundidad +"; break;
       case GLFW_KEY_5: ui->hud.nudgePopout(-5); tag = "relieve -"; break;
@@ -1461,11 +1506,45 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         foto = actual;
         fotoPuesta = true;
         std::map<std::string, double> pedidos;
+        std::map<std::string, std::string> palabras;   /* las ordenes de palabra: `capa`, `camara`, `mono` */
         std::string modeloPedido;
-        if (lector.cambio(pedidos, modeloPedido)) {
+        if (lector.cambio(pedidos, modeloPedido, &palabras)) {
           for (const auto &kv : pedidos) {
             if (ajuste::esOrden(kv.first)) continue;   /* `overlay` lo atiende el vigilante, no nosotros */
             aplicarAjuste(ui, wv, kv.first, kv.second);
+          }
+          /* `capa = ocultar|mostrar|alternar`: la misma tecla mandada por fichero. Sirve para el caso
+             en que el teclado de la pantalla se lo quedo otra ventana (una pagina a pantalla completa
+             que se apilo encima del visor, un juego que hace grab del teclado): ahi la tecla no nos
+             llega, pero el fichero lo leemos igual cada decima de segundo. */
+          const auto ordenCapa = palabras.find("capa");
+          if (ordenCapa != palabras.end()) {
+            const std::string v = strLower(ordenCapa->second);
+            const bool puesta = ui.hud.overlayVisible();
+            bool querida = puesta;
+            if (v == "ocultar" || v == "quitar" || v == "0" || v == "no" || v == "off")
+              querida = false;
+            else if (v == "mostrar" || v == "poner" || v == "1" || v == "si" || v == "on")
+              querida = true;
+            else if (v == "alternar" || v == "toggle")
+              querida = !puesta;
+            else
+              std::printf("[capa] no entiendo `capa = %s`: vale ocultar, mostrar o alternar\n", v.c_str());
+            cambioCapa(ui, querida, "ctl capa");
+          }
+          const auto orden3D = palabras.find("3d");
+          if (orden3D != palabras.end()) {
+            const std::string v = strLower(orden3D->second);
+            bool puesto = ui.hud.state().weaveOn;
+            if (v == "apagar" || v == "quitar" || v == "0" || v == "no" || v == "off")
+              puesto = false;
+            else if (v == "encender" || v == "poner" || v == "1" || v == "si" || v == "on")
+              puesto = true;
+            else if (v == "alternar" || v == "toggle")
+              puesto = !puesto;
+            else
+              std::printf("[3d] no entiendo `3d = %s`: vale encender, apagar o alternar\n", v.c_str());
+            cambio3D(ui, puesto, "ctl 3d");
           }
           if (!modeloPedido.empty()) {
             ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
