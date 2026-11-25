@@ -2509,6 +2509,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       wv.setConverter(ganancia, apoyoAuto ? red.focusPlane() : (float)st.depth / 100.0f,
                       wv.hasDepthMap());
+      wv.setSujeto(red.sujeto());   /* el realce de detalle va al sujeto, este donde este el plano (v0.68) */
     }
     /* Con el mapa venido de un archivo (--mapa-fijo) no hay red que mande el relieve, y sin relieve
        el mapa no mueve nada: se manda por el mismo camino de siempre, con el apoyo que diga --apoyo

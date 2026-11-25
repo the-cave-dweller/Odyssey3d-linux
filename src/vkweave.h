@@ -56,6 +56,8 @@ public:
   void setDepthShift(float d) { depthShift_ = d; }
   /* cuanto se ha movido la cabeza, en medias distancias entre ojos y ya con ganancia y tope (v0.67) */
   void setParalaje(float h) { paralaje_ = h < -1.0f ? -1.0f : (h > 1.0f ? 1.0f : h); }
+  /* profundidad del sujeto en el mapa (0..1), para el realce de detalle; < 0 = usar el plano de apoyo (v0.68) */
+  void setSujeto(float d) { sujeto_ = d; }
   void setSrcFlipY(bool f) { srcFlipY_ = f; }
 
   /* cuadro fuera de pantalla: dibuja trama + interfaz en una imagen propia y la baja a la CPU
@@ -227,6 +229,7 @@ private:
   int hudState_ = 0;
   float depthShift_ = 0.0f;
   float paralaje_ = 0.0f;
+  float sujeto_ = -1.0f;
   bool srcFlipY_ = false;
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   int pw_ = 3840, ph_ = 2160;

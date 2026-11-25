@@ -32,7 +32,9 @@ layout(set = 0, binding = 3) uniform WeaveParams {
                       z ancho del peso por distancia en puntos del mapa · w compresion suave en los
                       topes (v0.64, 1 = puesta) */
     vec4 tun9;     /* paralaje de movimiento (v0.67): x cuanto se ha movido la cabeza, en medias
-                      distancias entre ojos (0 = quieta; ya trae su ganancia y su tope de +-1) */
+                      distancias entre ojos (0 = quieta; ya trae su ganancia y su tope de +-1) ·
+                      realce del sujeto (v0.68): y profundidad del sujeto en el mapa (< 0 = usar el
+                      plano de apoyo) · z fuerza (0 = apagado) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -135,6 +137,32 @@ vec3 colorVisto(vec2 uvPantalla, float s, bool izq) {
         q.y = 1.0 - q.y;
     return texture(uSrc, q + vec2((izq ? vistaIzq() : vistaDer()) * s + P.tun1.w, 0.0)).rgb;
 }
+/* --- realce de detalle en el sujeto (v0.68, el inpaint.unsharp_mask del Hub) -----------------
+   Leido de su ensamblador NV: detalle = imagen - imagen desenfocada (nivel 2 de mip, 4 x 4 puntos);
+   una puerta de ruido smoothstep(t/2, t, |detalle|) con t = 0,05 (1 + luminancia/2); se suma con fuerza
+   0,4; y todo eso solo cerca del sujeto: se apaga con smoothstep(0,2, 0,3, distancia al foco). Un sujeto
+   mas nitido que el fondo se despega de el: es una senal de profundidad de las de foto (enfoque
+   selectivo), no de las de dos ojos. Aqui no hay mips de la fuente: el desenfoque son cuatro lecturas
+   bilineales a +-1,5 puntos, que juntas cubren un cuadro de 5 x 5 sin la cruz del centro.
+   `c` es el color ya leido en `q` (la coordenada de ESE ojo) y `d` su profundidad en el mapa. */
+vec3 realceSujeto(vec3 c, vec2 q, float d) {
+    float fuerza = P.tun9.z;
+    if (fuerza <= 0.0)
+        return c;
+    float suj = P.tun9.y >= 0.0 ? P.tun9.y : P.tun4.z;
+    float lejos = smoothstep(0.2, 0.3, abs(d - suj));
+    if (lejos >= 1.0)
+        return c;                      /* fuera del sujeto no se gastan las cuatro lecturas */
+    vec2 t = 1.5 / vec2(textureSize(uSrc, 0));
+    vec3 borroso = 0.25 * (texture(uSrc, q + vec2(-t.x, -t.y)).rgb + texture(uSrc, q + vec2(t.x, -t.y)).rgb +
+                           texture(uSrc, q + vec2(-t.x, t.y)).rgb + texture(uSrc, q + vec2(t.x, t.y)).rgb);
+    vec3 det = c - borroso;
+    float umbral = 0.05 * (1.0 + dot(c, vec3(0.1495, 0.2935, 0.057)));
+    float puerta = smoothstep(0.5 * umbral, umbral, length(det));
+    vec3 realzado = clamp(c + det * puerta * fuerza, 0.0, 1.0);
+    return mix(realzado, c, lejos);
+}
+
 vec2 mapaGuiado(vec2 uv, vec2 d0, float gF, float gN) {
     ivec2 tam = textureSize(uDepth, 0);
     vec2 p = uv * vec2(tam) - 0.5;
@@ -315,8 +343,10 @@ void main()
         /* lo que esta por delante del plano de referencia va hacia fuera en la pantalla: en la
            vista izquierda el contenido se corre a la derecha y en la derecha a la izquierda (se
            muestrea al reves de hacia donde se mueve) */
-        L = texture(uSrc, q4 + vec2(vistaIzq() * sI + cnv, 0.0)).rgb;
-        R = texture(uSrc, q4 + vec2(vistaDer() * sD + cnv, 0.0)).rgb;
+        vec2 qI = q4 + vec2(vistaIzq() * sI + cnv, 0.0);
+        vec2 qD = q4 + vec2(vistaDer() * sD + cnv, 0.0);
+        L = realceSujeto(texture(uSrc, qI).rgb, qI, mp.x);
+        R = realceSujeto(texture(uSrc, qD).rgb, qD, mp.z);
         if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
     } else if (P.tun4.w == 2.0) {
         /* conversor puesto pero aun sin mapa de profundidad: los dos ojos ven lo mismo, o sea la

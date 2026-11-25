@@ -834,7 +834,20 @@ void VkWeave::fillUbo(uint8_t *dst) {
   }();
   float *t9 = (float *)(dst + kOffTun9);
   t9[0] = kParalajeFijo < 50.0f ? kParalajeFijo : paralaje_;
-  t9[1] = t9[2] = t9[3] = 0.0f;
+  /* Realce de detalle en el sujeto (v0.68, realceSujeto en weave.frag). Fuerza 0,4, la de fabrica del
+     Hub (inpaint.detail.de_strength, que alli viene encendido). ODYSSEYVK_DETALLE / `detalle` en
+     serve.conf la cambian; 0 lo apaga. Tope 3, como el del Hub. */
+  static const float kDetalle = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_DETALLE");
+    std::string s = e ? e : "";
+    for (char &c : s)
+      if (c == ',') c = '.';
+    const float v = s.empty() ? 0.4f : (float)std::atof(s.c_str());
+    return (v >= 0.0f && v <= 3.0f) ? v : 0.4f;
+  }();
+  t9[1] = sujeto_;
+  t9[2] = kDetalle;
+  t9[3] = 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro

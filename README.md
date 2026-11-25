@@ -1017,6 +1017,13 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   El One-Euro se eligió con `tools/prueba_euro.cpp`: a 60 cm la fase de la trama tiembla 0,015 ciclos en
   el centro y 0,033 en el borde (antes 0,034 y 0,066), contra un margen de ±0,04 antes de que se cuele
   el subpíxel rojo o el azul en el ojo que no toca.
+* Conversor 2D→3D, llaves de `serve.conf` para la profundidad (v0.64–v0.68; todas tienen su variable
+  `ODYSSEYVK_…` y su entrada en `CAMBIOS.md`): `relieve` (escala de la ganancia; 1,2 ≈ el Hub),
+  `saliencia = si|no` (elegir el sujeto como el Hub; `si` por defecto), `pivote` (0–0,9: cuánto sale el
+  sujeto de la pantalla; 0 = en la pantalla), `relieve_local` (realce del relieve dentro de los objetos;
+  rinde poco), `paralaje` (ganancia del paralaje al mover la cabeza; 0 = apagado, negativo = invertido),
+  `detalle` (realce de nitidez del sujeto; 0,4 de fábrica), `foco_iir` (lo que tarda el plano en seguir
+  al sujeto). Para medir fotos sueltas: `odysseyvk mapa FOTOS… --sueltas`.
 * Conversor 2D→3D: desde v0.62 el mapa se agranda **guiado por la imagen** (el `jbu` de Windows) en vez de
   con la cúbica, para que los cantos no salgan en peine. `ODYSSEYVK_JBU=0` vuelve a lo de antes;
   `ODYSSEYVK_JBU_COLOR` (0,06) cambia cuánto tiene que parecerse el color. Para probarlo sin video:

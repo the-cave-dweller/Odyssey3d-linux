@@ -3,6 +3,35 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Realce de detalle en el sujeto, como el Hub (v0.68)
+
+- Tercera de las tres ideas pedidas por Rodolfo. Un sujeto más nítido que el fondo se despega de él
+  (enfoque selectivo: una señal de profundidad de las de foto, que se suma a la de los dos ojos).
+- Leído en el ensamblador NV del Hub (`inpaint.unsharp_mask.bin`, MEDIDO): detalle = imagen − imagen en
+  el nivel 2 de mip; puerta de ruido smoothstep(t/2, t, |detalle|) con t = `de_threshold` 0,05 ·
+  (1 + luminancia/2); se suma con `de_strength` 0,4 (tope 3); y con `de_focus` se apaga lejos del foco con
+  smoothstep(`fg_thresh` 0,2, `bg_thresh` 0,3, distancia). En el Hub viene **encendido** de fábrica.
+- Portado en `realceSujeto` (`shaders/weave.frag`), por ojo y en la coordenada ya desplazada de ese ojo.
+  Sin mips de la fuente, el desenfoque son cuatro lecturas bilineales a ±1,5 puntos (un cuadro de 5 × 5
+  sin la cruz del centro); fuera del sujeto no se hacen. La distancia se mide en el mapa contra la
+  profundidad del **sujeto** (`DepthNet::sujeto()`, por `tun9.y`), no contra el plano de la pantalla, que
+  con `pivote` ya no coincide. Fuerza por `tun9.z`.
+- `detalle` en `serve.conf` / `ODYSSEYVK_DETALLE`: **0,4 por defecto** (la de fábrica del Hub); 0 lo apaga.
+
+### Comprobado (sin panel)
+
+- El sombreador real con el cuadro real y el mapa real (apoyo 0,6 = la cara), ojo izquierdo: con 0,4 la
+  nitidez del sujeto (media del laplaciano) sube **×1,26** y la de lo lejano ×1,000; píxeles cambiados
+  (> 2 niveles): 4,7 % del sujeto y **0,00 % de lo lejano**; cambio máximo 57 niveles. Con 1,0: ×1,55.
+  Sin la llave = 0,4 (diferencia 0). 119-120 fps con y sin realce. Sin avisos de NaN.
+- A ojo en el recorte (`../pruebas/realce-sujeto-0-04-10-v0.68.png`): pelo, cejas y piel más definidos,
+  sin halos visibles con 0,4.
+
+### No probado
+
+- En el panel. Con video muy comprimido el realce puede subir el ruido de compresión de la cara (la
+  puerta de 0,05 lo frena); si pasa, `detalle = 0,2` o `0`.
+
 ## Paralaje de movimiento: lo cercano se desliza al mover la cabeza (v0.67)
 
 - Segunda de las tres ideas pedidas por Rodolfo. Hasta ahora el rastreo solo apuntaba cada vista a su
