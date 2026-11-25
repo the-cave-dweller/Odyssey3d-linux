@@ -198,6 +198,95 @@ void dilatar(float *mapa, float *aux, int n, int r) {
 }
 
 }  // namespace
+/* --- los dos planos ---------------------------------------------------------------
+   Aqui se mira si el cuadro tiene de verdad dos grupos de profundidad (un fondo y unos primeros
+   planos) y, si los hay, cada grupo recibe un valor propio: la imagen pasa de ser una lamina
+   ondulada a ser dos laminas con su paralaje, que es como lo resuelve el Nintendo 3DS (el
+   contenido trae dos capas y la pantalla solo escala, con un presupuesto fijo por ojo).
+
+   El corte sale del propio histograma con la prueba de Otsu: se busca el punto que deja los dos
+   grupos mas separados entre si. No hay un umbral escrito a mano ni que aprenderse el cuadro, y
+   manana sirve igual sobre el recorte de `degraph` o sobre otra red, solo mira los numeros que
+   ya hay en el mapa. */
+Planos buscarPlanos(const float *mapa, int n) {
+  Planos p;
+  const int NB = 32;
+  if (!mapa || n <= 0) return p;
+  float hist[NB] = {0.0f};
+  for (int i = 0; i < n; i++) {
+    const float v = mapa[i] < 0.0f ? 0.0f : (mapa[i] > 1.0f ? 1.0f : mapa[i]);
+    hist[(int)(v * 31.99f)] += 1.0f;
+  }
+  double total = 0.0, mediaTot = 0.0;
+  for (int i = 0; i < NB; i++) {
+    total += hist[i];
+    mediaTot += hist[i] * ((double)i + 0.5);
+  }
+  if (total <= 0.0) return p;
+  mediaTot /= total;
+  int corte = -1;
+  double mejor = -1.0, acumP = 0.0, acumM = 0.0;
+  for (int t = 0; t < NB - 1; t++) {
+    acumP += hist[t] / total;
+    if (acumP <= 0.0) continue;
+    acumM += hist[t] * ((double)t + 0.5) / total;
+    const double detras = 1.0 - acumP;
+    if (detras <= 0.0) break;
+    const double m0 = acumM / acumP;
+    const double m1 = (mediaTot - acumM) / detras;
+    const double gan = acumP * detras * (m0 - m1) * (m0 - m1);
+    if (gan > mejor) { mejor = gan; corte = t; }
+  }
+  if (corte < 0) return p;
+  /* El valor de cada lamina es la MEDIA del grupo, no su pico: el pico salta con el ruido de la
+     red y la media se sostiene cuando el cuadro respira. */
+  double nA = 0.0, sA = 0.0, nB = 0.0, sB = 0.0;
+  for (int i = 0; i < NB; i++) {
+    if (hist[i] <= 0.0f) continue;
+    if (i <= corte) { nA += hist[i]; sA += hist[i] * ((double)i + 0.5); }
+    else { nB += hist[i]; sB += hist[i] * ((double)i + 0.5); }
+  }
+  if (nA <= 0.0 || nB <= 0.0) return p;
+  p.fondo = (float)((sA / nA) / (double)NB);
+  p.frente = (float)((sB / nB) / (double)NB);
+  p.fraccion = (float)(nB / total);
+  /* Un plano fijo o un pasillo tambien sacan un corte, pero con las dos laminas pegadas o con una
+     de ellas comiendose casi todo el cuadro no hay dos planos que enseñar: mejor no tocar nada. */
+  if (p.frente - p.fondo < 0.15f || p.fraccion < 0.06f || p.fraccion > 0.94f) return p;
+  p.valido = true;
+  return p;
+}
+
+/* Acercar cada punto al valor de su lamina con la fuerza `dureza` (0 = dejar el mapa tal cual,
+   1 = laminas planas). Entre una y otra no se corta de golpe: se cruza en una franja suave,
+   porque un tajo en el canto del recorte se ve y, encima, ese borde es el que parpadea cuando el
+   mapa de la red tiembla. Devuelve la parte del cuadro que cae en la lamina delantera. */
+float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza) {
+  if (!mapa || !p.valido || dureza <= 0.0f || p.frente <= p.fondo || n <= 0) return 0.0f;
+  float margen = (p.frente - p.fondo) * 0.33f;
+  if (margen > 0.05f) margen = 0.05f;
+  const float a = p.fondo + margen, b = p.frente - margen;
+  const float medio = 0.5f * (p.fondo + p.frente);
+  int delante = 0;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) reduction(+:delante)
+#endif
+  for (int i = 0; i < n; i++) {
+    float t;
+    if (b <= a) {
+      t = mapa[i] > medio ? 1.0f : 0.0f;   /* laminas muy pegadas: no hay franja donde cruzar */
+    } else {
+      t = (mapa[i] - a) / (b - a);
+      t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+      t = t * t * (3.0f - 2.0f * t);       /* el suave de siempre, sin saltos en el borde */
+    }
+    if (t > 0.5f) delante++;
+    const float lamina = p.fondo + (p.frente - p.fondo) * t;
+    mapa[i] += (lamina - mapa[i]) * dureza;
+  }
+  return (float)delante / (float)n;
+}
+
 
 #ifdef HAVE_ORT
 namespace {
@@ -672,6 +761,47 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     float nuevo = ((float)(mejor > mediana ? mejor : mediana) + 0.5f) / 32.0f;
     if (corte_ || std::fabs(nuevo - focus_) >= 0.01f)
       focus_ += (nuevo - focus_) * (corte_ ? 1.0f : 0.06f);   /* Samsung usa 0,02; 0,06 responde antes */
+  }
+
+  /* Los dos planos. Con dureza 0 (lo de siempre, y lo que arranca el programa) este bloque no se
+     ejecuta ni una vez. Cuando esta subido se buscan los dos grupos en el mapa ya limpio, se siguen
+     sus posiciones en el tiempo (0,08 por cuadro, de golpe en cada cambio de plano) y luego se acerca
+     cada punto a su lamina. Seguir las posiciones y no tomar las de cada cuadro es lo que evita que
+     la costura baile con el ruido de la red; el mapa de salida se cuantiza aqui, antes de subirlo,
+     asi que el sombreador y sus topes por ojo (+12,67 hacia fuera / -9,98 hacia dentro) no cambian. */
+  if (dureza_ > 0.0f) {
+    static char bufPl[96];
+    const Planos visto = buscarPlanos(salida.data(), sz_ * sz_);
+    if (visto.valido) {
+      if (pFondo_ < 0.0f || corte_) {
+        pFondo_ = visto.fondo;
+        pFrente_ = visto.frente;
+      } else if (std::fabs(visto.fondo - pFondo_) >= 0.004f || std::fabs(visto.frente - pFrente_) >= 0.004f) {
+        pFondo_ += (visto.fondo - pFondo_) * 0.08f;
+        pFrente_ += (visto.frente - pFrente_) * 0.08f;
+      }
+      if (pFrente_ - pFondo_ < 0.10f) {
+        pFondo_ = visto.fondo;      /* se pegaron: tomar tal cual antes de aplicar */
+        pFrente_ = visto.frente;
+      }
+      Planos seguidas;
+      seguidas.valido = true;
+      seguidas.fondo = pFondo_;
+      seguidas.frente = pFrente_;
+      fracFrente_ = aplicarPlanos(salida.data(), sz_ * sz_, seguidas, dureza_);
+    } else {
+      pFondo_ = -1.0f;
+      pFrente_ = -1.0f;
+      fracFrente_ = 0.0f;
+    }
+    static const bool medirPl = std::getenv("ODYSSEY3D_MEDIR") != nullptr;
+    static long npl = 0;
+    if (medirPl && ++npl % 30 == 1)
+      std::printf("[planos] dureza %.2f · %s\n", dureza_,
+                  visto.valido ? (std::snprintf(bufPl, sizeof bufPl, "atras %.2f · delante %.2f · "
+                                                               "%.1f%% del cuadro por delante",
+                                                pFondo_, pFrente_, 100.0f * fracFrente_), bufPl)
+                               : "un solo plano claro (no se toca nada)");
   }
 
   const auto tPlano1 = std::chrono::steady_clock::now();

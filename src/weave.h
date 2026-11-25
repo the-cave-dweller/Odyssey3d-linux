@@ -52,6 +52,14 @@ struct WeaveTuning {
      puntos en 0,5. */
   float empFondo = 0.0f;
   float empFrente = 0.0f;
+  /* Dos planos (paralaje por laminas, como en el Nintendo 3DS). Cuanto se aplasta el mapa de
+     profundidad hacia los DOS unicos valores que `DepthNet` encuentra en el cuadro: 0 deja el
+     relieve continuo de siempre (lo que arranca el programa y lo que estaba hasta ahora) y 1 deja
+     dos laminas planas, cada una con su desplazamiento, que luego se colocan con `j`/`k` (atras),
+     `u`/`i` (delante), `h`/`l` y `y`/`o` (empuje fijo de cada lamina). No es un numero de la trama:
+     se aplica en el mapa, en la CPU, y por eso no entra en el bloque de la trama ni gasta ancho de
+     banda. Teclas: `g` sube la dureza y `v` la baja, de 0,1 en 0,1. */
+  float planos = 0.0f;
   bool capaTocada = false;   /* al menos una tecla de capas pulsada: manda lo del visor */
   bool weave = true;
   bool topBottom = false;      /* video arriba/abajo en lugar de lado a lado */

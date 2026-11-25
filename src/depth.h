@@ -30,6 +30,33 @@
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
                   int celdaPx, std::vector<uint8_t> *mascara, int *cw, int *ch);
 
+/* --- los dos planos ------------------------------------------------------------
+   El conversor da una profundidad distinta a cada punto, y con eso todo el cuadro se
+   trata igual: un sujeto y el fondo detras solo se separan si caen a lados opuestos del
+   plano de apoyo. Aqui se busca si el cuadro de verdad tiene DOS grupos (un fondo y unos
+   primeros planos) y, si los hay, se les puede dar un valor unico a cada grupo: la imagen
+   queda en dos laminas con paralaje propio, que es como lo resuelve el Nintendo 3DS (el
+   contenido pone dos capas y la pantalla solo escala, con un presupuesto fijo).
+
+   `buscarPlanos` mira el histograma del propio mapa (0 = el fondo, 1 = lo mas cerca) y
+   corta donde mas se separan los dos grupos, que es la prueba de Otsu de toda la vida:
+   sin umbrales escritos a mano y sin aprender nada del cuadro. Devuelve valido = false
+   cuando el cuadro no tiene dos grupos claros (un plano fijo, un pasillo, niebla), y
+   entonces no hay que tocar nada.
+
+   `aplicarPlanos` acerca cada punto al valor de su lamina con la fuerza `dureza` (0 = no
+   tocar nada, 1 = laminas planas). En el borde entre las dos no se corta de golpe: se
+   cruza en una franja suave, porque un corte duro se ve como un tajo y ademas parpadea. */
+struct Planos {
+  bool valido = false;
+  float fondo = 0.0f;      /* valor del plano de atras (0 fondo .. 1 cerca de la pantalla) */
+  float frente = 0.0f;     /* valor del plano de delante */
+  float fraccion = 0.0f;   /* parte del cuadro que cae en el plano delantero */
+};
+
+Planos buscarPlanos(const float *mapa, int n);
+float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza);
+
 class DepthNet {
 public:
   ~DepthNet();
@@ -75,6 +102,20 @@ public:
   void setCleaning(bool on) { limpieza_ = on; }
   bool cleaning() const { return limpieza_; }
 
+  /* Los dos planos (ver Planos mas arriba). La `dureza` va de 0 a 1: 0 deja el relieve continuo
+     de siempre (y no cuesta nada porque el codigo se salta entero), 1 deja cada lamina plana. Las
+     posiciones de las dos laminas se siguen en el tiempo para que no bailen cuadro a cuadro, y de
+     golpe en cada cambio de plano. */
+  void setPlanos(float dureza) {
+    /* al reves de lo normal: se compara contra 0 para que un numero que no es numero (NaN) caiga
+       directo en apagado en vez de colarse dentro del mapa */
+    dureza_ = dureza > 0.0f ? (dureza > 1.0f ? 1.0f : dureza) : 0.0f;
+  }
+  float planosDureza() const { return dureza_; }
+  float planoAtras() const { return pFondo_; }    /* -1 = todavia no se han visto dos planos */
+  float planoDelante() const { return pFrente_; }
+  float planoFraccion() const { return fracFrente_; }   /* parte del cuadro en la lamina delantera */
+
 private:
   void cierra();          /* suelta la sesion de ONNX Runtime */
 
@@ -98,6 +139,9 @@ private:
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */
   bool limpieza_ = true;                /* filtro guiado + dilatar activados */
   bool quemada_ = false;                /* ONNX Runtime ya reviento aqui: no intentar otra sesion */
+  float dureza_ = 0.0f;                 /* fuerza de la separacion en dos planos (0 = apagado) */
+  float pFondo_ = -1.0f, pFrente_ = -1.0f;   /* posiciones de las dos laminas, seguidas en el tiempo */
+  float fracFrente_ = 0.0f;             /* parte del cuadro en la lamina delantera */
 };
 
 #endif

@@ -33,6 +33,15 @@ struct ViewerOpts {
   std::string altModel;
   int convEach = 3;          /* cada cuantos cuadros se vuelve a calcular la profundidad */
   int convGpu = 0;           /* 0 = primera tarjeta NVIDIA, 1 = la otra (la primera puede estar llena) */
+  /* mapa de profundidad fijo para medir en el taller (--mapa-fijo F.pgm): el relieve se prueba con un
+     mapa que ya conocemos, sin red y sin sentarse delante del panel. vacio = lo de siempre. */
+  std::string mapaFijo;
+  /* plano de apoyo forzado (--apoyo 0..1): es exactamente Ctrl+Shift+3/4, pero escrito en la linea de
+     mando para poder repetir una medicion igual. -1 = que lo decida la red, que es lo de siempre. */
+  double apoyo = -1.0;
+  /* "3D Salida" forzado (--relieve 0..100): sin relieve el mapa de profundidad no mueve nada, y para
+     medir los dos planos hace falta ponerlo a mano. -1 = lo de siempre (0 sin conversor, 50 con el). */
+  int relieve = -1;
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */
@@ -46,6 +55,10 @@ struct ViewerOpts {
   double align = 0.0;      /* desfase de fase inicial (ciclos) */
   double pitch = 1.0;      /* escala de la rampa de fase */
   double filtro = 10.0;    /* pendiente del filtro de la trama (weave.h); 0 = corte seco */
+  /* Dureza con la que el mapa de profundidad se aplasta hacia los dos unicos valores que hay en el
+     cuadro (fondo y primeros planos): la imagen queda en dos laminas con su propio desplazamiento,
+     como en el Nintendo 3DS. 0 = el relieve continuo de siempre, y es lo que arranca. */
+  double planos = 0.0;
   /* rastreo de cabeza con la camara infrarroja del monitor (necesita OpenCV) */
   bool track = false;
   std::string trackDevice, trackModel, trackCalibDir;

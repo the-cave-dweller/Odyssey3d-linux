@@ -163,6 +163,52 @@ Se ve en el registro: `[conversor] video normal a 3D encendido con NVIDIA`; una 
 ~9 ms en una RTX 4090. La fuerza del relieve la siguen moviendo **3D Salida** (`Ctrl+Shift+5/6`) y
 la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo estéreo.
 
+### Dos planos por cuadro, como en la Nintendo 3DS (desde v0.48)
+
+El relieve continuo es bonito en los planos buenos y sucio en los malos: un partido de fútbol o una
+serie con mucho desenfondo producen un mapa de profundidad manchado, y ahí el relieve se convierte
+en una masa sin bordes. La Nintendo 3DS lo resolvía al revés: la pantalla no decidía las capas, las
+decidía el **juego**, que dibujaba dos o tres planos y un potenciómetro que solo los separaba más o
+menos. Aquí hay ahora lo mismo: el conversor puede cerrar el mapa en **dos láminas planas**, una
+detrás y otra delante, y el deslizador de relieve las separa.
+
+```sh
+odyssey3d capture3d --uuid '<id>' --conver --planos 0,6    # dos planos desde arrancar
+```
+
+* `--planos 0..1` (o `planos = 0,6` en `serve.conf`) es la **dureza**: `0` es el valor de arranque y
+  deja el relieve continuo, píxel por píxel, exactamente como estaba; `1` deja dos láminas perfectamente
+  planas. En marcha se sube y se baja con `g`/`v`.
+* Dónde cae el corte **no lo decide un parámetro fijo ni una red nueva**: lo decide el propio cuadro con
+  un Otsu sobre el histograma del mapa ya limpio, y de cada grupo se toma su media. Si el cuadro no tiene
+  dos grupos claros (los dos picos separan menos de 0,15 o uno de los dos ocupa menos del 6 % del cuadro)
+  se queda en continuo y no se corta nada.
+* Los dos cortes **se siguen en el tiempo** con una media móvil lenta (0,08) y banda muerta, y se vuelven
+  a calcular de golpe en un cambio de plano o cuando las láminas se pegan. Esto es lo que evita que la
+  costura parpadee cuadro a cuadro: medido sobre catorce fotogramas reales de vídeo, con dureza 1 solo el
+  **0,20 % de los puntos** cambia de lámina de un cuadro al siguiente.
+* En la costura hay una **franja suave** de ancho `min(0,33 · separación, 0,05)` con `smoothstep`, no un
+  tajo seco; aun así, en un plano fijo mal segmentado el tajo se va a notar: por eso la dureza empieza en
+  0 y se sube a gusto de cada uno.
+* Todo esto pasa **en el conversor, sobre el mapa de 518 × 518**, no en el sombreador: no toca los números
+  de la trama ni los topes por ojo, que siguen mandando (+12,67 hacia afuera y 9,98 hacia adentro sobre
+  3840). Un cuadro con las dos láminas puede verse más brusco en el relieve, nunca más caro.
+
+Se comprueba sin mirar el panel:
+
+```sh
+odyssey3d mapa foto.png            # foto real -> mapa PGM, sin panel y sin visor
+odyssey3d planos mapa.pgm          # donde estan los dos planos y cuanto parpadean
+ODYSSEY3D_MEDIR=1 odyssey3d ...    # imprime [planos] dureza · atras · delante · % del cuadro por delante
+```
+
+`odyssey3d planos` acepta varios mapas seguidos (una secuencia) y con `--hist` imprime las 32 casillas
+del histograma con barras, que es la forma rápida de ver si un cuadro tiene realmente dos planos o solo
+uno; `--dureza 0,6` escribe el mapa ya cerrado en láminas (`--out`) para compararlo byte a byte. Con
+`--mapa-fijo MAPA.pgm --apoyo 0,4 --relieve 50` el visor arranca con ese mapa puesto y sin red, así que
+la misma trama se puede medir dos veces y salir idéntica: es la única forma de comparar A/B sin que el
+panel y la red metan ruido.
+
 ## Ajuste fino (teclas)
 
 | tecla | efecto |
@@ -187,6 +233,7 @@ la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo 
 | `u` `i` | **capa frente**: lo mismo con lo que sale **delante** de la pantalla. Los dos en 1,00 es exactamente como se comportaba antes |
 | `h` `l` | **empuje del fondo** (−12…+12 puntos de panel, de 0,5 en 0,5): desplaza toda la capa de detrás a un plano concreto, sea cual sea su profundidad (v0.46) |
 | `y` `o` | **empuje del frente**: lo mismo con la capa de delante; es la forma de traer al frente subtítulos, banderines y ventanas (positivo = sale más de la pantalla) |
+| `g` `v` | **dureza de los dos planos** (0…1, de 0,1 en 0,1): 0 deja el relieve continuo de siempre; al subirlo el cuadro se queda en dos láminas planas, una detrás y otra delante, como la Nintendo 3DS (v0.48). Solo tiene efecto con el conversor de vídeo normal puesto |
 | `8` | reiniciar el ajuste a los valores nominales (las rampas vuelven a lo de `serve.conf`) |
 | `T` | **rastreo puesto / apartado**: la cámara deja de mandar y la trama vuelve a la posición de ojo de fábrica (el deslizador de ángulo a mano se quitó en v0.34) |
 | `Ctrl+Shift+1` | 3D puesto / apagado (igual que el Odyssey 3D Hub oficial) |
@@ -546,6 +593,14 @@ de un plano entero. En la config de Windows eso es `far_diff_popup −1,0` en `s
 alrededor del plano de apoyo, así que un objeto que lo cruza no se parte; y vuelve a pasar por los
 topes por ojo, que siguen mandando. Teclas `h`/`l` (fondo) y `y`/`o` (frente), de 0,5 en 0,5, tope
 ±12 puntos.
+
+Y en v0.48, **`planos`**: la dureza con la que el conversor cierra el mapa en **dos láminas planas**
+en vez de dejarlo continuo (`0` … `1`; sin escribir la línea, o `0`, es el comportamiento de siempre,
+píxel por píxel). `planos = 0,6` deja un relieve con dos planos claros y bordes definidos, que en
+deportes, series con desenfondo y cualquier mapa manchado se ve mucho más limpio que el continuo; `1`
+son dos láminas perfectamente planas. El lugar del corte lo saca el propio cuadro y se persigue en el
+tiempo, así que no hace falta afinar ningún umbral; subiendo o bajando la dureza (`g`/`v`) basta. Ojo:
+`serve.conf` lee los números con punto, no con coma (`planos = 0.6`). En marcha es lo mismo con `g`/`v`.
 
 **Los mapas de corrección son de fábrica por unidad.** Cada G90XF tiene los suyos, escritos en su
 línea de montaje, y desde fuera son idénticos (480×270, un PNG en escala de grises). Los que traía

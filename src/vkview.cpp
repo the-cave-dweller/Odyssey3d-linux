@@ -594,6 +594,60 @@ bool loadCorrections(const ViewerOpts &opts, std::vector<uint8_t> &a, int &aw, i
 #endif
 }
 
+/* Leer un mapa de profundidad guardado (P5, el que escribe el propio visor con --dump). Solo lo usa
+   el taller, para medir el relieve con un mapa que ya conocemos en vez de esperar a la red. */
+bool leerPgm(const std::string &ruta, int &w, int &h, std::vector<uint8_t> &gr, std::string *err) {
+  FILE *f = std::fopen(ruta.c_str(), "rb");
+  if (!f) {
+    if (err) *err = "no se puede abrir " + ruta;
+    return false;
+  }
+  char magic[3] = {0, 0, 0};
+  if (std::fread(magic, 1, 2, f) != 2 || magic[0] != 'P' || magic[1] != '5') {
+    std::fclose(f);
+    if (err) *err = ruta + " no es un PGM binario (P5)";
+    return false;
+  }
+  int val[3] = {0, 0, 0};   /* ancho, alto, nivel maximo */
+  int n = 0;
+  while (n < 3) {
+    int c = std::fgetc(f);
+    if (c == EOF) break;
+    if (c == '#') { while (c != '\n' && c != EOF) c = std::fgetc(f); continue; }
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+      if (val[n] != 0 || n > 0) n++;      /* un numero ya estaba abierto: se da por cerrado */
+      continue;
+    }
+    if (c < '0' || c > '9') continue;
+    val[n] = val[n] * 10 + (c - '0');
+  }
+  const int maxv = n >= 3 ? val[2] : 255;
+  w = n >= 1 ? val[0] : 0;
+  h = n >= 2 ? val[1] : 0;
+  if (w <= 0 || h <= 0 || (maxv != 255 && maxv != 65535)) {
+    std::fclose(f);
+    if (err) *err = "cabecera rara en " + ruta;
+    return false;
+  }
+  const size_t n_pix = (size_t)w * (size_t)h;
+  gr.assign(n_pix, 0);
+  size_t leidos = 0;
+  if (maxv == 255) {
+    leidos = std::fread(gr.data(), 1, n_pix, f);
+  } else {
+    /* 16 bits: nos sobra con el byte alto, que es el que usa el visor (mapa R8) */
+    std::vector<uint8_t> crudos(n_pix * 2);
+    leidos = std::fread(crudos.data(), 1, crudos.size(), f) / 2;
+    for (size_t i = 0; i < leidos; i++) gr[i] = crudos[i * 2];
+  }
+  std::fclose(f);
+  if (leidos != n_pix) {
+    if (err) *err = "leidos " + std::to_string(leidos) + " puntos de " + std::to_string(n_pix) + " en " + ruta;
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 #ifdef HAVE_CAPTURE
@@ -734,6 +788,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.tune.align = (float)opts.align;
   ui.tune.pitch = (float)opts.pitch;
   ui.tune.filterSlope = (float)opts.filtro;
+  ui.tune.planos = (float)opts.planos;   /* dos planos: 0 = el relieve continuo de siempre */
+  if (opts.apoyo >= 0.0) {
+    /* el apoyo escrito en la linea de mando (--apoyo 0..1) se pone en la palanca del panel: ahi el
+       propio bucle lo ve cambiado, avisa una vez y lo usa como plano de referencia */
+    ui.hud.state().depth = (int)std::lround(opts.apoyo * 100.0);
+    std::printf("[taller] plano de apoyo forzado a %.2f (la palanca 3D Depth queda en %d)\n", opts.apoyo,
+                (int)std::lround(opts.apoyo * 100.0));
+  }
+  if (opts.relieve >= 0) {
+    /* "3D Salida" escrito en la linea de mando: sin relieve el mapa de profundidad no mueve nada, y
+       para medir con el mapa fijo del taller hace falta poder ponerlo a mano (lo mismo que 5/6) */
+    ui.hud.state().popout = opts.relieve;
+    std::printf("[taller] relieve forzado a %d (3D Salida; 50 es lo que trae el programa de Samsung)\n",
+                opts.relieve);
+  }
+  if (!opts.mapaFijo.empty() && opts.apoyo < 0.0)
+    std::printf("[taller] con --mapa-fijo deberias escribir --apoyo 0..1: sin red nadie sabe donde va "
+                "el plano de apoyo y se pone a la mitad del rango (0,50)\n");
   ui.hud.state().weaveOn = ui.tune.weave;
   /* La tarjeta de "que formato tiene el video" solo sirve si nadie lo eligio antes: si el hub
      o la linea de ordenes ya lo dijeron (--sbs, --tb, --2d), no la volvemos a pintar encima
@@ -999,6 +1071,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   topesPorOjoActivos() ? "tope por ojo +12,67 / -9,98 px" : "sin tope por ojo");
       std::printf("[conversor] limpieza del mapa: filtro guiado (radio 8) + dilate 3 + corte de plano "
                   "(umbral 0,12, descanso 15 cuadros); apoyo por saliencia\n");
+      if (ui.tune.planos > 0.0f)
+        std::printf("[conversor] dos planos: dureza %.1f (las laminas las decide el propio cuadro; "
+                    "`g`/`v` las endurecen o las suavizan, 0 = relieve continuo)\n", ui.tune.planos);
       ui.convInfo = true;
       ui.extraInfo = "relieve 2D a 3D: Ctrl+Shift+6 subelo, Ctrl+Shift+5 lo baja";
       ui.extraHasta = glfwGetTime() + 9.0;
@@ -1630,7 +1705,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        pareja sin imagen, con la red trabajando y la captura bien. El aviso era mudo.
        Aqui miramos de cuadro a cuadro los unicos numeros que ninguna tecla toca (contraste, escala
        de la correccion A y crosstalk dinamico): si cambian solos, algo los esta pisando. Los demas
-       (paso, filtro, fase, crosstalk fijo, conversor, rampas) los mueven las teclas a proposito, asi
+       (paso, filtro, fase, crosstalk fijo, conversor, rampas, las capas y la dureza de los dos
+       planos) los mueven las teclas a proposito, asi
        que aqui no se comparan; en su lugar se vigila que ninguno se vuelva un numero loco. */
     static WeaveTuning vezAnterior{};
     static bool avisoPisoton = false;
@@ -1650,7 +1726,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       const float todos[] = {ui.tune.filterSlope, ui.tune.xtalkFac, ui.tune.contrast, ui.tune.corrAScale,
                              ui.tune.pitch, ui.tune.align, ui.tune.conv, ui.tune.rampaDX, ui.tune.rampaDY,
-                             ui.tune.ganFondo, ui.tune.ganFrente, ui.tune.empFondo, ui.tune.empFrente};
+                             ui.tune.ganFondo, ui.tune.ganFrente, ui.tune.empFondo, ui.tune.empFrente,
+                             ui.tune.planos};
       for (float v : todos) {
         if (std::isfinite(v)) continue;
         avisoPisoton = true;
@@ -1660,6 +1737,34 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
     }
     primeraVez = false;
+    /* --mapa-fijo: medir el relieve con un mapa que ya conocemos (el que escribe --dump, o el que sale
+       de `odyssey3d mapa foto.png`), sin red y sin sentarse delante del panel. Se sube una sola vez y
+       se deja quieto: asi la diferencia entre dos pasadas de la misma orden es solo lo que se cambi. */
+    if (!opts.mapaFijo.empty()) {
+      static std::vector<uint8_t> mfMapa;
+      static int mfW = 0, mfH = 0;
+      static bool mfIntentado = false;
+      if (!mfIntentado) {
+        mfIntentado = true;
+        std::string errmf;
+        if (leerPgm(opts.mapaFijo, mfW, mfH, mfMapa, &errmf)) {
+          unsigned hist[256] = {0};
+          unsigned niveles = 0;
+          double suma = 0.0;
+          for (uint8_t v : mfMapa) { hist[v]++; suma += (double)v; }
+          for (unsigned q : hist) if (q) niveles++;
+          std::printf("[mapa fijo] %s · %d x %d · %u niveles · media %.1f (sin red)\n",
+                      opts.mapaFijo.c_str(), mfW, mfH, niveles, suma / (double)mfMapa.size());
+        } else {
+          std::fprintf(stderr, "[mapa fijo] %s\n", errmf.c_str());
+        }
+      }
+      if (!mfMapa.empty()) {
+        std::string errmf;
+        if (wv.setDepthMap(mfMapa.data(), mfW, mfH, &errmf)) mfMapa.clear();
+        else std::fprintf(stderr, "[mapa fijo] no se pudo subir: %s\n", errmf.c_str());
+      }
+    }
     t.weave = ui.tune.weave && ui.hud.state().weaveOn;
     t.swapLR = ui.tune.swapLR;
     t.topBottom = ui.tune.topBottom;
@@ -1702,6 +1807,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         ultimaEstim = now;
         std::string cerr;
         if (wv.readSmall(chico, &cerr)) {
+          /* La dureza de los dos planos se puede subir o bajar con `g`/`v` en mitad de la pelicula:
+             se pasa a la red justo antes de lanzar la pasada, que es el unico momento en que su hilo
+             esta libre y no hay dos sitios tocando el mismo numero. */
+          red.setPlanos(ui.tune.planos);
           hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla);
         } else if (++convFallos == 1 || convFallos % 100 == 0) {
           std::fprintf(stderr, "[conversor] no se pudo leer el cuadro pequeno (%d): %s\n", (int)convFallos,
@@ -1852,6 +1961,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       wv.setConverter(ganancia, apoyoAuto ? red.focusPlane() : (float)st.depth / 100.0f,
                       wv.hasDepthMap());
     }
+    /* Con el mapa venido de un archivo (--mapa-fijo) no hay red que mande el relieve, y sin relieve
+       el mapa no mueve nada: se manda por el mismo camino de siempre, con el apoyo que diga --apoyo
+       (por eso esa bandera pide el apoyo escrito: no hay red que lo saque de la escena). */
+    if (!opts.mapaFijo.empty() && wv.hasDepthMap())
+      wv.setConverter(gananciaRelieve(st.popout), (float)(opts.apoyo >= 0.0 ? opts.apoyo : 0.5), true);
 #endif
     ui.hud.state().hud = rig.hud();
     /* la frase extra del video se quita sola, salvo si estamos en pausa a proposito */

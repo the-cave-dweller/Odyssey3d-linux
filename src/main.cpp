@@ -1294,6 +1294,16 @@ static std::string findDataFile(const std::string &name, const std::string &cali
   return {};
 }
 
+/* Numero escrito con punto o con coma: en esta casa las dos formas son normales y un "0,6" leido
+   como 0 habria parecido que el mando nuevo no hace nada. */
+static double leerNumero(const char *s) {
+  char tmp[64];
+  size_t k = 0;
+  for (; s[k] && k + 1 < sizeof tmp; k++) tmp[k] = (s[k] == ',') ? '.' : s[k];
+  tmp[k] = '\0';
+  return std::atof(tmp);
+}
+
 static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
   for (int i = 0; i < argc; i++) {
     std::string a = argv[i];
@@ -1391,6 +1401,10 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--align") { if (!need("align")) return false; o.align = atof(argv[++i]); }
     else if (a == "--pitch") { if (!need("pitch")) return false; o.pitch = atof(argv[++i]); }
     else if (a == "--filtro") { if (!need("filtro")) return false; o.filtro = atof(argv[++i]); }
+    else if (a == "--planos") { if (!need("planos")) return false; o.planos = (float)leerNumero(argv[++i]); }
+    else if (a == "--mapa-fijo") { if (!need("mapa-fijo")) return false; o.mapaFijo = argv[++i]; }
+    else if (a == "--apoyo") { if (!need("apoyo")) return false; o.apoyo = leerNumero(argv[++i]); }
+    else if (a == "--relieve") { if (!need("relieve")) return false; o.relieve = (int)leerNumero(argv[++i]); }
     else if (a == "--calib-dir") { if (!need("calib-dir")) return false; o.corrDir = argv[++i]; }
     else if (a == "--volcado-seguir") o.dumpKeep = true;
     else if (a == "--uuid") { if (!need("uuid")) return false; o.captureUuid = argv[++i]; }
@@ -1485,6 +1499,199 @@ static void escribirPgm(const std::string &ruta, int w, int h, const std::vector
   std::fwrite(g.data(), 1, g.size(), f);
   std::fclose(f);
   std::printf("escrito %s\n", ruta.c_str());
+}
+
+/* Mirar los DOS PLANOS de un mapa de profundidad guardado, sin sentarse delante del panel. El visor
+   tira el mapa de cada cuadro con `--dump /ruta` (termina en -profundidad.pgm), asi que con esto se
+   ve donde caen el fondo y los primeros planos, cuantos puntos van a cada lamina y, si se le pasan
+   varios mapas seguidos, cuanto parpadeo hay de un cuadro al siguiente (el "cambio de bando": puntos
+   que una pasada estan en la lamina delantera y la siguiente se van atras). Las posiciones de las
+   laminas se siguen aqui igual que en el visor, para que lo medido se parezca a lo que pasa de
+   verdad en la pelicula. */
+static int cmdPlanos(int argc, char **argv) {
+  float dureza = 0.6f;
+  bool hist = false;
+  std::string out;
+  std::vector<std::string> ficheros;
+  for (int i = 0; i < argc; i++) {
+    const std::string a = argv[i];
+    if (a == "--dureza" && i + 1 < argc) dureza = (float)leerNumero(argv[++i]);
+    else if (a == "--out" && i + 1 < argc) out = argv[++i];
+    else if (a == "--hist") hist = true;
+    else if (a == "--ayuda" || a == "-h") {
+      std::printf("odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] [--out lamina.pgm] [--hist]\n");
+      return 0;
+    } else ficheros.push_back(a);
+  }
+  if (ficheros.empty()) {
+    std::fprintf(stderr, "uso: odyssey3d planos mapa.pgm [mapa2.pgm ...] [--dureza 0,6] "
+                         "[--out lamina.pgm] [--hist]\n");
+    return 2;
+  }
+  float pAtras = -1.0f, pDelante = -1.0f;   /* posiciones seguidas, como en DepthNet */
+  std::vector<uint8_t> bandaAnterior;
+  int wAnt = 0, hAnt = 0;
+  double sumaCambio = 0.0;
+  int conCambio = 0;
+  for (size_t f = 0; f < ficheros.size(); f++) {
+    int w = 0, h = 0;
+    std::vector<uint8_t> g;
+    std::string err;
+    if (!leerPgm(ficheros[f], w, h, g, &err)) {
+      std::fprintf(stderr, "%s: %s\n", ficheros[f].c_str(), err.c_str());
+      return 1;
+    }
+    const int n = w * h;
+    std::vector<float> m((size_t)n);
+    for (int i = 0; i < n; i++) m[(size_t)i] = (float)g[(size_t)i] / 255.0f;
+    const Planos visto = buscarPlanos(m.data(), n);
+    if (hist) {
+      int hist2[32] = {0};
+      for (int i = 0; i < n; i++) hist2[(int)(m[(size_t)i] * 31.99f)]++;
+      int maximo = 1;
+      for (int i = 0; i < 32; i++) maximo = std::max(maximo, hist2[i]);
+      for (int i = 0; i < 32; i++) {
+        const int barras = (int)(40.0 * (double)hist2[i] / (double)maximo);
+        std::printf("  %.2f-%.2f |%.*s %d\n", (float)i / 32.0f, (float)(i + 1) / 32.0f, barras,
+                    std::string((size_t)barras, '#').c_str(), hist2[i]);
+      }
+    }
+    if (!visto.valido) {
+      std::printf("[planos] %d de %d · %d x %d · un solo plano claro: se deja el relieve continuo\n",
+                  (int)f + 1, (int)ficheros.size(), w, h);
+      pAtras = -1.0f, pDelante = -1.0f;
+      bandaAnterior.clear();
+      continue;
+    }
+    if (pAtras < 0.0f || std::fabs(visto.fondo - pAtras) >= 0.15f ||
+        std::fabs(visto.frente - pDelante) >= 0.15f) {
+      pAtras = visto.fondo;
+      pDelante = visto.frente;
+    } else {
+      pAtras += (visto.fondo - pAtras) * 0.08f;
+      pDelante += (visto.frente - pDelante) * 0.08f;
+    }
+    /* a que lamina va cada punto: el corte cae justo en el medio de las dos posiciones, que es
+       tambien donde cruza la franja suave de `aplicarPlanos` */
+    const float medio = 0.5f * (pAtras + pDelante);
+    std::vector<uint8_t> banda((size_t)n);
+    for (int i = 0; i < n; i++) banda[(size_t)i] = m[(size_t)i] > medio ? 1 : 0;
+    float cambio = 0.0f;
+    if (bandaAnterior.size() == banda.size() && w == wAnt && h == hAnt) {
+      int flips = 0;
+      for (int i = 0; i < n; i++) flips += banda[(size_t)i] != bandaAnterior[(size_t)i];
+      cambio = (float)flips / (float)n;
+      sumaCambio += cambio;
+      conCambio++;
+    }
+    bandaAnterior = std::move(banda);
+    wAnt = w, hAnt = h;
+    Planos seguidas;
+    seguidas.valido = true;
+    seguidas.fondo = pAtras;
+    seguidas.frente = pDelante;
+    const float fraccion = aplicarPlanos(m.data(), n, seguidas, dureza);
+    std::printf("[planos] %d de %d · %d x %d · atras %.3f · delante %.3f · separacion %.3f · "
+                "%.1f%% del cuadro por delante · cambio de bando %.1f%%\n",
+                (int)f + 1, (int)ficheros.size(), w, h, pAtras, pDelante, pDelante - pAtras,
+                100.0f * fraccion, 100.0f * cambio);
+    if (!out.empty() && f + 1 == ficheros.size()) {
+      std::vector<uint8_t> gris((size_t)n);
+      for (int i = 0; i < n; i++) {
+        const float v = m[(size_t)i] < 0.0f ? 0.0f : (m[(size_t)i] > 1.0f ? 1.0f : m[(size_t)i]);
+        gris[(size_t)i] = (uint8_t)(v * 255.0f + 0.5f);
+      }
+      escribirPgm(out, w, h, gris);
+    }
+  }
+  if (conCambio > 0)
+    std::printf("[planos] parpadeo medio de la costura: %.2f%% de los puntos cambian de lamina "
+                "cada cuadro (dureza %.2f)\n",
+                100.0f * sumaCambio / (float)conCambio, dureza);
+  return 0;
+}
+
+/* Pasar fotos reales por la red de profundidad y dejar el mapa en un PGM, sin abrir el panel. Con
+   esto se monta el banco de pruebas de lo que hace el conversor con una pelicula de verdad: se
+   sacan cuadros con ffmpeg (`ffmpeg -i pelicula.mkv -vf fps=2 cuadro%%04d.png`), se pasan por aqui
+   en orden y la salida se mira con `odyssey3d planos cuadro*-mapa.pgm`. La red suaviza en el tiempo
+   igual que en la sesion, asi que la secuencia se comporta como en la pelicula. */
+/* Leida en glutil.h; se vuelve a declarar aqui para no arrastrar las cabeceras de OpenGL a este
+   archivo. Sin libpng devuelve false y ya esta. */
+bool pngLoadRGBA(const std::string &path, int &w, int &h, std::vector<uint8_t> &rgba);
+static int cmdMapa(int argc, char **argv) {
+  std::string modelo;
+  int gpu = 0;
+  std::vector<std::string> ficheros;
+  for (int i = 0; i < argc; i++) {
+    const std::string a = argv[i];
+    if ((a == "--modelo" || a == "--model") && i + 1 < argc) modelo = argv[++i];
+    else if (a == "--red" && i + 1 < argc) gpu = std::max(0, std::atoi(argv[++i]));
+    else if (a == "--ayuda" || a == "-h") {
+      std::printf("odyssey3d mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
+      return 0;
+    } else ficheros.push_back(a);
+  }
+  if (ficheros.empty()) {
+    std::fprintf(stderr, "uso: odyssey3d mapa foto.png [foto2.png ...] [--modelo F.onnx] [--red 0]\n");
+    return 2;
+  }
+  DepthNet net;
+  std::string err;
+  char bufTmp[128];
+  if (!net.init(modelo, &err, gpu)) {
+    std::fprintf(stderr, "no se pudo abrir la red: %s\n", err.c_str());
+    std::fprintf(stderr, "(las .onnx viven en ~/.local/share/odyssey3d/modelos/)\n");
+    return 1;
+  }
+  std::printf("[mapa] red %s por %s · salida %d x %d\n", net.modelPath().c_str(), net.device().c_str(),
+              net.size(), net.size());
+  for (size_t f = 0; f < ficheros.size(); f++) {
+    int w = 0, h = 0;
+    std::vector<uint8_t> rgba;
+    const std::string &ruta = ficheros[f];
+    if (ruta.size() > 4 && ruta.compare(ruta.size() - 4, 4, ".png") == 0) {
+      if (!pngLoadRGBA(ruta, w, h, rgba)) {
+        std::fprintf(stderr, "%s: no se pudo leer el PNG\n", ruta.c_str());
+        return 1;
+      }
+    } else {
+      std::vector<uint8_t> rgb;
+      if (!leerPpm(ruta, w, h, rgb, &err)) {
+        std::fprintf(stderr, "%s: %s\n", ruta.c_str(), err.c_str());
+        std::fprintf(stderr, "(mapa lee PNG o PPM binario; convert foto.jpg foto.ppm)\n");
+        return 1;
+      }
+      rgba.resize((size_t)w * (size_t)h * 4);
+      for (size_t p = 0, q = 0; p + 2 < rgb.size(); p += 3, q += 4) {
+        rgba[q] = rgb[p];
+        rgba[q + 1] = rgb[p + 1];
+        rgba[q + 2] = rgb[p + 2];
+        rgba[q + 3] = 255;
+      }
+    }
+    std::vector<uint8_t> m;
+    if (!net.estimate(rgba.data(), w, h, m, &err)) {
+      std::fprintf(stderr, "%s: %s\n", ruta.c_str(), err.c_str());
+      return 1;
+    }
+    const int sz = net.size();
+    /* el plano de apoyo y los dos planos salen en la misma linea: es lo que el visor le manda al
+       sombreador, medido aqui sin sentarse delante del panel */
+    std::vector<float> mf((size_t)sz * (size_t)sz);
+    for (size_t i = 0; i < mf.size(); i++) mf[i] = (float)m[i] / 255.0f;
+    const Planos p = buscarPlanos(mf.data(), sz * sz);
+    std::printf("[mapa] %d de %d %s · %.1f ms · apoyo %.3f · %s\n", (int)f + 1, (int)ficheros.size(),
+                ruta.c_str(), net.lastMs(), net.focusPlane(),
+                p.valido ? (char *)(std::snprintf(bufTmp, sizeof bufTmp, "dos planos atras %.3f · "
+                                                                 "delante %.3f · %.1f%% por delante",
+                                                  p.fondo, p.frente, 100.0f * p.fraccion),
+                              bufTmp)
+                         : "un solo plano claro");
+    const size_t punto = ruta.find_last_of('.');
+    escribirPgm((punto != std::string::npos ? ruta.substr(0, punto) : ruta) + "-mapa.pgm", sz, sz, m);
+  }
+  return 0;
 }
 
 static int cmdTexto(int argc, char **argv) {
@@ -1933,6 +2140,10 @@ struct ServeCfg {
   /* empuje por capa, en puntos de panel; 999 = no puesto (0 si vale: es el neutro) */
   double empFondo = 999.0;
   double empFrente = 999.0;
+  /* Dos planos: fuerza con la que el mapa de profundidad se aplasta hacia el fondo y los primeros
+     planos del cuadro. -1 = sin ajustar (apagado, el relieve continuo de siempre); de 0,0 a 1,0.
+     Es lo mismo que sube y baja la tecla `g`, pero dejado por escrito. */
+  double planos = -1.0;
   std::map<std::string, std::string> porApp;   /* app_id -> modo, para no volver a preguntar */
 };
 
@@ -2030,7 +2241,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "fase" || k == "paso" || k == "filtro" ||
              k == "relieve" || k == "temblor" || k == "canto" || k == "fase_temblor" ||
              k == "rampa_x" || k == "rampa_y" || k == "fondo" || k == "frente" ||
-             k == "empuje_fondo" || k == "empuje_frente") {
+             k == "empuje_fondo" || k == "empuje_frente" || k == "planos") {
       /* la trama se desalinea medio por ciento, asi que estos numeros van con decimales */
       std::string numero = v;
       for (char &c : numero)
@@ -2049,6 +2260,8 @@ static void loadServeCfg(ServeCfg &cfg) {
       /* empuje de cada capa, en puntos de panel (positivo = hacia fuera de la pantalla) */
       else if (k == "empuje_fondo") cfg.empFondo = (d >= -15.0 && d <= 15.0) ? d : 999.0;
       else if (k == "empuje_frente") cfg.empFrente = (d >= -15.0 && d <= 15.0) ? d : 999.0;
+      /* dureza de los dos planos: 0 = apagado, 1 = laminas planas; fuera de ese rango no se usa */
+      else if (k == "planos") cfg.planos = (d >= 0.0 && d <= 1.0) ? d : -1.0;
       else cfg.faseTemblor = d;
     }
     else if (k == "auto") {
@@ -2118,6 +2331,14 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       std::snprintf(valor, sizeof valor, "%.3f", pila->filtro);
       args.push_back("--filtro");
       args.push_back(valor);
+    }
+    if (pila->planos >= 0.0) {
+      /* `planos = 0,6` en serve.conf: la imagen sale en dos laminas con su propio desplazamiento
+         en vez del relieve continuo; 0 lo deja como siempre */
+      std::snprintf(valor, sizeof valor, "%.3f", pila->planos);
+      args.push_back("--planos");
+      args.push_back(valor);
+      std::fprintf(stderr, "[serve] dos planos = %s (0 = relieve continuo, 1 = laminas planas)\n", valor);
     }
     if (!pila->calib.empty()) { args.push_back("--calib-dir"); args.push_back(pila->calib); }
     if (!pila->volcado.empty()) {
@@ -3477,11 +3698,17 @@ int main(int argc, char **argv) {
     if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
     if (sub == "vkprobe") return cmdVkProbe(argc - 3, argv + 3);
     if (sub == "hud") return cmdHudSelfTest(argc - 3, argv + 3);
+    if (sub == "planos") return cmdPlanos(argc - 3, argv + 3);
+    if (sub == "mapa") return cmdMapa(argc - 3, argv + 3);
     std::fprintf(stderr, "subcomando desconocido: %s\n", sub.c_str());
     return 2;
   }
   if (cmd == "texto-detect")
     return cmdTexto(argc - 2, argv + 2);
+  if (cmd == "planos")
+    return cmdPlanos(argc - 2, argv + 2);
+  if (cmd == "mapa")
+    return cmdMapa(argc - 2, argv + 2);
   if (cmd == "attrs") {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;

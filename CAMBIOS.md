@@ -2,6 +2,83 @@
 
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 
+## Dos planos por cuadro, como en la Nintendo 3DS (v0.48)
+- Pedido de Rodolfo: «revises lo de crear un modelo que separe la imagen en 2 planos parallax, porque
+  parece que todo lo maneja de forma similar, algo parecido al nintendo 3d». Elegido por él: **empezar
+  sin red nueva**, usando el mapa que ya tenemos, y **arrancar apagado** con un mando para subirlo (el
+  relieve continuo de hoy sigue siendo el valor de arranque).
+- La lección de la 3DS que manda el diseño: allí la pantalla **no decidía las capas**. El juego dibujaba
+  sus planos y el potenciómetro (`3D_SLIDERSTATE`, leído por `osGet3DSliderState()`) solo los separaba
+  más o menos; la barrera física era fija. Aquí igual: **el contenido pone los dos planos** y el deslizador
+  de relieve los escala, con el presupuesto duro por ojo ya impuesto (+12,67 hacia afuera, 9,98 hacia
+  adentro sobre 3840). Por eso la separación va **en el conversor**, sobre el mapa de 518 × 518, y no en
+  el sombreador: el bloque de parámetros sigue en 320 bytes y los topes por ojo no se tocaron.
+- Añadido en `depth.cpp/h`: `buscarPlanos()` y `aplicarPlanos()`. El corte sale de un **Otsu sobre el
+  histograma de 32 casillas del propio mapa ya limpio** (filtro guiado + dilate + corte de plano), y el
+  valor de cada lámina es la **media** de su grupo, no el pico del histograma; con el pico las láminas
+  salían corridas hacia los bordes. Rechaza el cuadro si los dos grupos separan menos de 0,15 o si uno
+  ocupa menos del 6 % o más del 94 % del cuadro: sin dos picos claros no hay dos planos que cortar.
+- Costura sin tajo: franja suave de ancho `min(0,33 · separación, 0,05)` con `smoothstep`, y la **dureza**
+  interpola entre el mapa continuo y las láminas (`mapa += (lamina − mapa) · dureza`). Con dureza 0 el
+  bloque ni se ejecuta: el mapa sale **byte a byte idéntico** al de v0.47 (comprobado con `cmp`).
+- Lo que de verdad evita el parpadeo es el **seguimiento temporal**: los dos cortes persiguen lo que ve
+  el cuadro con media móvil de 0,08 y banda muerta de 0,004, saltan de golpe en un cambio de plano y se
+  recalculan si las láminas se pegan (separación < 0,10). El mapa ya cuantizado alimenta `prev_`, así que
+  la realimentación es estable en vez de pelearse cuadro a cuadro.
+- Mandos: teclas `g`/`v` (dureza ±0,1, tope 0…1), `--planos 0..1` en la línea de mando y `planos = 0.6`
+  en `serve.conf` (esa clave va **con punto**: el lector de la config no entiende comas). No es un número
+  de la trama: no entra en el UBO, y por eso el vigía anti-pisotón de v0.47 solo lo mira como un campo más
+  de los que mueven las teclas.
+- Herramientas nuevas para medir esto **sin tocar el panel**:
+  - `odyssey3d mapa foto.png` hace mapas PGM de fotos reales con la red (acepta PNG y PPM, `--modelo`,
+      `--red N`) y dice en cada cuadro apoyo, dos planos y cuánto cae por delante.
+  - `odyssey3d planos mapa1.pgm mapa2.pgm …` sigue los dos cortes por la secuencia, mide el **parpadeo de
+      la costura** (cuántos puntos cambian de lámina de un cuadro al siguiente) y cierra con la media.
+      `--dureza` escribe el mapa cerrado (`--out`) y `--hist` imprime las 32 casillas con barras.
+  - `--mapa-fijo MAPA.pgm --apoyo 0..1 --relieve 0..100` arranca el visor con un mapa ya calculado y sin
+      red, para A/B deterministas. Sin estas tres banderas el A/B no valía nada: en modo `test` la red solo
+      hace una pasada y el mapa nunca llegaba a subir.
+  - `ODYSSEY3D_MEDIR=1` añade `[planos] dureza … · atras … · delante … · % del cuadro por delante`.
+- **Medido** (todo sin panel, sobre archivos):
+  - Mapa real de un cuadro (`/tmp/rampa-profundidad.pgm`): `atras 0,184 · delante 0,830 · separación 0,646
+      · 30,4 % del cuadro por delante`.
+  - Secuencia real de 14 fotogramas de vídeo (red `mde_large`, 6,7–8,3 ms por foto): los planos salen muy
+      estables, `atras 0,102…0,120`, `delante 0,775…0,817`, `30,6…31,4 % por delante`. Con el seguimiento
+      en marcha el **parpadeo medio de la costura es 0,20 % de los puntos por cuadro** a dureza 1.
+  - Escalera de dureza sobre el mismo mapa: 0 = idéntico byte a byte; 0,3 = 214 niveles y desvío medio 5,5;
+      0,6 = 173 niveles y 11,0; 1,0 = 118 niveles con dos picos dominantes (47 con 60,8 % y 212 con 22,4 %),
+      o sea dos láminas ya planas.
+  - Coste: con dureza 0,6 en el visor, `[medir] plano de apoyo` pasa de 0,5 a 1,0 ms por pasada de red
+      (~0,5 ms extra sobre un presupuesto de ~8 ms). `[planos] dureza 0.60 · atras 0.17 · delante 0.57 ·
+      39.4 % del cuadro por delante`.
+  - A/B de extremo a extremo con mapa fijo (misma orden cuatro veces, mismo cuadro trameado): control con
+      el mismo mapa **desvío 0,00 y 0,0 % de píxeles distintos**; mapa en dos láminas duras **6,6 % de
+      píxeles distintos (3,5 % con más de 8 niveles)**; dureza 0,6 **5,1 % / 2,4 %**. Repetido, los números
+      salen idénticos, así que la diferencia es el mapa y no el azar.
+- Errores que aparecieron por el camino y quedaron arreglados:
+  - `--planos 0,6` y `--dureza 0,6` se leían como **0** (`atof` con coma). Añadido `leerNumero`, que acepta
+      punto y coma, para `--planos`, `--apoyo`, `--relieve` y `--dureza`.
+  - Con `--mapa-fijo` y el conversor apagado las cuatro tramas salían **idénticas**: sin relieve el mapa no
+      mueve nada, y el `setConverter` solo corría dentro del bloque de la red. Añadido `--relieve` y una
+      llamada paralela para el mapa fijo.
+  - En ventana el lienzo a veces sale a 3840 × 2160 y a veces a 5760 × 3240 (aviso del escala 1,5 ya
+      conocido), así que los volcados no eran comparables entre sí: hay que comparar solo del mismo tamaño.
+  - Las dos funciones nuevas cayeron dentro del primer `namespace {` anónimo de `depth.cpp` y chocaban con
+      las declaraciones de `depth.h` (llamada ambigua). Movidas fuera del anónimo.
+- Detalles a tener en cuenta: `anclarTexto` sigue apoyando los rótulos en `focus_` (el plano de la
+  pantalla), no en las dos láminas, así que con dureza alta el rótulo queda en medio del tajo con
+  desplazamiento ≈ 0, que es lo deseado; pero su histograma entra en `prev_` y puede mover un poco el corte
+  de Otsu en cuadros con mucho texto.
+- Riesgos dichos de frente: la segmentación puede parpadear en planos raros (mitigado, no eliminado), en la
+  costura se nota el borde si el mapa venía sucio, y en un plano fijo mal segmentado el tajo se ve si se
+  sube mucho la dureza. Por eso arranca en 0.
+- Siguiente paso acordado: **Paso 2**, portar `degraph` (cajas de gráficos, subtítulos y ventanas dentro del
+  vídeo → plano delantero con `depth_offset`, `occlusion`, `blur_edge`, umbrales y dilate/erode) apoyándose
+  en lo que ya hace `anclarTexto`, y el modo «3 bandas» con la semántica exacta de `scene_dspr`
+  (`near_diff_scale −0,5`, `far_diff_scale 1,0`, `far_diff_popup −1,0`) para poder comparar si él lo enciende
+  en Windows. Paso 3 opcional: una red figura/fondo chica (`u2netp`/`salnet`, ~4 MB, 320 × 320) o
+  `Disp_Disp_1008_ver1.onnx` como segunda opinión, con `iir_weight 0,1` y rampa lenta.
+
 ## El visor gris: el bloque de la trama se salía de su caja y se pisaba sus propios números (v0.47)
 - Síntoma que dio Rodolfo: «veo el overlay con un fondo color gris, nada de imagen». Medido sobre el
   cuadro del propio visor: **RGB(127,127,127) exacto, varianza 0** en toda la banda central. Con la

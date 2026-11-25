@@ -290,6 +290,22 @@ bool tuningKey(WeaveTuning &t, int key, const char **tag) {
       *tag = etiqueta;
       break;
     }
+    /* Dos planos. `g` sube y `v` baja la dureza con la que el mapa de profundidad se aplasta hacia
+       los DOS unicos valores que hay en el cuadro (un fondo y unos primeros planos): la imagen
+       queda en dos laminas con su propio desplazamiento, que es como lo trata el Nintendo 3DS.
+       En 0 sigue el relieve continuo de siempre, que es como arranca el programa. Las laminas ya
+       colocadas se mueven con las parejas de antes: `j`/`k` y `u`/`i` para estirarlas, `h`/`l` y
+       `y`/`o` para llevar una lamina entera a un plano fijo. */
+    case GLFW_KEY_G:
+    case GLFW_KEY_V: {
+      const auto topeDureza = [](float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); };
+      if (key == GLFW_KEY_G) t.planos = topeDureza(t.planos + 0.1f);
+      if (key == GLFW_KEY_V) t.planos = topeDureza(t.planos - 0.1f);
+      std::snprintf(etiqueta, sizeof etiqueta, "dos planos %.1f%s", t.planos,
+                    t.planos <= 0.0f ? " (relieve continuo)" : "");
+      *tag = etiqueta;
+      break;
+    }
     case GLFW_KEY_8:
       t.conv = 0.0f;
       t.align = 0.0f;
