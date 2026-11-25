@@ -1243,6 +1243,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      std::vector<uint8_t> mapa;   /* mapa terminado y esperando subirse */
      std::vector<uint8_t> mapaRG; /* el mismo, ya repartido por ojo y con los huecos rellenos (v0.69) */
      std::vector<uint8_t> mascara; /* rejilla de rotulos detectados, para poder verla */
+     MemoriaTexto memoriaTexto;    /* el apoyo de los rotulos de un mapa al siguiente (v0.74); solo la toca el hilo */
      int mw = 0, mh = 0;
      float textoFrac = 0.0f;      /* parte del mapa que se apoyo en la pantalla */
      std::string error;
@@ -1282,10 +1283,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          float frac = 0.0f;
          std::vector<uint8_t> mk;
          int gw = 0, gh = 0;
-         if (ok && t.apoyar)
+         if (ok && t.apoyar) {
            /* los subtitulos y cualquier texto: van al plano de la pantalla para que no se deslicen
-              con la cabeza. Se hace aqui, con la misma foto que genero este mapa. */
-           frac = anclarTexto(t.copia.data(), t.sz, t.sz, m, t.red->focusPlane(), 8, &mk, &gw, &gh);
+              con la cabeza. Se hace aqui, con la misma foto que genero este mapa. La memoria no
+              se tira en los cambios de plano: un subtitulo que cruza el corte sigue quieto y sigue
+              apoyado, y lo demas deja de estar quieto y sale solo en dos mapas. */
+           frac = anclarTexto(t.copia.data(), t.sz, t.sz, m, t.red->focusPlane(), 8, &mk, &gw, &gh, &memoriaTexto);
+         }
          /* y el reparto por ojo con los huecos rellenos (antes lo hacia el hilo que dibuja) */
          std::vector<uint8_t> rg;
          if (ok) {
@@ -1480,13 +1484,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (c == ',') c = '.';
       double a = 0.0, b = fo.set.euroBeta;
       if (std::sscanf(s.c_str(), "%lf;%lf", &a, &b) >= 1) {
-        fo.set.euroMinCorte = a;
-        fo.set.euroBeta = b;
+        fo.set.euroMinCorte = fo.set.euroMinCorteFino = a;   /* puesto a mano: vale para las dos vias */
+        fo.set.euroBeta = fo.set.euroBetaFino = b;
       }
       std::printf("[rastreo] One-Euro %s (corte minimo %.2f Hz, beta %.2f)\n",
                   fo.set.euroMinCorte > 0.0 ? "puesto" : "apagado: exponencial de antes", fo.set.euroMinCorte,
                   fo.set.euroBeta);
     }
+    /* ODYSSEYVK_RASTREO_FINO=0 (rastreo_fino = no en serve.conf) vuelve al rastreo de antes de la
+       v0.74: los ojos que da YuNet en cada vista, restados. Para comparar en el panel. */
+    if (const char *e = entornoOdyssey("ODYSSEYVK_RASTREO_FINO")) fo.set.fino = !(e[0] == '0' || e[0] == 'n');
+    std::printf("[rastreo] %s\n", fo.set.fino
+                    ? "fino: la distancia sale de comparar la imagen de los ojos entre las dos vistas"
+                    : "de antes (rastreo_fino = no): los ojos de YuNet en cada vista, restados");
     fo.fuerzaMono = opts.trackMono;
     fo.set.hFovDegrees = opts.trackCampo;
     fo.set.faceWidthMillimetres = opts.trackCara;
@@ -2802,11 +2812,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         ultimoRastreo = now;
         const TrackSample &m = fs.sample;
         std::printf("[rastreo] camara (%6.1f, %6.1f, %6.1f) mm · panel (%6.2f, %6.2f, %6.2f) cm · ipd %.1f mm · "
-                    "%lld/%lld cuadros (%.1f fps) · error %.2f px · hace %.2f s · %s\n",
+                    "%lld/%lld cuadros (%.1f fps) · error %.2f px · hace %.2f s · %s · fino %lld (%.2f/%.2f)\n",
                     m.eyeMillimetres[0], m.eyeMillimetres[1], m.eyeMillimetres[2], m.panelCentimetres[0],
                     m.panelCentimetres[1], m.panelCentimetres[2], m.ipdMillimetres, fs.frames, fs.good,
                     fs.cameraFps, m.reprojectionPx, fs.age,
-                    fresco ? "siguiendo" : (fs.note.empty() ? "sin pose valida" : fs.note.c_str()));
+                    fresco ? "siguiendo" : (fs.note.empty() ? "sin pose valida" : fs.note.c_str()), fs.finos,
+                    m.puntajeFranja, m.puntajeDisparidad);
         std::fflush(stdout);
       }
       /* la vista de la camara: el cuadro crudo tal cual lo soltio, para que la ventana de ajustes la

@@ -3,6 +3,73 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El rastreo mide la distancia comparando la imagen de los ojos, y los rótulos tienen memoria (v0.74)
+
+- Rodolfo, con la 0.73: «ahora volvió otra vez el lado a lado». El visor de la 0.73 es el de la 0.72 (solo
+  cambió el vigilante), así que la causa no es un cambio nuestro: es algo que varía de una sesión a otra.
+- MEDIDO en el registro de las 20 sesiones del día: la distancia entre los ojos que saca el rastreo, que es
+  fija, tiene de 7 a 25 mm de desviación dentro de cada sesión (del 18 al 86 % de las muestras a más de
+  ±8 % de 64,8 mm), y la z YA FILTRADA cambia de 0,85 a 2,2 cm de un segundo al siguiente (mediana de
+  cada sesión desde las 08:34).
+- MEDIDO con la cámara (dos tomas grabadas con `ctl track --grabar`, 1186 y 1486 cuadros): YuNet da cada
+  ojo por separado en cada vista con ±2,7 a ±3,4 px de temblor y, peor, con un sesgo lento que ningún
+  filtro quita. Con la cabeza quieta, la disparidad de YuNet (mediana de cada segundo) va de 49,3 a
+  56,4 px mientras la correlación de imagen entre las dos vistas se queda entre 52,4 y 53,1: son ±4 cm
+  de distancia.
+  La z filtrada por segundo, sobre los mismos cuadros: **de 62,6 a 72,3 cm** antes, de 66,4 a 68,4 ahora.
+- DERIVADO: 4 cm de z son 5,239·30/65² · 4 = **0,15 ciclos de fase en el borde de la pantalla**, contra
+  un margen de ±0,04. La trama iba con el paso mal medido la mayor parte del tiempo, y cambiando.
+- MEDIDO en el registro, aparte: con el video de Nueva York el apoyo de los rótulos marcaba del 10 al 36 %
+  del cuadro como texto (no tiene subtítulos) y el porcentaje cambiaba más de 3 puntos entre 0,6 y 1,4
+  veces por segundo; con los videos de antes, del 1 al 5 %.
+- HIPÓTESIS (las dos medidas son firmes; que sean el vaivén que ve Rodolfo no está probado en el panel):
+  el vaivén es la suma de la z del rastreo, que mueve la fase en los bordes, y de zonas que el apoyo de
+  rótulos pega a la pantalla y suelta varias veces por segundo.
+
+### Lo que cambia
+
+- **Rastreo fino** (`src/track.cpp`, `afinar`). YuNet solo dice dónde está la cara:
+  - el punto medio de los ojos se sigue de cuadro a cuadro con una plantilla de la franja de los ojos
+    (correlación normalizada, con decimales de píxel), anclada despacio (10 s) a lo que dice YuNet;
+  - la distancia sale de buscar esa franja (solo lo que hay entre los dos ojos) en la otra vista;
+  - una pareja con más de 2 px de error de reproyección se tira (las buenas dan 0,8 a 1,2; las falsas,
+    de 2,5 para arriba), y un cuadro suelto sin medida aguanta la pose un cuarto de segundo antes de
+    caer a la vía de antes.
+  MEDIDO sobre los mismos 1186 cuadros (antes → ahora): ruido por cuadro con la cabeza quieta, x 0,081 →
+  0,008 cm, y 0,221 → 0,019, z 1,124 → 0,095; z cruda contra su mediana de 9 cuadros, p95 62,8 → 2,4 mm;
+  recorrido de la z filtrada en 4 s quieto, 2,16 → 0,68 cm (fase en el borde 0,079 → 0,024 ciclos);
+  distancia entre ojos, de 61–137 mm a 56–71. En la segunda toma (cara de lado y en el borde del cuadro)
+  la vía de antes daba z de 71 a 125 cm con tirones de 50; ahora, de 77,0 a 80,8. Cuesta 0,1 ms más por
+  cuadro.
+- **El filtro de la pose abre a 2 Hz** cuando la medida viene del rastreo fino (antes 0,6 Hz; los cuadros
+  que caen a la vía de antes siguen a 0,6). MEDIDO: quieto, la x filtrada recorre 0,38 cm en vez de 0,29
+  (lo demás es la cabeza, que no está clavada); en marcha, el retraso baja de 0,72 a 0,35 cm rms.
+- **Apoyo de los rótulos con memoria** (`src/depth.cpp`, `MemoriaTexto`). Una celda solo cuenta como
+  rótulo si sus trazos están donde estaban en el mapa anterior (un subtítulo no se mueve; el texto y la
+  textura de la escena sí, en cuanto se mueve la cámara), entra cuando lleva dos mapas así y sale cuando
+  lleva dos sin verse; en la banda de abajo entra al primero.
+  MEDIDO a 6 mapas por segundo: papel impreso grabado a pulso, 2,40 → 0,85 % de la rejilla cambiando por
+  mapa (fuera de la banda de abajo, 1,95 → 0,27); el mismo papel corriéndose 1 punto del mapa por mapa,
+  de 3,0 % apoyado y 1,65 % cambiando a **0 y 0**; un subtítulo de prueba sobre video en movimiento se
+  apoya un mapa después que antes (0,17 s) y se suelta un mapa después.
+- Para medir sin sentarse delante: `ctl track --grabar DIR`, `--repetir DIR`, `--csv`, `--fino no`,
+  `--euro MIN;BETA`; `texto-detect --secuencia A.ppm B.ppm …`; `tools/mide_rastreo.py`.
+- Para apagarlo sin reinstalar: `rastreo_fino = no` en serve.conf; `ODYSSEYVK_TEXTO_MEMORIA=0`.
+- El registro del visor dice cuántos cuadros salieron del rastreo fino y con qué parecido.
+
+### Comprobado / no probado
+
+- Comprobado: compila; las dos tomas grabadas repetidas por la vía de antes y por la fina; el rastreo en
+  vivo con `ctl track` (4 a 5 ms por cuadro); el visor fuera del panel con el conversor (119,5 fps, ningún
+  cuadro lento); las secuencias del apoyo de rótulos.
+- No probado: en el panel. No tengo cuadros del video de Nueva York: lo de los rótulos está medido con
+  otros videos. En las dos tomas Rodolfo miraba al otro monitor, con la cabeza girada: la mejora de frente
+  debería ser igual o mayor, pero no está medida.
+- A tener en cuenta: la z nueva sale en promedio ~1 cm más lejos que la de antes (que además iba y venía
+  ±4 cm). Si quedara imagen doble fija en los bordes, se retoca `rampa_x` con el patrón de un ojo.
+- Las dos tomas de la cámara eran fotos de la cara de Rodolfo: estaban en la carpeta temporal de la
+  sesión y se borraron al terminar.
+
 ## Al salir del video, el navegador ya no se queda a pantalla completa (v0.73)
 
 - Rodolfo, con la 0.72: el vaivén de lado a lado «sí bajó mucho» (la zona muerta del paralaje, probada

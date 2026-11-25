@@ -1085,7 +1085,8 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
    subtitulo mide de 6 a 14 puntos y el trazo 2 o 3. ODYSSEYVK_TEXTO_CONTRASTE y
    ODYSSEYVK_TEXTO_FINO sirven para comparar en el panel sin recompilar. */
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
-                  int celdaPx, std::vector<uint8_t> *mascara, int *cwOut, int *chOut) {
+                  int celdaPx, std::vector<uint8_t> *mascara, int *cwOut, int *chOut,
+                  MemoriaTexto *memoria) {
   if (!rgba || w < 32 || h < 32 || mapa.size() != (size_t)w * (size_t)h)
     return 0.0f;
   static const float kContraste = [] {
@@ -1134,6 +1135,15 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
   const size_t celdas = (size_t)cw * ch;
   std::vector<float> cont(celdas, 0.0f), dens(celdas, 0.0f), llan(celdas, 0.0f), fina(celdas, 0.0f),
       traz(celdas, 0.0f);
+  /* quieta: los trazos de la celda estan donde estaban en el mapa anterior (ver MemoriaTexto) */
+  static const bool kConMemoria = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_TEXTO_MEMORIA");
+    return !(e && e[0] == '0');
+  }();
+  if (!kConMemoria) memoria = nullptr;
+  const bool hayAnterior = memoria && memoria->w == w && memoria->h == h && memoria->lum.size() == lum.size();
+  const float *antes = hayAnterior ? memoria->lum.data() : nullptr;
+  std::vector<uint8_t> quieta(celdas, 0);
   for (int cy = 0; cy < ch; cy++) {
     const int y0 = cy * celda, y1 = std::min(h, y0 + celda);
     for (int cx = 0; cx < cw; cx++) {
@@ -1159,18 +1169,24 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
       const float umbral = std::max(24.0f, 0.32f * contraste);
       const float flojo = std::min(14.0f, std::max(2.0f, 0.12f * contraste));
       int densos = 0, claros = 0, llanos = 0;
+      float movido = 0.0f;   /* cuanto cambiaron los puntos de trazo desde el mapa anterior */
       for (int y = y0; y < y1; y++)
         for (int x = x0; x < x1; x++) {
           const size_t i = (size_t)y * w + x;
           const float g = std::fabs(gx[i]) + std::fabs(gy[i]);
-          if (g > umbral)
+          if (g > umbral) {
             densos++;
+            if (antes) movido += std::fabs(lum[i] - antes[i]);
+          }
           if (g < flojo)
             llanos++;
           if (lum[i] > 0.5f * (mn + mx))
             claros++;
         }
       const size_t q = (size_t)cy * cw + cx;
+      /* Quieta = los trazos cambiaron menos del 12 % del contraste (con un piso de 6 niveles por la
+         compresion del video). Una textura que se corre 0,3 puntos del mapa ya cambia el 20 %. */
+      if (antes && densos >= 4 && movido / (float)densos <= std::max(6.0f, 0.12f * contraste)) quieta[q] = 1;
       cont[q] = contraste;
       dens[q] = (float)densos / (float)n;
       llan[q] = (float)llanos / (float)n;
@@ -1262,6 +1278,53 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
         if (h >= kRachaMin && (h >= 2 * v || v <= kAltoMax)) forma[(size_t)cy * cw + cx] = 1.0f;
       }
     peso.swap(forma);
+  }
+
+  /* Memoria (v0.74, ver MemoriaTexto). La celda se da por rotulo en este mapa si el detector la
+     marca Y sus trazos estan quietos; con eso, un paso bajo (0,5 por mapa) con histeresis: entra
+     al pasar de 0,7 (dos mapas seguidos), sale al bajar de 0,3 (dos seguidos sin verse), y en la
+     banda de abajo entra al primero. El primer mapa de una sesion no apoya nada: no hay anterior
+     con el que comparar. ODYSSEYVK_TEXTO_MEMORIA=0 vuelve a decidir cada mapa de cero. */
+  if (memoria) {
+    if (memoria->cw != cw || memoria->ch != ch) {
+      memoria->cw = cw;
+      memoria->ch = ch;
+      memoria->confianza.assign(celdas, 0.0f);
+      memoria->puesta.assign(celdas, 0);
+    }
+    /* la forma se decidio con todas las marcadas; lo quieto se mira en la celda y sus vecinas, que
+       un glifo cae entre dos celdas y la racha perdona huecos */
+    for (size_t q = 0; q < celdas; q++) {
+      const int cy = (int)(q / cw), cx = (int)(q % cw);
+      bool visto = false;
+      if (peso[q] > 0.0f) {
+        int quietas = 0, marcadas = 0;
+        for (int dy = -1; dy <= 1; dy++)
+          for (int dx = -1; dx <= 1; dx++) {
+            const int yy = cy + dy, xx = cx + dx;
+            if (yy < 0 || yy >= ch || xx < 0 || xx >= cw) continue;
+            const size_t r = (size_t)yy * cw + xx;
+            if (peso[r] > 0.0f) {
+              marcadas++;
+              if (quieta[r]) quietas++;
+            }
+          }
+        visto = quieta[q] && 2 * quietas > marcadas;
+      }
+      const float centro = ((float)cy + 0.5f) / (float)ch;
+      float &c = memoria->confianza[q];
+      uint8_t &puesta = memoria->puesta[q];
+      /* subtitulo: al primer mapa quieto, pero solo en una celda que venia limpia (un renglon
+         nuevo). La que acaba de soltarse y vuelve a marcarse es una dudosa: que haga cola. */
+      if (visto && centro > 0.76f && !puesta && c < 0.1f) c = 1.0f;
+      else c += 0.5f * ((visto ? 1.0f : 0.0f) - c);
+      if (!puesta && c >= 0.7f) puesta = 1;
+      else if (puesta && c <= 0.3f) puesta = 0;
+    }
+    for (size_t q = 0; q < celdas; q++) peso[q] = memoria->puesta[q] ? 1.0f : 0.0f;
+    memoria->lum = lum;   /* para el mapa que viene */
+    memoria->w = w;
+    memoria->h = h;
   }
 
   /* dilatar una celda (un glifo suele cacer de una celda a otra) y despues difuminar, para que el

@@ -206,6 +206,7 @@ void TrackFeed::run() {
       st_.sample = muestra;
       st_.seen = true;
       st_.good++;
+      if (muestra.fino && !muestra.predicted) st_.finos++;
       acceptedAt_ = t;
       st_.note.clear();
     } else if (!muestra.reason.empty()) {

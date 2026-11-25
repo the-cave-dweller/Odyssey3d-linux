@@ -27,8 +27,29 @@
    `mapa` se modifica en el sitio (w x h, un byte por punto, el mismo tamano que la foto).
    Devuelve la fraccion de celdas tocadas (0..1). Si se pasa `mascara` se rellena la rejilla de
    deteccion, con el peso aplicado en cada celda (0..255), y `cw`/`ch` devuelven su tamano. */
+/* Memoria del apoyo entre un mapa y el siguiente (v0.74). Sin ella cada mapa decide de cero, celda
+   por celda y con umbrales duros, y sobre una textura que se mueve la misma celda sale texto en un
+   mapa y no en el siguiente: la zona salta a la pantalla y vuelve varias veces por segundo. Medido
+   a 6 mapas por segundo sobre 20 s de video a pulso de un papel impreso: de cada mapa al siguiente
+   cambiaba el 2,4 % de la rejilla, con el 4,3 % apoyado. Con memoria hacen falta dos cosas mas:
+     - QUIETO: un rotulo es un dibujo pegado a la pantalla y sus trazos no se mueven de un mapa al
+       siguiente; el texto y la textura de la escena (un cartel, las ventanas de un edificio) si,
+       en cuanto la camara se mueve. La celda solo cuenta si sus trazos estan donde estaban.
+     - SEGUIDO: la celda entra cuando lleva dos mapas viendose asi y sale cuando lleva dos sin
+       verse (en la banda de abajo, la de los subtitulos, entra al primero).
+   Un subtitulo nuevo tarda un mapa mas en apoyarse (0,17 s a 6 por segundo). */
+struct MemoriaTexto {
+  std::vector<float> lum;         /* la luminancia del mapa anterior, para ver que se quedo quieto */
+  int w = 0, h = 0;
+  std::vector<float> confianza;   /* 0..1: cuanto lleva viendose cada celda como rotulo */
+  std::vector<uint8_t> puesta;    /* la celda esta apoyada */
+  int cw = 0, ch = 0;
+  void olvidar() { cw = ch = w = h = 0; }
+};
+
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
-                  int celdaPx, std::vector<uint8_t> *mascara, int *cw, int *ch);
+                  int celdaPx, std::vector<uint8_t> *mascara, int *cw, int *ch,
+                  MemoriaTexto *memoria = nullptr);
 
 /* --- los dos planos ------------------------------------------------------------
    El conversor da una profundidad distinta a cada punto, y con eso todo el cuadro se

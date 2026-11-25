@@ -119,6 +119,8 @@ static double nowSeconds() {
   return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+double HeadTracker::ahora() const { return reloj_ >= 0.0 ? reloj_ : nowSeconds(); }
+
 bool HeadTracker::init(const CameraCalibration &calib, const TrackerTransform &xform,
                        const TrackSettings &set, std::string *err) {
   if (!set.mono && !calib.valid) {
@@ -263,6 +265,193 @@ static bool detectEyes(const uint8_t *gray, int w, int h, const TrackSettings &s
   return true;
 }
 
+/* --------------------------------------------------------------------------
+   Rastreo fino (v0.74): correlacion de imagen en vez de restar puntos de YuNet.
+   -------------------------------------------------------------------------- */
+/* Dos parches, en separaciones de ojos. La plantilla que se sigue de cuadro a cuadro es ancha (de
+   sien a sien): cuanto mas dibujo, mas firme. El que se compara entre las dos vistas es solo lo
+   que hay ENTRE los ojos: con la cabeza girada, por el lado de la sien se cuela el fondo, que esta
+   a otra distancia, y la pareja saltaba entre dos sitios (medido: 53,1 -> 48,8 -> 53,1 px durante
+   19 cuadros con el parche ancho; 54,2 / 53,9 / 53,2 con el estrecho). */
+static const double kFranjaAncho = 1.6, kFranjaAlto = 0.7;
+static const double kParejaAncho = 1.0, kParejaAlto = 0.7;
+static const double kSepMin = 16.0, kSepMax = 160.0;         /* separaciones de ojos creibles (px) */
+static const int kFranjaRadio = 12;                          /* busqueda de un cuadro al siguiente (px) */
+static const double kPuntajePerdido = 0.5;      /* por debajo, la plantilla no esta en el cuadro */
+/* por debajo un rato, la cara cambio de postura: plantilla nueva. Con 0,7 la plantilla se quedaba
+   vieja y el maximo saltaba 3 px en cuadros sueltos (8 saltos en 20 s; con 0,8, uno). */
+static const double kPuntajeRefresco = 0.8;
+static const double kPuntajeDisparidad = 0.6;   /* minimo para fiarse de la pareja entre vistas */
+static const double kTauAncla = 10.0;           /* segundos que tarda el ancla en seguir a YuNet */
+static const double kDispCaduca = 0.25;         /* segundos que vale la disparidad anterior */
+/* Tope del error de reproyeccion de la pareja fina. Una pareja buena lo tiene clavado (medido:
+   0,82 px de mediana y 0,97 de maximo en 1178 cuadros de frente; 1,01 y 1,16 de p90 con la cara de
+   lado en el borde del cuadro: es el desajuste fijo de la calibracion de fabrica); una pareja falsa
+   se va de 2,5 px para arriba, porque casa la franja con otra altura. */
+static const double kErrorFino = 2.0;
+
+/* Busca `plantilla` en `imagen` alrededor de la esquina entera (x0, y0), hasta +-rx y +-ry pixeles
+   (menos si la imagen se acaba antes). Devuelve la esquina hallada con decimales (parabola por el
+   maximo y sus vecinos) y el parecido (correlacion normalizada de media cero, 1 = identicas). Falso
+   si no cabe o si el maximo cae en el borde de la busqueda: ahi no se puede afinar ni fiar. */
+static bool buscarPlantilla(const cv::Mat &imagen, const cv::Mat &plantilla, int x0, int y0, int rx, int ry,
+                            double *hx, double *hy, double *parecido) {
+  const int w = plantilla.cols, h = plantilla.rows;
+  rx = std::min({rx, x0, imagen.cols - (x0 + w)});
+  ry = std::min({ry, y0, imagen.rows - (y0 + h)});
+  if (rx < 2 || ry < 2) return false;
+  cv::Mat res;
+  try {
+    cv::matchTemplate(imagen(cv::Rect(x0 - rx, y0 - ry, w + 2 * rx, h + 2 * ry)), plantilla, res,
+                      cv::TM_CCOEFF_NORMED);
+  } catch (const cv::Exception &) {
+    return false;
+  }
+  double maximo = 0;
+  cv::Point donde;
+  cv::minMaxLoc(res, nullptr, &maximo, nullptr, &donde);
+  if (!std::isfinite(maximo) || donde.x == 0 || donde.y == 0 || donde.x == res.cols - 1 ||
+      donde.y == res.rows - 1)
+    return false;
+  auto decimal = [](double a, double b, double c) {
+    const double den = a - 2.0 * b + c;
+    return std::fabs(den) < 1e-12 ? 0.0 : std::clamp(0.5 * (a - c) / den, -0.5, 0.5);
+  };
+  const double fx = decimal(res.at<float>(donde.y, donde.x - 1), maximo, res.at<float>(donde.y, donde.x + 1));
+  const double fy = decimal(res.at<float>(donde.y - 1, donde.x), maximo, res.at<float>(donde.y + 1, donde.x));
+  *hx = (double)(x0 - rx + donde.x) + fx;
+  *hy = (double)(y0 - ry + donde.y) + fy;
+  *parecido = maximo;
+  return true;
+}
+
+/* Corta la plantilla de la franja de los ojos centrada en (cx, cy). El punto medio de los ojos no
+   cambia: lo que sobre al redondear la esquina se lo queda el desfase. */
+bool HeadTracker::cortarFranja(const uint8_t *left, int w, int h, double cx, double cy, double sep) {
+  const int fw = std::max(21, (int)std::lround(kFranjaAncho * sep) | 1);
+  const int fh = std::max(11, (int)std::lround(kFranjaAlto * sep) | 1);
+  const int x0 = (int)std::lround(cx - 0.5 * fw), y0 = (int)std::lround(cy - 0.5 * fh);
+  if (x0 < 0 || y0 < 0 || x0 + fw > w || y0 + fh > h) return false;
+  franja_.resize((size_t)fw * (size_t)fh);
+  for (int y = 0; y < fh; y++)
+    std::memcpy(&franja_[(size_t)y * (size_t)fw], left + (size_t)(y0 + y) * (size_t)w + (size_t)x0, (size_t)fw);
+  franjaW_ = fw;
+  franjaH_ = fh;
+  franjaPos_[0] = x0;
+  franjaPos_[1] = y0;
+  franjaOff_[0] = cx - ((double)x0 + 0.5 * fw);
+  franjaOff_[1] = cy - ((double)y0 + 0.5 * fh);
+  franjaSep_ = sep;
+  franjaBajos_ = 0;
+  return true;
+}
+
+bool HeadTracker::afinar(const uint8_t *left, const uint8_t *right, int w, int h, const double ojos[8],
+                         double t, double par[4], TrackSample &out) {
+  const cv::Mat L(h, w, CV_8UC1, (void *)left), R(h, w, CV_8UC1, (void *)right);
+  /* lo que dice YuNet: punto medio y separacion en la vista izquierda, disparidad media de los dos ojos */
+  const double yunX = 0.5 * (ojos[0] + ojos[2]), yunY = 0.5 * (ojos[1] + ojos[3]);
+  const double sep = std::hypot(ojos[2] - ojos[0], ojos[3] - ojos[1]);
+  const double dYunX = 0.5 * ((ojos[4] - ojos[0]) + (ojos[6] - ojos[2]));
+  const double dYunY = 0.5 * ((ojos[5] - ojos[1]) + (ojos[7] - ojos[3]));
+  const bool sepVale = sep >= kSepMin && sep <= kSepMax;
+  double dt = franjaT_ >= 0.0 ? t - franjaT_ : 1.0 / 60.0;
+  dt = std::clamp(dt, 1.0 / 240.0, 0.5);
+  franjaT_ = t;
+
+  /* 1. donde esta el punto medio de los ojos en la vista izquierda */
+  double midX = 0, midY = 0;
+  bool hayMedio = false;
+  bool cuadra = false;   /* YuNet ve una cara del tamano de la que seguimos */
+  if (franjaW_ > 0) {
+    const cv::Mat plantilla(franjaH_, franjaW_, CV_8UC1, franja_.data());
+    cuadra = sepVale && std::fabs(sep - franjaSep_) < 0.25 * franjaSep_;
+    double hx = 0, hy = 0, s = 0;
+    if (!buscarPlantilla(L, plantilla, (int)std::lround(franjaPos_[0]), (int)std::lround(franjaPos_[1]),
+                         kFranjaRadio, kFranjaRadio, &hx, &hy, &s) ||
+        s < kPuntajePerdido) {
+      if (++franjaPerdidos_ > 5) franjaW_ = 0;   /* se fue: a empezar de YuNet */
+    } else {
+      franjaPerdidos_ = 0;
+      franjaPos_[0] = hx;
+      franjaPos_[1] = hy;
+      const double cx = hx + 0.5 * franjaW_, cy = hy + 0.5 * franjaH_;
+      if (cuadra) {
+        /* el ancla: al principio la media de lo visto (1/n), luego un paso bajo de kTauAncla */
+        franjaN_++;
+        const double a = std::max(1.0 / (double)franjaN_, dt / kTauAncla);
+        double ix = (yunX - cx) - franjaOff_[0], iy = (yunY - cy) - franjaOff_[1];
+        if (franjaN_ > 30) {   /* ya asentada, un punto loco de YuNet no la mueve mas que uno normal */
+          const double tope = 0.1 * franjaSep_;
+          ix = std::clamp(ix, -tope, tope);
+          iy = std::clamp(iy, -tope, tope);
+        }
+        franjaOff_[0] += a * ix;
+        franjaOff_[1] += a * iy;
+      }
+      midX = cx + franjaOff_[0];
+      midY = cy + franjaOff_[1];
+      hayMedio = true;
+      out.puntajeFranja = s;
+      /* la plantilla lejos de YuNet un buen rato = se quedo pegada a otra cosa: se rehace */
+      franjaLejos_ = (cuadra && std::hypot(yunX - midX, yunY - midY) > 0.25 * franjaSep_) ? franjaLejos_ + 1 : 0;
+      if (franjaLejos_ > 12) {
+        franjaW_ = 0;
+        hayMedio = false;
+      } else {
+        franjaBajos_ = s < kPuntajeRefresco ? franjaBajos_ + 1 : 0;
+        const bool otraEscala = cuadra && std::fabs(sep - franjaSep_) > 0.06 * franjaSep_;
+        if (franjaBajos_ > 6 || (otraEscala && franjaBajos_ > 0))
+          cortarFranja(left, w, h, midX, midY, cuadra ? sep : franjaSep_);
+      }
+    }
+  }
+  if (franjaW_ == 0 && sepVale && cortarFranja(left, w, h, yunX, yunY, sep)) {
+    franjaN_ = 1;
+    franjaPerdidos_ = 0;
+    franjaLejos_ = 0;
+    midX = yunX;
+    midY = yunY;
+    hayMedio = true;
+    cuadra = true;
+    out.puntajeFranja = 1.0;
+  }
+  if (!hayMedio) return false;
+
+  /* 2. su pareja en la vista derecha: la franja de AHORA, buscada cerca de la disparidad anterior
+        y, si no aparece, en una ventana ancha alrededor de la que dice YuNet */
+  const int pw = std::max(21, (int)std::lround(kParejaAncho * franjaSep_) | 1);
+  const int ph = std::max(11, (int)std::lround(kParejaAlto * franjaSep_) | 1);
+  const int x0 = (int)std::lround(midX - 0.5 * pw), y0 = (int)std::lround(midY - 0.5 * ph);
+  const bool previa = t >= dispT_ && t - dispT_ <= kDispCaduca;
+  bool medida = false;
+  if (x0 >= 0 && y0 >= 0 && x0 + pw <= w && y0 + ph <= h) {
+    const cv::Mat parche = L(cv::Rect(x0, y0, pw, ph));
+    double rx = 0, ry = 0, s = 0;
+    bool ok = previa && buscarPlantilla(R, parche, x0 + (int)std::lround(disp_[0]), y0 + (int)std::lround(disp_[1]),
+                                        4, 3, &rx, &ry, &s) && s >= kPuntajeDisparidad;
+    if (!ok && cuadra)
+      ok = buscarPlantilla(R, parche, x0 + (int)std::lround(dYunX), y0 + (int)std::lround(dYunY), 20, 6, &rx, &ry,
+                           &s) && s >= kPuntajeDisparidad;
+    /* con YuNet cuerdo, la pareja no puede quedar a mas de un tercio de cara de la suya: asi no
+       se casa un ojo con el otro */
+    if (ok && cuadra && std::fabs((rx - x0) - dYunX) > std::max(0.35 * franjaSep_, 8.0)) ok = false;
+    if (ok) {
+      disp_[0] = rx - x0;
+      disp_[1] = ry - y0;
+      dispT_ = t;
+      medida = true;
+      out.puntajeDisparidad = s;
+    }
+  }
+  if (!medida && !previa) return false;   /* ni medida ni una reciente que aguantar */
+  par[0] = midX;
+  par[1] = midY;
+  par[2] = midX + disp_[0];
+  par[3] = midY + disp_[1];
+  return true;
+}
+
 bool HeadTracker::process(const uint8_t *left, const uint8_t *right, int w, int h, TrackSample &out,
                           std::string *err) {
   out = TrackSample{};
@@ -289,12 +478,52 @@ bool HeadTracker::process(const uint8_t *left, const uint8_t *right, int w, int 
   }
   misses_ = 0;
 
-  /* ojo derecho y ojo izquierdo, cada uno con su pareja en la otra vista */
   double mid[3] = {0, 0, 0};
   double worstError = 0;
   double eyePoint[2][3];
   int good = 0;
-  for (int e = 0; e < 2; e++) {
+  /* via fina (v0.74): el punto medio seguido con la plantilla y su pareja por correlacion. Para el
+     ipd y el diagnostico, cada ojo es su punto de YuNet en la izquierda con la disparidad comun. */
+  if (set_.fino) {
+    const double ojos[8] = {eyesL[0].x, eyesL[0].y, eyesL[1].x, eyesL[1].y,
+                            eyesR[0].x, eyesR[0].y, eyesR[1].x, eyesR[1].y};
+    double par[4], punto[3], error = 0;
+    std::string why;
+    bool finoVale = afinar(left, right, w, h, ojos, ahora(), par, out) &&
+                    triangulate(calib_, par, set_.minDepthMillimetres, set_.maxReprojectionPx, punto, &error, &why);
+    if (finoVale && error > kErrorFino) {
+      finoVale = false;
+      dispT_ = -1e9;   /* esa disparidad no se guarda para el cuadro que viene */
+    }
+    if (finoVale) {
+      out.fino = true;
+      for (int k = 0; k < 4; k++) out.medioPx[k] = par[k];
+      for (int e = 0; e < 2; e++) {
+        const double pixels[4] = {ojos[2 * e], ojos[2 * e + 1], ojos[2 * e] + (par[2] - par[0]),
+                                  ojos[2 * e + 1] + (par[3] - par[1])};
+        double p3[3] = {punto[0], punto[1], punto[2]}, e3 = 0;
+        triangulate(calib_, pixels, 0.0, 1e9, p3, &e3, nullptr);
+        for (int k = 0; k < 4; k++) out.ojoPx[e][k] = pixels[k];
+        for (int k = 0; k < 3; k++) out.ojoMm[e][k] = eyePoint[e][k] = p3[k];
+      }
+      /* el punto que se entrega es el medio triangulado, no la media de los dos ojos */
+      for (int k = 0; k < 3; k++) mid[k] = punto[k];
+      worstError = error;
+      good = 3;
+      finoT_ = ahora();
+    } else if (ahora() >= finoT_ && ahora() - finoT_ <= kDispCaduca) {
+      /* Un cuadro suelto sin via fina (la plantilla no aparecio, la pareja no convence): se aguanta
+         la pose un cuarto de segundo antes de caer a la via de antes, que mide otra distancia
+         (+-4 cm de sesgo) y metia un tiron. Medido en la segunda grabacion, con la cara de lado y
+         en el borde del cuadro: la via de antes daba de 66 cm a 114 m. */
+      out.reason = "rastreo fino sin medida: se aguanta la pose";
+      hold(out);
+      out.latencyMs = (nowSeconds() - t0) * 1000.0;
+      return true;
+    }
+  }
+  /* la via de siempre: ojo derecho y ojo izquierdo, cada uno con su pareja de YuNet en la otra vista */
+  for (int e = 0; e < 2 && good < 3; e++) {
     const double pixels[4] = {eyesL[e].x, eyesL[e].y, eyesR[e].x, eyesR[e].y};
     double point[3], error = 0;
     std::string why;
@@ -306,6 +535,8 @@ bool HeadTracker::process(const uint8_t *left, const uint8_t *right, int w, int 
     eyePoint[good][0] = point[0];
     eyePoint[good][1] = point[1];
     eyePoint[good][2] = point[2];
+    for (int k = 0; k < 4; k++) out.ojoPx[e][k] = pixels[k];
+    for (int k = 0; k < 3; k++) out.ojoMm[e][k] = point[k];
     good++;
     worstError = std::max(worstError, error);
   }
@@ -315,7 +546,10 @@ bool HeadTracker::process(const uint8_t *left, const uint8_t *right, int w, int 
     out.latencyMs = (nowSeconds() - t0) * 1000.0;
     return true;
   }
-  for (int i = 0; i < 3; i++) mid[i] = 0.5 * (eyePoint[0][i] + eyePoint[1][i]);
+  if (good < 3) {
+    for (int i = 0; i < 3; i++) mid[i] = 0.5 * (eyePoint[0][i] + eyePoint[1][i]);
+    out.reason.clear();
+  }
   out.eyeMillimetres[0] = mid[0];
   out.eyeMillimetres[1] = mid[1];
   out.eyeMillimetres[2] = mid[2];
@@ -378,11 +612,11 @@ bool HeadTracker::publish(const double raw[3], TrackSample &out) {
   }
   saltos_ = 0;
   if (set_.euroMinCorte > 0.0) {
-    const double ahora = nowSeconds();
+    const double ahora = this->ahora();
     for (int i = 0; i < 3; i++) {
       FiltroEuro &f = euro_[i];
-      f.minCorte = set_.euroMinCorte;
-      f.beta = set_.euroBeta;
+      f.minCorte = out.fino ? set_.euroMinCorteFino : set_.euroMinCorte;
+      f.beta = out.fino ? set_.euroBetaFino : set_.euroBeta;
       f.corteDeriv = set_.euroCorteDeriv;
       if (!haveLast_) f.olvidar();   /* primer enganche o re-enganche: sin historia que arrastrar */
       last_[i] = f.paso(observation[i], ahora);
@@ -393,7 +627,7 @@ bool HeadTracker::publish(const double raw[3], TrackSample &out) {
       last_[i] = haveLast_ ? last_[i] + (observation[i] - last_[i]) * alpha : observation[i];
   }
   haveLast_ = true;
-  lastTime_ = nowSeconds();
+  lastTime_ = this->ahora();
   out.accepted = true;
   for (int i = 0; i < 3; i++) out.panelCentimetres[i] = last_[i];
   return true;

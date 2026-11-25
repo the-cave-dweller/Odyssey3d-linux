@@ -596,7 +596,14 @@ odysseyvk ctl track --mono-simulacro              # la cuenta, sin cámara: debe
 odysseyvk ctl track --dev /dev/video0 --segundos 8  # en vivo: cara si · panel x y z en cm
 odysseyvk ctl track --foto cuadro.jpg --dump anotado.jpg   # un cuadro guardado, sin tocar la cámara
 odysseyvk ctl track --segundos 5 --volcar-crudo /tmp/ab     # vuelca cuadro crudo + anotado + A/B
+odysseyvk ctl track --segundos 20 --grabar DIR              # graba la cámara tal cual (DIR ya creada)
+odysseyvk ctl track --repetir DIR --csv pose.csv [--fino no]   # la misma grabación por el rastreo, sin cámara
 ```
+
+Desde la v0.74 la distancia no sale de restar los ojos que YuNet da en cada vista (±4 cm de sesgo
+lento, medido), sino de comparar la imagen de la franja de los ojos entre las dos vistas, y el punto
+medio de los ojos se sigue con una plantilla. `rastreo_fino = no` en `serve.conf` vuelve al de antes,
+y `tools/mide_rastreo.py` compara los dos sobre una grabación.
 
 Y la **cámara suelta, sin rastreo**, que es lo que levanta la casilla de Previsualización de la ventana de
 ajustes cuando no hay sesión 3D abierta (v0.58):

@@ -630,6 +630,28 @@ static int cmdVistaCamara(int argc, char **argv) {
 }
 
 #ifdef HAVE_OPENCV
+/* Una linea por cuadro con todo lo que mide el rastreo (v0.74): con esto se ve el ruido de cada
+   pieza (los pixeles de cada ojo en cada vista, el punto 3D de cada ojo, la pose cruda y la
+   filtrada) sin tener que adivinarlo de la linea por segundo del visor. */
+static void csvCabecera(FILE *f) {
+  std::fprintf(f, "t,cara,valida,mantenida,camX,camY,camZ,crudoX,crudoY,crudoZ,panelX,panelY,panelZ,ipd,error,"
+                  "dIzqX,dIzqY,dDerX,dDerY,iIzqX,iIzqY,iDerX,iDerY,dX,dY,dZ,iX,iY,iZ,"
+                  "fino,parFranja,parDisp,mIzqX,mIzqY,mDerX,mDerY\n");
+}
+static void csvLinea(FILE *f, double t, const TrackSample &m) {
+  std::fprintf(f, "%.4f,%d,%d,%d,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f", t, m.detected ? 1 : 0,
+               m.accepted ? 1 : 0, m.predicted ? 1 : 0, m.eyeMillimetres[0], m.eyeMillimetres[1],
+               m.eyeMillimetres[2], m.rawPanelCentimetres[0], m.rawPanelCentimetres[1],
+               m.rawPanelCentimetres[2], m.panelCentimetres[0], m.panelCentimetres[1], m.panelCentimetres[2],
+               m.ipdMillimetres, m.reprojectionPx);
+  for (int e = 0; e < 2; e++)
+    for (int k = 0; k < 4; k++) std::fprintf(f, ",%.2f", m.ojoPx[e][k]);
+  for (int e = 0; e < 2; e++)
+    for (int k = 0; k < 3; k++) std::fprintf(f, ",%.2f", m.ojoMm[e][k]);
+  std::fprintf(f, ",%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n", m.fino ? 1 : 0, m.puntajeFranja, m.puntajeDisparidad,
+               m.medioPx[0], m.medioPx[1], m.medioPx[2], m.medioPx[3]);
+}
+
 static int cmdTrack(int argc, char **argv) {
   TrackSettings set;
   /* --mono: si = usar la webcam normal por la via de una sola vista; no = exigir
@@ -669,6 +691,16 @@ static int cmdTrack(int argc, char **argv) {
   if (!flag(argc, argv, "--suavizado").empty()) set.smoothing = atof(flag(argc, argv, "--suavizado").c_str());
   if (!flag(argc, argv, "--salto").empty()) set.maxJumpCentimetres = atof(flag(argc, argv, "--salto").c_str());
   if (!flag(argc, argv, "--realce").empty()) set.realce = flag(argc, argv, "--realce") != "no";
+  if (!flag(argc, argv, "--fino").empty()) set.fino = flag(argc, argv, "--fino") != "no";
+  if (!flag(argc, argv, "--euro").empty()) {
+    /* --euro MIN[;BETA]: el filtro de la pose, para compararlo sobre una grabacion */
+    std::string e = flag(argc, argv, "--euro");
+    for (char &c : e)
+      if (c == ',') c = '.';
+    std::sscanf(e.c_str(), "%lf;%lf", &set.euroMinCorte, &set.euroBeta);
+    set.euroMinCorteFino = set.euroMinCorte;
+    set.euroBetaFino = set.euroBeta;
+  }
 
   std::string err;
   CameraCalibration calib;
@@ -677,7 +709,14 @@ static int cmdTrack(int argc, char **argv) {
   bool calibVale = loadFactoryCalib(dir, &calib, &xform, &err);
   const std::string calibFallo = err;
   const bool pedidoFoto = !flag(argc, argv, "--foto").empty();
-  const bool pedidoSintetico = hasFlag(argc, argv, "--sintetico");
+  /* --grabar DIR guarda cada cuadro tal como lo suelta la camara (y su reloj en tiempos.txt);
+     --repetir DIR pasa esa grabacion por el rastreo sin abrir la camara, con los mismos tiempos;
+     --csv ARCHIVO deja una linea por cuadro. Asi un cambio del rastreo se mide sobre los MISMOS
+     cuadros, antes y despues. */
+  const std::string grabar = flag(argc, argv, "--grabar");
+  const std::string repetir = flag(argc, argv, "--repetir");
+  const std::string csvRuta = flag(argc, argv, "--csv");
+  const bool pedidoSintetico = hasFlag(argc, argv, "--sintetico") || !repetir.empty();
   bool mono = false;
   std::string dev = flag(argc, argv, "--dev");
   bool delMonitor = false;
@@ -747,7 +786,40 @@ static int cmdTrack(int argc, char **argv) {
     std::fprintf(stderr, "--sintetico prueba la geometria de las dos vistas: no vale --mono si\n");
     return 1;
   }
-  if (pedidoSintetico) {
+  if (!repetir.empty()) {
+    std::ifstream ft(repetir + "/tiempos.txt");
+    std::vector<double> tiempos;
+    for (double tt; ft >> tt;) tiempos.push_back(tt);
+    if (tiempos.empty()) {
+      std::fprintf(stderr, "--repetir: no hay tiempos en %s/tiempos.txt\n", repetir.c_str());
+      return 1;
+    }
+    FILE *csv = csvRuta.empty() ? nullptr : std::fopen(csvRuta.c_str(), "w");
+    if (csv) csvCabecera(csv);
+    int validas = 0, conCara = 0;
+    for (size_t n = 0; n < tiempos.size(); n++) {
+      char nombre[32];
+      std::snprintf(nombre, sizeof nombre, "/%06zu.jpg", n);
+      std::ifstream fc(repetir + nombre, std::ios::binary);
+      const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(fc)), std::istreambuf_iterator<char>());
+      std::vector<uint8_t> left, right;
+      int vw = 0, vh = 0;
+      std::string why;
+      TrackSample sample;
+      if (!bytes.empty() &&
+          HeadTracker::decodeFrame(bytes.data(), bytes.size(), 1280, 480, true, left, right, vw, vh, &why)) {
+        tracker.fijarReloj(tiempos[n]);
+        tracker.process(left.data(), right.data(), vw, vh, sample, &why);
+      }
+      if (sample.detected) conCara++;
+      if (sample.accepted && !sample.predicted) validas++;
+      if (csv) csvLinea(csv, tiempos[n], sample);
+    }
+    if (csv) std::fclose(csv);
+    std::printf("%zu cuadros repetidos, %d con cara, %d poses validas\n", tiempos.size(), conCara, validas);
+    return 0;
+  }
+  if (hasFlag(argc, argv, "--sintetico")) {
     /* Se comprime un punto 3D conocido en las dos vistas y se devuelve por toda
        la cadena: asi se ve si la geometria y los signos cuadran sin camara. */
     const double puntos[][3] = {{0, 0, 600},  {0, 0, 500},   {0, 0, 700},  {30, 0, 600},
@@ -813,6 +885,10 @@ static int cmdTrack(int argc, char **argv) {
   auto t0 = std::chrono::steady_clock::now();
   int leidos = 0, aceptados = 0;
   int sinCara = 0, ojosMal = 0, geoMal = 0, porRealce = 0;
+  FILE *csvVivo = csvRuta.empty() ? nullptr : std::fopen(csvRuta.c_str(), "w");
+  if (csvVivo) csvCabecera(csvVivo);
+  std::ofstream tiemposGrabados;
+  if (!grabar.empty()) tiemposGrabados.open(grabar + "/tiempos.txt");
   bool dumpHecho = false;
   double marcaCuadro = -10.0;   /* el ultimo cuadro crudo que se guardo para la vista */
   while (true) {
@@ -826,6 +902,14 @@ static int cmdTrack(int argc, char **argv) {
       break;
     }
     leidos++;
+    const double tCuadro = std::chrono::duration<double>(now - t0).count();
+    if (!grabar.empty() && cam.mjpeg()) {
+      char nombre[32];
+      std::snprintf(nombre, sizeof nombre, "/%06d.jpg", leidos - 1);
+      std::ofstream fc(grabar + nombre, std::ios::binary);
+      fc.write((const char *)data, (std::streamsize)size);
+      tiemposGrabados << std::fixed << tCuadro << "\n";
+    }
     std::vector<uint8_t> left, right;
     /* el sondeo deja el ultimo cuadro crudo en el mismo sitio que el visor (camara.jpg), asi la
        hoja de camara de la ventana tiene algo que ensenar sin tener que montar el overlay ni
@@ -884,6 +968,7 @@ static int cmdTrack(int argc, char **argv) {
       tracker.processMono(lp, vw, vh, sample, &why);
     else
       tracker.process(lp, rp, vw, vh, sample, &why);
+    if (csvVivo) csvLinea(csvVivo, tCuadro, sample);
     if (sample.accepted && !sample.predicted) aceptados++;
     if (!sample.detected) {
       if (sample.reason == "sin cara") sinCara++;
@@ -919,6 +1004,7 @@ static int cmdTrack(int argc, char **argv) {
     }
   }
   cam.stop();
+  if (csvVivo) std::fclose(csvVivo);
   std::printf("%d fotogramas leidos, %d poses validas\n", leidos, aceptados);
   std::printf("careos       sin cara %d, cara descartada por los ojos %d, geometria rechazada %d"
               " (a las %d las saco el reintento con CLAHE)\n",
@@ -2051,6 +2137,11 @@ static int cmdTexto(int argc, char **argv) {
   std::string foto, mapa, salida;
   float plano = 0.45f;
   int celda = 8;
+  /* --secuencia A.ppm B.ppm ... : varios cuadros seguidos por el detector CON la memoria del apoyo
+     (v0.74), como en el visor; deja la rejilla de cada uno en <cuadro>-rotulos.pgm. Para medir el
+     parpadeo sin sentarse delante. */
+  std::vector<std::string> secuencia;
+  bool enSecuencia = false;
   /* el dispatch pasa los argumentos sin hueco de programa, asi que se recorren desde 0 */
   for (int i = 0; i < argc; i++) {
     const std::string a = argv[i];
@@ -2058,15 +2149,47 @@ static int cmdTexto(int argc, char **argv) {
     else if (a == "--celda" && i + 1 < argc) celda = std::atoi(argv[++i]);
     else if (a == "--mapa" && i + 1 < argc) mapa = argv[++i];
     else if (a == "--out" && i + 1 < argc) salida = argv[++i];
+    else if (a == "--secuencia") enSecuencia = true;
+    else if (!a.empty() && a[0] != '-' && enSecuencia) secuencia.push_back(a);
     else if (!a.empty() && a[0] != '-') foto = a;
     else {
       std::fprintf(stderr, "no entiendo %s\n", a.c_str());
       return 2;
     }
   }
+  if (!secuencia.empty()) {
+    MemoriaTexto memoria;
+    for (const std::string &ruta : secuencia) {
+      int sw = 0, sh = 0;
+      std::string e2;
+      std::vector<uint8_t> rgb2;
+      if (!leerPpm(ruta, sw, sh, rgb2, &e2)) {
+        std::fprintf(stderr, "%s: %s\n", ruta.c_str(), e2.c_str());
+        return 1;
+      }
+      std::vector<uint8_t> rgba2((size_t)sw * (size_t)sh * 4, 255);
+      for (size_t p = 0, q = 0; p < rgb2.size(); p += 3, q += 4) {
+        rgba2[q] = rgb2[p];
+        rgba2[q + 1] = rgb2[p + 1];
+        rgba2[q + 2] = rgb2[p + 2];
+      }
+      std::vector<uint8_t> m2((size_t)sw * (size_t)sh, (uint8_t)(plano * 255.0f + 0.5f)), rej;
+      int cw2 = 0, ch2 = 0;
+      const float frac2 = anclarTexto(rgba2.data(), sw, sh, m2, plano, celda, &rej, &cw2, &ch2, &memoria);
+      std::printf("%s: apoyados %.1f%%\n", ruta.c_str(), frac2 * 100.0f);
+      const int es = 8;
+      std::vector<uint8_t> g((size_t)cw2 * es * ch2 * es, 0);
+      for (int y = 0; y < ch2 * es; y++)
+        for (int x = 0; x < cw2 * es; x++)
+          g[(size_t)y * cw2 * es + x] = rej[(size_t)(y / es) * cw2 + x / es];
+      escribirPgm(ruta + "-rotulos.pgm", cw2 * es, ch2 * es, g);
+    }
+    return 0;
+  }
   if (foto.empty()) {
     std::fprintf(stderr, "uso: odysseyvk texto-detect FOTO.ppm [--plano 0,45] [--celda 8] "
-                         "[--mapa MAPA.pgm] [--out ROTULOS.pgm]\n");
+                         "[--mapa MAPA.pgm] [--out ROTULOS.pgm]\n"
+                         "     odysseyvk texto-detect --secuencia A.ppm B.ppm ...   (con la memoria del apoyo)\n");
     return 2;
   }
   int w = 0, h = 0;
@@ -2880,6 +3003,7 @@ struct ServeCfg {
   double detalle = -1.0;    /* fuerza del realce de detalle en el sujeto, 0..3; -1 = la de fabrica (0,4) (v0.68) */
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
   std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
+  std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
@@ -3018,6 +3142,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
+    else if (k == "rastreo_fino") cfg.rastreoFino = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
     else if (k == "hz") {
       const double d = std::atof(v.c_str());
@@ -3290,6 +3415,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
     if (!pila->vrrEn3d.empty())
       ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
+    if (!pila->rastreoFino.empty())
+      ::setenv("ODYSSEYVK_RASTREO_FINO", (pila->rastreoFino == "no" || pila->rastreoFino == "0") ? "0" : "1", 1);
     if (pila->pivote >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->pivote);
       ::setenv("ODYSSEYVK_PIVOTE", valor, 1);

@@ -29,6 +29,7 @@ struct TrackFeedState {
   double age = -1.0;             /* segundos desde esa pose (-1 = nunca) */
   long long frames = 0;          /* cuadros leidos de la camara */
   long long good = 0;            /* cuadros con pose aceptada */
+  long long finos = 0;           /* de esos, los que salieron del rastreo fino (v0.74) */
   double cameraFps = 0.0;        /* cuadros por segundo leidos */
   std::string camera;            /* dispositivo en uso (/dev/videoN) */
   std::string nombre;            /* lo que anuncia el conductor: "3D Stereo WebCam" */

@@ -72,6 +72,26 @@ struct TrackSettings {
   int reengancheCuadros = 15;
   int detectWidth = 448, detectHeight = 320;  /* como el hub: 0.7 de la vista 640x480 */
 
+  /* Rastreo fino (v0.74). YuNet da los dos ojos por separado en cada vista, con +-3 px de temblor
+     y, peor, un sesgo lento de +-3 px que ningun filtro quita. Medido el 25-nov sobre 20 s grabados
+     (1186 cuadros, cara a ~65 cm): la disparidad de YuNet vale 49,3 px un segundo y 54,4 dos despues
+     con la cabeza quieta, o sea +-4 cm de distancia, que en el borde de la pantalla son +-0,18 ciclos
+     de fase contra un margen de +-0,04; y la distancia entre los ojos (que es fija) sale de 53 a 100 mm.
+     Con esto puesto, YuNet solo dice DONDE esta la cara:
+       - la distancia sale de comparar la imagen de la franja de los ojos entre las dos vistas
+         (correlacion normalizada, con decimales de pixel): +-0,12 px con la cabeza quieta;
+       - el punto medio de los ojos se sigue cuadro a cuadro con una plantilla de esa franja, anclada
+         despacio (10 s) a lo que dice YuNet.
+     Si la correlacion no encuentra nada fiable, ese cuadro va por la via de antes.
+     `rastreo_fino = no` en serve.conf (ODYSSEYVK_RASTREO_FINO=0) lo apaga. */
+  bool fino = true;
+  /* El filtro de la pose cuando viene del rastreo fino. Con la medida limpia ya no hace falta
+     cortar a 0,6 Hz: medido sobre la misma grabacion, a 2 Hz la pose quieta recorre 0,37 cm de x
+     en vez de 0,29 (el resto es la cabeza, que no esta clavada) y el retraso al moverse baja de
+     0,64 a 0,34 cm rms (de 1,18 a 0,68 de pico, a 21 cm/s). Los cuadros que caen a la via de
+     antes siguen con euroMinCorte y euroBeta. */
+  double euroMinCorteFino = 2.0, euroBetaFino = 0.05;
+
   /* Via de respaldo: una webcam normal, que es UNA sola vista y no esta
      calibrada. La distancia sale del ancho de la caja de la cara (de oreja a
      oreja) y el lado del campo horizontal que se le supone a la camara. */
@@ -100,6 +120,15 @@ struct TrackSample {
   int misses = 0;
   double latencyMs = 0;
   std::string reason;       /* por que no se acepto, si acaso */
+  /* Diagnostico (v0.74): cada ojo tal como salio de la deteccion y de la triangulacion.
+     ojoPx[e] = x,y en la vista izquierda y x,y en la derecha; ojoMm[e] = punto 3D visto desde la
+     camara izquierda. Solo valen con `detected`. */
+  double ojoPx[2][4] = {{0, 0, 0, 0}, {0, 0, 0, 0}};
+  double ojoMm[2][3] = {{0, 0, 0}, {0, 0, 0}};
+  bool fino = false;            /* la pose de este cuadro salio del rastreo fino (v0.74) */
+  double puntajeFranja = 0;     /* parecido de la plantilla con el cuadro (0..1) */
+  double puntajeDisparidad = 0; /* parecido de la franja entre las dos vistas (0..1) */
+  double medioPx[4] = {0, 0, 0, 0}; /* punto medio de los ojos: x,y en la vista izquierda y en la derecha */
 };
 
 class HeadTracker {
@@ -149,6 +178,10 @@ public:
       history_[i].clear();
       euro_[i].olvidar();
     }
+    franjaW_ = franjaH_ = 0;
+    franjaT_ = -1.0;
+    dispT_ = -1e9;
+    finoT_ = -1e9;
   }
 
   /* Comprueba deteccion y geometria sobre un archivo (PNG/JPG) con las dos
@@ -167,6 +200,10 @@ public:
 
   const std::string &lastError() const { return err_; }
 
+  /* Reloj puesto a mano (segundos), para repetir una grabacion con los tiempos de entonces: el
+     filtro de la pose depende del tiempo entre cuadros. Negativo = el reloj de verdad. */
+  void fijarReloj(double t) { reloj_ = t; }
+
 private:
   struct Eye {
     bool ok = false;
@@ -175,6 +212,11 @@ private:
 
   void hold(TrackSample &out);
   bool publish(const double raw[3], TrackSample &out);
+  /* rastreo fino: de los ojos de YuNet (x,y de cada ojo en la izquierda y luego en la derecha) al
+     punto medio seguido con la plantilla y su pareja en la otra vista (par = x,y izq, x,y der) */
+  bool afinar(const uint8_t *left, const uint8_t *right, int w, int h, const double ojos[8], double t,
+              double par[4], TrackSample &out);
+  bool cortarFranja(const uint8_t *left, int w, int h, double cx, double cy, double sep);
 
   TrackSettings set_;
   CameraCalibration calib_;
@@ -185,6 +227,21 @@ private:
   int misses_ = 0;
   int saltos_ = 0;   /* cuadros seguidos rechazados por salto (ver reengancheCuadros) */
   FiltroEuro euro_[3];
+  double reloj_ = -1.0;
+  double ahora() const;
+  /* rastreo fino (v0.74): la plantilla de la franja de los ojos en la vista izquierda. Va en bytes
+     sueltos para que esta cabecera siga sin saber nada de OpenCV. */
+  std::vector<uint8_t> franja_;
+  int franjaW_ = 0, franjaH_ = 0;      /* 0 = no hay plantilla */
+  double franjaPos_[2] = {0, 0};       /* su esquina en el cuadro actual (con decimales) */
+  double franjaOff_[2] = {0, 0};       /* punto medio de los ojos menos el centro de la plantilla */
+  double franjaSep_ = 0;               /* separacion de ojos (px) con la que se corto */
+  int franjaN_ = 0;                    /* muestras que lleva el ancla a YuNet */
+  int franjaPerdidos_ = 0, franjaBajos_ = 0, franjaLejos_ = 0;
+  double franjaT_ = -1.0;              /* reloj del cuadro anterior */
+  double disp_[2] = {0, 0};            /* ultima disparidad buena de la franja (x, y) */
+  double dispT_ = -1e9;                /* y cuando se midio */
+  double finoT_ = -1e9;                /* ultimo cuadro que salio por la via fina */
   std::vector<double> history_[3];
   std::string err_;
 };
