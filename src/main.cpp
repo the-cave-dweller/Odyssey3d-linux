@@ -4686,6 +4686,9 @@ static int cmdServe(int argc, char **argv) {
           }
           firmaVideo = firma;
           const bool sinEstado = !video.fullscreen();
+          /* el 3D cambio el tamano logico del panel: solo entonces KWin puede haber movido la ventana.
+             Sin ese cambio (v0.76), perder la pantalla completa es siempre el usuario saliendo. */
+          const bool cambioPanel = reposoW > 0 && salidaVista && (sw != reposoW || sh != reposoH);
           /* "chica" = la ventana conserva el tamano que tenia la salida en 2D. Es el caso que mas se ve
              tras nuestro cambio de modo: el flujo llegaba a 2560x1440 con el panel en 3840x2160. */
           const bool chica = salidaVista && ((int)video.w < sw || (int)video.h < sh);
@@ -4715,7 +4718,7 @@ static int cmdServe(int argc, char **argv) {
           for (const char *nav : kNavegadores)
             if (strLower(video.appId).find(nav) != std::string::npos) esNavegadorVideo = true;
           const bool yaPaso = caidaUuid == hijoUuid && now - caidaHora < 180.0;
-          if (enCambioDeModo && !cerrandoSesion && sinEstado && esNavegadorVideo && !yaPaso && reafirmadas == 0) {
+          if (enCambioDeModo && cambioPanel && !cerrandoSesion && sinEstado && esNavegadorVideo && !yaPaso && reafirmadas == 0) {
             caidaUuid = hijoUuid;
             caidaHora = now;
             motivo = "el escritorio saco al video de pantalla completa al cambiar el monitor";
@@ -4732,7 +4735,7 @@ static int cmdServe(int argc, char **argv) {
               avisoCaida.send("odysseyvk-caida", "El 3D no llegó a empezar",
                               "Al cambiar el monitor, el escritorio sacó el video de pantalla completa."
                               " Vuelve a ponerlo a pantalla completa y ya entra.", {}, nullptr);
-          } else if (enCambioDeModo && !cerrandoSesion && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
+          } else if (enCambioDeModo && cambioPanel && !cerrandoSesion && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
             reacomodoDesde = now;
             ++reafirmadas;
             std::string e4;
@@ -4754,7 +4757,7 @@ static int cmdServe(int argc, char **argv) {
                         (unsigned)video.w, (unsigned)video.h, sw, sh,
                         " Ctrl+Shift+1 sale del 3D si lo queres ver.");
             std::fflush(stdout);
-          } else if (!enCambioDeModo && sinEstado) {
+          } else if ((!enCambioDeModo || !cambioPanel) && sinEstado) {
             motivo = "la ventana del video salio de pantalla completa";
             videoSeFue = true;   /* el video se fue el solo: la ventana no tiene por que seguir a pantalla completa */
             /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y
