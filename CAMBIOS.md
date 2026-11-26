@@ -3,6 +3,20 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Interruptor 2D | 3D por juego y desenfoque detrás de la interfaz (v0.91)
+
+- Rodolfo: «en la sección de juegos, que el pill de 3D tenga a la izquierda un 2D, tipo encendido y
+  apagado, un toggle por juego, también añade algo de blur al hub, y a las settings».
+- La pastillita de cada juego es ahora un interruptor: la bola a la izquierda es 2D (apagado) y a la
+  derecha 3D (encendido), con la letra de lo puesto en la bola y la otra tenue. Se pica igual que
+  antes y guarda lo mismo (`auto = steam_app_ID:conv|flat`).
+- Desenfoque: la capa pide a KWin su protocolo `org_kde_kwin_blur` y le manda la misma caja que la
+  región de entrada (la pastilla, la tarjeta o el panel). KWin desenfoca lo que hay detrás; la
+  interfaz no cambia de transparencia. Si el compositor no ofrece el protocolo, no pasa nada.
+- MEDIDO: la pestaña Juegos pintada con el pintado de CPU (9,5 ms a 2560 × 1440) sale con los cinco
+  interruptores. **No probado**: el desenfoque (solo lo puede mostrar KWin en el panel) y que la
+  región se quite al cerrar la tarjeta.
+
 ## Vídeo dividido: la franja de la barra, limpia y sin quedarse puesta (v0.90)
 
 - Rodolfo: «sobre el reproductor lado a lado, implementa estas mejoras y lo que haga falta… la barra

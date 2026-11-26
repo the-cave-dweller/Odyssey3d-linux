@@ -577,7 +577,7 @@ uso, la memoria y la temperatura de cada tarjeta gráfica):
   `appmanifest_*.acf` de cada biblioteca; sin Proton ni los Steam Linux Runtime), los jugados hace
   menos primero, en rejilla con su carátula (la de la caché de Steam, `appcache/librarycache`). Se
   pica una carátula y el juego arranca (`steam steam://rungameid/ID`). La pastillita **3D / 2D** de
-  cada juego dice si entra solo en 3D al ponerse a pantalla completa o se deja como está: se guarda
+  cada juego (desde v0.91 un interruptor con la bola a la izquierda en 2D y a la derecha en 3D) dice si entra solo en 3D al ponerse a pantalla completa o se deja como está: se guarda
   como `auto = steam_app_ID:conv` o `:flat`, que es como se llama la ventana de un juego de Steam.
 
 Todo se escribe en `~/.config/odysseyvk/serve.conf` y el servicio lo relee solo cuando cambia (ya

@@ -26,6 +26,9 @@
 #include "viewporter-client-protocol.h"
 #endif
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#ifdef HAVE_KWIN_BLUR
+#include "blur-client-protocol.h"
+#endif
 
 #include <wayland-client.h>
 
@@ -58,6 +61,10 @@ struct Overlay::Impl {
   wl_pointer *pointer = nullptr;
 #ifdef HAVE_FRACTIONAL_SCALE
   wp_fractional_scale_manager_v1 *escalaMgr = nullptr;
+#ifdef HAVE_KWIN_BLUR
+  org_kde_kwin_blur_manager *blurMgr = nullptr;   /* KWin desenfoca lo que hay detras de la region que se le diga */
+  org_kde_kwin_blur *blur = nullptr;
+#endif
   wp_viewporter *viewporter = nullptr;
   wp_viewport *viewport = nullptr;
   wp_fractional_scale_v1 *escalaSuperf = nullptr;
@@ -152,6 +159,10 @@ struct Overlay::Impl {
     if (viewport) wp_viewport_destroy(viewport);
     if (viewporter) wp_viewporter_destroy(viewporter);
     if (escalaMgr) wp_fractional_scale_manager_v1_destroy(escalaMgr);
+#ifdef HAVE_KWIN_BLUR
+    if (blur) org_kde_kwin_blur_release(blur);
+    if (blurMgr) org_kde_kwin_blur_manager_destroy(blurMgr);
+#endif
 #endif
     if (surf) wl_surface_destroy(surf);
     if (pointer) wl_pointer_destroy(pointer);
@@ -279,6 +290,18 @@ struct Overlay::Impl {
     if (!r) return;
     if (caja[2] > 0 && caja[3] > 0) wl_region_add(r, caja[0], caja[1], caja[2], caja[3]);
     wl_surface_set_input_region(surf, r);  /* caja vacia = aqui no se pica nada: pasa todo */
+#ifdef HAVE_KWIN_BLUR
+    /* y la misma caja, desenfocada por detras (v0.91): la pastilla y el panel son translucidos y el
+       video se ve a traves; con el desenfoque de KWin se leen mejor y parecen de cristal. Se manda
+       con el siguiente commit de la superficie. */
+    if (blurMgr) {
+      if (!blur) blur = org_kde_kwin_blur_manager_create(blurMgr, surf);
+      if (blur) {
+        org_kde_kwin_blur_set_region(blur, (caja[2] > 0 && caja[3] > 0) ? r : nullptr);
+        org_kde_kwin_blur_commit(blur);
+      }
+    }
+#endif
     wl_region_destroy(r);
     std::printf("[capa] region de entrada: %s\n",
                 (caja[2] > 0 && caja[3] > 0) ? "solo la tarjeta" : "ninguna (el aviso no esta puesto)");
@@ -558,6 +581,11 @@ struct Overlay::Impl {
       }
       s->monitores.push_back(m);
     }
+#ifdef HAVE_KWIN_BLUR
+    else if (!std::strcmp(iface, org_kde_kwin_blur_manager_interface.name))
+      s->blurMgr = static_cast<org_kde_kwin_blur_manager *>(
+          wl_registry_bind(reg, name, &org_kde_kwin_blur_manager_interface, std::min<uint32_t>(version, 1)));
+#endif
 #ifdef HAVE_FRACTIONAL_SCALE
     else if (!std::strcmp(iface, wp_fractional_scale_manager_v1_interface.name))
       s->escalaMgr = static_cast<wp_fractional_scale_manager_v1 *>(wl_registry_bind(

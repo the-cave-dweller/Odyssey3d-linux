@@ -977,11 +977,12 @@ void Hud::dibujaPanel(int vw, int vh) {
           nextCp(it.rotulo, n);
           text(it.rotulo.substr(0, n), cara.x + cara.w * 0.5f, cara.y + cara.h * 0.5f - 24.0f, 44.0f, 1.0f, 1.0f, 1.0f, 0.96f, true);
         }
-        /* el nombre, cortado a lo que quepa */
-        const Rect chip{cara.x + cara.w - 38.0f, cara.y + cara.h + 10.0f, 38.0f, 22.0f};
+        /* el nombre, cortado a lo que quepa, y a su derecha el interruptor 2D | 3D (v0.91): la bola
+           a la izquierda es 2D (apagado), a la derecha 3D (encendido), con las dos letras dentro */
+        const Rect chip{cara.x + cara.w - 58.0f, cara.y + cara.h + 9.0f, 58.0f, 24.0f};
         z.subs.push_back(chip);
         std::string nombre = it.rotulo;
-        const float cabeN = cara.w - 46.0f;
+        const float cabeN = cara.w - 66.0f;
         if (textWidth(nombre, 13.0f) > cabeN) {
           std::string corto;
           size_t k = 0;
@@ -995,9 +996,13 @@ void Hud::dibujaPanel(int vw, int vh) {
         }
         text(nombre, cara.x + 2.0f, cara.y + cara.h + 13.0f, 13.0f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.90f);
         const bool hc2 = dentro && chip.inside(mx_, my_);
-        if (it.valor) mask9(chip, 0, 11.0f, accent[0], accent[1], accent[2], hc2 ? 1.0f : 0.92f);
-        else mask9(chip, 0, 11.0f, 0.30f, 0.31f, 0.36f, hc2 ? 1.0f : 0.92f);
-        text(it.valor ? "3D" : "2D", chip.x + chip.w * 0.5f, chip.y + 3.5f, 12.0f, 1.0f, 1.0f, 1.0f, it.valor ? 1.0f : 0.80f, true);
+        if (it.valor) mask9(chip, 0, 12.0f, accent[0], accent[1], accent[2], hc2 ? 1.0f : 0.92f);
+        else mask9(chip, 0, 12.0f, 0.30f, 0.31f, 0.36f, hc2 ? 1.0f : 0.92f);
+        const Rect bola{it.valor ? chip.x + chip.w - 23.0f : chip.x + 3.0f, chip.y + 3.0f, 20.0f, 20.0f};
+        mask9(bola, 0, 10.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+        /* la letra de lo que esta puesto va en la bola; la otra, tenue, en el hueco que deja */
+        text(it.valor ? "3D" : "2D", bola.x + bola.w * 0.5f, bola.y + 4.0f, 10.5f, 0.12f, 0.12f, 0.16f, 1.0f, true);
+        text(it.valor ? "2D" : "3D", it.valor ? chip.x + 17.0f : chip.x + chip.w - 17.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f, true);
         break;
       }
     }

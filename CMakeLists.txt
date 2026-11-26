@@ -87,6 +87,12 @@ if(WAYLAND_CLIENT_FOUND)
     get_filename_component(PLASMA_PROTO_DIR ${PLASMA_WM_XML} DIRECTORY)
     set(PROTO_XML_plasma-window-management ${PLASMA_PROTO_DIR}/plasma-window-management.xml)
     set(PROTO_XML_zkde-screencast-unstable-v1 ${PLASMA_PROTO_DIR}/zkde-screencast-unstable-v1.xml)
+    # desenfoque de KWin detras de la pastilla y del panel de ajustes (v0.91)
+    if(EXISTS ${PLASMA_PROTO_DIR}/blur.xml)
+      set(PROTO_XML_blur ${PLASMA_PROTO_DIR}/blur.xml)
+      list(APPEND PROTO_PROTOCOLS blur)
+      add_compile_definitions(HAVE_KWIN_BLUR=1)
+    endif()
     # wlr-layer-shell no esta en el paquete wayland-protocols: lo llevamos nosotros
     # (la copia es la de swaybg, MIT; ver protocols/LEEME.txt).
     set(PROTO_XML_wlr-layer-shell-unstable-v1 ${CMAKE_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml)
