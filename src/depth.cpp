@@ -437,15 +437,15 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   sinRed_ = 0;
   if (const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED")) {
     const std::string v = e;
-    if (v == "suelo") sinRed_ = 1, mezcla_ = 0.0f;
-    else if (v == "imagen" || v == "1" || v == "si") sinRed_ = 2, mezcla_ = 0.35f;
+    if (v == "suelo") sinRed_ = 1, mezcla_.store(0.0f);
+    else if (v == "imagen" || v == "1" || v == "si") sinRed_ = 2, mezcla_.store(0.35f);
   }
   if (const char *m = entornoOdyssey("ODYSSEYVK_SIN_RED_MEZCLA")) {
     std::string t = m;
     for (char &c : t)
       if (c == ',') c = '.';
     const float v = (float)std::atof(t.c_str());
-    if (v >= 0.0f && v <= 1.0f) mezcla_ = v;
+    if (v >= 0.0f && v <= 1.0f) mezcla_.store(v);
   }
 #ifdef HAVE_ORT
   if (sinRed_) {
@@ -459,7 +459,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     dev_ = "CPU (sin red)";
     std::printf("[conversor] sin red (rama experimental, modo rendimiento): la profundidad sale de la imagen, "
                 "%.0f %% suelo (abajo cerca, arriba lejos) y %.0f %% pistas (nitidez, color, centro) · mapa %d x %d\n",
-                100.0f * (1.0f - mezcla_), 100.0f * mezcla_, sz_, sz_);
+                100.0f * (1.0f - mezcla_.load()), 100.0f * mezcla_.load(), sz_, sz_);
     return true;
   }
 #endif
@@ -759,7 +759,8 @@ void DepthNet::profundidadSinRed(std::vector<float> &d) {
     const float a = 0.10f + 0.90f * std::pow(v, 1.3f);
     for (int x = 0; x < n; x++) alt[(size_t)y * n + x] = a;
   }
-  if (mezcla_ <= 0.0f || guia_.size() != plane) {
+  const float mezcla = mezcla_.load();
+  if (mezcla <= 0.0f || guia_.size() != plane) {
     d = alt;
     return;
   }
@@ -815,7 +816,7 @@ void DepthNet::profundidadSinRed(std::vector<float> &d) {
       const float centro = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);   /* smootherstep, como la saliencia */
       /* las pistas de la imagen, en su propio 0..1 (antes iban 0,25 / 0,10 / 0,15 junto a 0,50 de altura) */
       const float pistas = 0.50f * nitB[o] + 0.20f * satB[o] + 0.30f * centro;
-      d[o] = (1.0f - mezcla_) * alt[o] + mezcla_ * pistas;
+      d[o] = (1.0f - mezcla) * alt[o] + mezcla * pistas;
     }
 }
 

@@ -26,6 +26,7 @@
 #include <condition_variable>
 #endif
 #include "idioma.h"
+#include "rendimiento.h"
 #include "vkui.h"
 #include "vkweave.h"
 
@@ -123,6 +124,7 @@ struct VkUi {
   bool convWant = false;     /* la tarjeta del hub pidio "video normal": encender, no alternar */
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
   int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
+  int preajustePedido = -1;  /* un preajuste del modo rendimiento (pastilla u orden `preajuste`): 0..2 */
   bool suavizado = true;     /* el boton de dividido lo pone suavizado (los ajustes del programa lo quitan) */
   bool suavizadoAuto = false; /* ...o lo decide solo el medidor de separacion (v0.88) */
   std::string modoElegido;   /* "conv" / "sbs" / "tb": con que tipo de 3D se guarda el «no volver a preguntar» */
@@ -488,6 +490,11 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       st.ask = false;
       st.weaveOn = false;
       printTuning(ui, "2D plano");
+      break;
+    case Hud::HitPreajuste1:
+    case Hud::HitPreajuste2:
+    case Hud::HitPreajuste3:
+      ui.preajustePedido = (int)hit - (int)Hud::HitPreajuste1;   /* lo aplica el bucle: tiene la red y la trama */
       break;
     case Hud::HitModoNormal:
     case Hud::HitModoDividido:
@@ -1414,6 +1421,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      cuadro en el modo 3D es de 8, así que hacerla en cada cuadro hundiría la tasa de imagen. */
 #ifdef HAVE_ORT
   DepthNet red;
+  /* el modo rendimiento (rama experimental): cuanto se exageran, sin red, la ganancia del relieve, los
+     topes por ojo y el paralaje de la cabeza. De fabrica el preajuste «medio» (rendimiento.h); los
+     preajustes de la pastilla los cambian en marcha. */
+  auto numEntorno = [](const char *nombre, float defecto, float lo, float hi) {
+    const char *e = entornoOdyssey(nombre);
+    std::string t = e ? e : "";
+    for (char &c : t)
+      if (c == ',') c = '.';
+    const float v = t.empty() ? defecto : (float)std::atof(t.c_str());
+    return (v >= lo && v <= hi) ? v : defecto;
+  };
+  const rendimiento::Preajuste &pf = rendimiento::kPreajustes[rendimiento::kDeFabrica];
+  float exGanancia = numEntorno("ODYSSEYVK_SIN_RED_RELIEVE", pf.ganancia, 0.5f, 2.0f);
+  float exTopes = numEntorno("ODYSSEYVK_SIN_RED_TOPES", pf.topes, 1.0f, 4.0f);
+  double exParalaje = numEntorno("ODYSSEYVK_SIN_RED_PARALAJE", pf.paralaje, 1.0f, 4.0f);
   std::vector<uint8_t> chico, mapa;
   bool convActivo = opts.conver;
   /* video dividido suavizado desde el arranque: el conversor ve solo la imagen izquierda */
@@ -2130,6 +2152,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              es otra orden, la de cambiar de red con el conversor ya en marcha.) */
           /* `idioma = fr` (v1.07): el panel de ajustes cambio el idioma. La pastilla y sus avisos
              salen ya en el nuevo: se rehace el atlas de letras (con las chinas o japonesas si toca). */
+          /* `preajuste = 0|1|2` (rama experimental): el panel eligio un preajuste del modo rendimiento */
+          if (const auto op = palabras.find("preajuste"); op != palabras.end()) {
+            const int k = std::atoi(op->second.c_str());
+            if (k >= 0 && k <= 2) ui.preajustePedido = k;
+          }
           const auto ordenIdioma = palabras.find("idioma");
           if (ordenIdioma != palabras.end()) {
             const int l = idioma::deCodigo(ordenIdioma->second);
@@ -3270,23 +3297,41 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          curva: con 50 px de separacion no se notaba y con 98 molestaba a los ojos. */
       /* modo rendimiento sin red (rama experimental): el relieve entre los ojos, exagerado por
          ODYSSEYVK_SIN_RED_RELIEVE (x1..x3), y los topes por ojo agrandados lo mismo */
-      static const float kExageraRelieve = [] {
-        const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED_RELIEVE");
-        std::string t = e ? e : "";
-        for (char &c : t)
-          if (c == ',') c = '.';
-        const float v = t.empty() ? 2.0f : (float)std::atof(t.c_str());   /* de fabrica x2 */
-        return (v >= 1.0f && v <= 3.0f) ? v : 2.0f;
-      }();
-      const float exRel = red.sinRed() ? kExageraRelieve : 1.0f;
-      wv.setTopeEscala(exRel);
+      /* un preajuste pedido (la pastilla o la orden `preajuste` del panel): se pone en marcha y se
+         guarda en serve.conf, asi el panel lo ensena y la sesion siguiente arranca con el */
+      if (ui.preajustePedido >= 0 && ui.preajustePedido < 3) {
+        const rendimiento::Preajuste &p = rendimiento::kPreajustes[ui.preajustePedido];
+        exGanancia = p.ganancia, exTopes = p.topes, exParalaje = p.paralaje;
+        red.setMezcla(p.mezcla);
+        auto conComaV = [](double v) {
+          char b[32];
+          std::snprintf(b, sizeof b, "%.2f", v);
+          for (char *q = b; *q; q++)
+            if (*q == '.') *q = ',';
+          return std::string(b);
+        };
+        std::string e;
+        ajuste::fijarEnServeConf("exp_sin_red_mezcla", conComaV(p.mezcla), &e);
+        ajuste::fijarEnServeConf("exp_sin_red_relieve", conComaV(p.ganancia), &e);
+        ajuste::fijarEnServeConf("exp_sin_red_topes", conComaV(p.topes), &e);
+        ajuste::fijarEnServeConf("exp_sin_red_paralaje", conComaV(p.paralaje), &e);
+        static const char *kNombre[3] = {"suave", "medio", "intenso"};
+        std::printf("[rendimiento] preajuste %s: mezcla %.0f %% · relieve x%.2f · topes x%.2f (+%.1f / -%.1f px) · "
+                    "paralaje x%.1f%s%s\n",
+                    kNombre[ui.preajustePedido], 100.0 * p.mezcla, (double)p.ganancia, (double)p.topes,
+                    12.67 * p.topes, 9.98 * p.topes, (double)p.paralaje, e.empty() ? "" : " · no se guardo: ", e.c_str());
+        std::fflush(stdout);
+        ui.preajustePedido = -1;
+      }
+      const float exRel = red.sinRed() ? exGanancia : 1.0f;
+      wv.setTopeEscala(red.sinRed() ? exTopes : 1.0f);
       {
         static bool dicho = false;
         if (red.sinRed() && !dicho) {
           dicho = true;
-          const char *pe = entornoOdyssey("ODYSSEYVK_SIN_RED_PARALAJE");
-          std::printf("[conversor] sin red: relieve x%.1f (topes por ojo +%.1f / -%.1f px) · paralaje de la cabeza x%s\n",
-                      (double)exRel, 12.67 * exRel, 9.98 * exRel, pe ? pe : "2");
+          std::printf("[conversor] sin red: relieve x%.2f · topes x%.2f (+%.1f / -%.1f px por ojo) · paralaje de la cabeza "
+                      "x%.1f · mezcla %.0f %%\n",
+                      (double)exGanancia, (double)exTopes, 12.67 * exTopes, 9.98 * exTopes, exParalaje, 100.0 * red.mezcla());
           std::fflush(stdout);
         }
       }
@@ -3346,6 +3391,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     /* los botones de icono: cual de los dos tipos de 3D esta puesto de verdad (lo dice el conversor) */
     ui.hud.state().modoVisible = (kind == SourceKind::Capture) && !ui.hud.state().legado;
     ui.hud.state().modo3d = ui.convInfo ? (wv.mediaFuente() ? 3 : 1) : 2;
+    /* la pastilla de rendimiento: con el conversor puesto y sin red */
+    ui.hud.state().rendimiento = convActivo && red.sinRed();
+    ui.hud.state().preajuste = rendimiento::cual(red.mezcla(), exGanancia, exTopes, (float)exParalaje);
     /* Profundidad y Salida por modo (v1.10). De fabrica: el conversor y el dividido suavizado
        arrancan en Profundidad 75 (plano fijo en 0,75, lo que se ve al moverla a 75) y Salida 50; el
        dividido con su propio relieve, neutro (50 y 0). En cuanto se mueve uno de los dos y se deja
@@ -3595,15 +3643,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             const double d = x - xReposo, zona = 0.6;
             /* modo rendimiento sin red (rama experimental): el paralaje de la cabeza, exagerado por
                ODYSSEYVK_SIN_RED_PARALAJE (x1..x4); el tope de una vista sube con el, hasta dos */
-            static const double kExagera = [] {
-              const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED_PARALAJE");
-              std::string t = e ? e : "";
-              for (char &c : t)
-                if (c == ',') c = '.';
-              const double v = t.empty() ? 2.0 : std::atof(t.c_str());   /* de fabrica x2 */
-              return (v >= 1.0 && v <= 4.0) ? v : 2.0;
-            }();
-            const double ex = (convActivo && red.sinRed()) ? kExagera : 1.0;
+            const double ex = (convActivo && red.sinRed()) ? exParalaje : 1.0;
             const double topeVistas = std::min(2.0, ex);
             objetivo = d * (d * d / (d * d + zona * zona)) / 3.25 * kParalaje * ex;
             objetivo = objetivo < -topeVistas ? -topeVistas : (objetivo > topeVistas ? topeVistas : objetivo);

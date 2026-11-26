@@ -48,6 +48,10 @@ public:
     float frac = 0.0f;               /* deslizador, 0..1 */
     bool quitar = false;             /* fila con aspa para quitarla */
     bool peligro = false;            /* boton en rojo suave: desinstalar (v1.06) */
+    /* la ayuda al pasar el raton (rama experimental): `ayuda` para la fila entera y, en las opciones,
+       `ayudas[k]` para cada una (si la hay, manda sobre `ayuda`) */
+    std::string ayuda;
+    std::vector<std::string> ayudas;
     /* la caratula de un juego (RGBA, imgW x imgH). El atlas de la interfaz es de un solo canal, asi
        que las imagenes van aparte y solo las pinta el pintado de CPU (el del panel). */
     std::shared_ptr<const std::vector<uint8_t>> img;
@@ -103,6 +107,11 @@ public:
     bool menuIdioma = false;
     /* el renglon de las teclas de la pastilla cuando hay atajos cambiados (v1.09); vacio = el de fabrica */
     std::string teclas;
+    /* la pastilla del modo rendimiento (rama experimental): el conversor va sin red. Lleva un rayo,
+       el acento ambar y tres preajustes en vez de los botones de tipo de video; `preajuste` = el
+       puesto (0 suave, 1 medio, 2 intenso; -1 = valores a mano) */
+    bool rendimiento = false;
+    int preajuste = -1;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -143,6 +152,9 @@ public:
     HitModoDividido,   /* ... video dividido ... */
     HitModoSuave,      /* ... y video dividido suavizado (v0.83) */
     HitEngranaje,      /* el engranaje de la pastilla: abre el panel de ajustes */
+    HitPreajuste1,     /* los tres preajustes de la pastilla de rendimiento (rama experimental) */
+    HitPreajuste2,
+    HitPreajuste3,
     HitPanel,          /* dentro del panel de ajustes, sobre nada que se pique */
     HitPanelCerrar,
     HitPanelActualizar,   /* el boton de la actualizacion, junto al aspa (v0.95) */
@@ -290,7 +302,8 @@ private:
   Rect white_, pill_, card_;
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
-  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_;
+  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
+      icoRayo_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -324,6 +337,7 @@ private:
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
   Rect askActualizar_, askLuego_, askNoAvisar_;
   Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_, btnEngranaje_;
+  Rect btnPre_[3];   /* los preajustes de la pastilla de rendimiento */
   /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
   struct ZonaItem {
     Rect caja;

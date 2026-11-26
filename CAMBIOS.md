@@ -3,6 +3,47 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Modo rendimiento: la pastilla con rayo, tres preajustes medidos y ayudas al pasar el ratón (rama `experimental`)
+
+- Rodolfo: «crea un hub distinto con un rayo para modo performance, con 3 botones preset que midas
+  buenos; ya en las settings pones esto que me dijiste que cambia cada uno cuando se pase el mouse en
+  cada valor», y «que frecuencia variable desaparezca al presionar modo rendimiento, se sigue siempre
+  lo que defina el escritorio en ese modo; el toggle vuelve al desactivarlo en el estado en el que lo
+  dejó el usuario, por defecto apagado».
+- **La pastilla del modo rendimiento** (vídeo normal sin red): acento ámbar en lugar del morado, un
+  rayo, y en el sitio de los botones de tipo de vídeo y de la casilla, tres botones **Suave · Medio ·
+  Intenso**. Se aplican en marcha (sin esperar al siguiente vídeo) y se guardan en serve.conf. Si los
+  cuatro valores no son los de ningún preajuste, ninguno sale marcado.
+- **Los tres preajustes** (`src/rendimiento.h`), medidos con `odysseyvk mapa` sobre la persona, la
+  nave y el globo con ruido de vídeo:
+
+  | | Mezcla | Fuerza | Alcance | Paralaje | Entre los ojos | Aplastado contra el tope |
+  |---|---|---|---|---|---|---|
+  | Suave | 25 % | x0,75 | x2 | x1,5 | ~32 px | 3 % |
+  | Medio (de fábrica) | 35 % | x1 | x2,75 | x2 | ~43 px | 3 % |
+  | Intenso | 50 % | x1,5 | x2,75 | x3 | ~52 px | ~20 % |
+
+  Lo que salió al medir: sin red el parpadeo es 0,16–0,48 de 255 (con la red, 1,43), y la forma se
+  parece poco a la de la red (correlación 0,02–0,11). Multiplicar la fuerza y los topes por lo mismo
+  (el «relieve x2» de antes) dejaba el 43–57 % del cuadro aplastado contra los topes: se ve como
+  recortes planos. Por eso se separan.
+- **Fuerza y alcance por separado**: «Fuerza del relieve sin red» (`exp_sin_red_relieve`, x0,5..x2) es
+  cuánto se separan los ojos por cada paso de profundidad; «Alcance del relieve sin red»
+  (`exp_sin_red_topes`, x1..x4 → `ODYSSEYVK_SIN_RED_TOPES`) multiplica los topes por ojo (+12,67 /
+  −9,98 px). Encima, «Preajuste sin red» en el panel escribe las cuatro claves de una vez y se lo dice
+  al visor (orden `preajuste = 0|1|2`). En el visor aparte: «[rendimiento] preajuste intenso: mezcla
+  50 % · relieve x1.50 · topes x2.75 (+34.8 / -27.4 px) · paralaje x3.0», y serve.conf queda con las
+  cuatro claves.
+- **Ayudas al pasar el ratón**: cada fila nueva de MODO RENDIMIENTO (y el VRR) lleva una caja con lo
+  que cambia; en las filas de opciones, una por opción (cada preajuste dice sus cuatro valores y lo
+  que se midió). Se parten en renglones de hasta 460 puntos (en chino y japonés, por letras).
+- **El VRR en el modo rendimiento**: con «Sin red» el interruptor de la frecuencia variable desaparece
+  del panel y el servicio deja el VRR como lo tenga el escritorio (`ODYSSEYVK_VRR_3D=1`). `vrr_en_3d`
+  no se toca: al volver a «Con la red», el interruptor reaparece como lo dejó el usuario (de fábrica,
+  apagado).
+- **¿El mapa grande mejora el paralaje sin red?** No: con `exp_mapa = 1022` el mapa sin red cambia 2–3
+  de 255 respecto al de 518, y cuesta cuatro veces más (8,5 → 34 ms por mapa en la CPU).
+
 ## Modo rendimiento: mezcla suelo ↔ imagen y el 3D exagerado sin red (rama `experimental`)
 
 - Rodolfo: «¿no se puede exagerar más el paralaje solo en el modo rendimiento?», «¿y si se pueden

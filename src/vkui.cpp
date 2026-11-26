@@ -201,6 +201,30 @@ bool Hud::buildAtlas(std::string *err) {
         globo[(size_t)j * (size_t)n + (size_t)i] = cubre(d);
       }
     cupo = subir(n, n, globo, &icoGlobo_) && cupo;
+    /* el rayo del modo rendimiento (rama experimental): un poligono relleno, con 4x4 muestras por
+       punto para el borde suave */
+    {
+      static const float P[][2] = {{38, 4}, {14, 36}, {29, 36}, {24, 60}, {50, 26}, {35, 26}, {44, 4}};
+      const int np = (int)(sizeof P / sizeof P[0]);
+      auto dentro = [&](float x, float y) {
+        bool c = false;
+        for (int a = 0, b = np - 1; a < np; b = a++)
+          if (((P[a][1] > y) != (P[b][1] > y)) &&
+              (x < (P[b][0] - P[a][0]) * (y - P[a][1]) / (P[b][1] - P[a][1]) + P[a][0]))
+            c = !c;
+        return c;
+      };
+      std::vector<uint8_t> rayo((size_t)n * n);
+      for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+          int k = 0;
+          for (int sy = 0; sy < 4; sy++)
+            for (int sx = 0; sx < 4; sx++)
+              if (dentro((float)i + (sx + 0.5f) / 4.0f, (float)j + (sy + 0.5f) / 4.0f)) k++;
+          rayo[(size_t)j * n + i] = (uint8_t)(k * 255 / 16);
+        }
+      cupo = subir(n, n, rayo, &icoRayo_) && cupo;
+    }
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -646,7 +670,8 @@ void Hud::begin(int w, int h, float altoLogico) {
 
   /* v0.79: el acento es el morado del paisaje de la tarjeta (antes verde) y el fondo de la pastilla
      es el gris casi negro de la tarjeta: las dos piezas se ven de la misma familia. */
-  const float accent[3] = {0.46f, 0.37f, 0.92f};
+  /* la pastilla de rendimiento va en ambar, el color del rayo (rama experimental) */
+  const float accent[3] = {st_.rendimiento ? 0.93f : 0.46f, st_.rendimiento ? 0.62f : 0.37f, st_.rendimiento ? 0.12f : 0.92f};
   const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   const float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -660,6 +685,7 @@ void Hud::begin(int w, int h, float altoLogico) {
   chkRecordar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnEngranaje_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnNormal_ = btnDividido_ = btnSuave_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  for (Rect &b : btnPre_) b = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
     const bool leg = st_.legado;
@@ -668,9 +694,21 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float anchoRec = 18.0f + 8.0f + textWidth(rotRec, 12.5f);
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
        Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
-    const bool hayModo = st_.modoVisible && !leg;
+    const bool hayModo = st_.modoVisible && !leg && !st_.rendimiento;
+    /* los tres preajustes del modo rendimiento: el rayo y tres botones con su palabra */
+    const char *nombrePre[3] = {idioma::tr("Suave"), idioma::tr("Medio"), idioma::tr("Intenso")};
+    float anchoPre[3] = {0, 0, 0};
+    float anchoRendimiento = 0.0f;
+    if (st_.rendimiento) {
+      anchoRendimiento = 26.0f;
+      for (int k = 0; k < 3; k++) {
+        anchoPre[k] = std::max(52.0f, textWidth(nombrePre[k], 12.5f) + 20.0f);
+        anchoRendimiento += anchoPre[k] + (k ? 6.0f : 0.0f);
+      }
+    }
     /* v1.07: en chino o japones la casilla es corta y los dos botones no cabian: el bloque mide al menos 128 */
-    const float anchoBloque = st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f);
+    const float anchoBloque = st_.rendimiento ? anchoRendimiento
+                              : (st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f));
     float pw = aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
@@ -777,11 +815,28 @@ void Hud::begin(int w, int h, float altoLogico) {
       }
     }
 
+    /* ---- el modo rendimiento: el rayo y los tres preajustes (rama experimental) ---- */
+    if (cabeBloque && st_.rendimiento) {
+      const float by = y0 + 18.0f, bh = 30.0f;
+      icono({bloqueX, by + 3.0f, 24.0f, 24.0f}, icoRayo_, std::min(1.0f, accent[0] + 0.05f), std::min(1.0f, accent[1] + 0.1f),
+            accent[2] + 0.1f, 1.0f);
+      float bx = bloqueX + 26.0f;
+      for (int k = 0; k < 3; k++) {
+        btnPre_[k] = {bx, by, anchoPre[k], bh};
+        const bool puesto = st_.preajuste == k, hov = btnPre_[k].inside(mx_, my_);
+        if (puesto) mask9(btnPre_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
+        else mask9(btnPre_[k], 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+        text(nombrePre[k], bx + anchoPre[k] * 0.5f, by + 7.0f, 12.5f, puesto ? 0.10f : ink[0], puesto ? 0.08f : ink[1],
+             puesto ? 0.04f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
+        bx += anchoPre[k] + 6.0f;
+      }
+    }
+
     /* ---- «no volver a preguntar», dentro del video ----
        Es la misma casilla de la tarjeta de la orilla. Marcada, esta aplicacion pasa directa al 3D la
        proxima vez (con el tipo que este puesto arriba); se desmarca aqui mismo y el servicio vuelve
        a preguntar. Solo sale cuando el video llego por el servicio, que es quien guarda la eleccion. */
-    if (cabeBloque && st_.recordarVisible) {
+    if (cabeBloque && st_.recordarVisible && !st_.rendimiento) {
       const Rect caja = hayModo ? Rect{bloqueX, y0 + 49.0f, 16.0f, 16.0f} : Rect{bloqueX, y0 + 24.0f, 18.0f, 18.0f};
       chkRecordar_ = {caja.x - 6.0f, caja.y - 5.0f, anchoRec + 12.0f, caja.h + 10.0f};
       const bool hov = chkRecordar_.inside(mx_, my_);
@@ -801,7 +856,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     float cabe = pw - 2.0f * aire - sitioEngranaje;
     /* con la casilla de «no volver a preguntar» debajo de los botones, el renglon no pasa de ella
        (v1.09: con atajos cambiados el renglon es largo y se metia debajo de su letra) */
-    if (cabeBloque && st_.recordarVisible) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
+    if (cabeBloque && (st_.recordarVisible || st_.rendimiento)) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
   }
@@ -1306,6 +1361,19 @@ void Hud::dibujaPanel(int vw, int vh) {
     }
   }
   hayRecorte_ = false;
+  /* la ayuda de lo que hay bajo el raton (se pinta al final, por encima de todo) */
+  std::string ayudaRaton;
+  if (dentro && !st_.menuIdioma)
+    for (size_t i = 0; i < st_.items.size() && i < zonas_.size(); i++) {
+      const ItemPanel &it = st_.items[i];
+      const ZonaItem &z = zonas_[i];
+      if (z.caja.w <= 0.0f || !z.caja.inside(mx_, my_)) continue;
+      if (it.tipo == ItemPanel::Opciones && !it.ayudas.empty())
+        for (size_t k = 0; k < z.subs.size() && k < it.ayudas.size(); k++)
+          if (z.subs[k].inside(mx_, my_)) ayudaRaton = it.ayudas[k];
+      if (ayudaRaton.empty()) ayudaRaton = it.ayuda;
+      break;
+    }
   /* la barrita de la derecha, solo si hay mas lista que caja */
   if (tope > 0.0f) {
     const float largo = std::max(30.0f, panelCuerpo_.h * panelCuerpo_.h / contenidoAlto_);
@@ -1349,6 +1417,76 @@ void Hud::dibujaPanel(int vw, int vh) {
     const Rect rr{std::min(panelIdioma_.x, px + pw - 20.0f - w), panelIdioma_.y + panelIdioma_.h + 8.0f, w, 30.0f};
     mask9(rr, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
     text(r, rr.x + 12.0f, rr.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
+  }
+  /* la ayuda del valor bajo el raton: una caja de hasta 460 puntos, partida en renglones */
+  if (!ayudaRaton.empty()) {
+    const float tam = 12.5f, maxW = 460.0f;
+    std::vector<std::string> lineas;
+    std::string linea, palabra;
+    auto cierra = [&](const std::string &w) {
+      const std::string prueba = linea.empty() ? w : linea + " " + w;
+      if (textWidth(prueba, tam) <= maxW || linea.empty()) {
+        /* una «palabra» sin espacios mas ancha que la caja (chino, japones): se parte por letras */
+        if (linea.empty() && textWidth(w, tam) > maxW) {
+          std::string trozo;
+          size_t i = 0;
+          while (i < w.size()) {
+            const size_t a = i;
+            nextCp(w, i);
+            const std::string c = w.substr(a, i - a);
+            if (textWidth(trozo + c, tam) > maxW && !trozo.empty()) {
+              lineas.push_back(trozo);
+              trozo.clear();
+            }
+            trozo += c;
+          }
+          linea = trozo;
+        } else {
+          linea = prueba;
+        }
+      } else {
+        lineas.push_back(linea);
+        linea.clear();
+        if (textWidth(w, tam) > maxW) {
+          std::string trozo;
+          size_t i = 0;
+          while (i < w.size()) {
+            const size_t a = i;
+            nextCp(w, i);
+            const std::string c = w.substr(a, i - a);
+            if (textWidth(trozo + c, tam) > maxW && !trozo.empty()) {
+              lineas.push_back(trozo);
+              trozo.clear();
+            }
+            trozo += c;
+          }
+          linea = trozo;
+        } else {
+          linea = w;
+        }
+      }
+    };
+    for (char ch : ayudaRaton) {
+      if (ch == ' ') {
+        if (!palabra.empty()) cierra(palabra);
+        palabra.clear();
+      } else {
+        palabra += ch;
+      }
+    }
+    if (!palabra.empty()) cierra(palabra);
+    if (!linea.empty()) lineas.push_back(linea);
+    float w = 0.0f;
+    for (const std::string &l : lineas) w = std::max(w, textWidth(l, tam));
+    w += 24.0f;
+    const float h = 14.0f + 19.0f * (float)lineas.size();
+    float bx = std::min(mx_ + 14.0f, px + pw - 12.0f - w), by = my_ + 18.0f;
+    if (by + h > py + ph - 8.0f) by = my_ - 10.0f - h;   /* sin sitio debajo: encima del raton */
+    bx = std::max(px + 12.0f, bx);
+    mask9({bx - 1.0f, by - 1.0f, w + 2.0f, h + 2.0f}, 0, 10.0f, 0.42f, 0.43f, 0.50f, 0.85f);
+    mask9({bx, by, w, h}, 0, 9.0f, 0.10f, 0.105f, 0.13f, 0.98f);
+    for (size_t k = 0; k < lineas.size(); k++)
+      text(lineas[k], bx + 12.0f, by + 8.0f + 19.0f * (float)k, tam, ink[0], ink[1], ink[2], 0.95f);
   }
   /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
   if (ha && !rotuloActualizar.empty() && !st_.menuIdioma) {
@@ -1505,6 +1643,8 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
   if (dt.inside(mx, my)) return HitDepth;
   if (pt.inside(mx, my)) return HitPopout;
+  for (int k = 0; k < 3; k++)
+    if (btnPre_[k].inside(mx, my)) return (Hit)(HitPreajuste1 + k);
   if (btnNormal_.inside(mx, my)) return HitModoNormal;
   if (btnDividido_.inside(mx, my)) return HitModoDividido;
   if (chkRecordar_.inside(mx, my)) return HitRecordar;

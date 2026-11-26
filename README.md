@@ -187,6 +187,12 @@ The `experimental` branch adds an **Experimental** tab to the panel with trials 
 milliseconds (`exp_anticipacion = 25`). Each applies from the next video; what works moves to the
 normal version.
 
+It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`),
+worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's ~1.1 GB on the GPU). It is rougher
+than the network but steadier. The pill turns amber with a lightning bolt and three measured presets,
+**Gentle · Medium · Intense**, that apply at once. In this mode variable refresh is left as the
+desktop has it. Hover over each performance-mode option to see what it changes.
+
 ## Documentation
 
 - [docs/GUIDE.md](docs/GUIDE.md) — the short guide in English: every command, every key, troubleshooting.

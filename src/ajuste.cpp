@@ -74,7 +74,8 @@ static bool esOrdenTexto(const std::string &nombre) {
          nombre == "legado" || nombre == "vista" || nombre == "barra" || nombre == "dividido_suavizado" ||
          nombre == "cargar_red" ||   /* `cargar_red = si` (v0.94): la red de profundidad recien bajada, al visor */
          nombre == "idioma" ||        /* `idioma = fr` (v1.07): el panel cambio el idioma; la pastilla tambien */
-         nombre == "atajos";          /* `atajos = recargar` (v1.09): se cambio un atajo en el panel */
+         nombre == "atajos" ||        /* `atajos = recargar` (v1.09): se cambio un atajo en el panel */
+         nombre == "preajuste";       /* `preajuste = 0|1|2`: el modo rendimiento (rama experimental) */
 }
 
 bool esPalabra(const std::string &nombre) { return esOrdenTexto(nombre); }

@@ -3297,6 +3297,12 @@ static int cmdHudSelfTest(int argc, char **argv) {
     /* ODYSSEYVK_HUD_MENU_IDIOMA=1 (v1.07): con la lista de idiomas abierta */
     if (std::getenv("ODYSSEYVK_HUD_MENU_IDIOMA")) hud.state().menuIdioma = true;
   }
+  /* ODYSSEYVK_HUD_RENDIMIENTO=0|1|2 (rama experimental): la pastilla del modo rendimiento con ese
+     preajuste puesto (-1 = valores a mano) */
+  if (const char *r = std::getenv("ODYSSEYVK_HUD_RENDIMIENTO")) {
+    hud.state().rendimiento = true;
+    hud.state().preajuste = std::atoi(r);
+  }
   /* la pastilla con los atajos de serve.conf (v1.09), como la pone el visor */
   hud.state().teclas = atajos::renglonPastilla(o.legado);
   {
@@ -3636,7 +3642,8 @@ struct ServeCfg {
   std::string expSinRed;          /* no | suelo | imagen: la profundidad sin red (modo rendimiento) */
   /* de fabrica, lo mas perceptible de entrada (Rodolfo: «ajustalo a lo que seria mas perceptible de
      inicio»): relieve y paralaje al doble, y 35 % de pistas de la imagen sobre el suelo */
-  double expSinRedRelieve = 2.0;  /* x1..x3: el relieve entre los ojos, exagerado sin red */
+  double expSinRedRelieve = 1.0;  /* x0,5..x2: la ganancia del relieve sin red (preajuste medio: x1) */
+  double expSinRedTopes = 2.75;   /* x1..x4: los topes por ojo sin red (medio: x2,75) */
   double expSinRedMezcla = 0.35;  /* 0..1: suelo <-> pistas de la imagen */
   double expSinRedParalaje = 2.0; /* x1..x4: el paralaje de la cabeza, exagerado sin red */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
@@ -3804,11 +3811,12 @@ static void loadServeCfg(ServeCfg &cfg) {
       for (char &c : t) if (c == ',') c = '.';
       cfg.expSinRedMezcla = std::max(0.0, std::min(1.0, std::atof(t.c_str())));
     }
-    else if (k == "exp_sin_red_relieve" || k == "exp_sin_red_paralaje") {
+    else if (k == "exp_sin_red_relieve" || k == "exp_sin_red_paralaje" || k == "exp_sin_red_topes") {
       std::string t = v;
       for (char &c : t) if (c == ',') c = '.';
       const double x = std::atof(t.c_str());
-      if (k == "exp_sin_red_relieve") cfg.expSinRedRelieve = std::max(1.0, std::min(3.0, x));
+      if (k == "exp_sin_red_relieve") cfg.expSinRedRelieve = std::max(0.5, std::min(2.0, x));
+      else if (k == "exp_sin_red_topes") cfg.expSinRedTopes = std::max(1.0, std::min(4.0, x));
       else cfg.expSinRedParalaje = std::max(1.0, std::min(4.0, x));
     }
     else if (k == "exp_anticipacion") {
@@ -4139,7 +4147,11 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
        Cyberpunk: con el VRR puesto el refresco seguia al juego y el visor esperaba su imagen libre
        15-35 ms; 25 % de las presentaciones tarde con el juego bajo 100 cuadros. Apagado: 165 Hz fijos,
        0,1 % tarde, y Rodolfo lo noto fluido. `vrr_en_3d = si` lo deja como en el escritorio. */
-    ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "si" || pila->vrrEn3d == "1") ? "1" : "0", 1);
+    /* rama experimental: con el modo rendimiento (`exp_sin_red`) el VRR se queda como lo tenga el
+       escritorio; sin el, lo que diga `vrr_en_3d` (de fabrica apagado). La clave no se toca, asi que
+       al quitar el modo rendimiento vuelve lo que el usuario tenia. */
+    const bool rendimientoPuesto = pila->expSinRed == "si" || pila->expSinRed == "suelo" || pila->expSinRed == "imagen";
+    ::setenv("ODYSSEYVK_VRR_3D", (rendimientoPuesto || pila->vrrEn3d == "si" || pila->vrrEn3d == "1") ? "1" : "0", 1);
     if (!pila->barra2d.empty())
       ::setenv("ODYSSEYVK_BARRA_2D",
                (pila->barra2d == "no" || pila->barra2d == "0") ? "0" : (pila->barra2d == "entera" ? "entera" : "1"), 1);
@@ -4177,6 +4189,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       }
       std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedRelieve);
       ::setenv("ODYSSEYVK_SIN_RED_RELIEVE", valor, 1);
+      std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedTopes);
+      ::setenv("ODYSSEYVK_SIN_RED_TOPES", valor, 1);
       std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedParalaje);
       ::setenv("ODYSSEYVK_SIN_RED_PARALAJE", valor, 1);
       if (pila->expPrioridad == "alta" || pila->expPrioridad == "tiempo_real")
@@ -5929,6 +5943,7 @@ static int cmdServe(int argc, char **argv) {
           cfg.expPrioridad = nuevo.expPrioridad;
           cfg.expSinRed = nuevo.expSinRed;
           cfg.expSinRedRelieve = nuevo.expSinRedRelieve, cfg.expSinRedParalaje = nuevo.expSinRedParalaje;
+          cfg.expSinRedTopes = nuevo.expSinRedTopes;
           cfg.expSinRedMezcla = nuevo.expSinRedMezcla;
           cfg.vrrEn3d = nuevo.vrrEn3d;   /* el VRR del modo rendimiento vale desde el siguiente video */
           cfg.crosstalkBase = nuevo.crosstalkBase;

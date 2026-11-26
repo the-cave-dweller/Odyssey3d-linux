@@ -191,6 +191,13 @@ proporción 16:9 (`exp_red = cuadrado | 518 | 770`), un mapa de profundidad más
 (`exp_tope_arrastre = si`) y la anticipación de la cabeza en milisegundos (`exp_anticipacion = 25`).
 Cada una vale desde el siguiente vídeo; lo que funcione pasa a la versión normal.
 
+Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`),
+sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).
+Es más basta que la de la red, pero más estable. La pastilla se vuelve ámbar, con un rayo y tres
+preajustes medidos, **Suave · Medio · Intenso**, que se aplican al momento. En este modo la
+frecuencia variable queda como la tenga el escritorio. Pasa el ratón por cada opción del modo
+rendimiento para ver qué cambia.
+
 ## Documentación
 
 - [docs/GUIA.md](docs/GUIA.md) — el manual completo en español, con las medidas detrás de cada decisión.

@@ -86,6 +86,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 | `vrr_en_3d` | `no` | `si` keeps variable refresh (VRR) during 3D; off by default since 1.11 |
 | `profundidad_conv` / `salida_conv` | 75 / 50 | starting Depth (fixed screen plane; `auto` = saliency) and Pop-out for normal video; `_suave` 75/50, `_sbs` 50/0; written when the sliders move |
 | `exp_red` / `exp_mapa` / `exp_tope_arrastre` / `exp_anticipacion` | — | the Experimental tab (branch `experimental` only): network input proportion (`cuadrado`/`518`/`770`), depth map size (`518`/`770`/`1022`), lag cap (`si`), head anticipation in ms |
+| `exp_sin_red` / `exp_sin_red_mezcla` / `exp_sin_red_relieve` / `exp_sin_red_topes` / `exp_sin_red_paralaje` | `no` / `0,35` / `1,00` / `2,75` / `2,00` | performance mode (branch `experimental` only): depth from the image on the CPU instead of the network (`si`), its floor ↔ image mix, relief strength, relief reach (the per-eye caps multiplied) and head-parallax exaggeration; the pill's Gentle / Medium / Intense presets write all four. With it on, VRR stays as the desktop has it |
 | `atajo_<action>` | factory | a shortcut, e.g. `atajo_3d = Ctrl+Alt+3`; set in Settings → Keyboard shortcuts |
 | `cantos` | finos | `viejo` = pre-0.89 edges, to compare |
 | `barra_2d` | `si` | player bar rows: `si` / `entera` (raw) / `no` |

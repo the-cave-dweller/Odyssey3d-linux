@@ -21,6 +21,7 @@
 
 #include "ajuste.h"
 #include "atajos.h"
+#include "rendimiento.h"
 #include "util.h"
 
 #ifdef HAVE_OPENCV
@@ -285,7 +286,8 @@ Valores leer() {
       const double x = t.empty() ? defecto : std::atof(t.c_str());
       return std::max(lo, std::min(hi, x));
     };
-    v.expSinRedRelieve = num("exp_sin_red_relieve", 2.0, 1.0, 3.0);
+    v.expSinRedRelieve = num("exp_sin_red_relieve", 1.0, 0.5, 2.0);
+    v.expSinRedTopes = num("exp_sin_red_topes", 2.75, 1.0, 4.0);
     v.expSinRedParalaje = num("exp_sin_red_paralaje", 2.0, 1.0, 4.0);
   }
   v.expPrioridad = de("exp_prioridad");
@@ -666,31 +668,58 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     Hud::ItemPanel sr;
     sr.tipo = Hud::ItemPanel::Opciones, sr.rotulo = idioma::tr("Profundidad del vídeo normal");
     sr.opciones = {idioma::tr("Con la red"), idioma::tr("Sin red")};
-    sr.elegido = v.expSinRed == "si" ? 1 : 0;
+    /* `suelo` e `imagen` (escritos a mano) tambien son el modo rendimiento puesto, como en el servicio */
+    const bool sinRedPuesto = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
+    sr.elegido = sinRedPuesto ? 1 : 0;
+    sr.ayudas = {idioma::tr("La red Depth Anything: la forma de verdad de cada objeto. Ocupa la tarjeta: ~1,1 GB y 14-18 ms por mapa."),
+                 idioma::tr("La profundidad sale de la propia imagen en el procesador (~9 ms por mapa), sin tocar la tarjeta: más basta, pero más estable. La pastilla lleva un rayo y tres preajustes, y la frecuencia variable queda como en el escritorio.")};
     pon(sr, "exp_sin_red");
+    Hud::ItemPanel pj;
+    pj.tipo = Hud::ItemPanel::Opciones, pj.rotulo = idioma::tr("Preajuste sin red");
+    pj.opciones = {idioma::tr("Suave"), idioma::tr("Medio"), idioma::tr("Intenso")};
+    pj.elegido = rendimiento::cual((float)v.expSinRedMezcla, (float)v.expSinRedRelieve, (float)v.expSinRedTopes,
+                                   (float)v.expSinRedParalaje);
+    pj.ayudas = {idioma::tr("Mezcla 25 % · relieve x0,75 · topes x2 · paralaje x1,5. Hasta ~32 px entre los ojos y casi nada aplastado: para sesiones largas."),
+                 idioma::tr("Mezcla 35 % · relieve x1 · topes x2,75 · paralaje x2. Hasta ~43 px entre los ojos y casi nada aplastado: el de fábrica."),
+                 idioma::tr("Mezcla 50 % · relieve x1,5 · topes x2,75 · paralaje x3. Hasta ~52 px entre los ojos; un 20 % del cuadro toca el tope. Más 3D, cansa antes.")};
+    pon(pj, "exp_preajuste");
     Hud::ItemPanel mz;
     mz.tipo = Hud::ItemPanel::Deslizador, mz.rotulo = idioma::tr("Mezcla sin red: suelo ↔ imagen");
     mz.nota = idioma::tr("0 % = abajo cerca y arriba lejos · 100 % = lo nítido, lo saturado y el centro, cerca");
     mz.frac = (float)v.expSinRedMezcla;
     mz.valorTexto = std::to_string((int)std::lround(v.expSinRedMezcla * 100.0)) + " %";
+    mz.ayuda = idioma::tr("Hacia 0 %: un plano inclinado, estable, igual en cada cuadro. Hacia 100 %: lo cercano se separa más del fondo, pero también sale hacia delante lo nítido aunque esté lejos (los subtítulos).");
     pon(mz, "exp_sin_red_mezcla");
     Hud::ItemPanel er;
-    er.tipo = Hud::ItemPanel::Deslizador, er.rotulo = idioma::tr("Exagerar el relieve sin red");
-    er.nota = idioma::tr("La separación entre los ojos y sus topes, multiplicadas · solo sin red");
-    er.frac = (float)((v.expSinRedRelieve - 1.0) / 2.0);
-    er.valorTexto = "x" + conDecimal(v.expSinRedRelieve, 1);
+    er.tipo = Hud::ItemPanel::Deslizador, er.rotulo = idioma::tr("Fuerza del relieve sin red");
+    er.nota = idioma::tr("Cuánto se separan los ojos por cada paso de profundidad · solo sin red");
+    er.frac = (float)((v.expSinRedRelieve - 0.5) / 1.5);
+    er.valorTexto = "x" + conDecimal(v.expSinRedRelieve, 2);
+    er.ayuda = idioma::tr("Más fuerza = más 3D. Pero si la fuerza pasa del alcance, el relieve se aplasta contra el tope y se ve como recortes planos: súbelo junto con el alcance.");
     pon(er, "exp_sin_red_relieve");
+    Hud::ItemPanel et;
+    et.tipo = Hud::ItemPanel::Deslizador, et.rotulo = idioma::tr("Alcance del relieve sin red");
+    et.nota = idioma::tr("Hasta dónde puede salir y hundirse la imagen · solo sin red");
+    et.frac = (float)((v.expSinRedTopes - 1.0) / 3.0);
+    et.valorTexto = "x" + conDecimal(v.expSinRedTopes, 2);
+    et.ayuda = idioma::tr("Los topes por ojo (+12,67 / -9,98 px de fábrica), multiplicados. Más alcance deja más 3D sin aplastar; demasiado cansa la vista (unos 98 px entre los ojos ya molestaban).");
+    pon(et, "exp_sin_red_topes");
     Hud::ItemPanel ep;
     ep.tipo = Hud::ItemPanel::Deslizador, ep.rotulo = idioma::tr("Exagerar el paralaje de la cabeza sin red");
     ep.nota = idioma::tr("Cuánto se desliza lo cercano al mover la cabeza · solo sin red");
     ep.frac = (float)((v.expSinRedParalaje - 1.0) / 3.0);
     ep.valorTexto = "x" + conDecimal(v.expSinRedParalaje, 1);
+    ep.ayuda = idioma::tr("Con `paralaje = 0,5` en serve.conf, x2 es la geometría real. Más exagera el efecto de ventana al mover la cabeza; menos lo calma.");
     pon(ep, "exp_sin_red_paralaje");
+    /* el VRR solo se elige sin el modo rendimiento: con el, el 3D lo deja como el escritorio */
+    if (!sinRedPuesto) {
     Hud::ItemPanel vr;
     vr.tipo = Hud::ItemPanel::Interruptor, vr.rotulo = idioma::tr("Frecuencia variable (VRR) durante el 3D");
     vr.nota = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones");
     vr.valor = v.vrrEn3d;
+    vr.ayuda = idioma::tr("Con ella la pantalla sigue el ritmo del juego. En Cyberpunk, por debajo de 100 cuadros daba tirones (25 % de los cuadros tarde); sin ella, 165 Hz fijos.");
     pon(vr, "vrr_en_3d");
+    }
     s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
     pon(s, "");
     Hud::ItemPanel r;
@@ -1040,13 +1069,22 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
     return true;
   }
-  if (id == "exp_sin_red_relieve" || id == "exp_sin_red_paralaje") {
+  if (id == "exp_sin_red_relieve" || id == "exp_sin_red_paralaje" || id == "exp_sin_red_topes") {
     if (!soltado) return false;
-    const bool rel = id == "exp_sin_red_relieve";
-    const double tramo = rel ? 2.0 : 3.0;
-    const double x = std::round((1.0 + std::max(0.0f, std::min(1.0f, frac)) * tramo) * 10.0) / 10.0;
-    if (!fija(id, conComa(x, 1))) return false;
-    if (aviso) *aviso = idioma::trf("x{} · desde el siguiente vídeo", {conDecimal(x, 1)});
+    const double base = id == "exp_sin_red_relieve" ? 0.5 : 1.0, tramo = id == "exp_sin_red_relieve" ? 1.5 : 3.0;
+    const double x = std::round((base + std::max(0.0f, std::min(1.0f, frac)) * tramo) * 20.0) / 20.0;   /* de 0,05 en 0,05 */
+    if (!fija(id, conComa(x, 2))) return false;
+    if (aviso) *aviso = idioma::trf("x{} · desde el siguiente vídeo", {conDecimal(x, 2)});
+    return true;
+  }
+  if (id == "exp_preajuste") {
+    if (sub < 0 || sub > 2) return false;
+    const rendimiento::Preajuste &p = rendimiento::kPreajustes[sub];
+    if (!fija("exp_sin_red_mezcla", conComa(p.mezcla, 2)) || !fija("exp_sin_red_relieve", conComa(p.ganancia, 2)) ||
+        !fija("exp_sin_red_topes", conComa(p.topes, 2)) || !fija("exp_sin_red_paralaje", conComa(p.paralaje, 2)))
+      return false;
+    avisarVisor({}, {{"preajuste", std::to_string(sub)}});   /* el visor abierto lo pone al momento */
+    if (aviso) *aviso = idioma::tr("preajuste puesto: el vídeo abierto lo toma al momento");
     return true;
   }
   if (id == "vrr_en_3d") {

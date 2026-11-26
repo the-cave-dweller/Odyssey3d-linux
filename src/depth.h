@@ -5,6 +5,7 @@
 #define ODYSSEY_DEPTH_H
 
 #include <cstdint>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -102,6 +103,8 @@ public:
   bool ready() const { return ready_; }
   /* 0 = la red; 1 = sin red, suelo; 2 = sin red, imagen (rama experimental, modo rendimiento) */
   int sinRed() const { return sinRed_; }
+  float mezcla() const { return mezcla_.load(); }
+  void setMezcla(float m) { mezcla_.store(m < 0.0f ? 0.0f : (m > 1.0f ? 1.0f : m)); }
   int size() const { return sz_; }                    /* el mapa que sale es de sz_ x sz_ */
   /* la entrada de la red (rama experimental): de fabrica 518 x 518 (la imagen 16:9 aplastada a un
      cuadrado); con ODYSSEYVK_RED_ENTRADA=WxH la red ve el cuadro a esa medida (su proporcion, y mas
@@ -195,7 +198,7 @@ private:
   int sinRed_ = 0;
   /* la mezcla sin red: 0 = solo la altura (suelo), 1 = solo las pistas de la imagen (nitidez, color,
      centro); ODYSSEYVK_SIN_RED_MEZCLA. Sin ella: suelo = 0, imagen = 0,35 (lo mas perceptible). */
-  float mezcla_ = 0.35f;
+  std::atomic<float> mezcla_{0.35f};   /* se cambia en marcha (los preajustes de la pastilla) */
   void profundidadSinRed(std::vector<float> &d);
   bool topeArrastre_ = false;           /* rama experimental: tope de 1/16 al arrastre del suavizado */
   int gpu_ = 0;
