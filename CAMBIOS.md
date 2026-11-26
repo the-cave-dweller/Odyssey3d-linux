@@ -124,6 +124,9 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - MEDIDO en el visor aparte con golpes simulados (`ODYSSEY_GOLPE=…modo…`, ficha nueva): a Rendimiento en
   18 ms y de vuelta a Neural en 204 ms, con el Auto recalculando al momento y `exp_sin_red` apuntado.
   Dibujado con `ctl hud`: la pastilla de la red, la de rendimiento, la sin conversor y los dos menús.
+- **Y fuera de la cabecera del panel** («también quita ya esta, la vieja pastilla»): el interruptor
+  Neural | Rendimiento solo está en la pastilla; la cabecera queda con el pin, el logo y el nombre,
+  actualizar y cerrar.
 - No probado en el panel.
 
 ## Fondo negro translúcido y el interruptor «Neural» (rama `experimental`)

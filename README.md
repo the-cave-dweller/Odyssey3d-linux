@@ -94,9 +94,8 @@ no keys; Esc closes it.
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
 taskbar icon or the system-tray icon (click: settings, middle click: games). The header has two
 rows. On the first, the OdysseyVK logo and name open the
-main page (video, screen, keyboard shortcuts, apps that don't ask), and next to them a **Neural |
-Performance** switch (the same width in both positions) picks normal video with the depth network (blue, with the chip) or without it
-(amber, with the lightning bolt). On the second, centred: **Games** and **Settings** (the
+main page (video, screen, keyboard shortcuts, apps that don't ask); the **Neural | Performance** switch
+lives on the pill (up to the first 1.12 builds it was here too). On the second, centred: **Games** and **Settings** (the
 performance figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D,
 the drag cap and the viewer's GPU priority; *Head tracking*: head anticipation in milliseconds;
 version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow). Over a video
@@ -214,8 +213,8 @@ background next to it.
 
 ## Performance mode
 
-Depth without the network (`exp_sin_red = si`, the **Neural | Performance** switch on the pill or in
-the panel header, switched on the spot), worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's
+Depth without the network (`exp_sin_red = si`, the **Neural | Performance** switch on the pill,
+switched on the spot), worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's
 ~1.1 GB on the GPU). It is rougher than the network but steadier. The pill turns amber and carries a
 lightning-bolt button: its drop-down menu has three measured presets (**Gentle · Medium · Intense**)
 and four fine sliders (mix, strength, reach, head parallax), all applied at once; hover over each to

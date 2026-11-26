@@ -94,9 +94,9 @@ teclas; Esc lo cierra.
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
 La cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
-abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan), y a su
-lado un interruptor **Neural | Rendimiento** (del mismo ancho en los dos extremos) elige el vídeo normal con la red de profundidad (azul, con el
-chip) o sin ella (ámbar, con el rayo). En la segunda, centradas: **Juegos** y **Ajustes** (arriba los
+abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); el
+interruptor **Neural | Rendimiento** vive en la pastilla (en las primeras compilaciones de la 1.12
+también estaba aquí). En la segunda, centradas: **Juegos** y **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
 variable durante el 3D, el tope de arrastre y la prioridad del visor en la tarjeta; *Seguimiento de la
 cabeza*: la anticipación de la cabeza en milisegundos; versión, actualizaciones, idioma, barra de
@@ -218,8 +218,8 @@ se rellena con el fondo de al lado.
 
 ## Modo rendimiento
 
-Profundidad sin la red (`exp_sin_red = si`, el interruptor **Neural | Rendimiento** de la pastilla o de
-la cabecera del panel, en marcha), sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que
+Profundidad sin la red (`exp_sin_red = si`, el interruptor **Neural | Rendimiento** de la pastilla, en
+marcha), sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que
 ocupa la red en la tarjeta). Es más basta que la de la red, pero más estable. La pastilla se vuelve
 ámbar y lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos (**Suave · Medio ·
 Intenso**) y cuatro deslizadores finos (mezcla, fuerza, alcance y paralaje de la cabeza), que se
