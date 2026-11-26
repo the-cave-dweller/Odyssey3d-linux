@@ -50,6 +50,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <vector>
+#ifdef HAVE_WAYLAND_CURSOR
+#include <wayland-cursor.h>
+#endif
 
 /* ---------------- implementación ---------------- */
 
@@ -128,6 +131,23 @@ struct Overlay::Impl {
      corridos (el aspa no cerraba y el deslizador saltaba al tope; lo vio Rodolfo con la 0.84). */
   double escalaMonGeom = 0.0;
   bool sucio = false;             /* el panel pide pintarse: se pinta UNA vez por tanda de eventos */
+  /* el velo (rama experimental): con el panel abierto sobre un juego, una capa transparente que cubre
+     la pantalla entera por debajo del panel. Se queda con el raton: el juego no ve ni movimiento ni
+     clics, su cursor encerrado se suelta, y un clic en el velo cierra el panel (el juego recupera el
+     control). Se crea antes que la capa del panel para quedar debajo de ella. */
+  wl_surface *veloSurf = nullptr;
+  zwlr_layer_surface_v1 *veloLayer = nullptr;
+  bool veloConfigurado = false, ratonEnVelo = false;
+  int veloAncho = 0, veloAlto = 0;
+#ifdef HAVE_FRACTIONAL_SCALE
+  wp_viewport *veloViewport = nullptr;
+#endif
+  /* la flecha del tema: KWin no la pone sola, y sobre un juego que esconde su cursor no se veia nada */
+#ifdef HAVE_WAYLAND_CURSOR
+  wl_cursor_theme *temaCursor = nullptr;
+  int temaEscala = 0;
+#endif
+  wl_surface *cursorSurf = nullptr;
   bool conexionCaida = false;     /* el compositor cerró la conexión de la capa */
 
   /* mapas de memoria para los cuadros (doble buffer: uno en pantalla, otro dibujando) */
@@ -142,6 +162,7 @@ struct Overlay::Impl {
   };
   std::vector<Bloque *> bloques;
   Bloque *barraBloque = nullptr;   /* el pixel de la entrada en la barra de tareas (v1.04) */
+  Bloque *veloBloque = nullptr;    /* el lienzo transparente del velo (rama experimental) */
   std::vector<float> acum;        /* RGBA premultiplicado, para mezclar como hace la GPU */
 
   Hud hud;
@@ -172,6 +193,11 @@ struct Overlay::Impl {
   std::string pistaMonitor;
 
   ~Impl() {
+    quitaVelo();
+#ifdef HAVE_WAYLAND_CURSOR
+    if (temaCursor) wl_cursor_theme_destroy(temaCursor);
+#endif
+    if (cursorSurf) wl_surface_destroy(cursorSurf);
     quitaBarra();
     if (wmBase) xdg_wm_base_destroy(wmBase);
     limpiaTarjeta();
@@ -261,6 +287,123 @@ struct Overlay::Impl {
       barraBloque = nullptr;
     }
     if (dpy) wl_display_flush(dpy);
+  }
+
+  /* ---------- el velo y la flecha (rama experimental) ---------- */
+  static void veloConfigure(void *data, zwlr_layer_surface_v1 *ls, uint32_t serial, uint32_t w, uint32_t h) {
+    Impl *s = static_cast<Impl *>(data);
+    zwlr_layer_surface_v1_ack_configure(ls, serial);
+    if (w == 0 || h == 0 || (s->veloConfigurado && (int)w == s->veloAncho && (int)h == s->veloAlto)) return;
+    s->veloAncho = (int)w, s->veloAlto = (int)h;
+    std::string e;
+    /* transparente: con el recorte de la ventana basta un pixel estirado a la pantalla; sin el, un
+       lienzo del tamano logico (ceros = transparente) */
+    bool estirado = false;
+#ifdef HAVE_FRACTIONAL_SCALE
+    if (s->viewporter) {
+      if (!s->veloViewport) s->veloViewport = wp_viewporter_get_viewport(s->viewporter, s->veloSurf);
+      wp_viewport_set_destination(s->veloViewport, (int)w, (int)h);
+      estirado = s->veloViewport != nullptr;
+    }
+#endif
+    if (s->veloBloque) {
+      wl_buffer_destroy(s->veloBloque->buf);
+      wl_shm_pool_destroy(s->veloBloque->pozo);
+      ::munmap(s->veloBloque->mapa, s->veloBloque->tam);
+      ::close(s->veloBloque->fd);
+      delete s->veloBloque;
+      s->veloBloque = nullptr;
+    }
+    s->veloBloque = nuevoBloque(s->shm, estirado ? 1 : (int)w, estirado ? 1 : (int)h, &e);
+    if (!s->veloBloque) {
+      std::fprintf(stderr, "[velo] sin lienzo: %s\n", e.c_str());
+      return;
+    }
+    wl_surface_attach(s->veloSurf, s->veloBloque->buf, 0, 0);
+    wl_surface_damage(s->veloSurf, 0, 0, (int)w, (int)h);
+    wl_surface_commit(s->veloSurf);
+    s->veloConfigurado = true;
+  }
+  static void veloCerrado(void *data, zwlr_layer_surface_v1 *) { static_cast<Impl *>(data)->quitaVelo(); }
+  static const struct zwlr_layer_surface_v1_listener veloListener;
+  void ponVelo() {
+    if (veloSurf || !comp || !shell || !shm) return;
+    veloSurf = wl_compositor_create_surface(comp);
+    veloLayer = zwlr_layer_shell_v1_get_layer_surface(shell, veloSurf, elegido ? elegido->obj : nullptr,
+                                                      ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "odysseyvk-velo");
+    if (!veloLayer) {
+      wl_surface_destroy(veloSurf);
+      veloSurf = nullptr;
+      return;
+    }
+    zwlr_layer_surface_v1_add_listener(veloLayer, &veloListener, this);
+    zwlr_layer_surface_v1_set_anchor(veloLayer, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+                                                    ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    zwlr_layer_surface_v1_set_size(veloLayer, 0, 0);
+    zwlr_layer_surface_v1_set_exclusive_zone(veloLayer, -1);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(veloLayer, 0);
+    wl_surface_commit(veloSurf);
+    for (int intento = 0; intento < 40 && !veloConfigurado && veloSurf; ++intento)
+      if (esperar(50) < 0) break;
+    std::printf("[velo] %s\n", veloConfigurado ? "puesto: el raton es del panel mientras este abierto"
+                                                : "el compositor no lo configuro");
+    std::fflush(stdout);
+  }
+  void quitaVelo() {
+#ifdef HAVE_FRACTIONAL_SCALE
+    if (veloViewport) wp_viewport_destroy(veloViewport);
+    veloViewport = nullptr;
+#endif
+    if (veloLayer) zwlr_layer_surface_v1_destroy(veloLayer);
+    if (veloSurf) wl_surface_destroy(veloSurf);
+    veloLayer = nullptr, veloSurf = nullptr;
+    veloConfigurado = false, ratonEnVelo = false;
+    if (veloBloque) {
+      wl_buffer_destroy(veloBloque->buf);
+      wl_shm_pool_destroy(veloBloque->pozo);
+      ::munmap(veloBloque->mapa, veloBloque->tam);
+      ::close(veloBloque->fd);
+      delete veloBloque;
+      veloBloque = nullptr;
+    }
+    if (dpy) wl_display_flush(dpy);
+  }
+  /* la flecha del tema (XCURSOR_THEME / XCURSOR_SIZE), al doble o al triple si la pantalla va escalada */
+  void ponCursor(uint32_t serial) {
+#ifdef HAVE_WAYLAND_CURSOR
+    if (!pointer || !shm || !comp) return;
+    const char *tam = std::getenv("XCURSOR_SIZE");
+    int base = tam ? std::atoi(tam) : 24;
+    if (base <= 0) base = 24;
+    auto flecha = [&](int esc) -> wl_cursor_image * {
+      if (!temaCursor || temaEscala != esc) {
+        if (temaCursor) wl_cursor_theme_destroy(temaCursor);
+        temaCursor = wl_cursor_theme_load(std::getenv("XCURSOR_THEME"), base * esc, shm);
+        temaEscala = esc;
+      }
+      if (!temaCursor) return nullptr;
+      wl_cursor *c = wl_cursor_theme_get_cursor(temaCursor, "default");
+      if (!c) c = wl_cursor_theme_get_cursor(temaCursor, "left_ptr");
+      if (!c || c->image_count == 0) return nullptr;
+      wl_cursor_image *im = c->images[0];
+      /* el lienzo de una superficie escalada tiene que ser multiplo de su escala */
+      return ((int)im->width % esc == 0 && (int)im->height % esc == 0) ? im : nullptr;
+    };
+    int esc = std::max(1, (int)std::ceil(escala - 0.01));
+    wl_cursor_image *im = flecha(esc);
+    if (!im && esc > 1) im = flecha(esc = 1);
+    if (!im) return;
+    wl_buffer *b = wl_cursor_image_get_buffer(im);
+    if (!b) return;
+    if (!cursorSurf) cursorSurf = wl_compositor_create_surface(comp);
+    wl_surface_set_buffer_scale(cursorSurf, esc);
+    wl_surface_attach(cursorSurf, b, 0, 0);
+    wl_surface_damage(cursorSurf, 0, 0, (int)im->width, (int)im->height);
+    wl_surface_commit(cursorSurf);
+    wl_pointer_set_cursor(pointer, serial, cursorSurf, (int)im->hotspot_x / esc, (int)im->hotspot_y / esc);
+#else
+    (void)serial;
+#endif
   }
 
   /* ---------- memoria compartida ---------- */
@@ -801,15 +944,25 @@ struct Overlay::Impl {
   static const struct wp_fractional_scale_v1_listener escalaListener;
 #endif
 
-  static void ptrEnter(void *data, wl_pointer *, uint32_t, wl_surface *, wl_fixed_t sx, wl_fixed_t sy) {
+  static void ptrEnter(void *data, wl_pointer *, uint32_t serial, wl_surface *sobre, wl_fixed_t sx, wl_fixed_t sy) {
     Impl *s = static_cast<Impl *>(data);
+    s->ponCursor(serial);
+    if (sobre && sobre == s->veloSurf) {   /* el velo: fuera del panel, nada se resalta */
+      s->ratonEnVelo = true;
+      return;
+    }
+    s->ratonEnVelo = false;
     s->ratonDentro = true;
     s->ratonX = s->ox + wl_fixed_to_double(sx) * s->escala;
     s->ratonY = s->oy + wl_fixed_to_double(sy) * s->escala;
     s->hud.setMouse((float)s->ratonX, (float)s->ratonY);
   }
-  static void ptrLeave(void *data, wl_pointer *, uint32_t, wl_surface *) {
+  static void ptrLeave(void *data, wl_pointer *, uint32_t, wl_surface *sobre) {
     Impl *s = static_cast<Impl *>(data);
+    if (sobre && sobre == s->veloSurf) {
+      s->ratonEnVelo = false;
+      return;
+    }
     s->ratonDentro = false;
     s->ratonX = s->ratonY = -1.0;
     s->hud.setMouse(-1.0f, -1.0f);
@@ -891,7 +1044,7 @@ struct Overlay::Impl {
   }
   static void ptrMotion(void *data, wl_pointer *, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
     Impl *s = static_cast<Impl *>(data);
-    if (!s->tarjetaPuesta) return;
+    if (!s->tarjetaPuesta || s->ratonEnVelo) return;
     s->ratonX = s->ox + wl_fixed_to_double(sx) * s->escala;
     s->ratonY = s->oy + wl_fixed_to_double(sy) * s->escala;
     s->hud.setMouse((float)s->ratonX, (float)s->ratonY);
@@ -909,6 +1062,10 @@ struct Overlay::Impl {
   }
   static void ptrButton(void *data, wl_pointer *, uint32_t, uint32_t, uint32_t boton, uint32_t estado) {
     Impl *s = static_cast<Impl *>(data);
+    if (s->ratonEnVelo) {   /* un clic fuera del panel: quien lo ensena lo cierra */
+      if (estado == WL_POINTER_BUTTON_STATE_PRESSED) s->golpes.push_back({Overlay::kClicFuera, -1, 0, 0.0f, true});
+      return;
+    }
     if (s->tarjetaPuesta && s->hud.state().panel) {
       if (boton == BTN_LEFT) s->panelBoton(estado == WL_POINTER_BUTTON_STATE_PRESSED);
       return;
@@ -934,7 +1091,7 @@ struct Overlay::Impl {
   static void ptrAxis(void *data, wl_pointer *, uint32_t, uint32_t eje, wl_fixed_t v) {
     /* la rueda corre la lista del panel de ajustes (eje 0 = vertical) */
     Impl *s = static_cast<Impl *>(data);
-    if (!s->tarjetaPuesta || !s->hud.state().panel || eje != 0) return;
+    if (!s->tarjetaPuesta || !s->hud.state().panel || eje != 0 || s->ratonEnVelo) return;
     s->hud.correr((float)wl_fixed_to_double(v) * 2.5f);
     s->firmaVista = -1;
     s->sucio = true;
@@ -1048,6 +1205,7 @@ const struct wl_output_listener Overlay::Impl::outputListener = {
 
 const struct zwlr_layer_surface_v1_listener Overlay::Impl::layerListener = {Impl::layerConfigure,
                                                                             Impl::layerClosed};
+const struct zwlr_layer_surface_v1_listener Overlay::Impl::veloListener = {Impl::veloConfigure, Impl::veloCerrado};
 
 const struct wl_keyboard_listener Overlay::Impl::keyboardListener = {
     Overlay::Impl::kbKeymap, Overlay::Impl::kbEnter,     Overlay::Impl::kbLeave,
@@ -1236,7 +1394,7 @@ bool Overlay::takeGolpe(Golpe &g) {
 
 /* El panel de ajustes: el mismo montaje que la tarjeta, pero sin anclas (centrado) y con el lienzo
    justo de su caja. */
-void Overlay::showPanel(bool grande) {
+void Overlay::showPanel(bool grande, bool velo) {
   if (!available()) return;
   Impl &s = *d;
   s.hud.state().panel = true;
@@ -1267,6 +1425,11 @@ void Overlay::showPanel(bool grande) {
                 s.anchoE, s.altoE, s.escala, s.hud.scale(), s.ox, s.oy, s.bufAncho, s.bufAlto,
                 s.supAncho, s.supAlto);
 
+  /* el velo va antes que la capa del panel: en la misma capa del compositor, la ultima puesta va encima */
+  if (velo) {
+    if (s.layer && !s.veloSurf) s.quitaEscuchaLayer();   /* la del panel se rehace encima del velo */
+    s.ponVelo();
+  }
   if (!s.layer) {
     s.layer = zwlr_layer_shell_v1_get_layer_surface(s.shell, s.surf, s.elegido ? s.elegido->obj : nullptr,
                                                     ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "odysseyvk");

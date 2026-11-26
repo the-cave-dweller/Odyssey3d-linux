@@ -125,6 +125,20 @@ struct VkUi {
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
   int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
   int preajustePedido = -1;  /* un preajuste del modo rendimiento (pastilla u orden `preajuste`): 0..2 */
+  /* el cursor de los juegos (rama experimental). Con un juego debajo, la pastilla puesta a mano le quita
+     el cursor (`robando`): el visor se queda con todo el raton y se hace la ventana activa, que es lo que
+     suelta el cursor encerrado del juego (KWin solo lo deja encerrado mientras el juego es la activa). Al
+     ocultarla, o con un clic fuera de la pastilla, se le devuelve a `devolverA`. `esJuego`: -1 = sin
+     saber todavia. Al entrar al 3D de un juego la pastilla se ensena unos segundos (los atajos) y se va. */
+#ifdef HAVE_WAYLAND_WM
+  WindowMonitor wm;
+#endif
+  bool wmProbado = false, wmAbierto = false;
+  int esJuego = -1;
+  bool robando = false;
+  std::string devolverA;
+  double robadoMirar = -1.0;
+  bool presentacionHecha = false;
   bool suavizado = true;     /* el boton de dividido lo pone suavizado (los ajustes del programa lo quitan) */
   bool suavizadoAuto = false; /* ...o lo decide solo el medidor de separacion (v0.88) */
   std::string modoElegido;   /* "conv" / "sbs" / "tb": con que tipo de 3D se guarda el «no volver a preguntar» */
@@ -411,6 +425,100 @@ const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativ
    es la interfaz: la trama sigue tejiendose y el rastreo sigue mirando los ojos, que es lo que uno
    quiere mientras ve algo a pantalla completa. La region de entrada se rehace con `inputChanged`,
    porque sin pastilla no hay nada que picar salvo el rincon de arriba a la derecha. */
+/* ---- el cursor de los juegos (rama experimental) ---- */
+static bool monitorVentanas(VkUi &ui) {
+#ifdef HAVE_WAYLAND_WM
+  if (!ui.wmProbado) {
+    ui.wmProbado = true;
+    std::string e;
+    ui.wmAbierto = ui.wm.open(&e);
+    if (!ui.wmAbierto) std::printf("[raton] sin el gestor de ventanas de KWin: la pastilla no puede quitarle el cursor a un juego (%s)\n", e.c_str());
+    std::fflush(stdout);
+  }
+  if (ui.wmAbierto) ui.wm.waitAndDispatch(0);
+  return ui.wmAbierto;
+#else
+  (void)ui;
+  return false;
+#endif
+}
+/* la ventana capturada es un juego de Steam (o gamescope): la misma regla que el servicio */
+static bool sobreJuego(VkUi &ui) {
+  if (ui.esJuego >= 0) return ui.esJuego == 1;
+  /* ODYSSEYVK_JUEGO=1|0 lo fija a mano: para probarlo en el compositor aparte, que no tiene el de KWin */
+  if (const char *f = entornoOdyssey("ODYSSEYVK_JUEGO")) {
+    ui.esJuego = f[0] == '1' ? 1 : 0;
+    return ui.esJuego == 1;
+  }
+#ifdef HAVE_WAYLAND_WM
+  if (!ui.opts || ui.opts->captureUuid.empty() || !monitorVentanas(ui)) return false;
+  WindowInfo w{};
+  if (!ui.wm.find(ui.opts->captureUuid, w) || w.appId.empty()) return false;   /* todavia sin datos */
+  const std::string a = strLower(w.appId);
+  ui.esJuego = (a.rfind("steam_app_", 0) == 0 || a == "gamescope") ? 1 : 0;
+  std::printf("[raton] la ventana del 3D es %s (%s)\n", w.appId.c_str(), ui.esJuego ? "un juego" : "no es un juego");
+  std::fflush(stdout);
+  return ui.esJuego == 1;
+#else
+  return false;
+#endif
+}
+static void robarCursor(VkUi &ui, const char *fuente) {
+  if (ui.robando || !sobreJuego(ui)) return;
+  ui.robando = true;
+  ui.inputChanged = true;   /* la region de entrada pasa a la ventana entera */
+  std::string como = "sin el gestor de ventanas de KWin: solo se queda con el raton, sin hacerse la ventana activa";
+#ifdef HAVE_WAYLAND_WM
+  if (monitorVentanas(ui)) {
+    std::string propia, activa;
+    for (const WindowInfo &w : ui.wm.windows()) {
+      if (w.pid == (uint32_t)::getpid() && propia.empty()) propia = w.uuid;
+      if (w.active()) activa = w.uuid;
+    }
+    ui.devolverA = (!activa.empty() && activa != propia) ? activa : (ui.opts ? ui.opts->captureUuid : std::string());
+    std::string e;
+    const bool pedido = !propia.empty() && ui.wm.setState(propia, WindowInfo::Active, true, &e);
+    ui.wm.flush();
+    ui.robadoMirar = glfwGetTime() + 0.6;
+    como = pedido ? "el visor pide ser la ventana activa"
+                  : "no se pudo pedir ser la ventana activa: " + (propia.empty() ? std::string("sin la ventana del visor") : e);
+  }
+#endif
+  std::printf("[raton] %s: la pastilla le quita el cursor al juego (%s)\n", fuente, como.c_str());
+  std::fflush(stdout);
+}
+static void devolverCursor(VkUi &ui, const char *fuente) {
+  if (!ui.robando) return;
+  ui.robando = false;
+  ui.inputChanged = true;
+  ui.robadoMirar = -1.0;
+  std::string e = "sin el gestor de ventanas de KWin";
+  bool ok = false;
+#ifdef HAVE_WAYLAND_WM
+  if (ui.wmAbierto && !ui.devolverA.empty()) {
+    ok = ui.wm.setState(ui.devolverA, WindowInfo::Active, true, &e);
+    ui.wm.flush();
+  }
+#endif
+  std::printf("[raton] %s: el cursor vuelve al juego%s%s%s\n", fuente, ok ? "" : " (sin activarlo: ", ok ? "" : e.c_str(),
+              ok ? "" : ")");
+  std::fflush(stdout);
+}
+
+/* un clic con el cursor quitado al juego: fuera de la pastilla (y de su menu) se lo devuelve. La
+   pastilla se va, el panel de ajustes tambien si estaba abierto, y el juego vuelve a ser la activa.
+   Dice si el clic se quedo en eso (true) o hay que atenderlo como siempre. */
+static void cerrarPanelDeAjustes();
+static void cambioCapa(VkUi &ui, bool puesta, const char *fuente);
+static bool clicFuera(VkUi &ui, Hud::Hit hit, double x, double y) {
+  if (!ui.robando || hit != Hud::HitNone) return false;
+  float px = 0, py = 0, pw = 0, ph = 0;
+  if (ui.hud.pillBounds(&px, &py, &pw, &ph) && x >= px && x <= px + pw && y >= py && y <= py + ph) return false;
+  cerrarPanelDeAjustes();
+  cambioCapa(ui, false, "clic en el juego");
+  return true;
+}
+
 static void cambioCapa(VkUi &ui, bool puesta, const char *fuente) {
   const bool antes = ui.hud.overlayVisible();
   if (puesta == antes) {
@@ -420,10 +528,15 @@ static void cambioCapa(VkUi &ui, bool puesta, const char *fuente) {
   }
   ui.hud.state().overlayOn = puesta;
   ui.inputChanged = true;
+  ui.presentacionHecha = true;   /* tocada a mano (o ya ida): la presentacion no la vuelve a quitar */
+  if (!puesta) ui.hud.state().menuRendimiento = false;
   ajuste::registrar("capa", antes ? "puesta" : "oculta", puesta ? "puesta" : "oculta",
                     nombreCorto(g_modeloEnUso), fuente);
   std::printf("[capa] la pastilla %s (%s)\n", puesta ? "a la vista" : "ocultada", fuente);
   std::fflush(stdout);
+  /* con un juego debajo, la pastilla puesta a mano le quita el cursor y al irse se lo devuelve */
+  if (puesta) robarCursor(ui, fuente);
+  else devolverCursor(ui, fuente);
 }
 
 /* apagar o encender el 3D desde fuera: es el interruptor ON/OFF de la pastilla mandado por fichero
@@ -981,7 +1094,8 @@ void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dej
   re->firma = firma;
   std::printf("[raton] %s · region de entrada:%s\n",
               pleno ? (dejarPasar ? "arrastrando: el raton se queda en el visor"
-                                  : "el visor se queda todos los clics (--sin-pasar-raton)")
+                                  : ui->robando ? "la pastilla le quito el cursor al juego: el raton entero es del visor"
+                                                : "el visor se queda todos los clics (--sin-pasar-raton)")
                     : (re->hayHogar ? "pastilla oculta: solo se pica su rincon de arriba a la derecha"
                                     : (n ? "el raton atraviesa el visor fuera de la pastilla"
                                          : "sin pastilla ni aviso: el raton pasa entero")),
@@ -1050,6 +1164,9 @@ void onButtonVK(GLFWwindow *win, int button, int action, int) {
     return;
   }
   Hud::Hit hit = ui->hud.hit((float)ui->mx, (float)ui->my);
+  /* con el cursor quitado al juego, un clic fuera de la pastilla (y de su menu) se lo devuelve: la
+     pastilla se va, el panel de ajustes tambien si estaba abierto, y el juego vuelve a ser la activa */
+  if (clicFuera(*ui, hit, ui->mx, ui->my)) return;
   if (std::getenv("ODYSSEY_CONV")) {   /* mira donde cae el puntero: depuracion de la tarjeta */
     float bx = 0, by = 0, bw = 0, bh = 0;
     ui->hud.askBounds(&bx, &by, &bw, &bh);
@@ -2020,11 +2137,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
         if (!tok.empty()) goles.push_back(tok);
       }
-      if (hechos < (int)goles.size() && frames >= 4 + hechos * 12) {
+      /* su propio contador: `frames` vuelve a cero con cada linea de [fps] y los golpes de despues no llegaban */
+      static long cuadrosGolpe = 0;
+      ++cuadrosGolpe;
+      if (hechos < (int)goles.size() && cuadrosGolpe >= 4 + hechos * 12) {
         const std::string tok = strLower(goles[hechos]);
         float cx = 0.0f, cy = 0.0f;
         bool tiene = false;
-        if (tok == "red") {
+        if (tok == "capa") {   /* lo mismo que Ctrl+Shift+F1: ocultar o poner la pastilla */
+          atajoHub(ui, "capa", "golpe de prueba");
+        } else if (tok == "red") {
           float rx = 0, ry = 0, rw = 0, rh = 0;
           if (ui.hud.redBounds(&rx, &ry, &rw, &rh)) {
             /* hit() trabaja en pixeles reales de la ventana y la caja viene en el espacio virtual */
@@ -2052,7 +2174,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     tok.c_str(), (double)cx, (double)cy, (int)hit, (double)ax, (double)ay, (double)aw, (double)ah,
                     (double)ui.hud.scale());
         std::fflush(stdout);
-        if (tiene) applyHit(ui, hit);
+        if (tiene && !clicFuera(ui, hit, cx, cy)) applyHit(ui, hit);
         /* un golpe es un clic entero: si cayo en un deslizador, el valor es el de ese punto y se suelta */
         if (tiene && ui.dragging != Hud::HitNone) {
           ui.hud.dragTo(ui.dragging, cx);
@@ -3454,6 +3576,39 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     /* la pastilla de rendimiento: con el conversor puesto y sin red */
     ui.hud.state().rendimiento = convActivo && red.sinRed();
     if (!ui.hud.state().rendimiento) ui.hud.state().menuRendimiento = false;
+    /* el cursor de los juegos (rama experimental): el gestor de ventanas se lee cada cuadro (si no, sus
+       mensajes se amontonan en el enchufe); al entrar al 3D de un juego la pastilla se ensena unos
+       segundos, para que se vean los atajos, y se va sola sin tocar el raton; y tras quitarle el cursor
+       al juego, el registro dice si KWin hizo caso */
+    {
+      static double desde = -1.0;
+      if (desde < 0.0) desde = now;
+#ifdef HAVE_WAYLAND_WM
+      if (ui.wmAbierto) ui.wm.waitAndDispatch(0);
+#endif
+      if (!ui.presentacionHecha && now - desde >= 6.0) {
+        const bool juego = sobreJuego(ui);
+        if (juego && ui.hud.overlayVisible() && !ui.robando && !ui.hud.state().menuRendimiento) {
+          cambioCapa(ui, false, "se ensenaron los atajos al entrar al juego");
+        } else if (ui.esJuego >= 0 || now - desde >= 12.0) {
+          ui.presentacionHecha = true;
+        }
+      }
+#ifdef HAVE_WAYLAND_WM
+      if (ui.robando && ui.robadoMirar > 0.0 && now >= ui.robadoMirar) {
+        ui.robadoMirar = -1.0;
+        bool visorActivo = false, juegoActivo = false;
+        for (const WindowInfo &w : ui.wm.windows()) {
+          if (w.pid == (uint32_t)::getpid() && w.active()) visorActivo = true;
+          if (w.uuid == ui.devolverA && w.active()) juegoActivo = true;
+        }
+        std::printf("[raton] %s\n", visorActivo ? "el visor es la ventana activa: el juego solto el cursor"
+                                    : juegoActivo ? "KWin no hizo caso: el juego sigue siendo la ventana activa"
+                                                  : "el juego ya no es la ventana activa");
+        std::fflush(stdout);
+      }
+#endif
+    }
     ui.hud.state().preajuste = rendimiento::cual(red.mezcla(), exGanancia, exTopes, (float)exParalaje);
     /* Profundidad y Salida por modo (v1.10). De fabrica: el conversor y el dividido suavizado
        arrancan en Profundidad 75 (plano fijo en 0,75, lo que se ve al moverla a 75) y Salida 50; el
@@ -3541,7 +3696,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #endif
     ui.hud.begin(fbW, fbH);   /* escala por pixeles fisicos: ver el comentario del lienzo arriba */
     /* la pastilla cambio de sitio o se oculto: la caja que deja pasar el raton se actualiza aqui */
-    aplicarRegionEntrada(win, &ui.region, &ui, !opts.noPassthrough);
+    /* quitandole el cursor a un juego, el visor se queda con todo el raton */
+    aplicarRegionEntrada(win, &ui.region, &ui, !opts.noPassthrough && !ui.robando);
     wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
 
@@ -3931,6 +4087,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
   }
 
+  devolverCursor(ui, "el visor se cierra");   /* si se lo habia quitado, el juego recupera el cursor */
 #ifdef HAVE_CAPTURE
   if (haveCap) cap.stop();
 #endif

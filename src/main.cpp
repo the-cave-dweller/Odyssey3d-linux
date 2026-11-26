@@ -3043,7 +3043,26 @@ static int cmdAjustes(int argc, char **argv) {
      al dia sin esperar a la mirada del servicio. Es un curl aparte; si no hay red, no pasa nada. */
   if (prefs::leer().avisarActualizaciones) prefs::comprobarActualizacion(nullptr);
   rellenar();
-  ov.showPanel(grande);
+  /* el cursor de los juegos (rama experimental): si la ventana activa es un juego, el panel le quita
+     el raton mientras esta abierto (el velo) y al cerrarse se lo devuelve, volviendo a hacerla la
+     ventana activa. KWin solo deja el cursor encerrado en el juego mientras el juego es la activa:
+     el teclado del panel (exclusivo) se lo quita. */
+  WindowMonitor wmPanel;
+  std::string juegoUuid, juegoApp;
+  if (wmPanel.open(nullptr)) {
+    wmPanel.settle(60, 10);
+    for (const WindowInfo &w : wmPanel.windows()) {
+      if (!w.active() || w.pid == (uint32_t)::getpid()) continue;
+      const std::string a = strLower(w.appId);
+      /* ODYSSEYVK_JUEGO=1 toma por juego la ventana activa que sea: para probarlo en un KWin aparte */
+      const char *fingido = entornoOdyssey("ODYSSEYVK_JUEGO");
+      if (a.rfind("steam_app_", 0) == 0 || a == "gamescope" || (fingido && fingido[0] == '1'))
+        juegoUuid = w.uuid, juegoApp = w.appId;
+      break;
+    }
+  }
+  /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
+  ov.showPanel(grande, !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr);
   if (!ov.askVisible()) {
     std::fprintf(stderr, "[ajustes] el compositor no puso el panel: %s\n", ov.lastError().c_str());
     ::unlink(rutaPid.c_str());
@@ -3052,6 +3071,19 @@ static int cmdAjustes(int argc, char **argv) {
   /* el teclado entero para el panel mientras esta abierto (v1.09): el juego o el video de debajo no
      reciben teclas, Esc lo cierra y los atajos se capturan aqui */
   ov.tomarTeclado(true);
+  if (!juegoUuid.empty()) {
+    /* medido, no supuesto: el registro dice si el juego dejo de ser la ventana activa */
+    for (int i = 0; i < 6; i++) {
+      ov.waitAndDispatch(30);
+      wmPanel.waitAndDispatch(30);
+    }
+    WindowInfo j{};
+    const bool sigue = wmPanel.find(juegoUuid, j) && j.active();
+    std::printf("[ajustes] sobre el juego %s: %s\n", juegoApp.c_str(),
+                sigue ? "sigue siendo la ventana activa (su cursor puede seguir encerrado)"
+                      : "deja de ser la ventana activa: su cursor queda libre y el raton es del panel");
+    std::fflush(stdout);
+  }
   /* la entrada en la barra de tareas mientras el panel esta abierto (v1.04), si no se apago */
   if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
@@ -3073,6 +3105,13 @@ static int cmdAjustes(int argc, char **argv) {
     Overlay::Golpe g;
     bool repintar = false;
     while (ov.takeGolpe(g)) {
+      /* un clic en el velo, fuera del panel: el panel se cierra y el juego recupera el control */
+      if (g.tipo == Overlay::kClicFuera) {
+        std::printf("[ajustes] clic fuera del panel: se cierra y el juego recupera el control\n");
+        std::fflush(stdout);
+        g_cierraPanel = 1;
+        break;
+      }
       /* esperando un atajo: un clic en otra cosa que no sea la tecla de un atajo deja de esperar */
       if (!prefs::capturando().empty() && g.tipo != (int)Hud::HitPanel && g.tipo != (int)Hud::HitPanelTitulo) {
         const bool enAtajo = g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() &&
@@ -3210,7 +3249,19 @@ static int cmdAjustes(int argc, char **argv) {
       if (s2 == h2.end() || s2->second.empty() || s2->second == "ninguna") break;
     }
   }
+  ov.tomarTeclado(false);
   ov.hideAsk();
+  /* el juego vuelve a ser la ventana activa: recupera el teclado y, si lo encerraba, el cursor */
+  if (!juegoUuid.empty()) {
+    WindowInfo j{};
+    wmPanel.waitAndDispatch(0);
+    std::string e;
+    const bool ok = wmPanel.find(juegoUuid, j) && wmPanel.setState(juegoUuid, WindowInfo::Active, true, &e);
+    wmPanel.flush();
+    std::printf("[ajustes] panel cerrado: %s\n", ok ? ("el control vuelve a " + juegoApp).c_str()
+                                                     : ("no se pudo devolver el control al juego: " + e).c_str());
+    std::fflush(stdout);
+  }
   ::unlink(rutaPid.c_str());
   return 0;
 }

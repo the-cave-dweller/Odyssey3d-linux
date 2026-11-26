@@ -21,6 +21,7 @@ pkg_check_modules(MPV mpv)          # opcional: reproducción de video SBS
 pkg_check_modules(PNG libpng)      # opcional: mapas de corrección del panel
 pkg_check_modules(FREETYPE freetype2)  # opcional: atlas de fuentes para la interfaz
 pkg_check_modules(WAYLAND_CLIENT wayland-client)   # vigilancia de ventanas / captura
+pkg_check_modules(WAYLAND_CURSOR wayland-cursor)   # opcional: la flecha del tema sobre el panel y su velo
 pkg_check_modules(PIPEWIRE libpipewire-0.3)        # opcional: fotogramas de la captura
 pkg_check_modules(LIBSYSTEMD libsystemd)           # opcional: aviso por portal (sd-bus)
 pkg_check_modules(XKBCOMMON xkbcommon)             # opcional: que simbolo da Mayus+numero (atajos globales)
@@ -198,6 +199,11 @@ target_link_libraries(odysseyvk PRIVATE ${GLFW_LIBRARIES} ${CRYPTO_LIBRARIES} ${
 if(WAYLAND_CLIENT_FOUND)
   target_include_directories(odysseyvk PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIRS})
   target_link_libraries(odysseyvk PRIVATE ${WAYLAND_CLIENT_LIBRARIES})
+  if(WAYLAND_CURSOR_FOUND)
+    target_include_directories(odysseyvk PRIVATE ${WAYLAND_CURSOR_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk PRIVATE ${WAYLAND_CURSOR_LIBRARIES})
+    target_compile_definitions(odysseyvk PRIVATE HAVE_WAYLAND_CURSOR=1)
+  endif()
 endif()
 if(PIPEWIRE_FOUND)
   target_include_directories(odysseyvk PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${SPA_INCLUDE_DIRS})

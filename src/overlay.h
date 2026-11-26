@@ -55,14 +55,20 @@ public:
      Quien lo ensena rellena las filas en `hud().state()` (src/preferencias.cpp), lo pone con
      `showPanel` y va recogiendo los golpes del raton con `takeGolpe`. `grande` lo dibuja al
      doble: es para cuando hay un video en 3D debajo y el panel se ve a traves de la lente. */
+  /* el clic en el velo, fuera del panel (rama experimental): quien ensena el panel lo cierra y el
+     juego de debajo recupera el control */
+  static constexpr int kClicFuera = -100;
   struct Golpe {
-    int tipo = 0;          /* un Hud::Hit: HitPanelCerrar, HitPanelPestana o HitPanelItem */
+    int tipo = 0;          /* un Hud::Hit: HitPanelCerrar, HitPanelPestana o HitPanelItem (o kClicFuera) */
     int item = -1, sub = 0;
     float frac = 0.0f;     /* por donde va el deslizador */
     bool soltado = true;   /* falso mientras se arrastra un deslizador */
   };
   Hud &hud();
-  void showPanel(bool grande);
+  /* `velo` (rama experimental): con el panel sobre un juego, debajo del panel va una capa transparente
+     que cubre la pantalla entera. Se queda con el raton mientras el panel esta abierto: el juego no ve
+     movimiento ni clics y suelta el cursor; un clic en ella llega como `kClicFuera`. */
+  void showPanel(bool grande, bool velo = false);
   void repaint();
   bool takeGolpe(Golpe &g);
   /* El teclado (v1.09): con `tomarTeclado(true)` la capa se queda con todo el teclado mientras este

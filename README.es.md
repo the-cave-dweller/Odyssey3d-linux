@@ -199,6 +199,12 @@ Profundidad y Salida, lleva un botón con un rayo: su menú desplegable tiene tr
 cabeza), que se aplican al momento; al pasar el ratón por cada uno se ve qué cambia. En este modo la
 frecuencia variable queda como la tenga el escritorio.
 
+**Los juegos y el cursor.** Cuando un juego entra al 3D, la pastilla se ve unos segundos, para que
+se lean los atajos, y se oculta sola. Si la traes con `Ctrl+Shift+F1`, le quita el cursor al juego
+(el juego deja de ser la ventana activa y suelta el cursor encerrado); al ocultarla otra vez, o con
+un clic en cualquier parte del juego, se lo devuelve. El panel de ajustes hace lo mismo mientras está
+abierto sobre un juego: un clic fuera de él lo cierra y devuelve el control.
+
 ## Documentación
 
 - [docs/GUIA.md](docs/GUIA.md) — el manual completo en español, con las medidas detrás de cada decisión.

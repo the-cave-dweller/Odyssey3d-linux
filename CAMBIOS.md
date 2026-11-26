@@ -3,6 +3,41 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los juegos y el cursor: la pastilla y el panel se lo quitan y se lo devuelven (rama `experimental`)
+
+- Rodolfo: «quiero que el overlay me robe el cursor del juego mientras se muestre», «y claro,
+  devolverlo al cerrarse» (la pastilla y el panel, las dos), «que el comportamiento sea mostrarse
+  unos segundos para que se vean los shortcuts y ya quitarse», «que dar clic al juego le devuelva el
+  control también».
+- **Por qué no se podía**: el juego encierra el cursor (Proton/XWayland lo hace con las restricciones
+  de puntero) y KWin solo se lo deja encerrado mientras el juego es la ventana activa. La pastilla no
+  se alcanzaba sin soltarlo, y el panel sacaba la flecha solo por suerte (nunca ponía cursor: sobre un
+  juego que esconde el suyo no se veía).
+- **La pastilla en un juego**: al entrar al 3D se ve 6 s (los atajos) y se oculta sola, sin tocar el
+  ratón. Puesta a mano (Ctrl+Shift+F1 o `ctl capa`), le quita el cursor al juego: el visor se queda
+  con la región de entrada entera y pide ser la ventana activa por el gestor de ventanas de KWin. Al
+  ocultarla, con un clic fuera de la pastilla y su menú (eso cierra también el panel), o al cerrarse el
+  visor, se le devuelve: la región vuelve a la pastilla y el juego vuelve a ser la activa. Un juego es
+  lo que el servicio ya trata como tal (`steam_app_*` o gamescope); con vídeos nada cambia.
+- **El panel sobre un juego**: debajo del panel va un velo, una capa transparente de la pantalla
+  entera que se queda con el ratón (el juego no ve ni movimiento ni clics) y pone la flecha del tema
+  (`wayland-cursor`; el panel también la pone ahora). Un clic en el velo cierra el panel. Al cerrarse,
+  el juego vuelve a ser la ventana activa.
+- MEDIDO en un KWin aparte, sin pantalla y con su propio bus (`kwin_wayland --virtual` dentro de
+  `dbus-run-session`), con Konsole haciendo de juego (`ODYSSEYVK_JUEGO=1`) y un script de KWin que
+  lista el apilamiento: con el panel abierto el «juego» deja de ser la activa, el velo (1920×1080)
+  queda debajo del panel; al cerrarlo vuelve a ser la activa. Con dos Konsoles y la otra activada a
+  mano mientras tanto, al cerrar se activa justo la del juego: es nuestra petición, no la cadena de
+  foco de KWin. En el visor aparte (gamescope, sin el gestor de KWin): la pastilla se va sola a los
+  6 s; Ctrl+Shift+F1 (golpe «capa») pasa la región a «la ventana entera»; un clic dentro de la
+  pastilla no la quita; un clic fuera la oculta y devuelve la región.
+- Lo que no se pudo medir aquí: un juego de verdad con el cursor encerrado. El registro lo dice en
+  marcha: «[raton] el visor es la ventana activa: el juego soltó el cursor» o «KWin no hizo caso», y
+  en el panel «[ajustes] sobre el juego …: deja de ser la ventana activa».
+- Para las pruebas: `ODYSSEYVK_JUEGO=1|0` fija si hay un juego debajo, `ODYSSEYVK_VELO=1` pone el velo
+  sin juego, y `ODYSSEY_GOLPE` acepta `capa` y lleva su propio contador de cuadros (el de `[fps]`
+  vuelve a cero cada segundo y los golpes de después no llegaban).
+
 ## Modo rendimiento: el menú del rayo en la pastilla, sin Profundidad ni Salida (rama `experimental`)
 
 - Rodolfo: «¿profundidad y salida hacen falta en ese modo?», y «el menú de modo rendimiento ponlo

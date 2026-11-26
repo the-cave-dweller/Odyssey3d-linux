@@ -194,6 +194,12 @@ lightning-bolt button: its drop-down menu has three measured presets (**Gentle Â
 and four fine sliders (mix, strength, reach, head parallax), all applied at once; hover over each to
 see what it changes. In this mode variable refresh is left as the desktop has it.
 
+**Games and the cursor.** When a game enters 3D the pill shows for a few seconds, so the shortcuts
+can be read, and then hides by itself. While you bring it back with `Ctrl+Shift+F1` it takes the
+cursor from the game (the game stops being the active window, so it lets go of a locked cursor);
+hiding it again, or clicking anywhere on the game, gives the cursor back. The settings panel does
+the same while it is open over a game: a click outside it closes it and returns control.
+
 ## Documentation
 
 - [docs/GUIDE.md](docs/GUIDE.md) â€” the short guide in English: every command, every key, troubleshooting.
