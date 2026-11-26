@@ -5244,8 +5244,14 @@ static int cmdServe(int argc, char **argv) {
                     hijoUuid.empty() ? "el overlay del escritorio" : hijoUuid.c_str());
         std::fflush(stdout);
         /* Si la sesion se cerro porque el video se fue, esa ventana queda apuntada unos segundos:
-           es la que hay que devolver a estado normal (abajo se explica por que). */
-        if (videoSeFue && !hijoUuid.empty()) {
+           es la que hay que devolver a estado normal (abajo se explica por que). Salvo si la cerro
+           una salida de pantalla completa (v1.12): ahi la pantalla completa la quito el usuario, y si
+           la vuelve a poner es para volver al video. Con la vigilia armada, el que salia de un video,
+           elegia otro y le daba a pantalla completa en esos 6 s se quedaba fuera hasta tres veces
+           («al salir de un video ya no puedo entrar», Rodolfo; su registro: «se la quitamos (1/3)»,
+           «(2/3)», «(3/3)» a las 10:32:03-05). La vigilia sigue para el video que se va (el
+           navegador dice que no hay video) y para el cambio de monitor. */
+        if (videoSeFue && !hijoUuid.empty() && !porElUsuario) {
           if (seFueUuid != hijoUuid) {   /* si la vigilia ya empezo al volver el monitor, no se reinicia la cuenta */
             seFueUuid = hijoUuid;
             fullDesde = 0.0;
@@ -5303,13 +5309,13 @@ static int cmdServe(int argc, char **argv) {
              modo del panel): lo hizo el usuario o la aplicacion, no se cayo el visor. Antes contaba como
              muerte si la sesion habia durado menos de 20 s, y dos seguidas costaban un minuto sin 3D
              («ya arranco pero super lento», Rodolfo: dos salidas a los 11 y 12 s y el 3D volvio a los
-             60 s exactos). Ahora no cuenta como muerte, pero la espera de 8 s se queda: al salir, Firefox
-             se vuelve a poner a pantalla completa el solo un segundo despues y la vigilia de abajo se la
-             quita (hasta tres veces en ~6 s). Con 1,5 s el 3D se relanzaba justo en ese instante, la
-             vigilia le quitaba la pantalla completa y la sesion se cerraba: un bucle de cada ~6 s, cuatro
-             vueltas en su registro (10:18:53-10:19:12), con el panel parpadeando. */
+             60 s exactos). Ahora no cuenta como muerte. Primero se probo 1,5 s con la vigilia de la
+             pantalla completa armada, y fue un bucle: el 3D se relanzaba justo cuando la vigilia le quitaba
+             la pantalla completa al navegador, y la sesion se cerraba (cuatro vueltas en su registro,
+             10:18:53-10:19:12). Ahora tras esta salida la vigilia no se arma (ver arriba): nada le quita
+             la pantalla completa al navegador, asi que el bucle no puede darse, y bastan 3 s. */
           muertesSeguidas = 0;
-          enfriadoHasta = now + 8.0;
+          enfriadoHasta = now + 3.0;
         } else {
           if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
           else muertesSeguidas = 0;

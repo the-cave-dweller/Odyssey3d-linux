@@ -78,6 +78,16 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     cerraba, en bucle cada ~6 s («me pasó como 4 veces»: cuatro vueltas en su registro entre las
     10:18:53 y las 10:19:12, con el panel parpadeando). Los 8 s cubren esa vigilia; con el servicio
     anterior, en su registro de las 10:17, la salida y la vuelta fueron limpias.
+  - **Y sin la vigilia tras salir tú.** «Al salir de un vídeo ya no puedo entrar»: cada vez que el vídeo
+    salía de pantalla completa, el servicio armaba 6 s de vigilia que le quitaba la pantalla completa al
+    navegador si la volvía a poner (hasta tres veces); pensada para la página que se queda a pantalla
+    completa cuando el vídeo se va, también se armaba cuando el que salía era el usuario, y el que
+    elegía otro vídeo y pedía pantalla completa en esos segundos se quedaba fuera (su registro: «se la
+    quitamos (1/3)», «(2/3)», «(3/3)» a las 10:32:03–05 y el 3D a las 10:32:10). Ahora, tras una salida
+    de pantalla completa con la sesión asentada, la vigilia no se arma (sigue para el vídeo que se va,
+    cuando el navegador dice que no hay vídeo, y para el cambio de monitor) y, como ya nada le quita la
+    pantalla completa al navegador, el bucle de arriba no puede darse: la espera baja a 3 s. No probado
+    en el panel.
 - **La línea `[arranque]`** («¿ayuda al rendimiento cargar el modelo en RAM?»): el archivo de la red ya
   vive en la caché del sistema (leerlo tarda 5 ms) y cada mapa tarda lo mismo (13–14 ms); lo que cuesta es
   arrancar la red en la tarjeta en cada sesión (~0,7–0,8 s de los ~2,3 s que tarda el 3D en entrar).
