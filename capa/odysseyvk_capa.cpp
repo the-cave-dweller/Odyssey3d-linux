@@ -218,7 +218,13 @@ struct Dispositivo {
   std::unordered_set<VkImage> vistasDeProfundidad;     /* imagenes de profundidad que DLSS ha leido */
   /* la ultima imagen de profundidad a la que DLSS le pidio numero (MEDIDO en Cyberpunk: 1920x1080
      D32_SFLOAT, el tamano de render, varias veces al cambiar de escena) */
-  VkImage ultimaPedida = VK_NULL_HANDLE;
+  VkImage ultimaPedida = VK_NULL_HANDLE;   /* solo para saber el tamano de render: NO se copia (ver elegirProfundidad) */
+  /* (v1.13) la profundidad que se copia: de las imagenes de profundidad a las que DLSS pidio numero, la que el juego
+     uso como destino de profundidad mas reciente (en `usoComoProfundidad`, el numero de presentacion) */
+  std::unordered_set<VkImage> profundidadesDlss;
+  std::unordered_map<VkImage, long> usoComoProfundidad;
+  VkImage profElegida = VK_NULL_HANDLE;
+  bool profAvisada = false;
   /* fase 3 (sonda): las imagenes de color a las que DLSS pidio numero, con los tipos de descriptor (bit 1 =
      para leer con muestreador, bit 3 = de almacenamiento, la que escribe) */
   std::unordered_map<VkImage, uint32_t> colorDlss;
@@ -366,6 +372,14 @@ bool sonda() {
     return e && e[0] == '1';
   }();
   return s;
+}
+/* fase 2: la profundidad al visor, salvo ODYSSEYVK_COMPARTIR=0 */
+bool compartirActivo() {
+  static const bool c = [] {
+    const char *e = std::getenv("ODYSSEYVK_COMPARTIR");
+    return !(e && e[0] == '0');
+  }();
+  return c;
 }
 /* fase 3c: la mascara del HUD va con la profundidad salvo ODYSSEYVK_HUD=0 (o sin compartir nada) */
 bool hudActivo() {
@@ -904,6 +918,9 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAl
     d->colorDlss.erase(img);
     if (d->ultimaPedida == img) d->ultimaPedida = VK_NULL_HANDLE;
     if (d->ultimaCreada == img) d->ultimaCreada = VK_NULL_HANDLE;
+    d->profundidadesDlss.erase(img);
+    d->usoComoProfundidad.erase(img);
+    if (d->profElegida == img) d->profElegida = VK_NULL_HANDLE;
   }
   d->destroyImage(device, img, a);
 }
@@ -938,7 +955,10 @@ void apuntarNumero(Dispositivo *d, const VkImageViewHandleInfoNVX *info, uint64_
     auto v = d->vistas.find(info->imageView);
     if (v != d->vistas.end()) {
       auto im = d->imagenes.find(v->second.img);
-      if (im != d->imagenes.end() && esProfundidad(im->second.formato)) d->ultimaPedida = v->second.img;
+      if (im != d->imagenes.end() && esProfundidad(im->second.formato)) {
+        d->ultimaPedida = v->second.img;
+        d->profundidadesDlss.insert(v->second.img);
+      }
       else if (im != d->imagenes.end()) d->colorDlss[v->second.img] |= 1u << (uint32_t)info->descriptorType;
     }
   }
@@ -993,6 +1013,38 @@ void buscarEn(Dispositivo *d, const uint8_t *p, size_t bytes, std::vector<VkImag
       }
     }
   }
+}
+
+/* (v1.13) La profundidad que se copia, con g_mx tomado. MEDIDO en Cyberpunk, 26-nov 17:07: al entrar y salir del
+   menu el juego rehace sus imagenes y DLSS pide numero a varias de profundidad seguidas (41 a 65); antes se copiaba
+   la ULTIMA pedida, y esa no tenia por que ser la que el juego usa en ese cuadro. El juego la libero mientras
+   nuestra copia esperaba en la tarjeta: «NVRM: Xid 31 ... MMU Fault: ENGINE CE0 ... FAULT_PTE ACCESS_TYPE_VIRT_READ»
+   (el motor de copia leyendo memoria que ya no existia) y el juego cayo con «Device Removed». Es lo mismo que a
+   las 15:54 dio una profundidad llena de NaN (entonces la memoria aun existia). Ahora solo vale una imagen a la
+   que DLSS pidio numero Y que el juego uso como destino de profundidad en los ultimos 3 cuadros: esa la usa el
+   propio juego en este cuadro y no la suelta hasta acabarlo, despues de nuestra copia. Si no hay ninguna, no se
+   copia (el visor espera medio segundo y vuelve a la red). */
+VkImage elegirProfundidad(Dispositivo *d, Imagen *im) {
+  VkImage mejor = VK_NULL_HANDLE;
+  long uso = 0;
+  for (VkImage i : d->profundidadesDlss) {
+    auto u = d->usoComoProfundidad.find(i);
+    if (u == d->usoComoProfundidad.end()) continue;
+    if (mejor == VK_NULL_HANDLE || u->second > uso) mejor = i, uso = u->second;
+  }
+  auto it = mejor != VK_NULL_HANDLE ? d->imagenes.find(mejor) : d->imagenes.end();
+  const bool vale = it != d->imagenes.end() && uso >= d->presentes - 3;
+  if (vale && mejor != d->profElegida)
+    anota("[compartir] la profundidad de DLSS: %p %ux%u %s (el juego la usa como profundidad en este cuadro)", (void *)mejor,
+          it->second.w, it->second.h, formato(it->second.formato).c_str());
+  else if (!vale && (d->profElegida != VK_NULL_HANDLE || !d->profAvisada))
+    anota("[compartir] ninguna profundidad de DLSS en uso en este cuadro (%zu pedidas): no se copia hasta que vuelva una",
+          d->profundidadesDlss.size());
+  d->profAvisada = true;
+  d->profElegida = vale ? mejor : VK_NULL_HANDLE;
+  if (!vale) return VK_NULL_HANDLE;
+  *im = it->second;
+  return mejor;
 }
 
 VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLaunchInfoNVX *li) {
@@ -1059,23 +1111,15 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
       anota("[lanzar] %ld · parametros %zu, extra %zu (bufer de %zu bytes) · imagenes:%s", d->lanzamientos,
             li ? li->paramCount : 0, li ? li->extraCount : 0, buft, lista.empty() ? " (ninguna conocida)" : lista.c_str());
     }
-    if (prof == VK_NULL_HANDLE && d->armado && d->ultimaPedida != VK_NULL_HANDLE) {
-      auto im = d->imagenes.find(d->ultimaPedida);
-      if (im != d->imagenes.end()) {
-        anota("[volcar] por la ultima imagen de profundidad a la que DLSS pidio numero (los parametros no la nombran)");
-        grabarCopia(d, cb, d->ultimaPedida, im->second);
-      }
+    /* la de este lanzamiento, si los parametros la nombraran (no lo hacen en Cyberpunk); si no, elegirProfundidad */
+    VkImage elegida = prof;
+    Imagen imElegida = improf;
+    if (elegida == VK_NULL_HANDLE) elegida = elegirProfundidad(d, &imElegida);
+    if (prof == VK_NULL_HANDLE && d->armado && elegida != VK_NULL_HANDLE) {
+      anota("[volcar] por la profundidad de DLSS que el juego usa en este cuadro (los parametros no la nombran)");
+      grabarCopia(d, cb, elegida, imElegida);
     }
-    /* fase 2: la de este lanzamiento si los parametros la nombran; si no, la ultima pedida */
-    {
-      VkImage img = prof;
-      Imagen im = improf;
-      if (img == VK_NULL_HANDLE && d->ultimaPedida != VK_NULL_HANDLE) {
-        auto it = d->imagenes.find(d->ultimaPedida);
-        if (it != d->imagenes.end()) img = d->ultimaPedida, im = it->second;
-      }
-      if (img != VK_NULL_HANDLE) compartir(d, cb, img, im);
-    }
+    if (elegida != VK_NULL_HANDLE) compartir(d, cb, elegida, imElegida);   /* fase 2 */
     if (prof != VK_NULL_HANDLE) {
       d->conProfundidad++;
       if (!d->vistasDeProfundidad.count(prof)) {
@@ -1405,6 +1449,10 @@ void empezarAmbito(Dispositivo *d, VkCommandBuffer cb, const VkRenderingInfo *ri
     a.limpia.push_back(at.clearValue.color);
   }
   a.conProf = ri->pDepthAttachment && ri->pDepthAttachment->imageView != VK_NULL_HANDLE;
+  if (a.conProf) {   /* (v1.13) el juego la usa en este cuadro: se puede copiar (ver elegirProfundidad) */
+    auto v = d->vistas.find(ri->pDepthAttachment->imageView);
+    if (v != d->vistas.end()) d->usoComoProfundidad[v->second.img] = d->presentes;
+  }
   cachear(d, cb);
 }
 
@@ -2002,7 +2050,9 @@ PFN_vkVoidFunction gancho(const char *n) {
   G("vkQueueSubmit2KHR", QueueSubmit2KHR);
   G("vkDestroyDevice", DestroyDevice);
   if (modoPrueba()) G("vkCmdEndRenderPass", CmdEndRenderPass);
-  if (sonda() || hudActivo()) {   /* fase 3c: la cadena (su tamano) y los destinos de dibujo, para el HUD */
+  /* fase 3c: la cadena (su tamano) y los destinos de dibujo, para el HUD; y desde el 26-nov, para elegir la
+     profundidad que se copia (elegirProfundidad): siempre que se comparte */
+  if (sonda() || hudActivo() || compartirActivo()) {
     G("vkCreateSwapchainKHR", CreateSwapchainKHR);
     G("vkGetSwapchainImagesKHR", GetSwapchainImagesKHR);
     G("vkCmdBeginRendering", CmdBeginRendering);
@@ -2010,7 +2060,7 @@ PFN_vkVoidFunction gancho(const char *n) {
     G("vkCmdEndRendering", CmdEndRendering);
     G("vkCmdEndRenderingKHR", CmdEndRenderingKHR);
   }
-  if (sonda() || hudActivo()) G("vkQueuePresentKHR", QueuePresentKHR);   /* fase 3c: el cuadro de cada capa del HUD */
+  if (sonda() || hudActivo() || compartirActivo()) G("vkQueuePresentKHR", QueuePresentKHR);   /* los cuadros */
   if (sonda()) {   /* fase 3: el cuadro presentado, solo con la sonda */
     G("vkGetDeviceQueue", GetDeviceQueue);
     G("vkGetDeviceQueue2", GetDeviceQueue2);

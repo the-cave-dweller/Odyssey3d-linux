@@ -3,6 +3,26 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Cyberpunk ya no se cae al entrar y salir del menú: solo se copia una profundidad que el juego está usando (v1.13)
+
+- Rodolfo: «cyberpunk now crashed when entering the menu and leaving». MEDIDO: el núcleo dice
+  `NVRM: Xid 31 … MMU Fault: ENGINE CE0 HUBCLIENT_CE1 … FAULT_PTE ACCESS_TYPE_VIRT_READ` a las 17:07:22 (el motor
+  de copia de la tarjeta leyendo memoria que ya no existía), el juego dejó `gpucrash-…17.07.22.733.log` con
+  «Device Removed» (en mitad del posproceso) y el registro de la capa acaba en el mismo segundo, con DLSS
+  pidiendo número a varias imágenes de profundidad nuevas (41 a 65) mientras el juego rehacía las suyas.
+- La capa copiaba la **última** imagen de profundidad a la que DLSS había pedido número, sin saber si el juego
+  la usaba en ese cuadro. Al rehacer las imágenes, esa podía ser una que el juego ya no usaba y que soltó
+  mientras nuestra copia esperaba en la tarjeta. Es lo mismo que a las 15:54 dio una profundidad llena de NaN:
+  entonces la memoria aún existía.
+- Ahora (`elegirProfundidad`) solo se copia una imagen a la que DLSS pidió número **y** que el juego usó como
+  destino de profundidad (`vkCmdBeginRendering`) en los últimos 3 cuadros: esa la usa el propio juego en ese
+  cuadro y no la suelta hasta acabarlo, después de nuestra copia. Si no hay ninguna, no se copia (el visor
+  vuelve a la red en medio segundo). Los ganchos de los destinos de dibujo y de la presentación van ahora
+  siempre que se comparte. El registro dice cuál se eligió: `[compartir] la profundidad de DLSS: … (el juego
+  la usa como profundidad en este cuadro)`, o `ninguna profundidad de DLSS en uso en este cuadro`.
+- Probado sin juego que los ganchos siempre puestos no cambian nada (el visor con la capa: 60 fps, sin
+  caídas). La elección en sí solo se puede ver en el juego.
+
 ## DLSS a la vista: en Ajustes, en un cuadro junto a la pastilla, y con sus interruptores (v1.13)
 
 - Rodolfo: «when not dlss the title of the fps box should say Stock model». Sin DLSS, con la red sobre un juego,
