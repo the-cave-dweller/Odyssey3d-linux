@@ -3,6 +3,14 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Mirar GitHub cada tanto, configurable, y al abrir el panel (v0.99)
+
+- Rodolfo: «check for updates from time to time». El servicio ya miraba medio minuto después de
+  arrancar y cada seis horas; ahora el intervalo es `actualizaciones_cada = horas` en `serve.conf`
+  (0,25 … 168; 6 de fábrica) y al cambiarlo se mira a los cinco segundos. Además el panel de ajustes
+  mira al abrirse (si los avisos no están apagados), para que la pestaña Programa y el botón junto
+  al aspa salgan al día.
+
 ## Los juegos arrancan en paz: el 3D espera a que la ventana se asiente (v0.98)
 
 - Rodolfo: Cyberpunk «tuvo un crash… creo que es por una ventana de error que se abre y ya el

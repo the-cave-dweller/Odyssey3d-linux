@@ -86,6 +86,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 | `barra_2d` | `si` | player bar rows: `si` / `entera` (raw) / `no` |
 | `actualizaciones` | `si` | update card |
 | `actualizar_auto` | `no` | install updates automatically |
+| `actualizaciones_cada` | 6 | hours between update checks |
 | `rampa_x`, `rampa_y`, `fase` | — | lens pitch calibration of your unit (see GUIA.md) |
 
 ## Troubleshooting

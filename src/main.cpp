@@ -3035,6 +3035,9 @@ static int cmdAjustes(int argc, char **argv) {
   st.pestana = enJuegos ? 1 : 0;
   st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
   auto rellenar = [&] { prefs::llenar(st, prefs::leer(), juegos, ids); };
+  /* al abrirse, una mirada a GitHub (v0.99): asi la pestana Programa y el boton junto al aspa estan
+     al dia sin esperar a la mirada del servicio. Es un curl aparte; si no hay red, no pasa nada. */
+  if (prefs::leer().avisarActualizaciones) prefs::comprobarActualizacion(nullptr);
   rellenar();
   ov.showPanel(grande);
   if (!ov.askVisible()) {
@@ -3528,6 +3531,7 @@ struct ServeCfg {
                                entera = tejerlas tal cual vienen, sin la limpieza de la v0.90 */
   std::string actualizaciones;  /* no = no avisar con la tarjeta cuando hay una version nueva en GitHub (v0.95) */
   std::string actualizarAuto;   /* si = con una version nueva, `odysseyvk actualizar` sin preguntar (v0.95) */
+  double actualizacionesCada = 6.0;   /* horas entre miradas a GitHub (v0.99: `actualizaciones_cada`, 0,25..168) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
@@ -3667,6 +3671,13 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "barra_2d") cfg.barra2d = v;
     else if (k == "actualizaciones") cfg.actualizaciones = v;
     else if (k == "actualizar_auto") cfg.actualizarAuto = v;
+    else if (k == "actualizaciones_cada") {
+      std::string numero = v;
+      for (char &c : numero)
+        if (c == ',') c = '.';
+      const double d = std::atof(numero.c_str());
+      cfg.actualizacionesCada = (d >= 0.25 && d <= 168.0) ? d : 6.0;
+    }
     else if (k == "atajos_globales") cfg.atajosGlobales = v;
     else if (k == "escala_3d") cfg.escala3d = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
@@ -5515,7 +5526,7 @@ static int cmdServe(int argc, char **argv) {
     /* La actualizacion (v0.95): mirar GitHub de vez en cuando y, con una version nueva, la tarjeta */
     if (proximaComprobacion == 0.0) proximaComprobacion = now + 30.0;
     if (cfg.actualizaciones != "no" && now >= proximaComprobacion && !prefs::comprobacionEnMarcha()) {
-      proximaComprobacion = now + 6.0 * 3600.0;
+      proximaComprobacion = now + cfg.actualizacionesCada * 3600.0;
       prefs::comprobarActualizacion(nullptr);
     }
     if (prefs::comprobacionEnMarcha() && prefs::vigilarComprobacion()) {
@@ -5599,6 +5610,10 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.actualizaciones != cfg.actualizaciones || nuevo.actualizarAuto != cfg.actualizarAuto;
           cfg.actualizaciones = nuevo.actualizaciones;
           cfg.actualizarAuto = nuevo.actualizarAuto;
+          if (nuevo.actualizacionesCada != cfg.actualizacionesCada) {
+            cfg.actualizacionesCada = nuevo.actualizacionesCada;
+            proximaComprobacion = now + 5.0;   /* con el intervalo nuevo, una mirada ya */
+          }
           if (nuevo.modelo != cfg.modelo) {
             cfg.modelo = nuevo.modelo;
             elegirRedes();

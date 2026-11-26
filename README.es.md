@@ -138,6 +138,7 @@ una ventana), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. 
 | `hz = 165` | frecuencia del panel en 3D (120 de fábrica) |
 | `hdr_en_3d = si` | mantener el HDR durante el 3D |
 | `actualizaciones = no` / `actualizar_auto = si` | sin tarjeta de actualización / instalar solas |
+| `actualizaciones_cada = 6` | horas entre miradas a este repositorio (6 de fábrica) |
 
 Lo demás (calibrar el paso de la lente, el rastreo, los dos planos, las variables de taller) está
 en las guías.

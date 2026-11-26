@@ -140,6 +140,7 @@ asks your password in a window), restarts the service and reopens the video or g
 | `hz = 165` | panel refresh rate in 3D (default 120) |
 | `hdr_en_3d = si` | keep HDR during 3D |
 | `actualizaciones = no` / `actualizar_auto = si` | no update card / install updates automatically |
+| `actualizaciones_cada = 6` | hours between checks of this repository (6 by default) |
 
 Everything else (lens pitch calibration, head tracking, two-plane mode, workshop variables) is in
 the guides.
