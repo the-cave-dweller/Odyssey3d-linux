@@ -164,9 +164,12 @@ public:
     bool rastreoCara = false;    /* en el ultimo cuadro habia una cara delante */
     std::string rastreoNota;     /* lo que la camara reporta: "sin cara", "sin pose valida"... */
     std::string rastreoCamara;   /* lo que anuncia el conductor: "3D Stereo WebCam" */
-    /* (v1.13) el cuadrito a la izquierda de la pastilla con los FPS del juego y de la capa de DLSS (la que le
-       manda su profundidad). Sale con `fpsCapa` > 0 (llega la profundidad del juego) y `fpsCuadro` (el ajuste) */
+    /* (v1.13) el cuadrito a la izquierda de la pastilla con los FPS del juego. `fpsModo` 1 = con DLSS: «DLSS», los
+       del juego y los de la capa (las profundidades que manda); 2 = sin DLSS, con la red sobre un juego: «Modelo
+       de serie», los cuadros nuevos del juego que llegan y los mapas de la red (en `fpsCapa`); 0 = no sale.
+       `fpsCuadro` es el ajuste */
     float fpsJuego = 0.0f, fpsCapa = 0.0f;
+    int fpsModo = 0;
     bool fpsCuadro = true;
   };
 

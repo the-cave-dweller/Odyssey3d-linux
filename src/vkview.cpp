@@ -1843,6 +1843,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double tirFuenteUlt = 0.0, tirFuenteMax = 0.0, tirTrabajoMax = 0.0, tirPresentaMax = 0.0, tirPresentaUlt = 0.0,
          tirPresentaHueco = 0.0, tirTrabajo0 = 0.0, tirRedMs = 0.0;
   long long tirFuenteN = 0, tirFuenteHuecos = 0, tirTrabajoLargos = 0, tirPresentaLargas = 0, tirRedN = 0;
+  /* (v1.13) para el cuadrito de FPS con el modelo de serie (sin DLSS): los cuadros nuevos del juego que llegan y
+     los mapas de la red, contados sin parar (los de arriba se ponen a 0 en cada renglon del registro) */
+  long long cuentaFuente = 0, cuentaMapas = 0;
   int cadaConv = opts.convEach;
   bool apoyoAuto = true;      /* el plano de apoyo lo sigue la red; Ctrl+Shift+3/4 lo vuelve manual */
   int profundidadVista = ui.hud.state().depth;
@@ -3262,6 +3265,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       tirFuenteUlt = tirTrabajo0;
       tirFuenteN++;
+      cuentaFuente++;
     }
 
     /* la interfaz se rehace en CPU cada cuadro (son pocos triángulos) y se sube su geometría */
@@ -3754,6 +3758,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             std::printf("[conversor] cambio de plano (%ld): se reinicia la escala de profundidad y el apoyo\n",
                         red.cutCount());
           if (convHechas == 0) marcaArranque("primer mapa");
+          cuentaMapas++;
           if (++convHechas == 1 || convHechas % 150 == 0)
             std::printf("[conversor] profundidad en %.1f ms con %s (cuadro %lld)\n", convMs,
                         red.device().c_str(), (long long)convHechas);
@@ -3974,10 +3979,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     {
       Hud::State &hs = ui.hud.state();
       const float fj = red.fpsJuego(), fc = red.fpsCapa();
-      if ((int)std::lround(fj) != (int)std::lround(hs.fpsJuego) || (int)std::lround(fc) != (int)std::lround(hs.fpsCapa) ||
-          hs.fpsCuadro != g_fpsCuadro)
+      /* sin DLSS (Rodolfo: «when not dlss the title of the fps box should say Stock model»), sobre un juego y con
+         la red: los cuadros nuevos del juego que llegan al visor (sus FPS, hasta el refresco) y los mapas de la red
+         por segundo */
+      static double tTasas = 0.0;
+      static long long fuente0 = 0, mapas0 = 0;
+      static float fuenteFps = 0.0f, mapasFps = 0.0f;
+      const double ahoraT = glfwGetTime();
+      if (tTasas <= 0.0 || ahoraT - tTasas > 5.0) {
+        tTasas = ahoraT, fuente0 = cuentaFuente, mapas0 = cuentaMapas;
+      } else if (ahoraT - tTasas >= 1.0) {
+        fuenteFps = (float)((double)(cuentaFuente - fuente0) / (ahoraT - tTasas));
+        mapasFps = (float)((double)(cuentaMapas - mapas0) / (ahoraT - tTasas));
+        tTasas = ahoraT, fuente0 = cuentaFuente, mapas0 = cuentaMapas;
+      }
+      const bool dlss = red.usandoJuego();
+      const int modo = dlss ? 1 : (sobreJuego(ui) && wv.converterOn() ? 2 : 0);
+      const float vj = dlss ? fj : fuenteFps, vs = dlss ? fc : mapasFps;
+      if ((int)std::lround(vj) != (int)std::lround(hs.fpsJuego) || (int)std::lround(vs) != (int)std::lround(hs.fpsCapa) ||
+          hs.fpsCuadro != g_fpsCuadro || hs.fpsModo != modo)
         ui.inputChanged = true;
-      hs.fpsJuego = fj, hs.fpsCapa = fc, hs.fpsCuadro = g_fpsCuadro;
+      hs.fpsJuego = vj, hs.fpsCapa = vs, hs.fpsModo = modo, hs.fpsCuadro = g_fpsCuadro;
       g_fpsJuego = fj, g_fpsCapa = fc, g_hudJuego = red.hudFrac();
       g_profJuego = red.descJuego();
     }
@@ -4550,6 +4572,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         /* y dentro de presentar: valla = esperar a que la tarjeta acabe el cuadro anterior de ese hueco,
            adquirir = esperar una imagen libre (el refresco), entregar; tarjeta = lo que tarda nuestro
            cuadro en la tarjeta, de principio a fin (con el juego compartiendola, incluye esperar turno) */
+        /* (v1.13) lo que dice el cuadrito de FPS junto a la pastilla, para mirarlo en el registro */
+        {
+          const Hud::State &hsF = ui.hud.state();
+          if (hsF.fpsModo != 0)
+            std::printf("[cuadrito] %s · juego %.0f fps · %s %.0f fps%s\n", hsF.fpsModo == 1 ? "DLSS" : "modelo de serie",
+                        hsF.fpsJuego, hsF.fpsModo == 1 ? "capa" : "red", hsF.fpsCapa, hsF.fpsCuadro ? "" : " (oculto en los ajustes)");
+        }
         const VkWeave::TiemposCuadro tc = wv.tomaTiempos();
         std::printf("[tirones] valla max %.1f · adquirir max %.1f · entregar max %.1f ms · tarjeta %.2f media / %.1f max "
                     "ms (%ld cuadros) · cola %s\n",

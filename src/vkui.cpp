@@ -831,19 +831,23 @@ void Hud::begin(int w, int h, float altoLogico) {
        pequeño indiques los FPS del layer y los del juego»): los cuadros que presenta el juego y las profundidades
        que manda la capa por segundo (con la generacion de cuadros, los del juego son el doble). Solo se mira: queda
        fuera de la region de entrada y el raton lo atraviesa. `fps_juego = no` en los ajustes lo quita. */
-    if (st_.fpsCuadro && st_.fpsCapa > 0.0f) {
+    /* (v1.13) sin DLSS, con la red sobre un juego, el mismo cuadrito dice «Modelo de serie»: los cuadros nuevos del
+       juego que llegan y los mapas de la red por segundo */
+    if (st_.fpsCuadro && st_.fpsModo != 0) {
+      const bool dlss = st_.fpsModo == 1;
       char nj[16], nc[16];
       std::snprintf(nj, sizeof nj, "%d", (int)std::lround(st_.fpsJuego));
       std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
-      const char *rJ = idioma::tr("Juego"), *rC = idioma::tr("Capa");
+      const char *rJ = idioma::tr("Juego"), *rC = idioma::tr(dlss ? "Capa" : "Red");
+      const std::string titulo = dlss ? std::string("DLSS") : std::string(idioma::tr("Modelo de serie"));
       const float tamR = 12.0f, tamN = 14.0f, tamF = 10.5f, borde = 14.0f;
       const float wRot = std::max(textWidth(rJ, tamR), textWidth(rC, tamR));
       const float wNum = textWidth("000", tamN), wFps = textWidth("fps", tamF);
-      const float bw = borde + wRot + 14.0f + wNum + 4.0f + wFps + borde;
+      const float bw = std::max(borde + wRot + 14.0f + wNum + 4.0f + wFps + borde, borde + textWidth(titulo, 10.0f) + borde);
       const float bx = x0 - 10.0f - bw;
       if (bx >= 8.0f) {
         solid(bx, y0, bw, ph, 0.0f, 0.0f, 0.0f, 0.82f);
-        text("DLSS", bx + borde, y0 + 9.0f, 10.0f, accent[0], accent[1], accent[2], 1.0f);
+        text(titulo, bx + borde, y0 + 9.0f, 10.0f, accent[0], accent[1], accent[2], 1.0f);
         const float colFps = bx + bw - borde - wFps;
         const float filas[2] = {y0 + 28.0f, y0 + 50.0f};
         const char *rot[2] = {rJ, rC};
