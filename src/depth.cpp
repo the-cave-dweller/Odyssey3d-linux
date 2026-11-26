@@ -1642,6 +1642,64 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
     memoria->h = h;
   }
 
+  /* Subtitulos de una pieza (rama experimental, 26-nov). Celda por celda, un subtitulo de letras
+     gruesas con contorno sale a parches: muchas celdas se descartan por «densidad» (la letra y su
+     contorno llenan la celda de bordes, como una textura) o por no tener fondo liso al lado, y las
+     letras de esas celdas quedan con medio apoyo: a medio camino entre la pantalla y la profundidad
+     de lo que haya detras. MEDIDO con un subtitulo amarillo con contorno sobre el cuadro del
+     portatil: la punta que pasa por delante del portatil salia con -9, -16 y -25 px entre los ojos
+     y el resto a 0 («los tuerce», Rodolfo). Aqui, en la banda de abajo y en la de arriba, cada
+     renglon largo (una racha de al menos 10 celdas, perdonando huecos de 4: las celdas descartadas
+     por densidad dejan huecos de hasta 3, y el espacio entre palabras mide menos de una) se apoya ENTERO: el
+     rectangulo de su primera a su ultima celda, con una celda de margen alrededor (los descendentes
+     caen en la fila de debajo, y la ultima letra suele caer en una celda que el renglon no marco). Los renglones seguidos que se solapan van juntos (saltando hasta dos filas sin racha), hasta
+     kAltoMax filas. Lo corto (un estampado, un logo) se queda como estaba. */
+  {
+    const int kLargo = 10;
+    std::vector<int> ini((size_t)ch, -1), fin((size_t)ch, -1);
+    for (int cy = 0; cy < ch; cy++) {
+      const float centro = ((float)cy + 0.5f) / (float)ch;
+      if (!(centro > 0.76f || centro < 0.12f)) continue;
+      int mejorIni = -1, mejorFin = -1, cx = 0;
+      while (cx < cw) {
+        if (peso[(size_t)cy * cw + cx] <= 0.0f) { cx++; continue; }
+        int a = cx, b = cx, hueco = 0;
+        for (int x = cx + 1; x < cw; x++) {
+          if (peso[(size_t)cy * cw + x] > 0.0f) { b = x; hueco = 0; }
+          else if (++hueco > 4) break;
+        }
+        if (mejorIni < 0 || b - a > mejorFin - mejorIni) { mejorIni = a; mejorFin = b; }
+        cx = b + 1;
+      }
+      if (mejorIni >= 0 && mejorFin - mejorIni + 1 >= kLargo) { ini[(size_t)cy] = mejorIni; fin[(size_t)cy] = mejorFin; }
+    }
+    std::vector<float> lleno = peso;
+    int cy = 0;
+    while (cy < ch) {
+      if (ini[(size_t)cy] < 0) { cy++; continue; }
+      int y1 = cy, x0 = ini[(size_t)cy], x1 = fin[(size_t)cy];
+      for (int y = cy + 1; y < ch; y++) {
+        int yy = y;
+        /* perdona hasta dos filas: en el centro de unas letras gruesas casi todas las celdas se
+           descartan por densidad y ahi no sale racha larga */
+        while (ini[(size_t)yy] < 0 && yy + 1 < ch && yy - y < 2) yy++;
+        if (ini[(size_t)yy] < 0 || ini[(size_t)yy] > x1 || fin[(size_t)yy] < x0) break;
+        x0 = std::min(x0, ini[(size_t)yy]);
+        x1 = std::max(x1, fin[(size_t)yy]);
+        y1 = yy;
+        y = yy;
+      }
+      /* un renglon de una sola fila de celdas tiene que ser muy largo: los sueltos de 12 que salian en
+         cuadros sin texto (un tambor, el mastil de un violin) eran eso, sueltos */
+      const bool vale = y1 - cy + 1 <= kAltoMax && (y1 > cy || x1 - x0 + 1 >= 18);
+      if (vale)
+        for (int fy = std::max(0, cy - 1); fy <= std::min(ch - 1, y1 + 1); fy++)
+          for (int fx = std::max(0, x0 - 1); fx <= std::min(cw - 1, x1 + 1); fx++) lleno[(size_t)fy * cw + fx] = 1.0f;
+      cy = y1 + 1;
+    }
+    peso.swap(lleno);
+  }
+
   /* dilatar una celda (un glifo suele cacer de una celda a otra) y despues difuminar, para que el
      apoyo entre despacio y no deje un canto duro en el relieve */
   std::vector<float> dil((size_t)cw * ch, 0.0f);

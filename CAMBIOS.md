@@ -64,8 +64,21 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   46–115 % pero ya entra algo del otro ojo con la cabeza quieta si la lente reparte ancho. Deslizador
   **«Suavizar entre las vistas»** en la pestaña principal (PANTALLA), junto a «Reducir el fantasma»: de
   10 % (Samsung) a 100 %, se ve al momento mientras se arrastra; escribe `filtro` en serve.conf.
-- Visto en una captura suya y **pendiente**: unos subtítulos amarillos con contorno salen dobles (no
-  los ve como texto, así que no se quedan en el plano de la pantalla).
+- **Subtítulos de una pieza.** Rodolfo, con una captura: unos subtítulos amarillos con contorno «no
+  solo salen con fantasma, los tuerce». Reproducido con un subtítulo así (DejaVu Sans Condensed
+  Bold, 112 px, contorno negro de 7) sobre dos cuadros reales, en Auto, midiendo la separación entre
+  ojos de las LETRAS (máscara del amarillo en la vista de cada ojo, ventanas de 120 px): sobre el
+  cuadro de música, ±2 px; sobre el del portátil, 0 en el centro y **−4, −12 y −16 px** en la punta
+  que pasa por delante del portátil. El detector de rótulos decide celda por celda, y con letras
+  gruesas y contorno muchas celdas se descartan por «densidad» (letra y contorno llenan la celda de
+  bordes, como una textura) o por no tener fondo liso al lado; esas letras quedaban con medio apoyo,
+  entre la pantalla y la profundidad del portátil. Ahora, en la banda de abajo y en la de arriba,
+  cada renglón largo (una racha de 10 celdas o más, perdonando huecos de 4; los renglones que se
+  solapan van juntos aunque haya hasta dos filas sin racha) se apoya entero: el rectángulo de su
+  primera a su última celda con una celda de margen. Uno de una sola fila tiene que medir 18 celdas
+  o más (en cuadros sin texto salían sueltos de 12). MEDIDO: letras a **0 px** en el portátil y ≤ 1 px
+  en música; el cuadro de subtítulos de verdad apoya su renglón entero; en cuadros sin texto el
+  apoyo queda como estaba.
 - Sin probar en el panel.
 
 ## La cabecera del panel en dos filas, con el interruptor AI | Rendimiento (rama `experimental`)
