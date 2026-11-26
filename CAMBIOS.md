@@ -3,6 +3,33 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La profundidad del juego contra la de la red: `tools/comparar-profundidad.py` (v1.13)
+
+- Rodolfo, sobre Neural Forge (github.com/labj1987/neural-forge, su ticket #63): «check if any
+  improvements can be made here with it, either with dlss5 method of getting the depth or with the gpu
+  part»; y «Yes, set up the test».
+- **Lo de la tarjeta, MEDIDO**: la red ya va en la 5080 (`red = 1`) y ahí es más rápida, 10,5 ms por
+  mapa contra 15–23 en la 4090 (que además lleva el escritorio), con los mismos ocho cuadros de la nave
+  (`odysseyvk mapa --red 0|1`). La 5080 va en x4 detrás del chipset (`lspci -t`), que es lo que frena a
+  Neural Forge (unos 3,5 GB/s con cuadros enteros); a OdysseyVK no: mueve ~1 MB por mapa.
+- **La profundidad de DLSS**: Neural Forge, dentro del juego, sabe cuál de sus imágenes es la
+  profundidad que recibe DLSS y la puede volcar (`neural-forge-cli shmctl dump-cache --holds 2`, con
+  el modelo antes de DLSS y la caché de ediciones puesta, que es lo de fábrica). La herramienta nueva
+  toma ese volcado y la pone frente a la de la red en el mismo cuadro: tonifica el color HDR, pasa la
+  profundidad a cercanía (Z invertida o normal, la decide sola; las dos son lineales en 1/distancia,
+  como la disparidad que da la red, así que no hacen falta los planos cercano y lejano del juego),
+  corre la red en el visor aparte, pone el plano de la pantalla del juego en la misma cosa que eligió
+  la red y pasa los dos mapas por el mismo camino (`--mapa-fijo` con la imagen de guía): vista de
+  profundidad y ojo izquierdo (sonda 16) de cada uno, en `comparacion.png`, y los números en
+  `resumen.txt` (entre ellos el parecido de los dos mapas por rangos).
+- **Probado** con un volcado de mentira (la nave a 1024 × 768 con una profundidad de Z invertida hecha
+  de un mapa conocido): Z invertida detectada sola (215 506 puntos a 0), el plano en la misma cosa
+  (0,39 la red, 0,389 el juego), parecido 0,967, y el recorte de los ojos en el canto de la nave (al
+  principio caía en el borde de la banda: se busca solo dentro de la imagen). Falta el volcado de un
+  juego de verdad.
+- Neural Forge es AGPL y OdysseyVK MIT: de ahí se toman ideas o se le habla como otro programa, no
+  se copia código.
+
 ## Versión 1.13: lo que llegó después de la primera 1.12 (v1.13)
 
 - Rodolfo: «Check the update system, it works?» y, con lo que salió, «Yes, bump to 1.13». El
