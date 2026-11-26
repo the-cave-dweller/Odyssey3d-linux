@@ -1188,6 +1188,27 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     if (salto || std::fabs(nuevo - focus_) >= 0.01f)
       focus_ += (nuevo - focus_) * (salto ? 1.0f : porTiempo(kFocoIir));
   }
+  /* los cuantiles 2 y 98 % del mapa ya limpio, para la Salida automatica (rama experimental): con el
+     plano en el sujeto, la mayor salida que deja como mucho un 2 % pegado a cada tope */
+  {
+    int h[256] = {0};
+    long cuantos = 0;
+    for (size_t i = 0; i < (size_t)sz_ * (size_t)sz_; i += 3) {
+      const float v = salida[i] < 0.0f ? 0.0f : (salida[i] > 1.0f ? 1.0f : salida[i]);
+      h[(int)(v * 255.99f)]++;
+      cuantos++;
+    }
+    long acum = 0;
+    int bajo = 0, alto = 255;
+    bool hayBajo = false;
+    for (int i = 0; i < 256; i++) {
+      acum += h[i];
+      if (!hayBajo && acum >= cuantos * 2 / 100) bajo = i, hayBajo = true;
+      if (acum >= cuantos * 98 / 100) { alto = i; break; }
+    }
+    cuantilBajo_.store(((float)bajo + 0.5f) / 256.0f);
+    cuantilAlto_.store(((float)alto + 0.5f) / 256.0f);
+  }
 
   /* Los dos planos. Con dureza 0 (lo de siempre, y lo que arranca el programa) este bloque no se
      ejecuta ni una vez. Cuando esta subido se buscan los dos grupos en el mapa ya limpio, se siguen

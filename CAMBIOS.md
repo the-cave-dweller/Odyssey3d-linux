@@ -3,6 +3,47 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El hub del modo normal en azul, con Auto | Manual y la Salida automática (rama `experimental`)
+
+- Rodolfo: «no me gustó el con fondo, quiero solo la parte blanca en un tono más azul claro; quiero que
+  cambies ese hub a algo así [el de rendimiento], todo en ese azul, botón de encendido igual, en el de
+  a un lado ese logo, y que diga Auto o Manual; Auto que sea saliencia, y Manual la profundidad con lo
+  otro». Y: «estudia cómo autocalcular la salida junto a la profundidad para dar el mayor relieve
+  posible, mídelos».
+- **La Salida automática, MEDIDA** con `odysseyvk mapa` (red fp16) sobre 5 cuadros, cada uno como 8
+  copias con ruido de vídeo y como un barrido de 12 recortes. Con el plano de la saliencia en el sujeto,
+  la mayor ganancia que deja como mucho un 2 % del mapa en cada tope:
+  G = mín(12,67·alcance / (q98 − plano), 9,98·alcance / (plano − q2)).
+
+  | Alcance | Salida | Pegado al tope | Relieve entre los ojos (p5–p95) | Varía (ruido / barrido) |
+  |---|---|---|---|---|
+  | x1 | automática 2/98 | 0,9 % | 27,8 px | 1,2 % / 2,6 % |
+  | x1 | automática 5/95 | 3,9 % | 29,7 px | 1,2 % / 3,0 % |
+  | x1 | fija 50, `relieve` x1 | 39,7 % | 28,5 px | — |
+  | x1 | fija 50, `relieve` x2 (la de Rodolfo) | 61,3 % | 32,8 px | — |
+  | x2,75 | automática 2/98 | 0,9 % | 76,5 px | 1,2 % / 2,6 % |
+  | x2,75 | fija 50, `relieve` x2 | 30,7 % | 66,0 px | — |
+
+  Cada escena pide otra ganancia (la nave, ~10 px por unidad; el globo, ~23): una fija aplasta las
+  de mucho fondo. Con los topes de fábrica la automática da el mismo relieve sin aplastar; con el
+  alcance x2,75 da más relieve y sin aplastar. Se queda la 2/98, suavizada en ~0,6 s y con salto en los
+  cortes; tope: lo que daría la Salida 50 con `relieve = 2,00` y el mismo alcance (una escena casi plana
+  no infla el ruido de la red). La red calcula los cuantiles 2 y 98 % de cada mapa.
+- **El hub del modo normal** (conversor con la red): como el de rendimiento y en azul claro. El
+  interruptor, un botón con el chip «AI» (solo el trazo, en azul claro, sin fondo), «Auto» o «Manual» y
+  la flechita, y el engranaje. Su menú: Auto | Manual (con su ayuda al pasar el ratón); en Manual, la
+  Profundidad y la Salida; en Auto, el plano y la Salida que se calcularon. Debajo, el tipo de vídeo y
+  «No volver a preguntar». La pastilla del dividido de siempre también pasa a azul; la de rendimiento
+  sigue ámbar y la tarjeta de la orilla, morada.
+- **Auto** guarda `profundidad_<modo> = auto` (y enciende la saliencia si estaba apagada);
+  Ctrl+Shift+3/4/5/6 no hacen nada y el renglón de teclas se queda en «1 el 3D · F1 oculta · Esc sale».
+  **Manual** deja la Profundidad donde estaba el sujeto y la Salida que se calculaba, y las guarda. En el
+  visor aparte: «Auto … profundidad_conv = auto», «auto: plano 0.69 · salida 14.5 px por unidad (Salida
+  28)», y al volver a Manual `profundidad_conv = 68`, `salida_conv = 29`.
+- **Arreglo de paso (viene de main)**: arrastrar la Salida con el ratón daba 50 a mitad del recorrido
+  (se tomaba de 0 a 100 en vez de −50 a +50): la bola saltaba al final y lo negativo no se alcanzaba.
+- Sustituye al chip cuadrado del Foco automático de la entrega anterior.
+
 ## Foco automático: el chip «AI» de la pastilla (rama `experimental`)
 
 - Rodolfo: «quiero que hagas un toggle de saliencia, describiendo qué es al poner el mouse encima, y

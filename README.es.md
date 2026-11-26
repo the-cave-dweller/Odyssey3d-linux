@@ -198,10 +198,11 @@ relieve** (`exp_topes_red = 2,75`, x1–x4) ensancha los topes por ojo con la re
 fábrica, más fuerza o Profundidad solo aplasta la imagen contra ellos (medido: el 85 % del cuadro con
 Profundidad 100 y relieve x2).
 
-En el vídeo normal con la red, un **chip «AI»** junto al interruptor pone el **Foco automático**: en
-cada escena un mapa de saliencia busca lo que llama la atención (una cara, un objeto) y lo deja en el
-plano de la pantalla, nítido, con el fondo hundiéndose detrás. Sigue al contenido solo, así que la
-Profundidad se esconde mientras está puesto; al quitarlo vuelve en la posición del sujeto.
+En el vídeo normal con la red la pastilla se vuelve azul claro: junto al interruptor, un botón con un
+**chip «AI»** dice **Auto** o **Manual** y abre su menú. **Auto**: en cada escena un mapa de saliencia
+busca lo que llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, y la salida
+se calcula para el mayor relieve que cabe sin aplastar la imagen contra los topes (medido: un 0,9 % del
+cuadro en los topes en vez del 61 % con una salida fija). **Manual**: Profundidad y Salida a mano.
 
 Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`),
 sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).

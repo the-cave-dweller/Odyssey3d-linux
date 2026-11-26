@@ -125,7 +125,7 @@ struct VkUi {
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
   int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
   int preajustePedido = -1;  /* un preajuste del modo rendimiento (pastilla u orden `preajuste`): 0..2 */
-  bool focoPedido = false;   /* el chip «AI»: poner o quitar el Foco automatico (lo atiende el bucle) */
+  int focoPedido = 0;        /* el menu del chip «AI»: 1 = Auto, 2 = Manual (lo atiende el bucle) */
   /* el cursor de los juegos (rama experimental). Con un juego debajo, la pastilla puesta a mano le quita
      el cursor (`robando`): el visor se queda con todo el raton y se hace la ventana activa, que es lo que
      suelta el cursor encerrado del juego (KWin solo lo deja encerrado mientras el juego es la activa). Al
@@ -530,7 +530,7 @@ static void cambioCapa(VkUi &ui, bool puesta, const char *fuente) {
   ui.hud.state().overlayOn = puesta;
   ui.inputChanged = true;
   ui.presentacionHecha = true;   /* tocada a mano (o ya ida): la presentacion no la vuelve a quitar */
-  if (!puesta) ui.hud.state().menuRendimiento = false;
+  if (!puesta) ui.hud.state().menuRendimiento = ui.hud.state().menuNormal = false;
   ajuste::registrar("capa", antes ? "puesta" : "oculta", puesta ? "puesta" : "oculta",
                     nombreCorto(g_modeloEnUso), fuente);
   std::printf("[capa] la pastilla %s (%s)\n", puesta ? "a la vista" : "ocultada", fuente);
@@ -611,7 +611,11 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       ui.preajustePedido = (int)hit - (int)Hud::HitPreajuste1;   /* lo aplica el bucle: tiene la red y la trama */
       break;
     case Hud::HitFocoAuto:
-      ui.focoPedido = true;   /* lo atiende el bucle: tiene la red y los valores por modo */
+      st.menuNormal = !st.menuNormal;   /* el boton del chip abre y cierra su menu */
+      break;
+    case Hud::HitNormalAuto:
+    case Hud::HitNormalManual:
+      ui.focoPedido = hit == Hud::HitNormalAuto ? 1 : 2;   /* lo atiende el bucle: tiene la red y los valores */
       break;
     case Hud::HitRendimientoMenu:
       /* el boton del rayo: abre y cierra el menu del modo rendimiento */
@@ -735,10 +739,10 @@ static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
     std::fflush(stdout);
     return;
   }
-  /* con el Foco automatico puesto la Profundidad no esta: el plano lo elige la saliencia */
-  else if (ui.hud.state().focoVisible && ui.hud.state().focoAuto && (accion == "prof-" || accion == "prof+")) {
-    std::printf("[foco] %s no hace nada con el Foco automatico puesto (%s): el plano lo elige la saliencia\n",
-                accion.c_str(), origen);
+  /* en Auto la Profundidad y la Salida no estan: las calcula el visor (plano de la saliencia y salida) */
+  else if (ui.hud.state().focoVisible && ui.hud.state().focoAuto &&
+           (accion == "prof-" || accion == "prof+" || accion == "relieve-" || accion == "relieve+")) {
+    std::printf("[foco] %s no hace nada en Auto (%s): el plano y la salida se calculan solos\n", accion.c_str(), origen);
     std::fflush(stdout);
     return;
   }
@@ -768,7 +772,6 @@ static void cargaAtajos(VkUi &ui) {
   if (!ui.atajosPuestos.count("Ctrl+Shift+2")) ui.atajosPuestos["Ctrl+Shift+2"] = "capa2";
   ui.hud.state().teclas = atajos::renglonPastilla(ui.hud.state().legado);
   ui.hud.state().teclasRendimiento = atajos::renglonPastilla(ui.hud.state().legado, true);
-  ui.hud.state().teclasFoco = atajos::renglonPastilla(ui.hud.state().legado, false, true);
 }
 
 /* la tecla de GLFW escrita como los atajos ("Ctrl+Shift+K"); vacia si no es de las que valen */
@@ -3557,7 +3560,39 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       /* sin red (modo rendimiento) la base es la de los preajustes medidos: ni la Salida ni el `relieve`
          global cuentan, y el plano de la pantalla es el automatico (rendimiento.h) */
-      const float ganancia = (red.sinRed() ? rendimiento::kGananciaBase : gananciaRelieve(st.popout)) * exRel;
+      float ganancia = (red.sinRed() ? rendimiento::kGananciaBase : gananciaRelieve(st.popout)) * exRel;
+      /* la Salida automatica (rama experimental): en Auto, con el plano de la saliencia en el sujeto, la
+         mayor ganancia que deja como mucho un 2 % del mapa pegado a cada tope por ojo (cuantiles 2 y
+         98 % del mapa). MEDIDO 26-nov (5 cuadros, con ruido y con barrido): con los topes de fabrica
+         queda un 0,9 % pegado y ~28 px de relieve entre los ojos (la Salida 50 con `relieve = 2,00`:
+         61 % pegado); con el alcance x2,75, ~77 px y 0,9 % (la fija: 66 px y 31 %). Varia un 1,2 % con el
+         ruido y salta como mucho un 2,6 % en un barrido; se suaviza en ~0,6 s y salta en los cortes.
+         Tope: lo que daria la Salida 50 con `relieve = 2,00` y el mismo alcance, para que una escena
+         casi plana no infle el ruido de la red. */
+      if (!red.sinRed() && st.focoVisible && apoyoAuto) {
+        static float gAuto = -1.0f;
+        static double tAuto = -1.0;
+        const float T = exTopesRed, p = red.focusPlane();
+        const float lo = red.cuantilBajo(), hi = red.cuantilAlto();
+        float g = std::min(0.0033f * T / std::max(hi - p, 0.02f), 0.0026f * T / std::max(p - lo, 0.02f));
+        g = std::max(gananciaRelieve(0) * 0.5f, std::min(g, (0.00104f + 0.5f * 0.00972f) * 2.0f * T));
+        const double dt = tAuto < 0.0 ? 1.0 : now - tAuto;
+        tAuto = now;
+        if (gAuto < 0.0f || red.lastCut()) gAuto = g;
+        else gAuto += (g - gAuto) * (float)std::min(1.0, dt / 0.6);
+        ganancia = gAuto;
+        /* lo que ensena el menu: el plano y la Salida equivalente del deslizador */
+        const float esc = gananciaRelieve(0) / 0.00104f;
+        ui.hud.state().focoPlano = (int)std::lround(p * 100.0f);
+        ui.hud.state().focoSalida = (int)std::lround(((gAuto / esc) - 0.00104f) / 0.00972f * 100.0f);
+        static double dicho = -10.0;
+        if (now - dicho >= 5.0) {
+          dicho = now;
+          std::printf("[foco] auto: plano %.2f · salida %.1f px por unidad (Salida %d) · cuantiles %.2f..%.2f · alcance x%.2f\n",
+                      (double)p, (double)gAuto * 3840.0, ui.hud.state().focoSalida, (double)lo, (double)hi, (double)T);
+          std::fflush(stdout);
+        }
+      }
       /* El plano de apoyo (lo que se queda quieto en la pantalla) lo sigue la red: toma el pico del
          histograma del mapa ya limpio, o sea el sujeto. Con el sujeto apoyado en la pantalla el
          relieve se abre hacia atras y cansa menos la vista con el mismo relieve. Si el usuario mueve
@@ -3721,9 +3756,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          ese momento (la imagen no salta) y se guarda ese numero. */
       const bool conConv = modo == 1 || modo == 3;
       hs.focoVisible = !suf.empty() && conConv && convActivo && !red.sinRed();
+      if (!hs.focoVisible) hs.menuNormal = false;
       if (ui.focoPedido) {
-        ui.focoPedido = false;
-        if (hs.focoVisible) {
+        const bool quiereAuto = ui.focoPedido == 1;
+        ui.focoPedido = 0;
+        if (hs.focoVisible && quiereAuto != apoyoAuto) {
           const std::string k = "profundidad_" + suf;
           std::string e, valor;
           if (!apoyoAuto) {
@@ -3735,17 +3772,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               ajuste::fijarEnServeConf("saliencia", "si", &e);
             }
           } else {
+            /* a Manual: la Profundidad donde estaba el sujeto y la Salida que se estaba calculando (si
+               cabe en el deslizador), para que la imagen no salte */
             apoyoAuto = false;
             hs.depth = std::max(0, std::min(100, (int)std::lround(red.focusPlane() * 100.0f)));
             valor = std::to_string(hs.depth);
+            hs.popout = std::max(-50, std::min(50, hs.focoSalida));
+            basePop = hs.popout;
+            cambioPop = -1.0;
+            std::string e2;
+            if (ajuste::fijarEnServeConf("salida_" + suf, std::to_string(hs.popout), &e2)) conf["salida_" + suf] = std::to_string(hs.popout);
           }
           profundidadVista = hs.depth;
           baseDepth = hs.depth;
           cambioDepth = -1.0;
           const bool guardado = ajuste::fijarEnServeConf(k, valor, &e);
           if (guardado) conf[k] = valor;
-          std::printf("[foco] Foco automatico %s · %s = %s%s%s\n", apoyoAuto ? "puesto: el plano lo elige la saliencia"
-                                                                          : "quitado: la Profundidad vuelve donde estaba el sujeto",
+          std::printf("[foco] %s · %s = %s%s%s\n", apoyoAuto ? "Auto: el plano lo elige la saliencia y la salida se calcula"
+                                                            : "Manual: la Profundidad vuelve donde estaba el sujeto y la Salida la que se calculaba",
                       k.c_str(), valor.c_str(), guardado ? "" : " (no se guardo: ", guardado ? "" : (e + ")").c_str());
           std::fflush(stdout);
           ui.inputChanged = true;

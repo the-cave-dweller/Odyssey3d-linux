@@ -193,10 +193,11 @@ normal version. **Depth reach** (`exp_topes_red = 2,75`, x1–x4) widens the per
 network, live: with them at factory width, more strength or Depth only flattens the image against
 them (measured: 85 % of the frame at Depth 100 and relief x2).
 
-In normal video with the network, an **AI chip** next to the switch turns on **Auto focus**: in each
-scene a saliency map finds what draws the eye (a face, an object) and puts it on the screen plane,
-sharp, with the background sinking behind. It follows the content by itself, so the Depth slider is
-hidden while it is on; turning it off brings Depth back at the subject's position.
+In normal video with the network the pill turns light blue: next to the switch, a button with an
+**AI chip** says **Auto** or **Manual** and opens its menu. **Auto**: in each scene a saliency map finds
+what draws the eye (a face, an object) and puts it on the screen plane, and the pop-out is worked out
+for the most relief that fits without flattening the image against the limits (measured: 0.9 % of the
+frame on the limits instead of 61 % with a fixed pop-out). **Manual**: Depth and Pop-out by hand.
 
 It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`),
 worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's ~1.1 GB on the GPU). It is rougher

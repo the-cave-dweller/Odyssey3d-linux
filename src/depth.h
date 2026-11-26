@@ -109,6 +109,9 @@ public:
   /* la saliencia elige el sujeto del plano automatico; el Foco automatico de la pastilla la pone en
      marcha (rama experimental). De fabrica, lo que diga ODYSSEYVK_SALIENCIA (si no esta: puesta). */
   bool saliencia() const { return saliencia_.load(); }
+  /* los cuantiles 2 y 98 % del ultimo mapa (0..1), para la Salida automatica (rama experimental) */
+  float cuantilBajo() const { return cuantilBajo_.load(); }
+  float cuantilAlto() const { return cuantilAlto_.load(); }
   void setSaliencia(bool s) { saliencia_.store(s); }
   int size() const { return sz_; }                    /* el mapa que sale es de sz_ x sz_ */
   /* la entrada de la red (rama experimental): de fabrica 518 x 518 (la imagen 16:9 aplastada a un
@@ -204,6 +207,7 @@ private:
   /* la mezcla sin red: 0 = solo la altura (suelo), 1 = solo las pistas de la imagen (nitidez, color,
      centro); ODYSSEYVK_SIN_RED_MEZCLA. Sin ella: suelo = 0, imagen = 0,35 (lo mas perceptible). */
   std::atomic<float> mezcla_{0.35f};   /* se cambia en marcha (los preajustes de la pastilla) */
+  std::atomic<float> cuantilBajo_{0.0f}, cuantilAlto_{1.0f};
   std::atomic<bool> saliencia_{[] {
     const char *e = std::getenv("ODYSSEYVK_SALIENCIA");
     if (!e) e = std::getenv("ODYSSEY3D_SALIENCIA");

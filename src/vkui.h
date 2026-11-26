@@ -128,7 +128,11 @@ public:
        teclas con atajos cambiados mientras esta puesto (vacio = el de fabrica). */
     bool focoVisible = false;
     bool focoAuto = false;
-    std::string teclasFoco;
+    /* el hub del modo normal (rama experimental): el boton del chip abre su menu (`menuNormal`), con
+       Auto | Manual; en Auto el menu ensena el plano y la Salida que se calcularon (`focoPlano` 0..100,
+       `focoSalida` en unidades del deslizador) */
+    bool menuNormal = false;
+    int focoPlano = 0, focoSalida = 0;
     float rendValor[4] = {0.35f, 1.0f, 2.75f, 2.0f};
     std::string teclasRendimiento;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
@@ -175,7 +179,9 @@ public:
     HitPreajuste2,
     HitPreajuste3,
     HitRendimientoMenu,   /* el boton del rayo: abre y cierra su menu */
-    HitFocoAuto,          /* el chip «AI» del modo normal: Foco automatico puesto o quitado */
+    HitFocoAuto,          /* el boton del chip «AI» del modo normal: abre y cierra su menu */
+    HitNormalAuto,        /* su menu: Auto (plano y Salida automaticos) ... */
+    HitNormalManual,      /* ... o Manual (Profundidad y Salida a mano) */
     HitRendMezcla,        /* los cuatro deslizadores del menu del rayo */
     HitRendFuerza,
     HitRendAlcance,
@@ -372,7 +378,8 @@ private:
   Rect btnPre_[3];   /* los preajustes del menu del rayo */
   /* el boton del rayo de la pastilla, su menu desplegado y las pistas de sus cuatro deslizadores */
   Rect btnRayo_, menuRend_, rendTrack_[4], rendFila_[4];
-  Rect btnFoco_;   /* el chip «AI» del Foco automatico */
+  Rect btnFoco_;     /* el boton del chip «AI» del hub normal */
+  Rect btnAM_[2];    /* su menu: Auto y Manual */
   /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
   struct ZonaItem {
     Rect caja;

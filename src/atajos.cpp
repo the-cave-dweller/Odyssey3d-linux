@@ -492,7 +492,7 @@ std::map<std::string, std::string> combos() {
   return c;
 }
 
-std::string renglonPastilla(bool legado, bool rendimiento, bool foco) {
+std::string renglonPastilla(bool legado, bool rendimiento) {
   const std::map<std::string, std::string> c = combos();
   bool todasDeFabrica = true;
   for (const Def &d : kDefs)
@@ -508,10 +508,6 @@ std::string renglonPastilla(bool legado, bool rendimiento, bool foco) {
     return x + " / " + y;
   };
   if (rendimiento) return de("3d") + " 3D · " + de("capa") + " " + idioma::tr("oculta") + " · Esc " + idioma::tr("sale");
-  /* con el Foco automatico puesto la Profundidad no esta (rama experimental) */
-  if (foco)
-    return de("3d") + " 3D · " + par("relieve-", "relieve+") + " " + idioma::tr("salida") + " · " + de("capa") + " " +
-           idioma::tr("oculta") + " · Esc " + idioma::tr("sale");
   return de("3d") + " 3D · " + par("prof-", "prof+") + " " + idioma::tr(legado ? "plano" : "profundidad") + " · " +
          par("relieve-", "relieve+") + " " + idioma::tr("salida") + " · " + de("capa") + " " + idioma::tr("oculta") +
          " · Esc " + idioma::tr("sale");

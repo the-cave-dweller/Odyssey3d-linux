@@ -704,8 +704,9 @@ void Hud::begin(int w, int h, float altoLogico) {
 
   /* v0.79: el acento es el morado del paisaje de la tarjeta (antes verde) y el fondo de la pastilla
      es el gris casi negro de la tarjeta: las dos piezas se ven de la misma familia. */
-  /* la pastilla de rendimiento va en ambar, el color del rayo (rama experimental) */
-  const float accent[3] = {st_.rendimiento ? 0.93f : 0.46f, st_.rendimiento ? 0.62f : 0.37f, st_.rendimiento ? 0.12f : 0.92f};
+  /* rama experimental: la pastilla va en azul claro (el del chip «AI») y en ambar la de rendimiento (el
+     color del rayo). La tarjeta de la orilla sigue en morado: se vuelve a poner antes de pintarla. */
+  float accent[3] = {st_.rendimiento ? 0.93f : 0.40f, st_.rendimiento ? 0.62f : 0.72f, st_.rendimiento ? 0.12f : 1.0f};
   const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   const float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -720,8 +721,7 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnEngranaje_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnNormal_ = btnDividido_ = btnSuave_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   for (Rect &b : btnPre_) b = {-10.0f, -10.0f, 0.0f, 0.0f};
-  btnRayo_ = menuRend_ = btnFoco_ = {-10.0f, -10.0f, 0.0f, 0.0f};
-  bool ayudaFoco = false;   /* el raton sobre el chip: su ayuda se pinta al final, por encima de todo */
+  btnRayo_ = menuRend_ = btnFoco_ = btnAM_[0] = btnAM_[1] = {-10.0f, -10.0f, 0.0f, 0.0f};
   for (int k = 0; k < 4; k++) rendTrack_[k] = rendFila_[k] = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
@@ -731,7 +731,12 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float anchoRec = 18.0f + 8.0f + textWidth(rotRec, 12.5f);
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
        Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
-    const bool hayModo = st_.modoVisible && !leg && !st_.rendimiento;
+    /* el hub del modo normal (rama experimental): conversor con la red. Como el de rendimiento: el
+       interruptor, un boton con el chip «AI» que dice Auto o Manual y su menu, y el engranaje. Los
+       deslizadores, el tipo de video y la casilla pasan al menu. */
+    const bool hubNormal = st_.focoVisible && !leg && !st_.rendimiento;
+    const std::string nombreFoco = idioma::tr(st_.focoAuto ? "Auto" : "Manual");
+    const bool hayModo = st_.modoVisible && !leg && !st_.rendimiento && !hubNormal;
     /* el modo rendimiento: un boton con el rayo, el preajuste puesto y la flechita de su menu */
     const char *nombrePre[3] = {idioma::tr("Suave"), idioma::tr("Medio"), idioma::tr("Intenso")};
     const std::string nombreRend = st_.preajuste >= 0 && st_.preajuste < 3 ? nombrePre[st_.preajuste] : idioma::tr("A mano");
@@ -739,17 +744,27 @@ void Hud::begin(int w, int h, float altoLogico) {
     if (st_.rendimiento) anchoRendimiento = 12.0f + 22.0f + 8.0f + textWidth(nombreRend, 13.0f) + 10.0f + 12.0f + 12.0f;
     /* v1.07: en chino o japones la casilla es corta y los dos botones no cabian: el bloque mide al menos 128 */
     const float anchoBloque = st_.rendimiento ? anchoRendimiento
+                              : hubNormal ? 12.0f + 22.0f + 8.0f + textWidth(nombreFoco, 13.0f) + 10.0f + 12.0f + 12.0f
                               : (st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f));
-    /* el Foco automatico (modo normal con la red): el chip va junto al interruptor y, puesto, se lleva la
-       Profundidad (el plano lo elige la saliencia; tocarla lo fijaba a mano) */
-    const bool hayFoco = st_.focoVisible && !leg && !st_.rendimiento;
-    const bool sinProfundidad = hayFoco && st_.focoAuto;
-    const float anchoFoco = hayFoco ? 18.0f + 32.0f : 0.0f;
-    /* en el modo rendimiento no hay Profundidad ni Salida: el boton del rayo va junto al interruptor */
-    float pw = st_.rendimiento ? aire + anchoSw + aire
-                               : aire + anchoSw + anchoFoco + 26.0f + (sinProfundidad ? 0.0f : anchoDes + 24.0f) + anchoDes + aire;
+    /* en el modo rendimiento y en el hub normal no hay deslizadores en la pastilla: el boton va junto al
+       interruptor */
+    float pw = (st_.rendimiento || hubNormal) ? aire + anchoSw + aire
+                                              : aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
+    /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
+    /* en el modo rendimiento las teclas de Profundidad y Salida no hacen nada: no salen */
+    const std::string teclas =
+        (st_.rendimiento || (hubNormal && st_.focoAuto))
+            ? (!st_.teclasRendimiento.empty() ? st_.teclasRendimiento
+                                              : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · F1 oculta · Esc sale")))
+        : !st_.teclas.empty() ? st_.teclas
+                              : idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
+                                            {idioma::tr(leg ? "plano" : "profundidad")});
+    /* la pastilla compacta (rendimiento, hub normal) se ensancha lo justo para que el renglon se lea */
+    if (st_.rendimiento || hubNormal)
+      pw = std::max(pw, 2.0f * aire + textWidth(teclas, 9.5f) + (st_.engranaje ? 44.0f : 0.0f));
+
     pw = std::min(pw, (float)vw - 48.0f);
     const float ph = 76.0f;
     panelW_ = pw;
@@ -793,34 +808,17 @@ void Hud::begin(int w, int h, float altoLogico) {
     };
     /* En modo de legado el de la izquierda es el plano que se queda quieto en la pantalla (lo que la
        ventana de ajustes llama `apoyo`); con el conversor es cuanta profundidad saca la red. */
-    if (hayFoco) {
-      btnFoco_ = {sw3D_.x + anchoSw + 18.0f, y0 + 17.0f, 32.0f, 32.0f};
-      const bool hov = btnFoco_.inside(mx_, my_);
-      if (st_.focoAuto) mask9(btnFoco_, 0, 9.0f, accent[0], accent[1], accent[2], 0.95f);
-      else mask9(btnFoco_, 0, 9.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
-      if (st_.focoAuto)
-        icono({btnFoco_.x + 4.0f, btnFoco_.y + 4.0f, 24.0f, 24.0f}, icoChip_, 0.98f, 0.98f, 1.0f, 1.0f);
-      else
-        icono({btnFoco_.x + 4.0f, btnFoco_.y + 4.0f, 24.0f, 24.0f}, icoChip_, ink[0], ink[1], ink[2], hov ? 0.95f : 0.62f);
-      ayudaFoco = hov;
-    }
-    if (!st_.rendimiento) {
-      const float xDes = sw3D_.x + anchoSw + anchoFoco + 26.0f;
-      if (sinProfundidad) {
-        depTrack_ = depKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
-        popTrack_ = {xDes, y0 + 41.0f, anchoDes, 4.0f};
-      } else {
-        depTrack_ = {xDes, y0 + 41.0f, anchoDes, 4.0f};
-        popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
-        slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
-               std::to_string(st_.depth));
-      }
+    if (!st_.rendimiento && !hubNormal) {
+      depTrack_ = {sw3D_.x + anchoSw + 26.0f, y0 + 41.0f, anchoDes, 4.0f};
+      popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
+      slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
+             std::to_string(st_.depth));
       slider(&popTrack_, &popKnob_, idioma::tr("Salida"), (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
     } else {
       depTrack_ = popTrack_ = depKnob_ = popKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
     }
 
-    const float bloqueX = st_.rendimiento ? sw3D_.x + anchoSw + 26.0f : popTrack_.x + anchoDes + 26.0f;
+    const float bloqueX = (st_.rendimiento || hubNormal) ? sw3D_.x + anchoSw + 26.0f : popTrack_.x + anchoDes + 26.0f;
     const float sitioEngranaje = st_.engranaje ? 44.0f : 0.0f;
     const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + sitioEngranaje + aire <= x0 + pw + 0.5f;
     /* ---- el engranaje: abre el panel de ajustes por encima del video (v0.84) ---- */
@@ -841,11 +839,9 @@ void Hud::begin(int w, int h, float altoLogico) {
            ajustes del programa se quito el suavizado, lleva las dos imagenes separadas y teje el
            video con el relieve que trae. Desde v0.84 no hay tercer boton: el suavizado solo se
            quita en los ajustes (asi lo pidio Rodolfo). */
-    if (cabeBloque && hayModo) {
-      const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
-      const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
-      btnNormal_ = {bloqueX, by, bw, bh};
-      btnDividido_ = {bloqueX + bw + 8.0f, by, bw, bh};
+    auto dibujaModos = [&](Rect b0, Rect b1) {
+      btnNormal_ = b0;
+      btnDividido_ = b1;
       const Rect bs[2] = {btnNormal_, btnDividido_};
       for (int i = 0; i < 2; i++) {
         const Rect &b = bs[i];
@@ -872,6 +868,11 @@ void Hud::begin(int w, int h, float altoLogico) {
             solid(ix + iw * 0.5f - 1.0f, iy + 1.0f + (float)k * 5.5f, 2.0f, 3.5f, luz, luz, luz, 1.0f);
         }
       }
+    };
+    if (cabeBloque && hayModo) {
+      const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
+      const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
+      dibujaModos({bloqueX, by, bw, bh}, {bloqueX + bw + 8.0f, by, bw, bh});
     }
 
     /* ---- el modo rendimiento: el boton del rayo (rama experimental) ----
@@ -892,13 +893,25 @@ void Hud::begin(int w, int h, float altoLogico) {
       text(nombreRend, bloqueX + 42.0f, by + 6.5f, 13.0f, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnRayo_.x + btnRayo_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.80f);
     }
+    /* ---- el hub normal: el boton del chip «AI» (rama experimental) ----
+       El chip solo, en su trazo azul claro (sin fondo propio), «Auto» o «Manual» y la flechita del menu.
+       Abierto, el boton se tiñe del azul en vez de rellenarse. */
+    if (cabeBloque && hubNormal) {
+      const float by = y0 + 18.0f, bh = 30.0f;
+      btnFoco_ = {bloqueX, by, anchoBloque, bh};
+      const bool abierto = st_.menuNormal, hov = btnFoco_.inside(mx_, my_);
+      if (abierto) mask9(btnFoco_, 0, 15.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
+      else mask9(btnFoco_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+      icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, icoChip_, 0.62f, 0.85f, 1.0f, 1.0f);
+      text(nombreFoco, bloqueX + 42.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
+      icono({btnFoco_.x + btnFoco_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.80f);
+    }
 
     /* ---- «no volver a preguntar», dentro del video ----
        Es la misma casilla de la tarjeta de la orilla. Marcada, esta aplicacion pasa directa al 3D la
        proxima vez (con el tipo que este puesto arriba); se desmarca aqui mismo y el servicio vuelve
        a preguntar. Solo sale cuando el video llego por el servicio, que es quien guarda la eleccion. */
-    if (cabeBloque && st_.recordarVisible && !st_.rendimiento) {
-      const Rect caja = hayModo ? Rect{bloqueX, y0 + 49.0f, 16.0f, 16.0f} : Rect{bloqueX, y0 + 24.0f, 18.0f, 18.0f};
+    auto dibujaRecordar = [&](Rect caja) {
       chkRecordar_ = {caja.x - 6.0f, caja.y - 5.0f, anchoRec + 12.0f, caja.h + 10.0f};
       const bool hov = chkRecordar_.inside(mx_, my_);
       const float c = hov ? 1.0f : 0.86f;
@@ -908,22 +921,14 @@ void Hud::begin(int w, int h, float altoLogico) {
       else
         solid(caja.x + 2.0f, caja.y + 2.0f, caja.w - 4.0f, caja.h - 4.0f, 0.115f, 0.12f, 0.135f, 1.0f);
       text(rotRec, caja.x + 26.0f, caja.y + (caja.h - 16.0f) * 0.5f, 12.5f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.88f);
-    }
+    };
+    if (cabeBloque && st_.recordarVisible && !st_.rendimiento && !hubNormal)
+      dibujaRecordar(hayModo ? Rect{bloqueX, y0 + 49.0f, 16.0f, 16.0f} : Rect{bloqueX, y0 + 24.0f, 18.0f, 18.0f});
 
-    /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
-    /* en el modo rendimiento las teclas de Profundidad y Salida no hacen nada: no salen */
-    const std::string teclas =
-        st_.rendimiento ? (!st_.teclasRendimiento.empty() ? st_.teclasRendimiento
-                                                          : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · F1 oculta · Esc sale")))
-        : sinProfundidad ? (!st_.teclasFoco.empty() ? st_.teclasFoco
-                                                    : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · 5/6 salida · F1 oculta · Esc sale")))
-        : !st_.teclas.empty() ? st_.teclas
-                              : idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
-                                            {idioma::tr(leg ? "plano" : "profundidad")});
     float cabe = pw - 2.0f * aire - sitioEngranaje;
     /* con la casilla de «no volver a preguntar» debajo de los botones, el renglon no pasa de ella
        (v1.09: con atajos cambiados el renglon es largo y se metia debajo de su letra) */
-    if (cabeBloque && st_.recordarVisible && !st_.rendimiento) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
+    if (cabeBloque && st_.recordarVisible && !st_.rendimiento && !hubNormal) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
 
@@ -1008,8 +1013,92 @@ void Hud::begin(int w, int h, float altoLogico) {
         cajaAyuda(lineas, ax, ay, tam);
       }
     }
+
+    /* ---- el menu del hub normal (rama experimental) ----
+       Cuelga debajo de la pastilla como el del rayo: Auto | Manual; en Manual, la Profundidad y la Salida;
+       en Auto, lo que se calculo (el plano de la saliencia y la Salida que da el mayor relieve sin aplastar
+       la imagen). Debajo, el tipo de video y la casilla de «no volver a preguntar». */
+    if (hubNormal && st_.menuNormal && btnFoco_.w > 0.0f) {
+      const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f, tam = 12.0f;
+      const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;
+      const bool manual = !st_.focoAuto;
+      std::vector<std::string> nota;
+      if (!manual)
+        nota = renglones(idioma::tr("La saliencia elige el plano de la pantalla en cada escena y la salida se calcula para el mayor relieve sin aplastar la imagen contra los topes."),
+                         tam, mw - 2.0f * pad);
+      float alto = 78.0f + (manual ? 2.0f * filaAlto : 18.0f * (float)nota.size() + 30.0f);
+      if (st_.modoVisible) alto += 46.0f;
+      if (st_.recordarVisible) alto += 32.0f;
+      alto += 8.0f;
+      menuRend_ = {mx0, my0, mw, alto};
+      solid(mx0, my0, mw, alto, 0.115f, 0.12f, 0.135f, 0.94f);
+      solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
+      text(idioma::tr("RELIEVE"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
+      std::string ayuda;
+      float ayudaY = 0.0f;
+      const char *opc[2] = {idioma::tr("Auto"), idioma::tr("Manual")};
+      const float bw = (mw - 2.0f * pad - 6.0f) * 0.5f;
+      for (int k = 0; k < 2; k++) {
+        btnAM_[k] = {mx0 + pad + (float)k * (bw + 6.0f), my0 + 36.0f, bw, 30.0f};
+        const bool puesto = (k == 0) == st_.focoAuto, hov = btnAM_[k].inside(mx_, my_);
+        if (puesto) mask9(btnAM_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
+        else mask9(btnAM_[k], 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+        textoCabe(opc[k], btnAM_[k].x + bw * 0.5f, btnAM_[k].y + 7.0f, 12.5f, bw - 12.0f, puesto ? 0.06f : ink[0],
+                  puesto ? 0.10f : ink[1], puesto ? 0.16f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
+        if (hov) {
+          ayuda = idioma::tr(k == 0 ? "Auto: en cada escena la saliencia busca lo que más llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, nítido; la salida se calcula sola para el mayor relieve que cabe sin aplastar la imagen contra los topes. Sigue al contenido y salta en los cortes de escena."
+                                    : "Manual: tú eliges el plano que queda en la pantalla (Profundidad) y cuánto sale y se hunde la imagen (Salida). Al pasar de Auto a Manual se quedan los valores que se estaban calculando.");
+          ayudaY = btnAM_[k].y;
+        }
+      }
+      float y = my0 + 78.0f;
+      if (manual) {
+        /* los dos deslizadores de siempre, ahora en el menu */
+        auto fila = [&](Rect *pista, const char *rotulo, float frac, const std::string &valor) {
+          const float vw2 = textWidth(valor, 12.0f);
+          textoCabe(rotulo, mx0 + pad, y + 6.0f, 12.0f, mw - 2.0f * pad - vw2 - 12.0f, dim[0], dim[1], dim[2], dim[3]);
+          text(valor, mx0 + mw - pad - vw2, y + 6.0f, 12.0f, ink[0], ink[1], ink[2], ink[3]);
+          *pista = {mx0 + pad + 8.0f, y + 32.0f, mw - 2.0f * pad - 16.0f, 4.0f};
+          const Rect &t = *pista;
+          solid(t.x, t.y, t.w, 4.0f, 0.30f, 0.32f, 0.35f, 0.9f);
+          const float kx = t.x + std::max(0.0f, std::min(1.0f, frac)) * t.w, kr = 8.0f;
+          solid(t.x, t.y, kx - t.x, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+          solid(kx - kr, t.y + 2.0f - kr, 2.0f * kr, 2.0f * kr, 0.95f, 0.96f, 0.98f, 1.0f);
+          y += filaAlto;
+        };
+        fila(&depTrack_, idioma::tr("Profundidad"), (float)st_.depth / 100.0f, std::to_string(st_.depth));
+        fila(&popTrack_, idioma::tr("Salida"), (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
+      } else {
+        for (size_t k = 0; k < nota.size(); k++)
+          text(nota[k], mx0 + pad, y + 18.0f * (float)k, tam, dim[0], dim[1], dim[2], 0.90f);
+        y += 18.0f * (float)nota.size() + 6.0f;
+        text(idioma::trf("Plano {} · Salida ≈ {}", {std::to_string(st_.focoPlano), std::to_string(st_.focoSalida)}), mx0 + pad, y,
+             12.5f, ink[0], ink[1], ink[2], 0.95f);
+        y += 24.0f;
+      }
+      if (st_.modoVisible) {
+        text(idioma::tr("Tipo de vídeo"), mx0 + pad, y + 13.0f, 12.0f, dim[0], dim[1], dim[2], dim[3]);
+        const float bw2 = 64.0f, bh2 = 30.0f;
+        dibujaModos({mx0 + mw - pad - 2.0f * bw2 - 8.0f, y + 6.0f, bw2, bh2}, {mx0 + mw - pad - bw2, y + 6.0f, bw2, bh2});
+        y += 46.0f;
+      }
+      if (st_.recordarVisible) dibujaRecordar({mx0 + pad, y + 8.0f, 16.0f, 16.0f});
+      /* la ayuda de Auto o Manual, a la izquierda del menu (o debajo, si no cabe) */
+      if (!ayuda.empty()) {
+        const float t2 = 12.5f;
+        const std::vector<std::string> lineas = renglones(ayuda, t2, 360.0f);
+        float aw = 0.0f;
+        for (const std::string &l : lineas) aw = std::max(aw, textWidth(l, t2));
+        aw += 24.0f;
+        const float ah = 14.0f + 19.0f * (float)lineas.size();
+        float ax = mx0 - 10.0f - aw, ay = std::min(ayudaY, (float)vh - 12.0f - ah);
+        if (ax < 12.0f) ax = std::max(12.0f, mx0 + mw - aw), ay = my0 + alto + 8.0f;
+        cajaAyuda(lineas, ax, ay, t2);
+      }
+    }
   }
 
+  accent[0] = 0.46f, accent[1] = 0.37f, accent[2] = 0.92f;   /* la tarjeta, en su morado */
   /* ---- la tarjeta de la orilla (abajo a la derecha) ----
      v0.78: se parece a la de la aplicacion oficial, que es la que Rodolfo paso en foto: tarjeta
      oscura de esquinas redondas, la pregunta arriba, dos teselas grandes con su dibujo (video normal
@@ -1197,19 +1286,6 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float arriba = menuRend_.w > 0.0f ? menuRend_.y + menuRend_.h + 6.0f : pillPanel_.y + pillPanel_.h + 6.0f;
     solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.115f, 0.12f, 0.135f, 0.90f);
     text(info_, der - tw - 10.0f, arriba + 5.0f, tam, ink[0], ink[1], ink[2], 0.92f);
-  }
-  /* la ayuda del chip del Foco automatico, bajo la pastilla y por encima de todo (rama experimental) */
-  if (ayudaFoco && btnFoco_.w > 0.0f) {
-    const float tam = 12.5f;
-    const std::vector<std::string> lineas = renglones(
-        idioma::tr(st_.focoAuto ? "Foco automático, puesto: en cada escena busca lo que más llama la atención (una cara, un objeto) con un mapa de saliencia y lo deja en el plano de la pantalla, nítido; el fondo se hunde detrás y lo cercano sale. Sigue al contenido solo, por eso la Profundidad se esconde. Pica para quitarlo."
-                                : "Foco automático: en cada escena busca lo que más llama la atención (una cara, un objeto) con un mapa de saliencia y lo deja en el plano de la pantalla, nítido; el fondo se hunde detrás y lo cercano sale. Sigue al contenido solo, así que la Profundidad se esconde mientras está puesto. Pica para ponerlo."),
-        tam, 380.0f);
-    float w = 0.0f;
-    for (const std::string &l : lineas) w = std::max(w, textWidth(l, tam));
-    w += 24.0f;
-    const float x = std::max(12.0f, std::min(btnFoco_.x - 12.0f, (float)vw - 12.0f - w));
-    cajaAyuda(lineas, x, pillPanel_.y + pillPanel_.h + 8.0f, tam);
   }
 }
 
@@ -1869,6 +1945,19 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
     }
   } else {
     if (btnFoco_.inside(mx, my)) return HitFocoAuto;
+    /* el menu del hub normal: Auto | Manual, los deslizadores (Manual), el tipo de video y la casilla */
+    if (st_.focoVisible && st_.menuNormal && menuRend_.inside(mx, my)) {
+      if (btnAM_[0].inside(mx, my)) return HitNormalAuto;
+      if (btnAM_[1].inside(mx, my)) return HitNormalManual;
+      if (depTrack_.w > 0.0f && Rect{depTrack_.x - pad, depTrack_.y - 14.0f, depTrack_.w + 2.0f * pad, 26.0f}.inside(mx, my))
+        return HitDepth;
+      if (popTrack_.w > 0.0f && Rect{popTrack_.x - pad, popTrack_.y - 14.0f, popTrack_.w + 2.0f * pad, 26.0f}.inside(mx, my))
+        return HitPopout;
+      if (btnNormal_.inside(mx, my)) return HitModoNormal;
+      if (btnDividido_.inside(mx, my)) return HitModoDividido;
+      if (chkRecordar_.inside(mx, my)) return HitRecordar;
+      return HitRendFondo;
+    }
     Rect dt = {depTrack_.x - pad, depTrack_.y - pad, depTrack_.w + 2.0f * pad, depTrack_.h + 2.0f * pad};
     Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
     if (depTrack_.w > 0.0f && dt.inside(mx, my)) return HitDepth;
@@ -1888,7 +1977,9 @@ void Hud::dragTo(Hit which, float mxa) {
     st_.depth = std::max(0, std::min(100, (int)std::lround(f * 100.0f)));
   } else if (which == HitPopout) {
     float f = (mx - popTrack_.x) / std::max(1.0f, popTrack_.w);
-    st_.popout = std::max(-50, std::min(50, (int)std::lround(f * 100.0f)));
+    /* el deslizador va de -50 a +50 (se pinta en (salida + 50) / 100): antes se tomaba f * 100 y la mitad
+       del recorrido ya daba 50, la bola saltaba al final y lo negativo no se alcanzaba con el raton */
+    st_.popout = std::max(-50, std::min(50, (int)std::lround(f * 100.0f) - 50));
   } else if (which >= HitRendMezcla && which <= HitRendParalaje) {
     /* los deslizadores del menu del rayo: el visor ve el valor nuevo y lo pone en marcha */
     const int k = (int)which - (int)HitRendMezcla;
