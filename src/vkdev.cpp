@@ -1,5 +1,10 @@
 /* vkdev.cpp — implementación de VkDev (ver vkdev.h). */
 #include "vkdev.h"
+
+#include <linux/capability.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include "frame.h"
 
 #include <fcntl.h>
@@ -272,6 +277,13 @@ bool VkDev::createDevice(const std::vector<const char *> &extraDevExts, VkSurfac
     }
   } else if (quiereAlta || quiereTR) {
     prioridadNota_ = "la tarjeta no ofrece VK_KHR_global_priority";
+  }
+  if (rDev == VK_SUCCESS) {
+    /* Ya tenemos la cola con su prioridad: el permiso (CAP_SYS_NICE de `setcap`) no hace falta para
+       nada mas. Se suelta, y el proceso vuelve a dejarse leer (/proc, depurador) como cualquier otro. */
+    __user_cap_header_struct cab{_LINUX_CAPABILITY_VERSION_3, 0};
+    __user_cap_data_struct datos[2]{};
+    if (syscall(SYS_capset, &cab, datos) == 0) prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
   }
   if (rDev != VK_SUCCESS) {
     qci.pNext = nullptr;

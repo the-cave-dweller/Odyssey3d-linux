@@ -1212,6 +1212,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
 
+  /* el app_id, dicho por nosotros (rama experimental): sin esto KWin lo saca de /proc/<pid>/exe, y con
+     `setcap` en el binario el proceso no se deja leer (no volcable). MEDIDO 26-nov: el servicio no
+     encontraba la ventana del visor, no bajaba el juego y el juego quedaba encima del 3D. */
+  glfwWindowHintString(GLFW_WAYLAND_APP_ID, "odysseyvk");
   GLFWwindow *win = glfwCreateWindow(W, H, NOMBRE_APP, (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
   if (!win) {
     const char *desc = nullptr;

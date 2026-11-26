@@ -1,4 +1,5 @@
 #include "mpris.h"
+#include "bususuario.h"
 
 #ifdef HAVE_SDBUS
 #include <systemd/sd-bus.h>
@@ -70,7 +71,7 @@ Mpris::~Mpris() {
 bool Mpris::open(std::string *err) {
 #ifdef HAVE_SDBUS
   if (bus_) return refresh(err);
-  int r = sd_bus_open_user(&bus_);
+  int r = abrirBusUsuario(&bus_);
   if (r < 0) {
     if (err) *err = "no hay bus del usuario";
     bus_ = nullptr;

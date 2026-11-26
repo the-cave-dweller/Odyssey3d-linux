@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El permiso de la prioridad dejaba el visor detrás del juego (rama `experimental`)
+
+- Rodolfo, tras dar `setcap cap_sys_nice+ep` al binario: «lo está mandando tras el juego». MEDIDO en
+  la partida de las 04:16: la cola salió con prioridad alta (el permiso sirve), pero
+  - el servicio no encontró la ventana del visor en toda la sesión: ni «el video pasa por debajo»
+    ni «ventanas más pasaron por debajo». Con un permiso de fichero el proceso queda «no volcable» y
+    KWin no puede leer su /proc/<pid>/exe, de donde saca el app_id cuando el programa no lo da; sin
+    app_id «odysseyvk» el servicio no reconoce el visor y no baja el juego, que queda encima;
+  - el visor: «sin atajos globales (no hay bus del usuario)»: glibc arranca en modo seguro y
+    sd_bus_open_user lee la dirección del bus con secure_getenv (vacía). También le pasaba a la
+    pausa del vídeo (MPRIS) y a los avisos del escritorio.
+- Arreglos: el visor da su app_id (`GLFW_WAYLAND_APP_ID = odysseyvk`); `abrirBusUsuario` (nuevo
+  `src/bususuario.h`) abre el bus a mano con DBUS_SESSION_BUS_ADDRESS o XDG_RUNTIME_DIR si el de
+  siempre falla (atajos, MPRIS, avisos, bandeja); y en cuanto la cola tiene su prioridad, el visor
+  suelta el permiso (capset a cero) y vuelve a ser volcable. Sin probar con el permiso puesto
+  (hace falta sudo).
+- Lo que dijo la medición nueva: con prioridad alta el cuadro tarda en la tarjeta 0,8–1,3 ms y la
+  valla 0: la tarjeta ya no es la que hace esperar. La espera está en ADQUIRIR (imagen libre del
+  intercambio): 35–61 ms, con el visor tapado (KWin no presenta una ventana tapada). En la partida
+  de las 04:03 (sin desglose) las esperas de 15–23 ms con el juego a ~78 cuadros cuadran con el
+  VRR siguiendo al juego. Para la próxima prueba: `vrr_en_3d = no` en el serve.conf de Rodolfo
+  (respaldo `serve.conf.respaldo-2026-11-26-antes-vrr`): 165 Hz fijos durante el 3D.
+
 ## Prioridad del visor en la tarjeta (rama `experimental`)
 
 - La partida de las 04:03 con la medición nueva: el juego mandaba parejo (74–84 cuadros/s, huecos

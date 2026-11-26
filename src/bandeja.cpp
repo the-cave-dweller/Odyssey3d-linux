@@ -1,5 +1,6 @@
 /* bandeja.cpp — ver bandeja.h. */
 #include "bandeja.h"
+#include "bususuario.h"
 #include "idioma.h"
 
 #include <systemd/sd-bus.h>
@@ -66,7 +67,7 @@ Bandeja::~Bandeja() { quitar(); }
 
 bool Bandeja::poner(std::string *err) {
   if (bus_) return true;
-  int r = sd_bus_open_user(&bus_);
+  int r = abrirBusUsuario(&bus_);
   if (r < 0) {
     if (err) *err = std::string("sin bus de sesion: ") + std::strerror(-r);
     bus_ = nullptr;
