@@ -121,6 +121,12 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - La memoria de la tarjeta gráfica, «3.7 / 24 GB» (decía «de» en todos los idiomas).
 - Traducciones: «PROGRAMA» y «En GitHub: {}» nuevas; fuera «VERSIÓN», «Instalada», «OTROS», «Buscar
   actualizaciones» y «El tipo de vídeo se detecta solo».
+- **Las imágenes del README, rehechas** (eran de la 1.10: la pastilla de Profundidad y Salida, la
+  tarjeta de la pregunta y el panel con cinco pestañas). `tools/capturas-readme.py` pinta ahora la
+  pastilla en Auto con su menú abierto; la pestaña Ajustes entera (el panel a 820×1070), con GitHub una
+  versión por delante para que la fila de la versión y la tarjeta digan lo mismo; después de la primera
+  vez, `modelo` apunta a un archivo vacío del HOME aparte para que no salga el aviso de la red; los
+  atajos con su cabecera a la vista. Fuera `language.png`, que el README ya no usaba.
 
 ## El arranque del 3D, en paralelo (v1.12)
 

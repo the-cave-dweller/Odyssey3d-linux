@@ -61,44 +61,45 @@ def interfaz(lengua, destino):
     os.makedirs(os.path.join(casa, ".config", "odysseyvk"))
     os.makedirs(os.path.join(estado, "odysseyvk"))
     with open(os.path.join(casa, ".config", "odysseyvk", "serve.conf"), "w") as f:
-        f.write("modo = ask\nbandeja = si\nbarra_tareas = si\n")
+        f.write("bandeja = si\nbarra_tareas = si\n")
     version = open(os.path.join(RAIZ, "VERSION")).read().strip()
+    # (v1.12) GitHub con una version mas: la fila de la version en Ajustes y la tarjeta dicen lo mismo
+    siguiente = "%.2f" % (float(version) + 0.01)
     with open(os.path.join(estado, "odysseyvk", "actualizacion"), "w") as f:
-        f.write("remota = %s\nhora = %d\n" % (version, int(time.mktime(time.strptime("2026-11-26 09:30", "%Y-%m-%d %H:%M")))))
+        f.write("remota = %s\nhora = %d\n" % (siguiente, int(time.mktime(time.strptime("2026-11-26 09:30", "%Y-%m-%d %H:%M")))))
     steam = os.path.expanduser("~/.local/share/Steam")
     if os.path.isdir(steam):
         os.makedirs(os.path.join(casa, ".local", "share"))
         os.symlink(steam, os.path.join(casa, ".local", "share", "Steam"))
     try:
         mitad = (W // 2, 0, W, H)
-        # la pastilla y la tarjeta de la pregunta
-        im = pinta(casa, estado, lengua, "pastilla", ODYSSEYVK_HUD_RECORDAR=2)
-        pastilla = sobre(im, caja_alfa(im, (W // 2, 0, W, 400)))
-        tarjeta = sobre(im, caja_alfa(im, (W // 2, H // 2, W, H)))
-        hoja = Image.new("RGB", (max(pastilla.width, tarjeta.width), pastilla.height + tarjeta.height))
-        hoja.paste(fondo(hoja.width, hoja.height))
-        hoja.paste(pastilla, (hoja.width - pastilla.width, 0))
-        hoja.paste(tarjeta, (hoja.width - tarjeta.width, pastilla.height))
-        guarda(hoja, os.path.join(destino, "pill.png"), 1400)
-        # el panel: primera vez (sin red), juegos, programa, la lista de idiomas
+        # (v1.12) la pastilla en Auto con su menu abierto; la tarjeta de la pregunta ya no existe
+        im = pinta(casa, estado, lengua, "pastilla", ODYSSEYVK_HUD_RECORDAR=0, ODYSSEYVK_HUD_FOCO=1,
+                   ODYSSEYVK_HUD_MENU_NORMAL=1)
+        guarda(sobre(im, caja_alfa(im, (W // 2, 0, W, 1300))), os.path.join(destino, "pill.png"), 1000)
+        # el panel: primera vez (sin red), juegos, ajustes
         centro = (W // 2 - 900, H // 2 - 700, W // 2 + 900, H // 2 + 700)
         im = pinta(casa, estado, lengua, "primera", ODYSSEYVK_HUD_PANEL=0)
         guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "first-run.png"), 1400)
+        # (v1.12) de aqui en adelante, como con la red en su sitio: `modelo` apunta a un archivo vacio
+        # del HOME aparte y el panel no pone el aviso de que falta (la carpeta real ni se mira)
+        red = os.path.join(tmp, "red.onnx")
+        open(red, "w").close()
+        with open(os.path.join(casa, ".config", "odysseyvk", "serve.conf"), "a") as f:
+            f.write("modelo = %s\n" % red)
         im = pinta(casa, estado, lengua, "juegos", ODYSSEYVK_HUD_PANEL=1)
         guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "games.png"), 1400)
-        im = pinta(casa, estado, lengua, "programa", ODYSSEYVK_HUD_PANEL=3)
-        programa = sobre(im, caja_alfa(im, centro))
-        siguiente = "%.2f" % (float(version) + 0.01)
+        # (v1.12) la pestana Ajustes entera, con el panel alto: rendimiento, fluidez, cabeza y programa
+        im = pinta(casa, estado, lengua, "programa", ODYSSEYVK_HUD_PANEL=3, ODYSSEYVK_HUD_TAMANO="820x1070")
+        programa = sobre(im, caja_alfa(im, (W // 2 - 1000, 0, W // 2 + 1000, H)))
         im = pinta(casa, estado, lengua, "act", ODYSSEYVK_HUD_ACTUALIZACION=siguiente)
         act = sobre(im, caja_alfa(im, (W // 2, H // 2, W, H)))
         hoja = fondo(programa.width + act.width, max(programa.height, act.height))
         hoja.paste(programa, (0, 0))
         hoja.paste(act, (programa.width, hoja.height - act.height))
-        guarda(hoja, os.path.join(destino, "settings-program.png"), 1600)
-        im = pinta(casa, estado, lengua, "idiomas", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_MENU_IDIOMA=1)
-        caja = caja_alfa(im, centro)
-        guarda(sobre(im, (caja[0], caja[1], caja[2], caja[1] + 820), 0), os.path.join(destino, "language.png"), 1400)
-        im = pinta(casa, estado, lengua, "atajos", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_CORRIDA=470,
+        guarda(hoja, os.path.join(destino, "settings-program.png"), 1800)
+        # (v1.12) sin language.png: el idioma es una fila mas de Ajustes, se ve en settings-program.png
+        im = pinta(casa, estado, lengua, "atajos", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_CORRIDA=255,
                    ODYSSEYVK_HUD_CAPTURA="prof+")
         guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "shortcuts.png"), 1400)
         im = pinta(casa, estado, lengua, "aviso", ODYSSEYVK_HUD_AVISO=1)

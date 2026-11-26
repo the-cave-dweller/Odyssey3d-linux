@@ -16,7 +16,7 @@ Lo que tienes:
   Español, Français, Deutsch, 中文, 日本語, Русский), actualizaciones desde este repositorio y
   desinstalación con un clic.
 
-![La pastilla y la tarjeta](docs/img/es/pill.png)
+![La pastilla y su menú del relieve](docs/img/es/pill.png)
 
 ## Instalar
 
@@ -174,7 +174,7 @@ al aspa del panel se pone amarilla (verde = al día). Actualizar baja, compila, 
 pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. La pestaña
 **Ajustes** (Programa hasta la 1.11) tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
 
-![La pestaña Programa y la tarjeta de actualización](docs/img/es/settings-program.png)
+![La pestaña Ajustes y la tarjeta de actualización](docs/img/es/settings-program.png)
 
 ## Configuración
 

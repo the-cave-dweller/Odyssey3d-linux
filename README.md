@@ -16,7 +16,7 @@ What you get:
   Español, Français, Deutsch, 中文, 日本語, Русский), updates from this repository and a one-click
   uninstall.
 
-![The pill and the card](docs/img/pill.png)
+![The pill and its relief menu](docs/img/pill.png)
 
 ## Install
 
