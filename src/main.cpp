@@ -40,6 +40,7 @@
 #include <poll.h>
 
 #include <csignal>
+#include <functional>
 #include <map>
 #include <set>
 #include <sys/stat.h>
@@ -4700,8 +4701,16 @@ static int cmdServe(int argc, char **argv) {
   double tarjetaAvisoT = 0.0;
   std::string hijoApp;          /* la aplicacion de la sesion en curso */
   int visorEscondidas = 0;      /* cuantas veces un juego mando el visor detras en esta sesion */
-  auto mostrarAviso = [&](const std::string &titulo, const std::vector<std::string> &lineas, double ahora) {
+  /* v1.07: el texto del aviso se guarda como receta (los textos en español y sus datos), no ya
+     traducido: si se cambia el idioma con la tarjeta puesta, se vuelve a escribir en el nuevo.
+     Antes salia «了解» en el boton y el titulo y los renglones seguian en español. */
+  std::function<void(std::string &, std::vector<std::string> &)> avisoTexto;
+  auto mostrarAviso = [&](std::function<void(std::string &, std::vector<std::string> &)> texto, double ahora) {
     if (!hayTarjeta || !ov || ov->askVisible()) return;
+    avisoTexto = std::move(texto);
+    std::string titulo;
+    std::vector<std::string> lineas;
+    avisoTexto(titulo, lineas);
     ov->hud().state().askAviso = titulo;
     ov->hud().state().askAvisoLineas = lineas;
     ov->showAsk(std::string(), std::string());
@@ -5229,9 +5238,12 @@ static int cmdServe(int argc, char **argv) {
                veces por sesion y el juego siempre delante. La salida es que el juego vaya en ventana
                sin bordes: se avisa con la tarjeta a la segunda vez. */
             if (esJuego(hijoApp) && ++visorEscondidas == 2)
-              mostrarAviso(idioma::tr("El juego tapa el 3D"), {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
-                                                               idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se ve encima."),
-                                                               idioma::tr("Con gamescope igual: también tiene que ir sin bordes.")}, now);
+              mostrarAviso([](std::string &t, std::vector<std::string> &l) {
+                t = idioma::tr("El juego tapa el 3D");
+                l = {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
+                     idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se ve encima."),
+                     idioma::tr("Con gamescope igual: también tiene que ir sin bordes.")};
+              }, now);
             if (!avisoAparecerHecho) {
               avisoAparecerHecho = true;
               std::printf("[ventana] %s\n", pudo
@@ -5511,10 +5523,13 @@ static int cmdServe(int argc, char **argv) {
             /* un juego cuya ventana desaparece a los pocos minutos de entrar en 3D: lo mas probable es
                que se haya caido (v1.00). Se avisa con lo que suele arreglarlo. */
             if (esJuego(hijoApp) && std::string(motivo) == "la ventana del video ya no esta" && hijoDesde > 0.0 && now - hijoDesde < 300.0) {
-              const std::string t = idioma::trf("El juego se cerró a los {} s de entrar en 3D", {std::to_string((long)std::lround(now - hijoDesde))});
-              mostrarAviso(t, {idioma::tr("Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar."),
-                               idioma::tr("A pantalla completa exclusiva choca con el visor al cambiar de modo."),
-                               idioma::tr("Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.")}, now);
+              const std::string segundos = std::to_string((long)std::lround(now - hijoDesde));
+              mostrarAviso([segundos](std::string &t, std::vector<std::string> &l) {
+                t = idioma::trf("El juego se cerró a los {} s de entrar en 3D", {segundos});
+                l = {idioma::tr("Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar."),
+                     idioma::tr("A pantalla completa exclusiva choca con el visor al cambiar de modo."),
+                     idioma::tr("Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.")};
+              }, now);
             }
             /* KWin guarda, para cada configuracion de pantallas, como estaba cada ventana, y al
                volver a esa configuracion se lo repone (v0.75). Medido el 25-nov: a las 11:25:32,
@@ -5748,6 +5763,7 @@ static int cmdServe(int argc, char **argv) {
             if (ov) {
               std::string e2;
               if (!ov->hud().buildAtlas(&e2)) std::fprintf(stderr, "[serve] atlas: %s\n", e2.c_str());
+              if (tarjetaAviso && avisoTexto) avisoTexto(ov->hud().state().askAviso, ov->hud().state().askAvisoLineas);
               if (ov->askVisible()) ov->repaint();
             }
             std::printf("[serve] idioma: %s\n", idioma::codigo(idioma::actual()));

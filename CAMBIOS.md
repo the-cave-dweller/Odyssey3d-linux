@@ -3,6 +3,15 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La tarjeta de aviso cambia de idioma con las demás (v1.08)
+
+- Rodolfo, con la 1.07 en japonés: la tarjeta «El juego se cerró a los 28 s de entrar en 3D» seguía
+  en español y solo el botón decía «了解». El servicio guardaba el título y los renglones ya
+  traducidos al momento de ponerla (antes de cambiar el idioma); el botón se traduce al pintarse.
+- Ahora el aviso se guarda como receta (los textos en español y sus datos, como los segundos) y,
+  cuando el servicio nota en serve.conf el idioma nuevo, lo vuelve a escribir y repinta la tarjeta.
+  Las otras dos tarjetas (la pregunta del vídeo y la de actualización) ya se traducían al pintarse.
+
 ## El idioma: inglés de fábrica y seis más (v1.07)
 
 - Rodolfo: «Crea un botón de idioma, haz el default el inglés, pero mantén Español, Francés, Alemán,
