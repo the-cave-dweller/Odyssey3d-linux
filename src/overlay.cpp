@@ -26,6 +26,7 @@
 #include "viewporter-client-protocol.h"
 #endif
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "xdg-shell-client-protocol.h"
 #ifdef HAVE_KWIN_BLUR
 #include "blur-client-protocol.h"
 #endif
@@ -56,6 +57,11 @@ struct Overlay::Impl {
   wl_compositor *comp = nullptr;
   wl_shm *shm = nullptr;
   zwlr_layer_shell_v1 *shell = nullptr;
+  xdg_wm_base *wmBase = nullptr;         /* la ventana normal de la entrada en la barra de tareas (v1.04) */
+  wl_surface *barraSurf = nullptr;
+  xdg_surface *barraXdg = nullptr;
+  xdg_toplevel *barraTop = nullptr;
+  bool barraCerrada = false;
   zxdg_output_manager_v1 *xdgMgr = nullptr;
   wl_seat *seat = nullptr;
   wl_pointer *pointer = nullptr;
@@ -122,6 +128,7 @@ struct Overlay::Impl {
     bool libre = false;
   };
   std::vector<Bloque *> bloques;
+  Bloque *barraBloque = nullptr;   /* el pixel de la entrada en la barra de tareas (v1.04) */
   std::vector<float> acum;        /* RGBA premultiplicado, para mezclar como hace la GPU */
 
   Hud hud;
@@ -152,6 +159,8 @@ struct Overlay::Impl {
   std::string pistaMonitor;
 
   ~Impl() {
+    quitaBarra();
+    if (wmBase) xdg_wm_base_destroy(wmBase);
     limpiaTarjeta();
     liberaBloques(true);
 #ifdef HAVE_FRACTIONAL_SCALE
@@ -176,6 +185,58 @@ struct Overlay::Impl {
     if (dpy) wl_display_disconnect(dpy);
     for (Monitor *m : monitores) delete m;
     monitores.clear();
+  }
+
+  /* ---------- la entrada en la barra de tareas (v1.04) ---------- */
+  static void wmPing(void *, xdg_wm_base *b, uint32_t serie) { xdg_wm_base_pong(b, serie); }
+  static void barraConfigura(void *data, xdg_surface *xs, uint32_t serie) {
+    Impl *s = static_cast<Impl *>(data);
+    xdg_surface_ack_configure(xs, serie);
+    if (s->barraBloque && s->barraSurf) {
+      wl_surface_attach(s->barraSurf, s->barraBloque->buf, 0, 0);
+      wl_surface_damage(s->barraSurf, 0, 0, 1, 1);
+      wl_surface_commit(s->barraSurf);
+    }
+  }
+  static void topConfigura(void *, xdg_toplevel *, int32_t, int32_t, wl_array *) {}
+  static void topCierra(void *data, xdg_toplevel *) { static_cast<Impl *>(data)->barraCerrada = true; }
+  static void topLimites(void *, xdg_toplevel *, int32_t, int32_t) {}
+  static void topCapacidades(void *, xdg_toplevel *, wl_array *) {}
+  void ponBarra(const std::string &titulo) {
+    if (barraTop || !wmBase || !comp || !shm) return;
+    static const xdg_wm_base_listener wl = {wmPing};
+    static const xdg_surface_listener sl = {barraConfigura};
+    static const xdg_toplevel_listener tl = {topConfigura, topCierra, topLimites, topCapacidades};
+    xdg_wm_base_add_listener(wmBase, &wl, this);
+    barraSurf = wl_compositor_create_surface(comp);
+    std::string e;
+    barraBloque = nuevoBloque(shm, 1, 1, &e);   /* un pixel transparente: la ventana no se ve */
+    wl_region *nada = wl_compositor_create_region(comp);
+    wl_surface_set_input_region(barraSurf, nada);   /* y el raton la atraviesa */
+    wl_region_destroy(nada);
+    barraXdg = xdg_wm_base_get_xdg_surface(wmBase, barraSurf);
+    xdg_surface_add_listener(barraXdg, &sl, this);
+    barraTop = xdg_surface_get_toplevel(barraXdg);
+    xdg_toplevel_add_listener(barraTop, &tl, this);
+    xdg_toplevel_set_title(barraTop, titulo.c_str());
+    xdg_toplevel_set_app_id(barraTop, "odysseyvk");   /* el icono y el nombre del lanzador del menu */
+    wl_surface_commit(barraSurf);
+    wl_display_flush(dpy);
+  }
+  void quitaBarra() {
+    if (barraTop) xdg_toplevel_destroy(barraTop);
+    if (barraXdg) xdg_surface_destroy(barraXdg);
+    if (barraSurf) wl_surface_destroy(barraSurf);
+    barraTop = nullptr, barraXdg = nullptr, barraSurf = nullptr;
+    if (barraBloque) {
+      wl_buffer_destroy(barraBloque->buf);
+      wl_shm_pool_destroy(barraBloque->pozo);
+      ::munmap(barraBloque->mapa, barraBloque->tam);
+      ::close(barraBloque->fd);
+      delete barraBloque;
+      barraBloque = nullptr;
+    }
+    if (dpy) wl_display_flush(dpy);
   }
 
   /* ---------- memoria compartida ---------- */
@@ -555,6 +616,8 @@ struct Overlay::Impl {
           wl_registry_bind(reg, name, &wl_compositor_interface, std::min<uint32_t>(version, 4)));
     else if (!std::strcmp(iface, wl_shm_interface.name))
       s->shm = static_cast<wl_shm *>(wl_registry_bind(reg, name, &wl_shm_interface, std::min<uint32_t>(version, 1)));
+    else if (!std::strcmp(iface, xdg_wm_base_interface.name))
+      s->wmBase = static_cast<xdg_wm_base *>(wl_registry_bind(reg, name, &xdg_wm_base_interface, std::min<uint32_t>(version, 2)));
     else if (!std::strcmp(iface, zwlr_layer_shell_v1_interface.name))
       s->shell = static_cast<zwlr_layer_shell_v1 *>(
           wl_registry_bind(reg, name, &zwlr_layer_shell_v1_interface, std::min<uint32_t>(version, 1)));
@@ -1128,6 +1191,9 @@ void Overlay::hideAsk() {
 bool Overlay::askVisible() const { return d->tarjetaPuesta; }
 
 bool Overlay::conexionCaida() const { return d && d->conexionCaida; }
+void Overlay::ponEntradaBarra(const std::string &titulo) { if (d) d->ponBarra(titulo); }
+void Overlay::quitaEntradaBarra() { if (d) d->quitaBarra(); }
+bool Overlay::entradaCerrada() const { return d && d->barraCerrada; }
 
 bool Overlay::remember() const { return d && d->hud.state().remember; }
 

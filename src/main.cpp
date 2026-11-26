@@ -3046,6 +3046,8 @@ static int cmdAjustes(int argc, char **argv) {
     ::unlink(rutaPid.c_str());
     return 1;
   }
+  /* la entrada en la barra de tareas mientras el panel esta abierto (v1.04), si no se apago */
+  if (prefs::leer().enBarraTareas) ov.ponEntradaBarra("OdysseyVK — Ajustes");
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
               grande ? "al doble: hay una sesion 3D" : "tamano de escritorio", (int)juegos.size());
   std::fflush(stdout);
@@ -3059,7 +3061,7 @@ static int cmdAjustes(int argc, char **argv) {
     return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
   };
   double cerrarEn = -1.0, miradaHub = 0.0, miradaRend = 0.0;
-  while (!g_cierraPanel && !ov.conexionCaida()) {
+  while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
     ov.waitAndDispatch(100);
     Overlay::Golpe g;
     bool repintar = false;
@@ -5711,6 +5713,7 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.actualizaciones != cfg.actualizaciones || nuevo.actualizarAuto != cfg.actualizarAuto;
           cfg.actualizaciones = nuevo.actualizaciones;
           cfg.barraTareas = nuevo.barraTareas;
+          if (nuevo.bandeja && !cfg.bandeja) bandejaIntento = -100.0;   /* encendida en el panel: ponerla ya, sin esperar al reintento */
           cfg.bandeja = nuevo.bandeja;
           cfg.actualizarAuto = nuevo.actualizarAuto;
           if (nuevo.actualizacionesCada != cfg.actualizacionesCada) {

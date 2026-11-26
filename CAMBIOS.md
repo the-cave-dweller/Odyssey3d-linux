@@ -3,6 +3,19 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El panel de ajustes en la barra de tareas (v1.04)
+
+- Rodolfo, con la 1.03 y el panel abierto: no está «en el panel de abajo, en el gestor de tareas».
+  El panel es una capa (layer-shell) y KDE nunca pone las capas en el gestor de tareas.
+- Mientras el panel está abierto, la capa pone además una ventana normal de 1×1 transparente y sin
+  entrada de ratón, con título «OdysseyVK — Ajustes» y el app_id `odysseyvk` (el icono y el nombre
+  del lanzador): lo que se ve es su botón en el gestor de tareas. Cerrarla desde ahí cierra el
+  panel. El interruptor de Otros pasa a «Mostrar OdysseyVK en la barra de tareas» y vale para el
+  visor 3D y para el panel.
+- Al volver a encender la bandeja en el panel, el icono vuelve al momento (antes esperaba al
+  reintento: MEDIDO, 10 s).
+- **No probado**: había un panel abierto (abrir otro lo cierra) y no se tocó.
+
 ## Otros: icono en la bandeja del sistema en vez de Alt+Tab (v1.03)
 
 - Rodolfo, con la 1.02: «no en Alt+Tab, sino en el panel de notificaciones». El segundo interruptor

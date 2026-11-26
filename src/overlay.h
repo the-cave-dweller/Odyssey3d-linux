@@ -82,6 +82,13 @@ public:
      tamaño o con el lienzo). Desde ahi la tarjeta no vuelve a aparecer: reiniciar el
      servicio la recupera. */
   bool conexionCaida() const;
+  /* Una entrada en la barra de tareas mientras el panel esta abierto (v1.04). Las capas (layer-shell)
+     nunca salen en el gestor de tareas de KDE, asi que se pone al lado una ventana normal de 1x1
+     transparente, con el nombre y el icono de OdysseyVK y sin entrada de raton: lo que se ve es su
+     boton en la barra. Cerrarla desde la barra cierra el panel (`entradaCerrada`). */
+  void ponEntradaBarra(const std::string &titulo);
+  void quitaEntradaBarra();
+  bool entradaCerrada() const;
 
   /* Comprueba si el compositor puso la capa en la pantalla pedida; si no, la rehace
      (como mucho dos veces) y deja el motivo en `lastError()`. Devuelve true si reaccionó. */

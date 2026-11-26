@@ -585,8 +585,8 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     s.rotulo = "OTROS";
     pon(s, "");
     Hud::ItemPanel bt;
-    bt.tipo = Hud::ItemPanel::Interruptor, bt.rotulo = "Mostrar el visor 3D en la barra de tareas";
-    bt.nota = "El administrador de tareas del panel de KDE; se aplica al momento";
+    bt.tipo = Hud::ItemPanel::Interruptor, bt.rotulo = "Mostrar OdysseyVK en la barra de tareas";
+    bt.nota = "En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos";
     bt.valor = v.enBarraTareas;
     pon(bt, "barra_tareas");
     Hud::ItemPanel sw;
