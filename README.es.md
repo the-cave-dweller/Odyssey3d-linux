@@ -86,7 +86,9 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 
 Cada atajo se cambia en la página principal del panel → **Atajos de teclado** (la sección se pliega con la flechita de su
 cabecera, como *Aplicaciones que no preguntan*; las dos empiezan plegadas): pícalo y pulsa la combinación nueva
-(necesita Ctrl, Alt o Meta; Esc cancela y la flecha circular vuelve a la de fábrica). Mientras el
+o una tecla sola (Esc cancela y la flecha circular vuelve a la de fábrica). Una tecla sola, o con
+Mayús nada más, vale desde la 1.12 (hasta la 1.11 hacía falta Ctrl, Alt o Meta): mientras haya 3D,
+esa tecla ya no llega al vídeo ni al juego, y el panel lo avisa al ponerla. Mientras el
 panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
 teclas; Esc lo cierra.
 

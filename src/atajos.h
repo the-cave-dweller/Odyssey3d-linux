@@ -38,7 +38,8 @@ const std::vector<Def> &lista();
 std::map<std::string, std::string> combos();
 /* "ctrl + shift + k" -> "Ctrl+Shift+K"; vacio si no se entiende */
 std::string normaliza(const std::string &combo);
-/* que no se coma una tecla suelta en todo el escritorio: hace falta Ctrl, Alt o Meta */
+/* si lleva Ctrl, Alt o Meta. Hasta la 1.11 hacia falta; desde la 1.12 una tecla sola tambien vale y el
+   panel avisa de que, mientras haya 3D, esa tecla no llega al video ni al juego */
 bool tieneModificador(const std::string &combo);
 /* el renglon de las teclas de la pastilla cuando alguna no es la de fabrica (vacio si todas lo son) */
 /* `rendimiento` (rama experimental): el renglon de la pastilla del modo rendimiento, sin Profundidad ni Salida */

@@ -86,8 +86,10 @@ Keys (they also work while the video or game has the keyboard):
 
 Every shortcut can be changed in the panel's main page → **Keyboard shortcuts** (the section folds with the arrow
 on its header, like *Apps that don't ask*; both start folded): click it and press the new
-combination (it needs Ctrl, Alt or Meta; Esc cancels, the circular arrow puts the factory one
-back). While the settings panel is open it keeps the whole keyboard, so the game underneath gets
+combination or a single key (Esc cancels, the circular arrow puts the factory one back). A single
+key, or one with only Shift, works too since 1.12 (up to 1.11 it needed Ctrl, Alt or Meta): while
+the 3D is on, that key no longer reaches the video or the game, and the panel says so when you set
+it. While the settings panel is open it keeps the whole keyboard, so the game underneath gets
 no keys; Esc closes it.
 
 ![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)

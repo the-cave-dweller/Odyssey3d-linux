@@ -103,6 +103,24 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
+## Atajos de una tecla sola (v1.12)
+
+- Rodolfo: «allow one key being assigned too, on the keyboard shortcuts».
+- **Panel** (`src/preferencias.cpp`): al esperar la combinación nueva, una tecla sola (o con Mayús nada
+  más) ya no se rechaza con «necesita Ctrl, Alt o Meta»: se guarda, y el pie avisa de que, mientras
+  haya 3D, esa tecla ya no llega al vídeo ni al juego (el atajo es global del escritorio mientras hay
+  un visor abierto). Los modificadores solos se siguen ignorando hasta que llega la tecla de verdad,
+  así que pulsar Ctrl de camino a Ctrl+X no se apunta.
+- **Visor** (`src/vkview.cpp`): la tecla con el visor enfocado se busca en los atajos aunque no lleve
+  Ctrl, Alt ni Meta, y manda sobre las teclas propias del visor (P, C...), que valen solo si no son de
+  ningún atajo.
+- **Golpe de prueba** `tecla:<combinación>` (`tecla:d`, `tecla:ctrl+shift+9`): la misma búsqueda que
+  una tecla pulsada, sin teclado. Probado en el visor aparte con `atajo_ver_profundidad = D` en un
+  HOME aparte: `tecla:x` no es de ningún atajo y `tecla:d` pone la vista de profundidad; el panel
+  enseña la D en la lista. Sin probar todavía: el registro de una tecla sola en kglobalaccel con el
+  visor de verdad (`ctl atajos` lo registraría en el escritorio de Rodolfo).
+- Traducciones: fuera «{}: el atajo necesita Ctrl, Alt o Meta»; nueva la del aviso.
+
 ## Vista de depuración de la profundidad: Ctrl+Mayús+9 (v1.12)
 
 - Rodolfo: «is there a chance to create a depth mode, for debugging, that shows both the depth

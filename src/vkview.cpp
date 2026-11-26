@@ -997,7 +997,9 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      Ctrl+Shift+2 era la tecla del boton que ya no esta y sigue valiendo por costumbre.
      Ninguna de las dos choca con el escritorio: lo que tiene KWin asignado es Ctrl+F1 (cambiar de
      escritorio) y Meta+F1, no Ctrl+Shift+F1. F1 con Ctrl+Shift tampoco la pide el navegador. */
-  if (mods & (GLFW_MOD_CONTROL | GLFW_MOD_ALT | GLFW_MOD_SUPER)) {
+  /* (v1.12) tambien una tecla sola si se le dio a un atajo en el panel: manda sobre la del visor
+     (P, C, ...), que solo vale si no es de ningun atajo */
+  {
     const auto it = ui->atajosPuestos.find(comboDeGlfw(key, mods));
     if (it != ui->atajosPuestos.end()) {
       atajoHub(*ui, it->second, "tecla");
@@ -2340,6 +2342,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           atajoHub(ui, "capa", "golpe de prueba");
         } else if (tok == "verprof") {   /* lo mismo que Ctrl+Shift+9: la vista de depuracion */
           atajoHub(ui, "verprof", "golpe de prueba");
+        } else if (tok.rfind("tecla:", 0) == 0) {
+          /* (v1.12) una tecla como si se pulsara con el visor enfocado: `tecla:d`, `tecla:ctrl+shift+9`.
+             Pasa por la misma busqueda que la tecla de verdad (atajosPuestos), sin teclado */
+          const std::string combo = atajos::normaliza(tok.substr(6));
+          const auto it = ui.atajosPuestos.find(combo);
+          std::printf("[tecla] golpe %s: %s\n", combo.c_str(),
+                      it != ui.atajosPuestos.end() ? it->second.c_str() : "no es de ningun atajo");
+          if (it != ui.atajosPuestos.end()) atajoHub(ui, it->second, "golpe de tecla");
         } else if (tok == "red") {
           float rx = 0, ry = 0, rw = 0, rh = 0;
           if (ui.hud.redBounds(&rx, &ry, &rw, &rh)) {

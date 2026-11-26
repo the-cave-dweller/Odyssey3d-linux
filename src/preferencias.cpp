@@ -928,11 +928,10 @@ bool teclaCapturada(const std::string &combo0, std::string *aviso) {
   }
   const std::string combo = atajos::normaliza(combo0);
   if (combo.empty()) return false;
-  if (!atajos::tieneModificador(combo)) {
-    /* se sigue esperando: una tecla suelta se comeria esa tecla en todo el escritorio */
-    if (aviso) *aviso = idioma::trf("{}: el atajo necesita Ctrl, Alt o Meta", {combo});
-    return true;
-  }
+  /* (v1.12) una tecla sola tambien vale (Rodolfo: «allow one key being assigned too»). Hasta la 1.11
+     se seguia esperando: el atajo es global mientras hay 3D, asi que esa tecla deja de llegar al video
+     o al juego de debajo; ahora se acepta y el pie lo avisa */
+  const bool suelta = !atajos::tieneModificador(combo);
   for (const auto &par : atajos::combos())
     if (par.second == combo && par.first != d->nombre) {
       if (aviso) *aviso = idioma::trf("{} ya lo usa «{}»", {combo, idioma::tr(defDe(par.first)->texto)});
@@ -947,7 +946,10 @@ bool teclaCapturada(const std::string &combo0, std::string *aviso) {
   }
   g_capturando.clear();
   avisarVisor({}, {{"atajos", "recargar"}});
-  if (aviso) *aviso = idioma::trf("«{}» ahora va con {}", {idioma::tr(d->texto), combo});
+  if (aviso)
+    *aviso = idioma::trf(suelta ? "«{}» ahora va con {}: mientras haya 3D, esa tecla ya no llega al vídeo ni al juego"
+                                : "«{}» ahora va con {}",
+                         {idioma::tr(d->texto), combo});
   return true;
 }
 

@@ -182,7 +182,6 @@ T = {
 "Ocultar o mostrar la pastilla": ("Hide or show the pill", "Masquer ou afficher la pastille", "Leiste aus- oder einblenden", "隐藏或显示控制条", "ピルの表示／非表示"),
 "Pulsa las teclas…": ("Press the keys…", "Appuyez sur les touches…", "Tasten drücken…", "请按键…", "キーを押してください…"),
 "sin cambios": ("no changes", "aucun changement", "keine Änderung", "未更改", "変更なし"),
-"{}: el atajo necesita Ctrl, Alt o Meta": ("{}: the shortcut needs Ctrl, Alt or Meta", "{} : le raccourci doit avoir Ctrl, Alt ou Meta", "{}: das Kürzel braucht Strg, Alt oder Meta", "{}：快捷键需要包含 Ctrl、Alt 或 Meta", "{}：ショートカットには Ctrl、Alt、Meta のいずれかが必要です"),
 "{} ya lo usa «{}»": ("{} is already used by “{}”", "{} est déjà utilisé par « {} »", "{} ist schon „{}“ zugewiesen", "{} 已被“{}”使用", "{} は「{}」で使われています"),
 "«{}» ahora va con {}": ("“{}” is now {}", "« {} » est maintenant {}", "„{}“ ist jetzt {}", "“{}”现在是 {}", "「{}」は {} になりました"),
 "«{}» vuelve a {}": ("“{}” is back to {}", "« {} » revient à {}", "„{}“ ist wieder {}", "“{}”恢复为 {}", "「{}」を {} に戻しました"),
@@ -250,6 +249,7 @@ T = {
 "vista de profundidad quitada": ("depth view off", "vue de profondeur désactivée", "Tiefenansicht aus", "已关闭深度视图", "深度表示オフ"),
 "profundidad: blanco = cerca · naranja = saliencia · cian = plano de la pantalla": ("depth: white = near · orange = saliency · cyan = screen plane", "profondeur : blanc = proche · orange = saillance · cyan = plan de l'écran", "Tiefe: weiß = nah · orange = Salienz · cyan = Bildschirmebene", "深度：白 = 近 · 橙 = 显著性 · 青 = 屏幕平面", "深度：白 = 近い · オレンジ = 顕著性 · シアン = 画面の面"),
 "la vista de profundidad necesita el conversor (vídeo normal o dividido suavizado)": ("the depth view needs the converter (normal or smoothed split video)", "la vue de profondeur demande le convertisseur (vidéo normale ou divisée lissée)", "die Tiefenansicht braucht den Konverter (normales oder geglättetes geteiltes Video)", "深度视图需要转换器（普通视频或平滑的分屏视频）", "深度表示には変換が必要です（通常の動画か、なめらかにした分割動画）"),
+"«{}» ahora va con {}: mientras haya 3D, esa tecla ya no llega al vídeo ni al juego": ("“{}” now uses {}: while 3D is on, that key no longer reaches the video or the game", "« {} » utilise maintenant {} : tant que la 3D est active, cette touche n'arrive plus à la vidéo ni au jeu", "„{}“ nutzt jetzt {}: solange 3D läuft, kommt diese Taste nicht mehr beim Video oder Spiel an", "“{}”现在使用 {}：3D 开启期间，这个键不再传给视频或游戏", "「{}」は {} になりました。3D の間、このキーは動画やゲームに届きません"),
 }
 
 from traducciones_ru import RU
