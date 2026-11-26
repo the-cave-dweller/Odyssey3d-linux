@@ -53,9 +53,10 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   surface_ = surface;
   if (!createSwapchain(w, h, err)) return false;
 
-  /* conjunto de la trama: 0 fuente · 1 corrA · 2 corrB · 3 parámetros · 4 profundidad */
-  VkDescriptorSetLayoutBinding b[5]{};
-  for (int i : {0, 1, 2, 4}) {
+  /* conjunto de la trama: 0 fuente · 1 corrA · 2 corrB · 3 parámetros · 4 profundidad ·
+     5 profundidad afinada (v0.89) */
+  VkDescriptorSetLayoutBinding b[6]{};
+  for (int i : {0, 1, 2, 4, 5}) {
     b[i].binding = (uint32_t)i;
     b[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     b[i].descriptorCount = 1;
@@ -66,7 +67,7 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   b[3].descriptorCount = 1;
   b[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   VkDescriptorSetLayoutCreateInfo dli{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dli.bindingCount = 5;
+  dli.bindingCount = 6;
   dli.pBindings = b;
   if (vkCreateDescriptorSetLayout(dev.device(), &dli, nullptr, &srcSetLay_) != VK_SUCCESS) {
     if (err) *err = "vkCreateDescriptorSetLayout de la trama falló";
@@ -81,12 +82,13 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
     return false;
   }
 
-  /* un par de conjuntos por hueco del intercambio, mas los dos que pide un cuadro fuera de pantalla */
-  VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7 * (uint32_t)imgs_.size() + 10},
-                                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 * (uint32_t)imgs_.size() + 4}};
+  /* tres conjuntos por hueco del intercambio (trama, afinado e interfaz), mas el de la copia
+     pequena y los tres que pide un cuadro fuera de pantalla */
+  VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 12 * (uint32_t)imgs_.size() + 24},
+                                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 * (uint32_t)imgs_.size() + 6}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-  pci.maxSets = 4 * (uint32_t)imgs_.size() + 8;
+  pci.maxSets = 4 * (uint32_t)imgs_.size() + 10;
   pci.poolSizeCount = 2;
   pci.pPoolSizes = ps;
   if (vkCreateDescriptorPool(dev.device(), &pci, nullptr, &pool_) != VK_SUCCESS) {
@@ -332,14 +334,17 @@ bool VkWeave::createPipelines(std::string *err) {
   return true;
 }
 
-void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer ubo) {
+void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer ubo, VkImageView finoView) {
   const VkSampler samp = dev_->sampler();
-  VkDescriptorImageInfo si[4] = {{samp, srcView, VK_IMAGE_LAYOUT_GENERAL},
+  /* sin pase de afinado el enlace 5 lleva la imagen negra de reserva: el sombreador no la lee, pero
+     un enlace tiene que apuntar siempre a algo valido */
+  VkDescriptorImageInfo si[5] = {{samp, srcView, VK_IMAGE_LAYOUT_GENERAL},
                                  {samp, corrA_.view, VK_IMAGE_LAYOUT_GENERAL},
                                  {samp, corrB_.view, VK_IMAGE_LAYOUT_GENERAL},
-                                 {samp, depth_.view, VK_IMAGE_LAYOUT_GENERAL}};
+                                 {samp, depth_.view, VK_IMAGE_LAYOUT_GENERAL},
+                                 {samp, finoView ? finoView : black_.view, VK_IMAGE_LAYOUT_GENERAL}};
   VkDescriptorBufferInfo bi{ubo, 0, kUboBytes};
-  VkWriteDescriptorSet wr[5]{};
+  VkWriteDescriptorSet wr[6]{};
   for (int i = 0; i < 3; i++) {
     wr[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     wr[i].dstSet = set;
@@ -360,7 +365,13 @@ void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer u
   wr[4].descriptorCount = 1;
   wr[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   wr[4].pImageInfo = &si[3];
-  vkUpdateDescriptorSets(dev_->device(), 5, wr, 0, nullptr);
+  wr[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  wr[5].dstSet = set;
+  wr[5].dstBinding = 5;
+  wr[5].descriptorCount = 1;
+  wr[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  wr[5].pImageInfo = &si[4];
+  vkUpdateDescriptorSets(dev_->device(), 6, wr, 0, nullptr);
 }
 
 void VkWeave::writeHudSet(VkDescriptorSet set, VkImageView atlasView) {
@@ -418,8 +429,9 @@ bool VkWeave::createFrames(std::string *err) {
       return false;
     }
     s.weave = newSet(srcSetLay_);
+    s.weavePre = newSet(srcSetLay_);
     s.hud = newSet(hudSetLay_);
-    if (!s.weave || !s.hud) {
+    if (!s.weave || !s.weavePre || !s.hud) {
       if (err) *err = "el charco de descriptores se quedó vacío";
       return false;
     }
@@ -427,6 +439,12 @@ bool VkWeave::createFrames(std::string *err) {
                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, s.ubo,
                             s.uboMem, &e2)) {
       if (err) *err = "buffer de parámetros: " + e2;
+      return false;
+    }
+    if (!dev_->createBuffer(kUboBytes, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, s.uboPre,
+                            s.uboPreMem, &e2)) {
+      if (err) *err = "buffer de parámetros del afinado: " + e2;
       return false;
     }
     if (!dev_->createBuffer(kMaxHudVerts * sizeof(HudVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -447,6 +465,9 @@ void VkWeave::destroyFrames() {
     if (s.fence) vkDestroyFence(dev_->device(), s.fence, nullptr);
     if (s.sem) vkDestroySemaphore(dev_->device(), s.sem, nullptr);
     if (s.weave && pool_) vkFreeDescriptorSets(dev_->device(), pool_, 1, &s.weave);
+    if (s.weavePre && pool_) vkFreeDescriptorSets(dev_->device(), pool_, 1, &s.weavePre);
+    if (s.uboPre) vkDestroyBuffer(dev_->device(), s.uboPre, nullptr);
+    if (s.uboPreMem) vkFreeMemory(dev_->device(), s.uboPreMem, nullptr);
     if (s.hud && pool_) vkFreeDescriptorSets(dev_->device(), pool_, 1, &s.hud);
     if (s.ubo) vkDestroyBuffer(dev_->device(), s.ubo, nullptr);
     if (s.uboMem) vkFreeMemory(dev_->device(), s.uboMem, nullptr);
@@ -495,6 +516,10 @@ void VkWeave::destroy() {
   dev_->destroyImg(atlas_);
   dev_->destroyImg(small_);
   dev_->destroyImg(depth_);
+  dev_->destroyImg(fino_);
+  fino_ = VkImg{};
+  finoW_ = finoH_ = 0;
+  finoFirma_.clear();
   if (smallStage_) vkDestroyBuffer(dev_->device(), smallStage_, nullptr);
   if (smallStageMem_) vkFreeMemory(dev_->device(), smallStageMem_, nullptr);
   if (mapStage_) vkDestroyBuffer(dev_->device(), mapStage_, nullptr);
@@ -529,6 +554,11 @@ bool VkWeave::resize(int w, int h) {
   keep_.clear();
   dev_->destroyImg(next_);
   next_ = VkImg{};
+  /* la imagen del afinado va con el formato del intercambio: se rehace cuando haga falta */
+  dev_->destroyImg(fino_);
+  fino_ = VkImg{};
+  finoW_ = finoH_ = 0;
+  finoFirma_.clear();
   destroySwapchain();
   if (weavePipe_) vkDestroyPipeline(dev_->device(), weavePipe_, nullptr), weavePipe_ = VK_NULL_HANDLE;
   if (hudPipe_) vkDestroyPipeline(dev_->device(), hudPipe_, nullptr), hudPipe_ = VK_NULL_HANDLE;
@@ -875,6 +905,9 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t9[2] = kDetalle;
   t9[3] = filasArriba_;
   ((float *)(dst + kOffTun10))[0] = mediaFuente_ ? 1.0f : 0.0f;
+  ((float *)(dst + kOffTun10))[1] = cantosFinos_ ? 1.0f : 0.0f;
+  ((float *)(dst + kOffTun10))[2] = finoEnUso_ ? 1.0f : 0.0f;                 /* la profundidad afinada esta en uFino */
+  ((float *)(dst + kOffTun10))[3] = (cantosFinos_ && depthCanales_ == 4) ? 1.0f : 0.0f;   /* el mapa trae el color de su imagen */
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
@@ -927,6 +960,7 @@ bool VkWeave::frame(std::string *err) {
     std::string e3;
     uploadR8(blanco, 1, 1, atlas_, &e3);
   }
+  finoEnUso_ = cantosFinos_ && convOn_ && depthUsable_ && asegurarFino((int)ext_.width, (int)ext_.height);
   fillUbo(uboData_);
   cornersDirty_ = false;
   if (hud_.size() > kMaxHudVerts) hud_.resize(kMaxHudVerts);
@@ -975,8 +1009,36 @@ bool VkWeave::frame(std::string *err) {
     if (k.gen == useGen) srcView = k.img.view;
 
   /* descriptores del hueco */
-  writeWeaveSet(s.weave, srcView, s.ubo);
+  writeWeaveSet(s.weave, srcView, s.ubo, finoEnUso_ ? fino_.view : VK_NULL_HANDLE);
   writeHudSet(s.hud, atlas_.view);
+  /* El pase de afinado solo se repite si cambio algo de lo que depende (la imagen, el mapa o los
+     numeros del relieve): con un video de 30 cuadros en un panel a 120 son tres de cada cuatro
+     cuadros ahorrados, y con la imagen quieta, todos. */
+  bool pintarFino = false;
+  if (finoEnUso_) {
+    uint8_t pre[kUboBytes];
+    uboDelAfinado(pre);
+    std::vector<uint8_t> firma;
+    firma.insert(firma.end(), pre + kOffRes, pre + kOffRes + 8);
+    firma.insert(firma.end(), pre + kOffTun3, pre + kOffTun9);
+    firma.insert(firma.end(), pre + kOffTun10, pre + kOffTun10 + 16);
+    const uint64_t marcas[2] = {(uint64_t)(int64_t)useGen, mapaGen_};
+    firma.insert(firma.end(), (const uint8_t *)marcas, (const uint8_t *)marcas + sizeof marcas);
+    static const bool kSiempre = entornoOdyssey("ODYSSEYVK_AFINAR_SIEMPRE") != nullptr;
+    pintarFino = kSiempre || firma != finoFirma_;
+    if (pintarFino) {
+      finoFirma_ = std::move(firma);
+      writeWeaveSet(s.weavePre, srcView, s.uboPre);
+      void *p = nullptr;
+      if (vkMapMemory(dev_->device(), s.uboPreMem, 0, kUboBytes, 0, &p) == VK_SUCCESS) {
+        memcpy(p, pre, kUboBytes);
+        vkUnmapMemory(dev_->device(), s.uboPreMem);
+      }
+      finoHechos_++;
+    } else {
+      finoAhorrados_++;
+    }
+  }
 
   /* parámetros y geometría, escritos en la memoria mapeada del hueco (ya esperamos su cerca) */
   {
@@ -1002,6 +1064,9 @@ bool VkWeave::frame(std::string *err) {
   }
   barrier(cb, imgs_[idx], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+
+  /* pasada 0: la profundidad de la fuente con el canto en su sitio (solo con los cantos finos) */
+  if (pintarFino) pasoFino(cb, s.weavePre);
 
   VkRenderingAttachmentInfo att{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
   att.imageView = views_[idx];
@@ -1081,6 +1146,91 @@ bool VkWeave::frame(std::string *err) {
   return true;
 }
 
+/* ---------------- el pase de afinado del mapa (v0.89) ----------------
+   La imagen donde se dibuja la profundidad afinada: del tamano de lo que se va a pintar y con el
+   formato del intercambio (asi vale la misma tuberia de la trama). Vive siempre en la disposicion
+   GENERAL: se escribe en un pase y se lee en el siguiente del mismo cuadro, con una barrera de por
+   medio, sin cambiarla de disposicion. */
+bool VkWeave::asegurarFino(int w, int h) {
+  if (fino_.valid() && finoW_ == w && finoH_ == h) return true;
+  if (!dev_ || w <= 0 || h <= 0) return false;
+  waitIdle();
+  dev_->destroyImg(fino_);
+  fino_ = VkImg{};
+  finoW_ = finoH_ = 0;
+  finoFirma_.clear();
+  std::string e;
+  bool ok = dev_->createImage(w, h, fmt_, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, fino_, &e);
+  if (ok) {
+    VkCommandBuffer cb = dev_->beginOneTime(&e);
+    ok = cb != VK_NULL_HANDLE;
+    if (ok) {
+      barrier(cb, fino_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 0, VK_ACCESS_SHADER_READ_BIT);
+      ok = dev_->endOneTime(cb, &e);
+    }
+  }
+  if (!ok) {
+    dev_->destroyImg(fino_);
+    fino_ = VkImg{};
+    if (!finoAvisado_) {
+      std::fprintf(stderr, "[conversor] no hay imagen para afinar el mapa (%s): los cantos se afinan dentro de la "
+                           "propia trama, que cuesta bastante mas\n", e.c_str());
+      finoAvisado_ = true;
+    }
+    return false;
+  }
+  finoW_ = w, finoH_ = h;
+  return true;
+}
+
+/* Los parametros del pase de afinado: los del cuadro, con el aviso de «pase de afinado» (tun4.w = 3),
+   la ventana del tamano de su imagen y sin el aviso de que la profundidad afinada ya esta hecha. */
+void VkWeave::uboDelAfinado(uint8_t *dst) const {
+  memcpy(dst, uboData_, kUboBytes);
+  float *res = (float *)(dst + kOffRes);
+  res[0] = (float)finoW_, res[1] = (float)finoH_;
+  ((float *)(dst + kOffTun4))[3] = 3.0f;
+  ((float *)(dst + kOffTun10))[2] = 0.0f;
+}
+
+void VkWeave::pasoFino(VkCommandBuffer cb, VkDescriptorSet set) {
+  VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  b.oldLayout = b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+  b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  b.image = fino_.img;
+  b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  /* lo que leyo la trama del cuadro anterior ya no hace falta: ahora se escribe encima */
+  b.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  b.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0,
+                       nullptr, 0, nullptr, 1, &b);
+  VkRenderingAttachmentInfo att{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+  att.imageView = fino_.view;
+  att.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+  att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  const VkExtent2D ext{(uint32_t)finoW_, (uint32_t)finoH_};
+  VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO};
+  ri.renderArea = {{0, 0}, ext};
+  ri.layerCount = 1;
+  ri.colorAttachmentCount = 1;
+  ri.pColorAttachments = &att;
+  VkViewport vp{0.0f, 0.0f, (float)finoW_, (float)finoH_, 0.0f, 1.0f};
+  VkRect2D sc{{0, 0}, ext};
+  vkCmdSetViewport(cb, 0, 1, &vp);
+  vkCmdSetScissor(cb, 0, 1, &sc);
+  vkCmdBeginRendering(cb, &ri);
+  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weavePipe_);
+  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weaveLay_, 0, 1, &set, 0, nullptr);
+  vkCmdDraw(cb, 3, 1, 0, 0);
+  vkCmdEndRendering(cb);
+  /* y lo recien escrito lo lee la trama en el pase siguiente */
+  b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                       nullptr, 0, nullptr, 1, &b);
+}
+
 /* Cuadro fuera de pantalla. Dibuja la trama y la interfaz en una imagen del tamaño del panel y
    la copia a la CPU. No presenta nada: sirve para --dump y para comparar el trazado de Vulkan
    con el de OpenGL cuadro a cuadro. */
@@ -1094,6 +1244,7 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
     static const uint8_t blanco[1] = {255};
     uploadR8(blanco, 1, 1, atlas_, nullptr);
   }
+  finoEnUso_ = !copiaPura && cantosFinos_ && convOn_ && depthUsable_ && asegurarFino(pw_, ph_);
   fillUbo(uboData_);
   if (copiaPura) {
     /* el pase de copia del sombreador saca la fuente tal cual, sin campo de la lente ni trama:
@@ -1125,8 +1276,24 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
     if (err) *err = "el charco de descriptores no da para un cuadro fuera de pantalla";
     ok = false;
   }
+  /* el pase de afinado de este cuadro suelto, con sus propios enlaces y parametros */
+  VkDescriptorSet wsetPre = VK_NULL_HANDLE;
+  VkBuffer uboPre = VK_NULL_HANDLE;
+  VkDeviceMemory uboPreMem = VK_NULL_HANDLE;
+  if (ok && finoEnUso_) {
+    uint8_t pre[kUboBytes];
+    uboDelAfinado(pre);
+    wsetPre = newSet(srcSetLay_);
+    if (!wsetPre || !dev_->uploadBytes(pre, kUboBytes, uboPre, uboPreMem, err)) {
+      if (err && err->empty()) *err = "el charco de descriptores no da para el pase de afinado";
+      ok = false;
+    } else {
+      writeWeaveSet(wsetPre, srcView, uboPre);
+    }
+    finoFirma_.clear();   /* lo que quede en la imagen es de este cuadro suelto: el siguiente de verdad la repinta */
+  }
   if (ok) {
-    writeWeaveSet(wset, srcView, ubo);
+    writeWeaveSet(wset, srcView, ubo, finoEnUso_ ? fino_.view : VK_NULL_HANDLE);
     writeHudSet(hset, atlas_.view);
   }
 
@@ -1135,6 +1302,7 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
   if (ok) {
     barrier(cb, tgt.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+    if (finoEnUso_) pasoFino(cb, wsetPre);
 
     VkRenderingAttachmentInfo att{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     att.imageView = tgt.view;
@@ -1216,6 +1384,9 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
   if (dev_) {
     VkDescriptorSet par[2] = {wset, hset};
     if (wset && hset) vkFreeDescriptorSets(dev_->device(), pool_, 2, par);
+    if (wsetPre) vkFreeDescriptorSets(dev_->device(), pool_, 1, &wsetPre);
+    if (uboPre) vkDestroyBuffer(dev_->device(), uboPre, nullptr);
+    if (uboPreMem) vkFreeMemory(dev_->device(), uboPreMem, nullptr);
     if (stage) vkDestroyBuffer(dev_->device(), stage, nullptr);
     if (stageMem) vkFreeMemory(dev_->device(), stageMem, nullptr);
     if (ubo) vkDestroyBuffer(dev_->device(), ubo, nullptr);
@@ -1383,7 +1554,7 @@ bool VkWeave::setDepthMap(const uint8_t *g, int w, int h, std::string *err) {
   mapRG_.resize((size_t)nrg);
   int huecos = 0;
   const auto tHoyos0 = std::chrono::steady_clock::now();
-  if (conHoyos) {
+  if (conHoyos && !cantosFinos_) {
     /* convGain_ esta en unidades de la pantalla; multiplicado por el ancho del mapa pasa a
        puntos del propio mapa, que es la medida en la que esparcimos */
     rellenarVistas(g, w, convGain_ * (float)w, convRef_, mapRG_.data(), &huecos);
@@ -1409,9 +1580,19 @@ bool VkWeave::setDepthMapRG(const uint8_t *rg, int w, int h, std::string *err) {
   return subirMapaRG(rg, w, h, err);
 }
 
-bool VkWeave::subirMapaRG(const uint8_t *rg, int w, int h, std::string *err) {
-  const VkDeviceSize nrg = (VkDeviceSize)w * (VkDeviceSize)h * 2;
-  if (!depth_.valid() || depthW_ != w || depthH_ != h) {
+bool VkWeave::setDepthMapGuia(const uint8_t *rgba, int w, int h, std::string *err) {
+  if (!dev_ || !rgba || w <= 0 || h <= 0) {
+    if (err) *err = "mapa de profundidad vacio";
+    return false;
+  }
+  waitIdle();   /* el mapa anterior puede estar en manos de un cuadro en vuelo */
+  return subirMapaRG(rgba, w, h, err, 4);
+}
+
+bool VkWeave::subirMapaRG(const uint8_t *rg, int w, int h, std::string *err, int canales) {
+  const VkDeviceSize nrg = (VkDeviceSize)w * (VkDeviceSize)h * (VkDeviceSize)canales;
+  mapaGen_++;
+  if (!depth_.valid() || depthW_ != w || depthH_ != h || depthCanales_ != canales) {
     /* la primera vez, o si cambia el tamano del modelo: imagen nueva y buffer de paso a su medida */
     if (mapStage_) {
       vkDestroyBuffer(dev_->device(), mapStage_, nullptr);
@@ -1419,7 +1600,9 @@ bool VkWeave::subirMapaRG(const uint8_t *rg, int w, int h, std::string *err) {
       mapStage_ = VK_NULL_HANDLE;
       mapStageMem_ = VK_NULL_HANDLE;
     }
-    if (!uploadR8(rg, w, h, depth_, err, VK_FORMAT_R8G8_UNORM, 2)) return false;
+    if (!uploadR8(rg, w, h, depth_, err, canales == 4 ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8_UNORM, canales))
+      return false;
+    depthCanales_ = canales;
     if (!dev_->createBuffer(nrg, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, mapStage_,
                             mapStageMem_, err))

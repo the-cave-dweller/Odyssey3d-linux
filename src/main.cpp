@@ -3360,6 +3360,7 @@ struct ServeCfg {
      consigue con Ctrl+Shift+5 porque en 0 de "3D Salida" quedan 4 px de separacion entre ojos. */
   double relieve = -1.0;    /* escala de la ganancia del releve; 0 = sin releve ninguno */
   std::string saliencia;    /* si / no: elegir el plano de apoyo con la saliencia del Hub (v0.65) */
+  std::string cantos;       /* `viejo` = el reparto del mapa por ojo de antes de la v0.89; vacio = cantos finos */
   double pivote = -1.0;     /* 0..0,9: cuanto se retrasa el plano de la pantalla respecto al sujeto (v0.66) */
   double paralaje = 999.0;  /* ganancia del paralaje de movimiento, -2..2; 999 = sin poner (apagado) (v0.67) */
   double detalle = -1.0;    /* fuerza del realce de detalle en el sujeto, 0..3; -1 = la de fabrica (0,4) (v0.68) */
@@ -3500,6 +3501,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "calib") cfg.calib = expansionRuta(v);
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
+    else if (k == "cantos") cfg.cantos = v;
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
     else if (k == "rastreo_fino") cfg.rastreoFino = v;
     else if (k == "barra_2d") cfg.barra2d = v;
@@ -3817,6 +3819,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     }
     if (!pila->saliencia.empty())
       ::setenv("ODYSSEYVK_SALIENCIA", (pila->saliencia == "si" || pila->saliencia == "1") ? "1" : "0", 1);
+    /* cantos finos (v0.89): de fabrica. `cantos = viejo` vuelve al camino de antes, para comparar */
+    if (!pila->cantos.empty()) ::setenv("ODYSSEYVK_CANTOS", pila->cantos.c_str(), 1);
     if (!pila->hdrEn3d.empty())
       ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
     if (!pila->vrrEn3d.empty())

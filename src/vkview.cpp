@@ -157,6 +157,7 @@ void printTuning(const VkUi &ui, const char *what) {
    con las teclas de esa ventana. La ventana de ajustes (otro proceso) y `odysseyvk ctl ajuste` los
    mueven por ficheros: ver src/ajuste.h. Aqui esta la otra mitad: la foto de lo que el visor usa de
    verdad (el fichero `estado`) y la cuenta de lo que va cambiando (`preferencias.log`). */
+static bool g_cantosFinos = true;   /* v0.89: el mapa va tal cual y el sombreador busca la vista de cada ojo */
 static double g_fpsVisto = 0.0, g_mapaMs = 0.0;   /* para el `estado`: lo ensena la pestana de rendimiento */
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
 static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
@@ -1370,6 +1371,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   bool convActivo = opts.conver;
   /* video dividido suavizado desde el arranque: el conversor ve solo la imagen izquierda */
   wv.setMediaFuente(opts.suave && opts.conver);
+  /* cantos finos (v0.89), de fabrica. `cantos = viejo` en serve.conf (ODYSSEYVK_CANTOS=viejo) vuelve
+     al reparto del mapa por ojo de antes, para comparar en el panel. */
+  if (const char *e = entornoOdyssey("ODYSSEYVK_CANTOS")) g_cantosFinos = !(e[0] == 'v' || e[0] == 'V' || e[0] == '0');
+  wv.setCantosFinos(g_cantosFinos);
+  /* Con los cantos finos el mapa no se ensancha: el dilatado de 3 puntos (22 pixeles) estaba para que
+     el objeto no dejara atras su orilla, y a cambio se llevaba pegada una franja de fondo. Ahora el
+     canto lo pone el sombreador en su sitio, pixel a pixel. ODYSSEYVK_DILATAR lo fuerza (taller). */
+  if (g_cantosFinos && !entornoOdyssey("ODYSSEYVK_DILATAR")) red.setDilatar(0);
+  std::printf("[conversor] cantos: %s\n",
+              g_cantosFinos ? "finos (el canto del mapa se afina con el color de la imagen y cada ojo busca su vista)"
+                            : "los de antes (el mapa ensanchado y repartido por ojo; `cantos = viejo`)");
   /* rotulos y subtitulos apoyados en el plano de la pantalla (ODYSSEYVK_TEXTO=0 para apagarlo) */
   bool textoAncla = opts.textoPanel != 0;
   if (const char *e = entornoOdyssey("ODYSSEYVK_TEXTO"))
@@ -1486,9 +1498,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          if (ok) {
            const int n = t.red->size();
            const size_t plano = (size_t)n * (size_t)n;
-           if (m.size() == plano) {
+           if (m.size() == plano && g_cantosFinos && t.copia.size() >= plano * 4) {
+             /* cantos finos (v0.89): el mapa tal cual y, con el, el color de la copia que vio la red
+                (cuatro bytes por punto). El sombreador compara el pixel de ahora con ESTOS colores
+                para decidir de que lado del canto cae: ver afinar() en weave.frag. */
+             rg.resize(plano * 4);
+             for (size_t i = 0; i < plano; i++) {
+               rg[4 * i] = m[i];
+               rg[4 * i + 1] = t.copia[4 * i];
+               rg[4 * i + 2] = t.copia[4 * i + 1];
+               rg[4 * i + 3] = t.copia[4 * i + 2];
+             }
+           } else if (m.size() == plano) {
              rg.resize(plano * 2);
-             if (hoyosActivo()) {
+             if (hoyosActivo() && !g_cantosFinos) {
                rellenarVistas(m.data(), n, t.ganancia * (float)n,
                               t.apoyoFijo >= 0.0f ? t.apoyoFijo : t.red->focusPlane(), rg.data(), nullptr);
              } else {
@@ -1629,8 +1652,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                   "Ctrl+Shift+5 lo baja\n",
                   ui.hud.state().popout, gananciaRelieve(ui.hud.state().popout) * 3840.0, 3840,
                   topesPorOjoActivos() ? "tope por ojo +12,67 / -9,98 px" : "sin tope por ojo");
-      std::printf("[conversor] limpieza del mapa: filtro guiado (radio 8) + dilate 3 + corte de plano "
-                  "(umbral 0,12, descanso 15 cuadros); apoyo por saliencia\n");
+      std::printf("[conversor] limpieza del mapa: filtro guiado (radio 8) + %s + corte de plano "
+                  "(umbral 0,12, descanso 15 cuadros); apoyo por saliencia\n",
+                  red.radioDilatar() > 0 ? "dilate 3" : "sin dilatar (el canto lo afina el sombreador)");
       if (ui.tune.planos > 0.0f) {
         char bufLam[80];
         std::printf("[conversor] dos planos: dureza %.1f%s (las laminas las decide el propio cuadro; "
@@ -2699,7 +2723,35 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
       if (!mfMapa.empty()) {
         std::string errmf;
-        if (wv.setDepthMap(mfMapa.data(), mfW, mfH, &errmf)) mfMapa.clear();
+        /* ODYSSEYVK_GUIA_PNG (taller, v0.89): con los cantos finos, la imagen de la que se supone que
+           salio este mapa. Sus colores viajan con el mapa, como en una sesion de verdad (ver afinar()
+           en weave.frag); dando una imagen distinta de la que se dibuja se prueba lo que pasa tras
+           un cambio de plano, cuando el mapa todavia es del plano anterior. */
+        std::vector<uint8_t> conGuia;
+#ifdef HAVE_PNG
+        if (const char *gp = entornoOdyssey("ODYSSEYVK_GUIA_PNG")) {
+          int gw = 0, gh = 0;
+          std::vector<uint8_t> gpx;
+          if (g_cantosFinos && pngLoadRGBA(gp, gw, gh, gpx) && gw > 0 && gh > 0) {
+            conGuia.resize((size_t)mfW * (size_t)mfH * 4);
+            for (int y = 0; y < mfH; y++)
+              for (int x = 0; x < mfW; x++) {
+                const int sx = std::min(gw - 1, (int)(((double)x + 0.5) * gw / mfW));
+                const int sy = std::min(gh - 1, (int)(((double)y + 0.5) * gh / mfH));
+                const uint8_t *s = &gpx[((size_t)sy * (size_t)gw + (size_t)sx) * 4];
+                uint8_t *d = &conGuia[((size_t)y * (size_t)mfW + (size_t)x) * 4];
+                d[0] = mfMapa[(size_t)y * (size_t)mfW + (size_t)x];
+                d[1] = s[0], d[2] = s[1], d[3] = s[2];
+              }
+            std::printf("[mapa fijo] con los colores de %s (%d x %d)\n", gp, gw, gh);
+          } else {
+            std::fprintf(stderr, "[mapa fijo] ODYSSEYVK_GUIA_PNG: %s no se pudo leer (o los cantos no son los finos)\n", gp);
+          }
+        }
+#endif
+        const bool subido = conGuia.empty() ? wv.setDepthMap(mfMapa.data(), mfW, mfH, &errmf)
+                                            : wv.setDepthMapGuia(conGuia.data(), mfW, mfH, &errmf);
+        if (subido) mfMapa.clear();
         else std::fprintf(stderr, "[mapa fijo] no se pudo subir: %s\n", errmf.c_str());
       }
     }
@@ -2971,9 +3023,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         convMs = msHecho;
         g_mapaMs = msHecho;
         const double tSube0 = glfwGetTime();
-        const bool subido = mapaRG.size() == mapa.size() * 2
-                                ? wv.setDepthMapRG(mapaRG.data(), red.size(), red.size(), &cerr)
-                                : wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
+        const bool subido = mapaRG.size() == mapa.size() * 4
+                                ? wv.setDepthMapGuia(mapaRG.data(), red.size(), red.size(), &cerr)
+                                : mapaRG.size() == mapa.size() * 2
+                                      ? wv.setDepthMapRG(mapaRG.data(), red.size(), red.size(), &cerr)
+                                      : wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
         medSubeMs += (glfwGetTime() - tSube0) * 1000.0;
         medSubeN++;
         if (subido) {
@@ -3445,6 +3499,21 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     if (now - clock > 5.0) {
       g_fpsVisto = frames / (now - clock);
       std::printf("[fps] %.1f\n", g_fpsVisto);
+      /* Cada 20 s, lo que ha hecho el pase de afinado de los cantos finos (v0.89): asi el registro de
+         una sesion dice si estuvo puesto y cuantas veces tuvo que repetirse. */
+      {
+        static int vueltaCantos = 0;
+        static long hechosAntes = 0, ahorradosAntes = 0;
+        if (g_cantosFinos && wv.converterOn() && ++vueltaCantos % 4 == 1) {
+          long hechos = 0, ahorrados = 0;
+          wv.cuentaAfinado(&hechos, &ahorrados);
+          const long dh = hechos - hechosAntes, da = ahorrados - ahorradosAntes;
+          hechosAntes = hechos, ahorradosAntes = ahorrados;
+          if (dh + da > 0)
+            std::printf("[cantos] finos: el mapa se afino en %ld de %ld cuadros (en los demas no habia cambiado ni la "
+                        "imagen ni el mapa)\n", dh, dh + da);
+        }
+      }
       /* ODYSSEYVK_MEDIR: donde se va el cuadro. `leer` es bajar la copia pequena para la red y
          `subir` es mandar el mapa nuevo a la tarjeta; las dos corren en el hilo que dibuja. */
       static const bool kMedir = entornoOdyssey("ODYSSEYVK_MEDIR") != nullptr;

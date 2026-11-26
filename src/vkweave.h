@@ -67,6 +67,10 @@ public:
   void setMediaFuente(bool m) { mediaFuente_ = m; }
   bool mediaFuente() const { return mediaFuente_; }
   void dropDepthMap() { depthUsable_ = false; }
+  /* Cantos finos (v0.89): el mapa se sube tal cual sale de la red (sin repartirlo por ojo en la CPU)
+     y el sombreador busca la vista de cada ojo punto a punto. Ver buscaVista en weave.frag. */
+  void setCantosFinos(bool c) { cantosFinos_ = c; }
+  bool cantosFinos() const { return cantosFinos_; }
   void setSrcFlipY(bool f) { srcFlipY_ = f; }
 
   /* cuadro fuera de pantalla: dibuja trama + interfaz en una imagen propia y la baja a la CPU
@@ -89,6 +93,11 @@ public:
   bool setDepthMap(const uint8_t *g, int w, int h, std::string *err);
   /* lo mismo, con el mapa ya repartido por ojo (dos bytes por punto: izquierdo, derecho) */
   bool setDepthMapRG(const uint8_t *rg, int w, int h, std::string *err);
+  /* cantos finos (v0.89): el mapa tal cual sale de la red y, con el, el color de la imagen que
+     lo dio (cuatro bytes por punto: profundidad, rojo, verde, azul). Ver afinar() en weave.frag. */
+  bool setDepthMapGuia(const uint8_t *rgba, int w, int h, std::string *err);
+  /* cuantos pases de afinado se han dibujado y cuantos se ahorraron por no haber cambiado nada */
+  void cuentaAfinado(long *hechos, long *ahorrados) const { *hechos = finoHechos_, *ahorrados = finoAhorrados_; }
   bool hasDepthMap() const { return depthUsable_; }
   void setConverter(float gain, float ref, bool on) { convGain_ = gain, convRef_ = ref, convOn_ = on; }
   /* para el volcado: poder apagar el releve un momento y volverlo a dejar como estaba */
@@ -130,6 +139,10 @@ private:
     VkDeviceMemory vboMem = VK_NULL_HANDLE;
     VkBuffer ubo = VK_NULL_HANDLE;
     VkDeviceMemory uboMem = VK_NULL_HANDLE;
+    /* el pase de afinado del mapa (v0.89) lleva sus propios enlaces y parametros */
+    VkDescriptorSet weavePre = VK_NULL_HANDLE;
+    VkBuffer uboPre = VK_NULL_HANDLE;
+    VkDeviceMemory uboPreMem = VK_NULL_HANDLE;
     size_t vboSize = 0;
     int gen = -1;         /* generación de la fuente que usó este hueco */
   };
@@ -154,7 +167,13 @@ private:
                VkAccessFlags dstA);
   void fillUbo(uint8_t *dst);
   VkDescriptorSet newSet(VkDescriptorSetLayout lay);
-  void writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer ubo);
+  void writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer ubo, VkImageView finoView = VK_NULL_HANDLE);
+  /* El pase de afinado (v0.89): antes de la trama se dibuja, una vez por pixel, la profundidad
+     de la fuente con el canto en su sitio (afinar() en weave.frag) en una imagen del tamano de
+     la pantalla; la trama la lee de ahi al buscar la vista de cada ojo. */
+  bool asegurarFino(int w, int h);
+  void pasoFino(VkCommandBuffer cb, VkDescriptorSet set);
+  void uboDelAfinado(uint8_t *dst) const;
   void writeHudSet(VkDescriptorSet set, VkImageView atlasView);
 
   VkDev *dev_ = nullptr;
@@ -190,8 +209,16 @@ private:
   VkDeviceMemory smallUboMem_ = VK_NULL_HANDLE;
   VkDescriptorSet smallSet_ = VK_NULL_HANDLE;
   VkImg depth_{};          /* mapa de profundidad (R8G8: un canal por ojo) que lee el shader */
+  int depthCanales_ = 2;   /* 2 = un canal por ojo · 4 = profundidad + el color de la imagen que la dio */
+  VkImg fino_{};           /* la profundidad afinada, a tamano de pantalla (v0.89) */
+  int finoW_ = 0, finoH_ = 0;
+  bool finoEnUso_ = false; /* este cuadro se dibuja con el pase de afinado */
+  bool finoAvisado_ = false;
+  uint64_t mapaGen_ = 0;   /* sube con cada mapa nuevo */
+  std::vector<uint8_t> finoFirma_;   /* de que se dibujo el afinado que hay en la imagen */
+  long finoHechos_ = 0, finoAhorrados_ = 0;
   std::vector<uint8_t> mapRG_;   /* el mapa ya partido por ojo, antes de subirlo */
-  bool subirMapaRG(const uint8_t *rg, int w, int h, std::string *err);   /* la subida a la tarjeta, sin mas */
+  bool subirMapaRG(const uint8_t *rg, int w, int h, std::string *err, int canales = 2);   /* la subida a la tarjeta, sin mas */
   double msHoyos_ = 0.0;         /* lo que tarda rellenar los huecos (medible con ODYSSEYVK_MEDIR=1) */
   long mapasContados_ = 0;
   bool depthUsable_ = false;
@@ -247,6 +274,7 @@ private:
   float sujeto_ = -1.0f;
   float filasArriba_ = 0.0f, filasAbajo_ = 0.0f;
   bool mediaFuente_ = false;
+  bool cantosFinos_ = false;
   bool srcFlipY_ = false;
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   int pw_ = 3840, ph_ = 2160;

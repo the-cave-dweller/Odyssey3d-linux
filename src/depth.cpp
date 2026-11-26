@@ -391,6 +391,8 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   gpu_ = gpu < 0 ? 0 : gpu;
   if (const char *lim = entornoOdyssey("ODYSSEYVK_LIMPIEZA"))   /* 0 deja el mapa en crudo: para comparar */
     limpieza_ = lim[0] != '0';
+  if (const char *dl = entornoOdyssey("ODYSSEYVK_DILATAR"))    /* taller: radio del dilatado (0..6) */
+    setDilatar(std::atoi(dl));
   struct stat stt {};
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
@@ -841,7 +843,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
      ODYSSEYVK_LIMPIEZA=0 se apaga, para comparar en el panel la misma red con el mapa en crudo. */
   if (limpieza_) {
     filtroGuiado(guia_.data(), limpio.data(), salida.data(), sz_, 8, 0.04f, trabajo.data());
-    dilatar(salida.data(), mapa.data(), sz_, 3);
+    if (dilata_ > 0) dilatar(salida.data(), mapa.data(), sz_, dilata_);
   } else {
     salida = limpio;
   }

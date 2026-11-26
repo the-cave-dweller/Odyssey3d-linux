@@ -190,6 +190,29 @@ Se ve en el registro: `[conversor] video normal a 3D encendido con NVIDIA`; una 
 ~9 ms en una RTX 4090. La fuerza del relieve la siguen moviendo **3D Salida** (`Ctrl+Shift+5/6`) y
 la profundidad base **3D Profundidad** (`Ctrl+Shift+3/4`), igual que con vídeo estéreo.
 
+### Cantos finos: el borde de cada objeto en su sitio (desde v0.89)
+
+El mapa de profundidad mide 518 × 518: un punto cada 7 píxeles, y en el borde de un objeto trae una
+rampa de dos o tres puntos. Hasta la v0.88 ese mapa se ensanchaba 3 puntos alrededor de lo cercano
+(para que el objeto no dejara atrás su orilla) y se repartía por ojo en la CPU; a cambio, cada
+objeto se llevaba pegada una franja de fondo de unos 4 mm, y donde acababa esa franja el fondo se
+veía doble: un «fantasma» de 1 a 1,5 mm junto a los planos, más visible al mover la cabeza.
+
+Ahora, antes de la trama, un pase previo recorre la imagen y cambia esa rampa por un escalón puesto
+donde lo dice el **color**: cada píxel se va con el fondo o con el objeto según a cuál se parece, y
+el corte queda a menos de 2 píxeles del borde de la imagen (medido en cuadros reales: 0,7 de
+mediana, antes 26). Cada ojo busca después su vista sobre esa profundidad, y lo que el objeto
+destapa al correrse se rellena con el fondo de al lado. No hay nada que ajustar.
+
+* `cantos = viejo` en `serve.conf` vuelve al camino de antes, para comparar en el panel. Quitar la
+  línea vuelve a los cantos finos.
+* Cuesta 0,4 a 0,7 ms más por cuadro en una RTX 4090 a 3840 × 2160 (1,0–1,4 ms contra 0,66).
+* En el registro: `[conversor] cantos: finos …` al arrancar y, cada 20 s, `[cantos] finos: el mapa se
+  afinó en N de M cuadros`.
+* Para probarlo sin panel: `tools/prueba-aparte.sh ODYSSEYVK_FUENTE_PNG=cuadro.png ODYSSEYVK_PRUEBA=15
+  -- --conver --modelo RED.onnx --dump salida` deja en `salida-trama-vulkan.png` la profundidad ya
+  afinada (la sonda 15); con `ODYSSEYVK_PRUEBA=1` o `2`, la vista de cada ojo.
+
 ### Dos planos por cuadro, como en la Nintendo 3DS (desde v0.48)
 
 El relieve continuo es bonito en los planos buenos y sucio en los malos: un partido de fútbol o una
@@ -1120,7 +1143,8 @@ cuántos fotogramas manda el compositor cada segundo (un vídeo normal da 24-25)
   rinde poco), `paralaje` (ganancia del paralaje al mover la cabeza; 0 = apagado, negativo = invertido),
   `detalle` (realce de nitidez del sujeto; 0,4 de fábrica), `foco_iir` (lo que tarda el plano en seguir
   al sujeto). Para medir fotos sueltas: `odysseyvk mapa FOTOS… --sueltas`.
-* Conversor 2D→3D: desde v0.62 el mapa se agranda **guiado por la imagen** (el `jbu` de Windows) en vez de
+* Conversor 2D→3D: desde v0.89 van los **cantos finos** (ver arriba); lo que sigue vale para `cantos = viejo`.
+  Desde v0.62 el mapa se agranda **guiado por la imagen** (el `jbu` de Windows) en vez de
   con la cúbica, para que los cantos no salgan en peine. `ODYSSEYVK_JBU=0` vuelve a lo de antes;
   `ODYSSEYVK_JBU_COLOR` (0,06) cambia cuánto tiene que parecerse el color. Para probarlo sin video:
   `ODYSSEYVK_FUENTE_PNG=cuadro.png odysseyvk test ... --mapa-fijo mapa.pgm --dump salida` (ver CAMBIOS v0.62).

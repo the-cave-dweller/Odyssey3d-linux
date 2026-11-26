@@ -152,6 +152,9 @@ public:
      el panel la misma red con el mapa en crudo. */
   void setCleaning(bool on) { limpieza_ = on; }
   bool cleaning() const { return limpieza_; }
+  /* radio del dilatado de lo cercano (0 = sin dilatar). Ver `dilatar` en depth.cpp. */
+  void setDilatar(int r) { dilata_ = r < 0 ? 0 : (r > 6 ? 6 : r); }
+  int radioDilatar() const { return dilata_; }
 
   /* Los dos planos (ver Planos mas arriba). La `dureza` va de 0 a 1: 0 deja el relieve continuo
      de siempre (y no cuesta nada porque el codigo se salta entero), 1 deja cada lamina plana. Las
@@ -198,6 +201,7 @@ private:
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */
   std::vector<float> opRG_, opBY_;      /* color oponente (R-G, B-Y) para la saliencia (v0.65) */
   bool limpieza_ = true;                /* filtro guiado + dilatar activados */
+  int dilata_ = 3;                      /* radio del dilatado de lo cercano, en puntos del mapa */
   bool quemada_ = false;                /* ONNX Runtime ya reviento aqui: no intentar otra sesion */
   float dureza_ = 0.0f;                 /* fuerza de la separacion en dos planos (0 = apagado) */
   int muestras_ = 0;                    /* muestras intermedias entre las laminas (0 = rampa) */

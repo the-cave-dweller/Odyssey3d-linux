@@ -3,6 +3,61 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Cantos finos: el borde de cada objeto en su sitio (v0.89)
+
+- Rodolfo, de vuelta al conversor: «percibo un pequeño ghost de 1-1.5mm junto a algunos planos de la
+  imagen al mover la cabeza… quiero que casi no se perciba». Y pregunta si la mancha de la izquierda
+  de `calib/3DStackCorrection_A.png` afecta a la calidad.
+- **La mancha del mapa A**: MEDIDO, son 311 puntos con valor 253–255 en la esquina de abajo a la
+  izquierda (2,1 × 5,5 cm de pantalla), rodeados de ceros: la fase, que ahí baja un pelo de cero, dio
+  la vuelta al guardarse en 8 bits. Es un defecto del archivo de fábrica, pero el visor ya lo lee
+  como 0 desde la v0.59 (`[correccion] mapa A: 311 puntos dados la vuelta`), con un error de 3/255 de
+  ciclo como mucho. No afecta.
+- **De dónde salía el fantasma** (MEDIDO, tres cosas que se sumaban):
+  1. El mapa llegaba **ensanchado** a propósito (`dilatar`, 3 puntos): en 8 cuadros reales, 753
+     cantos, el borde del mapa caía a **25,8 px** (4 mm) por fuera del borde de la imagen (mediana;
+     el 80 % entre 22,9 y 40,5). Esa franja de fondo se movía pegada al objeto, y donde acababa, el
+     fondo se estiraba en un ojo y se encogía en el otro: una banda del ancho del desplazamiento
+     (1–1,5 mm) con el fondo doble. Sin ensanchar queda a 1,9 px (de −0,9 a +6,1).
+  2. El color de los dos ojos se leía corrido lo que diga «3D Salida» (15,4 px en 50) y el mapa no:
+     mapa e imagen iban desencajados 2,4 mm en todos los cantos (sonda 14: canto del mapa en
+     x = 1400, canto del color en x = 1385).
+  3. El mapa se repartía por ojo en la CPU a su tamaño (un punto cada 7,4 px), distinto en cada ojo.
+  Con una escena de canto conocido (objeto 10 px por ojo): el borde de cada ojo a 9–10 px de su
+  sitio (20 px con la cabeza a un lado) y una tira de 10–20 px equivocada junto a él.
+- **Cantos finos** (`shaders/weave.frag`, de fábrica): el mapa llega sin ensanchar y en la
+  profundidad de la FUENTE. Un pase previo (`afinar`, una vez por píxel) cambia la rampa del mapa en
+  cada canto por un escalón puesto donde lo dice el COLOR de la imagen: con los 4 × 4 puntos de
+  alrededor saca el color del fondo y el del objeto, mira en qué punto de esa mezcla está el píxel y
+  corta a lo largo de una línea de nivel (3 partes de 10 de objeto). Luego cada ojo busca su vista
+  sobre esa profundidad (`buscaVista`), sin «convergencia» que la desencaje, y lo que el objeto
+  destapa se rellena (`rellenoHueco`) con el fondo pegado al corte; si el corte pasa por mitad de un
+  canto borroso, con el degradado tendido de un lado al otro.
+- Probado y descartado por el camino, con cuadros reales: cortar por votos de parecido de color (en
+  un hombro desenfocado el corte caía a media orilla y a saltos de fila en fila: una raya dentada);
+  rellenar el hueco con el fondo en espejo (repite cada raya del fondo y, en un canto borroso, deja
+  una raya oscura: 171 | 30 30 37 47 | 94); valor de cada lado por mínimo y máximo (un foso en el
+  fondo junto al canto).
+- El mapa viaja con **el color de la imagen que lo dio** (cuatro bytes por punto): el mapa se renueva
+  6 veces por segundo y el corte se decide con el píxel de ahora contra los colores de entonces, así
+  que sigue al objeto aunque el mapa vaya atrasado. Si el color no cuadra con nada (el quinto de
+  segundo que sigue a un cambio de plano), no se corta: MEDIDO, 2080 escalones con el mapa de su
+  propio cuadro y 798 con el de otro.
+- MEDIDO sin panel (`tools/prueba-aparte.sh`, red de verdad): el escalón queda a **+0,7 px** de
+  mediana del borde de la imagen (439 cantos en 3 cuadros; el 96 % a menos de 2 px; antes 25,8). En
+  la escena de canto conocido el borde de cada ojo queda a 1 px o menos, con la cabeza centrada y a
+  un lado, y la tira equivocada baja de 19,6–35,5 a 0,3–1,6 niveles.
+- Coste (RTX 4090, 3840 × 2160, sin freno): 0,66 ms por cuadro antes; ahora 1,36 ms si hay que
+  afinar en cada cuadro y 1,02 ms si no (el pase se salta cuando no cambian ni la imagen ni el mapa:
+  30 de 294 cuadros con la imagen quieta). Con `afinar` dentro de la búsqueda eran 21 ms: de ahí el
+  pase previo. La capa de validación de Vulkan no da ningún aviso nuevo.
+- `cantos = viejo` en `serve.conf` (`ODYSSEYVK_CANTOS=viejo`) vuelve al camino de antes, con su
+  ensanchado, para comparar. Taller: `ODYSSEYVK_DILATAR=N`, `ODYSSEYVK_GUIA_PNG`, sondas 14 y 15,
+  `ODYSSEYVK_AFINAR_SIEMPRE`. El registro dice `[cantos] finos: el mapa se afinó en N de M cuadros`.
+- **No probado**: nada en el panel. Tampoco vídeo en movimiento (aquí solo cuadros quietos), HDR ni
+  juegos. HIPÓTESIS: si el fantasma solo aparece MIENTRAS se mueve la cabeza y se va al parar, lo
+  que queda es el retraso del rastreo, no los cantos.
+
 ## Lanzador con carátulas y 3D por juego; suavizado automático (v0.88)
 
 - Rodolfo, con la 0.87 (el panel se arrastra «sin saltos»): «sigue con el lanzador y el suavizado».
