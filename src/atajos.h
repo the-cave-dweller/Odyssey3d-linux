@@ -32,7 +32,7 @@ struct Def {
   const char *texto;     /* lo que se ve en el panel, en español (pasa por idioma::tr) */
   const char *defecto;   /* la combinacion de fabrica */
 };
-/* las ocho acciones que se pueden cambiar, en el orden del panel */
+/* las acciones que se pueden cambiar (nueve desde la v1.12), en el orden del panel */
 const std::vector<Def> &lista();
 /* la combinacion puesta para cada accion (serve.conf o la de fabrica): nombre -> combinacion */
 std::map<std::string, std::string> combos();

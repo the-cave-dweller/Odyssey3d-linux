@@ -21,6 +21,9 @@ layout(set = 0, binding = 5) uniform sampler2D uFino;   /* cantos finos: la prof
    Va en dos canales: .r los 8 bits altos y .g los 8 bajos (r + g/255); en .b, cuanto de objeto
    tiene el pixel segun su color (0 = fondo, 1 = objeto, solo junto a los cantos). Solo vale con
    tun10.z = 1. */
+layout(set = 0, binding = 6) uniform sampler2D uSal;    /* la saliencia de la ultima estimacion (v1.12), una
+   celda cada 8 puntos del mapa, 1 = el punto que mas pesa al elegir el plano. Solo la lee la vista de
+   depuracion (tun11.y); sin ella es la imagen negra de reserva. */
 
 layout(set = 0, binding = 3) uniform WeaveParams {
     vec2 v2c[4];   /* campo v2 en TL, TR, BL, BR */
@@ -50,7 +53,8 @@ layout(set = 0, binding = 3) uniform WeaveParams {
                       z = 1 la profundidad afinada ya esta hecha en uFino (ver profFuente) ·
                       w = 1 el mapa trae en .gba el color de la imagen que lo dio */
     vec4 tun11;    /* x = 1: las filas de la barra del reproductor se ensenan enteras y tal cual, como
-                      de la v0.81 a la v0.89 (`barra_2d = entera`), en vez de la franja nueva (v0.90) */
+                      de la v0.81 a la v0.89 (`barra_2d = entera`), en vez de la franja nueva (v0.90) ·
+                      y = 1: la vista de depuracion de la profundidad (v1.12, ver mas abajo) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -828,6 +832,21 @@ void main()
     if (P.tun6.w == 8.0) { o = vec4(fract(v4), 1.0); return; }
     if (P.tun6.w == 9.0) { o = vec4(corrA, corrB, rsq, 1.0); return; }
     if (P.tun6.w == 3.0) { o = vec4(texture(uSrc, vec2(u, v)).rgb, 1.0); return; }
+
+    /* Vista de depuracion de la profundidad (v1.12, Ctrl+Mayus+9): en vez de las dos vistas, la misma
+       imagen a los dos ojos (se ve plana, sin el relieve). Gris = la profundidad que usa la trama, ya
+       afinada y con los rotulos apoyados (blanco = cerca); naranja = donde pesa la saliencia, que es la
+       que elige el plano en Auto (relativa al punto que mas pesa de esa estimacion); cian = lo que cae
+       en el plano de la pantalla (tun4.z), lo que se queda quieto y nitido. */
+    if (P.tun11.y == 1.0 && P.tun4.x == 1.0) {
+        float d = P.tun10.y == 1.0 ? profFuente(fuv, 1.0, 1.0) : texture(uDepth, fuv).r;
+        vec3 c = vec3(d);
+        float sal = texture(uSal, fuv).r;
+        c = mix(c, vec3(1.0, 0.45, 0.05) * (0.3 + 0.7 * d), 0.85 * smoothstep(0.15, 0.85, sal));   /* con su sombra */
+        c = mix(c, vec3(0.0, 0.85, 1.0), 0.9 * (1.0 - smoothstep(0.008, 0.016, abs(d - P.tun4.z))));
+        o = vec4(c, 1.0);
+        return;
+    }
 
     float lx = (P.tun2.w == 1.0) ? 0.0 : 0.5;   /* orden de ojos validado en el Hub */
     float rx = (P.tun2.w == 1.0) ? 0.5 : 0.0;

@@ -43,6 +43,7 @@ const Accion kAcciones[] = {
     {"pastilla-", "Achicar la pastilla"},
     {"pastilla+", "Agrandar la pastilla"},
     {"capa", "Ocultar o mostrar la pastilla"},
+    {"verprof", "Ver la profundidad y la saliencia (depuración)"},   /* v1.12 */
 };
 
 /* las que se pueden cambiar en el panel (v1.09). `capa2` (Ctrl+Shift+2) no: es la vieja de ocultar
@@ -56,6 +57,9 @@ const std::vector<atajos::Def> kDefs = {
     {"pastilla-", "pastilla_menos", "Pastilla más chica", "Ctrl+Shift+7"},
     {"pastilla+", "pastilla_mas", "Pastilla más grande", "Ctrl+Shift+8"},
     {"capa", "pastilla", "Ocultar o mostrar la pastilla", "Ctrl+Shift+F1"},
+    /* v1.12: la vista de depuracion (weave.frag): la profundidad en gris, la saliencia en naranja y el
+       plano de la pantalla en cian */
+    {"verprof", "ver_profundidad", "Ver la profundidad (depuración)", "Ctrl+Shift+9"},
 };
 const char *kCapa2 = "Ctrl+Shift+2";
 

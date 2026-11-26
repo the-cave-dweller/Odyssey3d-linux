@@ -1190,8 +1190,9 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       std::vector<float> vD, vCS, vE, vLab, vW;
       vD.reserve((size_t)g * g); vCS.reserve((size_t)g * g); vE.reserve((size_t)g * g);
       vLab.reserve((size_t)g * g); vW.reserve((size_t)g * g);
-      std::vector<int> vBin;
+      std::vector<int> vBin, vCelda;   /* vCelda: donde cae cada punto en la rejilla de la depuracion */
       vBin.reserve((size_t)g * g);
+      vCelda.reserve((size_t)g * g);
       const float cx = 0.5f * (float)sz_, cy = 0.5f * (float)sz_, rmax = std::sqrt(cx * cx + cy * cy);
       for (int y = 1; y < sz_ - 1; y += paso)
         for (int x = 1; x < sz_ - 1; x += paso) {
@@ -1206,16 +1207,27 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
           t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
           vW.push_back(t * t * t * (t * (6.0f * t - 15.0f) + 10.0f));   /* smootherstep, como el Hub */
           vBin.push_back((int)(salida[o] * 31.99f));
+          vCelda.push_back(((y - 1) / paso) * g + (x - 1) / paso);
         }
       const float nCS = p99(vCS), nE = p99(vE), nLab = p99(vLab);
+      std::vector<float> rejilla((size_t)g * g, 0.0f);
+      float salMax = 0.0f;
       for (size_t i = 0; i < vD.size(); i++) {
         const float s = (0.2f * vD[i] + 0.6f * std::min(vCS[i] / nCS, 1.0f) + 0.1f * std::min(vE[i] / nE, 1.0f) +
                          0.1f * std::min(vLab[i] / nLab, 1.0f)) * vW[i];
         const float wgt = 0.02f + s;   /* un piso: que el histograma nunca quede vacio */
         hist[vBin[i]] += wgt;
         total += wgt;
+        rejilla[(size_t)vCelda[i]] = s;
+        salMax = std::max(salMax, s);
       }
+      /* para la vista de depuracion: relativa al punto que mas pesa, que es lo que decide el plano */
+      salRejilla_.resize(rejilla.size());
+      for (size_t i = 0; i < rejilla.size(); i++)
+        salRejilla_[i] = (uint8_t)std::lround(salMax > 1e-6f ? 255.0f * rejilla[i] / salMax : 0.0f);
+      salLado_ = g;
     } else {
+      salRejilla_.clear(), salLado_ = 0;
       for (int y = 1; y < sz_ - 1; y++) {
         for (int x = 1; x < sz_ - 1; x++) {
           if (enBanda(x, y)) continue;

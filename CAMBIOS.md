@@ -103,6 +103,31 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
+## Vista de depuración de la profundidad: Ctrl+Mayús+9 (v1.12)
+
+- Rodolfo: «is there a chance to create a depth mode, for debugging, that shows both the depth
+  elements and marks the saliency ones with other color».
+- **Qué se ve**: la misma imagen a los dos ojos (plana, sin relieve). En gris la profundidad que usa la
+  trama, ya afinada y con los rótulos apoyados (blanco = cerca); en naranja, con la sombra de la
+  profundidad debajo, donde pesa la saliencia, que es la que elige el plano de la pantalla en Auto
+  (relativa al punto que más pesa en esa estimación); en cian lo que cae en el plano de la pantalla
+  (a ±0,008 de él), lo que se queda quieto y nítido. Bajo la pastilla, la leyenda de los colores
+  durante 12 s, o que hace falta el conversor si el vídeo va dividido sin suavizar.
+- **Cómo** (`src/depth.*`, `src/vkweave.*`, `src/vkview.cpp`, `shaders/weave.frag`): la saliencia ya
+  se calculaba en cada estimación en una rejilla de 65 × 65 (un punto cada 8 del mapa) para pesar el
+  histograma del plano; ahora `estimate` la deja guardada (`rejillaSaliencia`), el hilo de la red la
+  copia junto al mapa y, con la vista puesta, sube como textura R8 (enlace 6 del sombreador, buffer de
+  paso fijo como el del mapa). `tun11.y` enciende la rama, antes de buscar las vistas de cada ojo;
+  apagada no cuesta nada.
+- **Atajo** `verprof` (Ctrl+Mayús+9, se cambia en el panel como los demás: «Ver la profundidad
+  (depuración)»), golpe de prueba `verprof` y `ODYSSEYVK_VER_PROFUNDIDAD=1` para arrancar con ella.
+- **Probado** en el visor aparte con un cuadro de una persona hablando: la cara en naranja, el contorno
+  del plano de la pantalla en cian alrededor de la cara y los subtítulos apoyados en cian; un toque
+  la pone, dos la quitan (la trama vuelve a ser la de siempre). La leyenda sale bajo la pastilla y la
+  fila nueva en los atajos del panel. El arranque de Vulkan pasó por 1,0 s las dos primeras veces (la
+  caché de sombreadores, por el cambio) y volvió a 0,2 s.
+- Traducciones: cuatro textos nuevos.
+
 ## Los ajustes, más compactos (v1.12)
 
 - Rodolfo: «en settings reacomoda las opciones que quedan para ser compactas y útiles»; «los juegos

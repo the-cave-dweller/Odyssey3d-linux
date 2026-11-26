@@ -45,6 +45,7 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
 | `Ctrl+Shift+5` / `6` | 3D pop-out − / + |
 | `Ctrl+Shift+7` / `8` | pill smaller / bigger |
 | `Ctrl+Shift+F1` | hide / show the pill |
+| `Ctrl+Shift+9` | depth debug view: depth in gray (white = near), saliency in orange, the screen plane in cyan (`ODYSSEYVK_VER_PROFUNDIDAD=1` starts with it, for `--dump`) |
 | In the viewer: `Esc` leave · `3` 2D/3D · `F` swap eyes · `M` cycle format · `C` converter on/off · `P`/space pause · `1` `2` switch depth network · `[` `]` `;` `'` lens pitch fine-tune · `8` reset |
 
 ## 2D → 3D conversion

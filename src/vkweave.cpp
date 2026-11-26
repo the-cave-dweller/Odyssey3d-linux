@@ -54,9 +54,9 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   if (!createSwapchain(w, h, err)) return false;
 
   /* conjunto de la trama: 0 fuente · 1 corrA · 2 corrB · 3 parámetros · 4 profundidad ·
-     5 profundidad afinada (v0.89) */
-  VkDescriptorSetLayoutBinding b[6]{};
-  for (int i : {0, 1, 2, 4, 5}) {
+     5 profundidad afinada (v0.89) · 6 rejilla de la saliencia (v1.12, vista de depuracion) */
+  VkDescriptorSetLayoutBinding b[7]{};
+  for (int i : {0, 1, 2, 4, 5, 6}) {
     b[i].binding = (uint32_t)i;
     b[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     b[i].descriptorCount = 1;
@@ -67,7 +67,7 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
   b[3].descriptorCount = 1;
   b[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   VkDescriptorSetLayoutCreateInfo dli{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dli.bindingCount = 6;
+  dli.bindingCount = 7;
   dli.pBindings = b;
   if (vkCreateDescriptorSetLayout(dev.device(), &dli, nullptr, &srcSetLay_) != VK_SUCCESS) {
     if (err) *err = "vkCreateDescriptorSetLayout de la trama falló";
@@ -84,7 +84,8 @@ bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *
 
   /* tres conjuntos por hueco del intercambio (trama, afinado e interfaz), mas el de la copia
      pequena y los tres que pide un cuadro fuera de pantalla */
-  VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 12 * (uint32_t)imgs_.size() + 24},
+  /* seis imagenes por conjunto de la trama desde la v1.12 (dos por hueco) y una la interfaz */
+  VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 14 * (uint32_t)imgs_.size() + 28},
                                 {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 * (uint32_t)imgs_.size() + 6}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -338,13 +339,14 @@ void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer u
   const VkSampler samp = dev_->sampler();
   /* sin pase de afinado el enlace 5 lleva la imagen negra de reserva: el sombreador no la lee, pero
      un enlace tiene que apuntar siempre a algo valido */
-  VkDescriptorImageInfo si[5] = {{samp, srcView, VK_IMAGE_LAYOUT_GENERAL},
+  VkDescriptorImageInfo si[6] = {{samp, srcView, VK_IMAGE_LAYOUT_GENERAL},
                                  {samp, corrA_.view, VK_IMAGE_LAYOUT_GENERAL},
                                  {samp, corrB_.view, VK_IMAGE_LAYOUT_GENERAL},
                                  {samp, depth_.view, VK_IMAGE_LAYOUT_GENERAL},
-                                 {samp, finoView ? finoView : black_.view, VK_IMAGE_LAYOUT_GENERAL}};
+                                 {samp, finoView ? finoView : black_.view, VK_IMAGE_LAYOUT_GENERAL},
+                                 {samp, sal_.valid() ? sal_.view : black_.view, VK_IMAGE_LAYOUT_GENERAL}};
   VkDescriptorBufferInfo bi{ubo, 0, kUboBytes};
-  VkWriteDescriptorSet wr[6]{};
+  VkWriteDescriptorSet wr[7]{};
   for (int i = 0; i < 3; i++) {
     wr[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     wr[i].dstSet = set;
@@ -371,7 +373,13 @@ void VkWeave::writeWeaveSet(VkDescriptorSet set, VkImageView srcView, VkBuffer u
   wr[5].descriptorCount = 1;
   wr[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   wr[5].pImageInfo = &si[4];
-  vkUpdateDescriptorSets(dev_->device(), 6, wr, 0, nullptr);
+  wr[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  wr[6].dstSet = set;
+  wr[6].dstBinding = 6;
+  wr[6].descriptorCount = 1;
+  wr[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  wr[6].pImageInfo = &si[5];
+  vkUpdateDescriptorSets(dev_->device(), 7, wr, 0, nullptr);
 }
 
 void VkWeave::writeHudSet(VkDescriptorSet set, VkImageView atlasView) {
@@ -546,6 +554,13 @@ void VkWeave::destroy() {
   fino_ = VkImg{};
   finoW_ = finoH_ = 0;
   finoFirma_.clear();
+  dev_->destroyImg(sal_);
+  sal_ = VkImg{};
+  salLado_ = 0;
+  if (salStage_) vkDestroyBuffer(dev_->device(), salStage_, nullptr);
+  if (salStageMem_) vkFreeMemory(dev_->device(), salStageMem_, nullptr);
+  salStage_ = VK_NULL_HANDLE;
+  salStageMem_ = VK_NULL_HANDLE;
   if (smallStage_) vkDestroyBuffer(dev_->device(), smallStage_, nullptr);
   if (smallStageMem_) vkFreeMemory(dev_->device(), smallStageMem_, nullptr);
   if (mapStage_) vkDestroyBuffer(dev_->device(), mapStage_, nullptr);
@@ -936,7 +951,8 @@ void VkWeave::fillUbo(uint8_t *dst) {
   ((float *)(dst + kOffTun10))[3] = (cantosFinos_ && depthCanales_ == 4) ? 1.0f : 0.0f;   /* el mapa trae el color de su imagen */
   float *t11 = (float *)(dst + kOffTun11);
   t11[0] = franjaEntera_ ? 1.0f : 0.0f;
-  t11[1] = t11[2] = t11[3] = 0.0f;
+  t11[1] = verProfundidad_ ? 1.0f : 0.0f;   /* la vista de depuracion (v1.12) */
+  t11[2] = t11[3] = 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
@@ -1703,4 +1719,46 @@ bool VkWeave::subirMapaRG(const uint8_t *rg, int w, int h, std::string *err, int
   }
   depthUsable_ = true;
   return true;
+}
+
+/* La rejilla de la saliencia para la vista de depuracion (v1.12). Como el mapa: la imagen se crea la
+   primera vez (o si cambia el lado) y despues solo se copian bytes por un buffer de paso fijo. */
+bool VkWeave::setSaliencia(const uint8_t *s, int lado, std::string *err) {
+  if (!dev_ || !s || lado <= 0) {
+    if (err) *err = "rejilla de saliencia vacia";
+    return false;
+  }
+  waitIdle();   /* la anterior puede estar en manos de un cuadro en vuelo */
+  const VkDeviceSize n = (VkDeviceSize)lado * (VkDeviceSize)lado;
+  if (!sal_.valid() || salLado_ != lado) {
+    if (salStage_) vkDestroyBuffer(dev_->device(), salStage_, nullptr);
+    if (salStageMem_) vkFreeMemory(dev_->device(), salStageMem_, nullptr);
+    salStage_ = VK_NULL_HANDLE;
+    salStageMem_ = VK_NULL_HANDLE;
+    if (!uploadR8(s, lado, lado, sal_, err)) return false;
+    if (!dev_->createBuffer(n, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, salStage_,
+                            salStageMem_, err))
+      return false;
+    salLado_ = lado;
+    return true;
+  }
+  void *p = nullptr;
+  if (vkMapMemory(dev_->device(), salStageMem_, 0, n, 0, &p) != VK_SUCCESS) {
+    if (err) *err = "no se pudo preparar la rejilla de saliencia";
+    return false;
+  }
+  memcpy(p, s, (size_t)n);
+  vkUnmapMemory(dev_->device(), salStageMem_);
+  VkCommandBuffer cb = dev_->beginOneTime(err);
+  if (!cb) return false;
+  barrier(cb, sal_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+          VK_ACCESS_TRANSFER_WRITE_BIT);
+  VkBufferImageCopy reg{};
+  reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  reg.imageExtent = {(uint32_t)lado, (uint32_t)lado, 1};
+  vkCmdCopyBufferToImage(cb, salStage_, sal_.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &reg);
+  barrier(cb, sal_.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_WRITE_BIT,
+          VK_ACCESS_SHADER_READ_BIT);
+  return dev_->endOneTime(cb, err);
 }

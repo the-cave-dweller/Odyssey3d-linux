@@ -99,6 +99,13 @@ public:
   /* cantos finos (v0.89): el mapa tal cual sale de la red y, con el, el color de la imagen que
      lo dio (cuatro bytes por punto: profundidad, rojo, verde, azul). Ver afinar() en weave.frag. */
   bool setDepthMapGuia(const uint8_t *rgba, int w, int h, std::string *err);
+  /* La vista de depuracion de la profundidad (v1.12): con ella puesta, en vez de las dos vistas se ve
+     plana la profundidad que usa la trama (gris, blanco = cerca), encima la saliencia en naranja y en
+     cian lo que cae en el plano de la pantalla. `setSaliencia` sube la rejilla de DepthNet
+     (rejillaSaliencia, lado x lado, R8). */
+  void setVerProfundidad(bool v) { verProfundidad_ = v; }
+  bool verProfundidad() const { return verProfundidad_; }
+  bool setSaliencia(const uint8_t *s, int lado, std::string *err);
   /* cuantos pases de afinado se han dibujado y cuantos se ahorraron por no haber cambiado nada */
   void cuentaAfinado(long *hechos, long *ahorrados) const { *hechos = finoHechos_, *ahorrados = finoAhorrados_; }
   bool hasDepthMap() const { return depthUsable_; }
@@ -239,6 +246,11 @@ private:
   std::vector<uint8_t> finoFirma_;   /* de que se dibujo el afinado que hay en la imagen */
   long finoHechos_ = 0, finoAhorrados_ = 0;
   std::vector<uint8_t> mapRG_;   /* el mapa ya partido por ojo, antes de subirlo */
+  bool verProfundidad_ = false;  /* ver setVerProfundidad */
+  VkImg sal_{};                  /* la rejilla de la saliencia (R8), solo con la vista de depuracion */
+  int salLado_ = 0;
+  VkBuffer salStage_ = VK_NULL_HANDLE;
+  VkDeviceMemory salStageMem_ = VK_NULL_HANDLE;
   bool subirMapaRG(const uint8_t *rg, int w, int h, std::string *err, int canales = 2);   /* la subida a la tarjeta, sin mas */
   double msHoyos_ = 0.0;         /* lo que tarda rellenar los huecos (medible con ODYSSEYVK_MEDIR=1) */
   long mapasContados_ = 0;

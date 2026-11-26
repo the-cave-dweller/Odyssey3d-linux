@@ -81,6 +81,7 @@ Keys (they also work while the video or game has the keyboard):
 | `Ctrl+Shift+3` / `4` | 3D depth down / up |
 | `Ctrl+Shift+5` / `6` | 3D pop-out down / up |
 | `Ctrl+Shift+F1` | hide / show the pill |
+| `Ctrl+Shift+9` | depth debug view (flat, no 3D): the depth in gray (white = near), where saliency weighs in orange (it picks the screen plane in Auto) and what sits on the screen plane in cyan; again to go back |
 | `Esc` (in the viewer) | leave 3D |
 
 Every shortcut can be changed in the panel's main page → **Keyboard shortcuts** (the section folds with the arrow

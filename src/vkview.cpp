@@ -121,6 +121,9 @@ struct VkUi {
   bool mediaPausaManual = false;
   std::string fmtInfo;       /* " · lado a lado": recuerda que formato se esta entrelazando */
   bool convToggle = false;   /* la tecla C: el bucle del visor enciende o apaga el conversor */
+  /* la vista de depuracion de la profundidad (v1.12, Ctrl+Mayus+9, ver weave.frag): la cambia el atajo
+     y el bucle se la pasa a la trama. ODYSSEYVK_VER_PROFUNDIDAD=1 arranca con ella (para --dump). */
+  bool verProfundidad = entornoOdyssey("ODYSSEYVK_VER_PROFUNDIDAD") != nullptr;
   std::string extraInfo;     /* el aviso del momento, bajo la pastilla: se quita solo */
   std::string estadoVideo;   /* " · video en pausa": ya no se pinta (lo dice el propio video), queda para depurar */
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
@@ -843,6 +846,10 @@ static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
   const char *tag = nullptr;
   if (accion == "3d") { ui.hud.toggle3D(); tag = "3D/2D"; }
   else if (accion == "capa" || accion == "capa2") cambioCapa(ui, !ui.hud.overlayVisible(), origen);
+  else if (accion == "verprof") {   /* el bucle se lo pasa a la trama y avisa bajo la pastilla */
+    ui.verProfundidad = !ui.verProfundidad;
+    std::printf("[depuracion] vista de profundidad %s (%s)\n", ui.verProfundidad ? "puesta" : "quitada", origen);
+  }
   /* en el modo rendimiento no hay Profundidad ni Salida: la separacion la pone el menu del rayo */
   else if (ui.hud.state().rendimiento && (accion == "prof-" || accion == "prof+" || accion == "relieve-" || accion == "relieve+")) {
     std::printf("[rendimiento] %s no hace nada en el modo rendimiento (%s): la separacion la pone el menu del rayo\n",
@@ -1833,6 +1840,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      std::vector<uint8_t> mapa;   /* mapa terminado y esperando subirse */
      std::vector<uint8_t> mapaRG; /* el mismo, ya repartido por ojo y con los huecos rellenos (v0.69) */
      std::vector<uint8_t> mascara; /* rejilla de rotulos detectados, para poder verla */
+     std::vector<uint8_t> saliencia; /* la rejilla de la saliencia de este mapa (v1.12, vista de depuracion) */
+     int salLado = 0;
      MemoriaTexto memoriaTexto;    /* el apoyo de los rotulos de un mapa al siguiente (v0.74); solo la toca el hilo */
      int mw = 0, mh = 0;
      float textoFrac = 0.0f;      /* parte del mapa que se apoyo en la pantalla */
@@ -1871,8 +1880,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          std::string e;
          const bool ok = t.red->estimate(t.copia.data(), t.sz, t.sz, m, &e);
          float frac = 0.0f;
-         std::vector<uint8_t> mk;
-         int gw = 0, gh = 0;
+         std::vector<uint8_t> mk, sal;
+         int gw = 0, gh = 0, sLado = 0;
+         if (ok) t.red->rejillaSaliencia(sal, sLado);   /* 4 KB: se copia siempre, se sube solo si se mira */
          if (ok && t.apoyar) {
            /* los subtitulos y cualquier texto: van al plano de la pantalla para que no se deslicen
               con la cabeza. Se hace aqui, con la misma foto que genero este mapa. La memoria no
@@ -1909,6 +1919,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          {
            std::lock_guard<std::mutex> g(candado);
            mascara = std::move(mk), mw = gw, mh = gh, textoFrac = frac;
+           saliencia = std::move(sal), salLado = sLado;
            mapaRG = std::move(rg);
            mapa = ok ? std::move(m) : std::vector<uint8_t>{};
            error = ok ? std::string() : e;
@@ -1942,7 +1953,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      /* 0 = sigue trabajando, 1 = mapa listo (en `fuera`), -1 = fallo (en `errFuera`) */
      int recoger(std::vector<uint8_t> &fuera, float &msFuera, std::string &errFuera,
                  std::vector<uint8_t> *masc = nullptr, int *mw = nullptr, int *mh = nullptr,
-                 float *frac = nullptr, std::vector<uint8_t> *rgFuera = nullptr) {
+                 float *frac = nullptr, std::vector<uint8_t> *rgFuera = nullptr,
+                 std::vector<uint8_t> *salFuera = nullptr, int *salLadoFuera = nullptr) {
        if (!ocupado)
          return 0;
        std::lock_guard<std::mutex> g(candado);
@@ -1960,6 +1972,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        if (masc)
          masc->swap(mascara);
        if (mw) *mw = this->mw, *mh = this->mh, *frac = textoFrac;
+       if (salFuera) salFuera->swap(saliencia), *salLadoFuera = salLado;
        return fuera.empty() ? -1 : 1;
      }
    } hiloRed;
@@ -2325,6 +2338,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         bool tiene = false;
         if (tok == "capa") {   /* lo mismo que Ctrl+Shift+F1: ocultar o poner la pastilla */
           atajoHub(ui, "capa", "golpe de prueba");
+        } else if (tok == "verprof") {   /* lo mismo que Ctrl+Shift+9: la vista de depuracion */
+          atajoHub(ui, "verprof", "golpe de prueba");
         } else if (tok == "red") {
           float rx = 0, ry = 0, rw = 0, rh = 0;
           if (ui.hud.redBounds(&rx, &ry, &rw, &rh)) {
@@ -3552,8 +3567,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::vector<uint8_t> mascara;
       int masW = 0, masH = 0;
       float fracTexto = 0.0f;
-      std::vector<uint8_t> mapaRG;
-      const int estado = hiloRed.recoger(mapa, msHecho, errHecho, &mascara, &masW, &masH, &fracTexto, &mapaRG);
+      std::vector<uint8_t> mapaRG, salRejilla;
+      int salLado = 0;
+      const int estado = hiloRed.recoger(mapa, msHecho, errHecho, &mascara, &masW, &masH, &fracTexto, &mapaRG,
+                                         &salRejilla, &salLado);
       if (estado == 1) {
         convMs = msHecho;
         g_mapaMs = msHecho;
@@ -3563,6 +3580,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                                 : mapaRG.size() == mapa.size() * 2
                                       ? wv.setDepthMapRG(mapaRG.data(), red.size(), red.size(), &cerr)
                                       : wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
+        /* la vista de depuracion (v1.12): la saliencia de este mismo mapa; sin ella puesta no se sube */
+        if (subido && wv.verProfundidad() && salLado > 0) {
+          std::string se;
+          if (!wv.setSaliencia(salRejilla.data(), salLado, &se)) std::fprintf(stderr, "[depuracion] %s\n", se.c_str());
+        }
         medSubeMs += (glfwGetTime() - tSube0) * 1000.0;
         medSubeMax = std::max(medSubeMax, (glfwGetTime() - tSube0) * 1000.0);
         medSubeN++;
@@ -3873,6 +3895,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     if (!opts.mapaFijo.empty() && wv.hasDepthMap())
       wv.setConverter(gananciaRelieve(st.popout), (float)(opts.apoyo >= 0.0 ? opts.apoyo : 0.5), true);
 #endif
+    /* la vista de depuracion de la profundidad (v1.12): el atajo la cambia en `ui` y aqui pasa a la
+       trama; bajo la pastilla, que es cada color (o que hace falta el conversor para verla) */
+    if (wv.verProfundidad() != ui.verProfundidad) {
+      wv.setVerProfundidad(ui.verProfundidad);
+      ui.extraInfo = !ui.verProfundidad ? idioma::tr("vista de profundidad quitada")
+                     : wv.converterOn() ? idioma::tr("profundidad: blanco = cerca · naranja = saliencia · cian = plano de la pantalla")
+                                        : idioma::tr("la vista de profundidad necesita el conversor (vídeo normal o dividido suavizado)");
+      ui.extraHasta = glfwGetTime() + (ui.verProfundidad ? 12.0 : 3.0);
+      ui.inputChanged = true;
+      std::printf("[depuracion] la trama %s la profundidad%s\n", ui.verProfundidad ? "ensena" : "deja de ensenar",
+                  ui.verProfundidad && !wv.converterOn() ? " (sin conversor ahora: no se vera hasta que lo haya)" : "");
+      std::fflush(stdout);
+    }
     ui.hud.state().hud = rig.hud();
     /* la frase extra del video se quita sola, salvo si estamos en pausa a proposito */
     if (!ui.extraInfo.empty() && ui.extraHasta > 0.0 && now >= ui.extraHasta) {

@@ -119,6 +119,11 @@ public:
      bandas negras de las peliculas (rama experimental). Negativo = el automatico. */
   void setPlanoPantalla(float p) { planoPantalla_.store(p); }
   void setSaliencia(bool s) { saliencia_.store(s); }
+  /* La vista de depuracion (v1.12, Ctrl+Mayus+9): el peso de la saliencia en cada punto de su rejilla
+     (una celda cada 8 puntos del mapa, lado x lado, 255 = el punto que mas pesa en esta estimacion,
+     0 = nada o banda negra). La deja `estimate` y se lee desde el mismo hilo, justo despues; vacia
+     sin la saliencia puesta. */
+  void rejillaSaliencia(std::vector<uint8_t> &fuera, int &lado) const { fuera = salRejilla_, lado = salLado_; }
   int size() const { return sz_; }                    /* el mapa que sale es de sz_ x sz_ */
   /* la entrada de la red (rama experimental): de fabrica 518 x 518 (la imagen 16:9 aplastada a un
      cuadrado); con ODYSSEYVK_RED_ENTRADA=WxH la red ve el cuadro a esa medida (su proporcion, y mas
@@ -250,6 +255,8 @@ private:
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */
   std::vector<float> guiaAntes_;        /* la de la estimacion anterior (el tope de arrastre mira que se movio) */
   std::vector<float> opRG_, opBY_;      /* color oponente (R-G, B-Y) para la saliencia (v0.65) */
+  std::vector<uint8_t> salRejilla_;     /* ver rejillaSaliencia */
+  int salLado_ = 0;
   bool limpieza_ = true;                /* filtro guiado + dilatar activados */
   int dilata_ = 3;                      /* radio del dilatado de lo cercano, en puntos del mapa */
   bool quemada_ = false;                /* ONNX Runtime ya reviento aqui: no intentar otra sesion */

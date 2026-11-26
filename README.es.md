@@ -81,6 +81,7 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 | `Ctrl+Shift+3` / `4` | menos / más profundidad |
 | `Ctrl+Shift+5` / `6` | menos / más salida |
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla |
+| `Ctrl+Shift+9` | vista de depuración de la profundidad (plana, sin 3D): la profundidad en gris (blanco = cerca), en naranja donde pesa la saliencia (la que elige el plano de la pantalla en Auto) y en cian lo que cae en el plano de la pantalla; otra vez para volver |
 | `Esc` (en el visor) | salir del 3D |
 
 Cada atajo se cambia en la página principal del panel → **Atajos de teclado** (la sección se pliega con la flechita de su
