@@ -150,9 +150,19 @@ std::string rutaEstadoOdyssey(const char *nombre) {
   return dir + "/" + nombre;
 }
 
-std::string rutaRedNuestra() {
+/* la red abierta: desde la rama experimental (26-nov) la de fabrica es la fp16 (la misma red a media
+   precision: el mismo mapa con un 35 % menos de tiempo y 260 MiB menos, medido en la RTX 5080). Si
+   solo esta la de siempre (fp32), se usa esa hasta que se baje la ligera. */
+static std::string carpetaRedes() {
   const char *home = std::getenv("HOME");
-  return std::string(home ? home : "/home") + "/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx";
+  return std::string(home ? home : "/home") + "/.local/share/odysseyvk/modelos/";
+}
+std::string rutaRedLigera() { return carpetaRedes() + "depth_anything_v2_small_fp16.onnx"; }
+std::string rutaRedVieja() { return carpetaRedes() + "depth_anything_v2_small.onnx"; }
+std::string rutaRedNuestra() {
+  if (fileExists(rutaRedLigera())) return rutaRedLigera();
+  if (fileExists(rutaRedVieja())) return rutaRedVieja();
+  return rutaRedLigera();
 }
 
 int slotRed(const std::string &ruta) {

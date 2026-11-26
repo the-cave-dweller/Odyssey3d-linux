@@ -49,7 +49,8 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
 
 ## 2D → 3D conversion
 
-- Network: Depth Anything V2 Small (open, 95 MB) in `~/.local/share/odysseyvk/modelos/`. If the
+- Network: Depth Anything V2 Small (open; on the `experimental` branch the 50 MB fp16 file
+  `depth_anything_v2_small_fp16.onnx`, else the 95 MB one) in `~/.local/share/odysseyvk/modelos/`. If the
   Odyssey 3D Hub's own `mde_large.onnx` is in that folder it is used automatically (key `1`/`2`
   switches). `modelo = /path.onnx` in `serve.conf` forces another file.
 - A map is computed 6 times per second on the GPU (`mapas_por_segundo`); the panel's Performance

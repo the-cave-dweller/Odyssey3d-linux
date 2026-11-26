@@ -44,8 +44,11 @@ del monitor** una vez (la regla udev se aplica al reconectar). Nunca hagas `udev
 el monitor: reinicia su hub interno y la lente, el scaler y la cámara desaparecen hasta reconectar.
 
 La primera vez que el servicio arranca sin red de profundidad, el panel de ajustes se abre solo y
-ofrece bajarla (95 MB, Depth Anything V2 pequeña, de
-[huggingface.co/XnetShadow/depth_anything_v2_small](https://huggingface.co/XnetShadow/depth_anything_v2_small)).
+ofrece bajarla (50 MB, Depth Anything V2 pequeña a media precisión, de
+[huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)).
+En la rama `experimental` esta versión fp16, más ligera, es la de fábrica: el mismo mapa con un 35 %
+menos de tiempo de red y 260 MB menos en la tarjeta; si ya tienes el archivo de 95 MB de antes, el
+panel ofrece la ligera con un botón.
 Al acabar la descarga el panel se cierra y la red se carga. Desde la terminal es:
 
 ```bash

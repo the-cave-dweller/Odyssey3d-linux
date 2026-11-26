@@ -44,8 +44,11 @@ USB-B cable** once (the udev rule applies on reconnect). Never run `udevadm trig
 monitor: it resets its internal hub and the lens, scaler and camera disappear until you replug.
 
 The first time the service starts without a depth network, the settings panel opens by itself
-and offers to download it (95 MB, Depth Anything V2 Small, from
-[huggingface.co/XnetShadow/depth_anything_v2_small](https://huggingface.co/XnetShadow/depth_anything_v2_small)).
+and offers to download it (50 MB, Depth Anything V2 Small at half precision, from
+[huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)).
+On the `experimental` branch this lighter fp16 version is the default: the same map with 35 % less
+network time and 260 MB less GPU memory; if you already have the older 95 MB file, the panel offers
+the lighter one with a button.
 When the download finishes the panel closes and the network loads. From a terminal it is:
 
 ```bash

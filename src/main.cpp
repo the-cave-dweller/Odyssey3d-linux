@@ -3234,7 +3234,7 @@ static int cmdAjustes(int argc, char **argv) {
       if (!prefs::descargaEnMarcha()) {
         std::printf("[ajustes] red abierta: %s\n", prefs::textoDescarga().c_str());
         std::fflush(stdout);
-        if (prefs::redAbiertaPresente()) {
+        if (prefs::redLigeraPresente()) {
           /* bajada y entera: el visor que haya abierto la carga ya (orden `cargar_red`), el servicio
              la ve en su proxima mirada, y este panel se cierra solo (v0.94) */
           std::string e;
@@ -5957,6 +5957,12 @@ static int cmdServe(int argc, char **argv) {
         /* sin ninguna red al arrancar: en cuanto la abierta aparece en su carpeta (el boton de descarga
            del panel), se toma para el siguiente visor (v0.94) */
         if (redActiva.empty() && fileExists(rutaRedNuestra())) elegirRedes();
+        /* y con la de siempre puesta, en cuanto baja la ligera (fp16) se cambia a ella (rama experimental) */
+        if (!redActiva.empty() && cfg.nuestra.empty() && (cfg.modelo.empty() || slotRed(cfg.modelo) == 1) &&
+            redActiva != rutaRedNuestra() && redOtra != rutaRedNuestra() && fileExists(rutaRedNuestra())) {
+          std::printf("[serve] la red ligera (fp16) ya esta en su carpeta: el siguiente visor la usa\n");
+          elegirRedes();
+        }
         if (marca != marcaConf) {
           marcaConf = marca;
           ServeCfg nuevo;
@@ -6411,12 +6417,14 @@ int main(int argc, char **argv) {
       const std::string que = argc > 3 ? strLower(argv[3]) : std::string();
       const bool hay = prefs::redAbiertaPresente();
       if (que != "descargar") {
-        std::printf("red abierta (Depth Anything V2 pequena): %s\n  %s\n", hay ? "en su sitio" : "FALTA", rutaRedNuestra().c_str());
+        std::printf("red abierta (Depth Anything V2 pequena%s): %s\n  %s\n", prefs::redLigeraPresente() ? ", fp16" : "",
+                    hay ? "en su sitio" : "FALTA", rutaRedNuestra().c_str());
         std::printf("se baja de %s\n", prefs::kUrlRedAbierta);
-        if (!hay) std::printf("  odysseyvk ctl red descargar   la deja ahi (95 MB)\n");
+        if (!prefs::redLigeraPresente())
+          std::printf("  odysseyvk ctl red descargar   deja ahi la ligera (fp16, 50 MB)\n");
         return hay ? 0 : 1;
       }
-      if (hay) {
+      if (prefs::redLigeraPresente()) {
         std::printf("ya esta: %s\n", rutaRedNuestra().c_str());
         return 0;
       }
@@ -6433,7 +6441,7 @@ int main(int argc, char **argv) {
         }
         ::usleep(500000);
       }
-      return prefs::redAbiertaPresente() ? 0 : 1;
+      return prefs::redLigeraPresente() ? 0 : 1;
     }
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "legado") return cmdLegado(argc - 3, argv + 3);

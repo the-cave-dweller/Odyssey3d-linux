@@ -45,6 +45,9 @@ void grabarRedPreferida(int red);
    Samsung son mde_... o Disp_...; la nuestra se llama depth_anything_v2_small.onnx. */
 int slotRed(const std::string &ruta);
 std::string rutaRedNuestra();
+/* las dos versiones de la abierta: la ligera (fp16, la de fabrica) y la de siempre (fp32) */
+std::string rutaRedLigera();
+std::string rutaRedVieja();
 
 /* True si el archivo existe y se puede leer. */
 bool fileExists(const std::string &path);

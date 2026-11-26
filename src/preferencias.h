@@ -70,8 +70,10 @@ Valores leer();
 /* La red de profundidad abierta (Depth Anything V2 pequena, v0.92): de donde se baja, cuanto pesa y
    si ya esta en su sitio (~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx). */
 extern const char *const kUrlRedAbierta;
-constexpr long kBytesRedAbierta = 99060839;
-bool redAbiertaPresente();
+constexpr long kBytesRedAbierta = 49642442;   /* la fp16, la de fabrica desde la rama experimental */
+constexpr long kBytesRedVieja = 99060839;     /* la de siempre (fp32), que sigue valiendo */
+bool redAbiertaPresente();   /* la una o la otra */
+bool redLigeraPresente();
 /* La descarga, con un `curl` aparte: `descargar` la arranca (una sola a la vez); `vigilarDescarga`
    se llama de vez en cuando desde el bucle del panel y devuelve true si cambio algo (avance, fin o
    fallo); `descargaEnMarcha` y `textoDescarga` son lo que ensena el panel. */

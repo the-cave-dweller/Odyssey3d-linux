@@ -312,11 +312,16 @@ Valores leer() {
 }
 
 /* ---- la red abierta y su descarga (v0.92) ------------------------------------------------------ */
-const char *const kUrlRedAbierta = "https://huggingface.co/XnetShadow/depth_anything_v2_small/resolve/main/depth_anything_v2_small.onnx";
+/* desde la rama experimental se baja la fp16 (49,6 MB); la de siempre (fp32, 95 MB) sigue valiendo */
+const char *const kUrlRedAbierta = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_fp16.onnx";
 
+bool redLigeraPresente() {
+  struct stat sb {};
+  return ::stat(rutaRedLigera().c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
+}
 bool redAbiertaPresente() {
   struct stat sb {};
-  return ::stat(rutaRedNuestra().c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
+  return redLigeraPresente() || (::stat(rutaRedVieja().c_str(), &sb) == 0 && sb.st_size == kBytesRedVieja);
 }
 
 namespace {
@@ -334,7 +339,7 @@ std::string textoDescarga() { return g_descarga.texto; }
 
 bool descargar(std::string *err) {
   if (g_descarga.pid > 0) return true;
-  const std::string destino = rutaRedNuestra();
+  const std::string destino = rutaRedLigera();
   const std::string dir = destino.substr(0, destino.rfind('/'));
   std::error_code ec;
   std::filesystem::create_directories(dir, ec);
@@ -356,7 +361,7 @@ bool descargar(std::string *err) {
   g_descarga.pid = pid;
   g_descarga.fallo = false;
   g_descarga.bytes = 0;
-  g_descarga.texto = idioma::trf("descargando… {} de 95 MB", {"0"});
+  g_descarga.texto = idioma::trf("descargando… {} de 50 MB", {"0"});
   return true;
 }
 
@@ -369,14 +374,14 @@ bool vigilarDescarga() {
     const long bytes = ::stat(g_descarga.parte.c_str(), &sb) == 0 ? (long)sb.st_size : 0;
     if (bytes == g_descarga.bytes) return false;
     g_descarga.bytes = bytes;
-    g_descarga.texto = idioma::trf("descargando… {} de 95 MB", {std::to_string(bytes / 1000000)});
+    g_descarga.texto = idioma::trf("descargando… {} de 50 MB", {std::to_string(bytes / 1000000)});
     return true;
   }
   g_descarga.pid = 0;
   const bool bien = r > 0 && WIFEXITED(estado) && WEXITSTATUS(estado) == 0;
   struct stat sb {};
   const bool entera = ::stat(g_descarga.parte.c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
-  if (bien && entera && ::rename(g_descarga.parte.c_str(), rutaRedNuestra().c_str()) == 0) {
+  if (bien && entera && ::rename(g_descarga.parte.c_str(), rutaRedLigera().c_str()) == 0) {
     g_descarga.texto = idioma::tr("lista: la red abierta ya está en su carpeta");
     g_descarga.fallo = false;
   } else {
@@ -549,8 +554,9 @@ namespace {
    baja y el boton que lo hace. Con la red en su sitio no pone nada. */
 void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &ids) {
   const bool abierta = redAbiertaPresente();
+  const bool ligera = redLigeraPresente();
   const bool otra = !v.modelo.empty() && v.modelo != rutaRedNuestra() && fileExists(v.modelo);
-  if ((abierta || otra) && !descargaEnMarcha() && textoDescarga().empty()) return;
+  if ((ligera || otra) && !descargaEnMarcha() && textoDescarga().empty()) return;
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
     st.items.push_back(std::move(it));
     ids.push_back(id);
@@ -562,15 +568,19 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
     Hud::ItemPanel i;
     i.tipo = Hud::ItemPanel::Info;
     i.rotulo = idioma::tr("Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).");
-    i.nota = idioma::tr("Depth Anything V2 pequeña, 95 MB, de huggingface.co/XnetShadow/depth_anything_v2_small; queda en ~/.local/share/odysseyvk/modelos.");
+    i.nota = idioma::tr("Depth Anything V2 pequeña, 50 MB, de huggingface.co/onnx-community/depth-anything-v2-small; queda en ~/.local/share/odysseyvk/modelos.");
     pon(i, "");
   }
+  /* con la de siempre (fp32) ya puesta, el boton ofrece la ligera (rama experimental) */
+  const bool ofreceLigera = abierta && !ligera && !otra;
   Hud::ItemPanel b;
   b.tipo = Hud::ItemPanel::Boton;
-  b.rotulo = idioma::tr(abierta ? "Red de profundidad" : "Descargar la red para tener profundidad");
-  b.nota = textoDescarga();
-  b.valorTexto = idioma::tr(descargaEnMarcha() ? "Bajando…" : (abierta ? "Lista" : "Descargar (95 MB)"));
-  b.valor = !descargaEnMarcha() && !abierta;
+  b.rotulo = idioma::tr(ofreceLigera ? "Versión ligera de la red" : (abierta ? "Red de profundidad" : "Descargar la red para tener profundidad"));
+  b.nota = !textoDescarga().empty() || !ofreceLigera
+               ? textoDescarga()
+               : std::string(idioma::tr("La misma red a media precisión: el mismo mapa con un 35 % menos de tiempo y 260 MB menos en la tarjeta."));
+  b.valorTexto = idioma::tr(descargaEnMarcha() ? "Bajando…" : (ligera || (abierta && otra) ? "Lista" : "Descargar (50 MB)"));
+  b.valor = !descargaEnMarcha() && !ligera;
   pon(b, "descargar_red");
 }
 }  // namespace
@@ -1132,7 +1142,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = idioma::tr("bajando la red abierta (95 MB)…");
+    if (aviso) *aviso = idioma::tr("bajando la red abierta (50 MB)…");
     return true;
   }
   if (id.rfind("auto:", 0) == 0) {

@@ -2338,6 +2338,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           const auto ordenRed = palabras.find("cargar_red");
           if (ordenRed != palabras.end()) {
             if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra())) ui.rutaRed[2] = rutaRedNuestra();
+            /* bajo la ligera (fp16) con la de siempre puesta: se cambia a ella en marcha (rama experimental) */
+            if (ui.rutaRed[2] == rutaRedVieja() && rutaRedNuestra() == rutaRedLigera()) {
+              ui.rutaRed[2] = rutaRedLigera();
+              if (modeloActivo == rutaRedVieja() && convActivo) ui.redRutaPedida = rutaRedLigera();
+              else if (modeloActivo == rutaRedVieja()) modeloActivo = rutaRedLigera();
+            }
             if (modeloActivo.empty() || !fileExists(modeloActivo)) modeloActivo = ui.rutaRed[2];
             if (!convActivo && !modeloActivo.empty() && fileExists(modeloActivo)) {
               std::printf("[conversor] la red de profundidad ya esta (%s): se carga ahora\n", modeloActivo.c_str());

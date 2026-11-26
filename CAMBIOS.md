@@ -3,6 +3,22 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La red de fábrica es la fp16 (rama `experimental`)
+
+- Rodolfo, tras la medida de las redes ligeras: «Sí, ponla».
+- **Qué red se usa**: `depth_anything_v2_small_fp16.onnx` si está en `~/.local/share/odysseyvk/modelos/`;
+  si no, la de siempre (`depth_anything_v2_small.onnx`, fp32), que sigue valiendo.
+- **Qué se baja**: la fp16, 49 642 442 bytes, de
+  `huggingface.co/onnx-community/depth-anything-v2-small` (`onnx/model_fp16.onnx`). Los textos del
+  panel y de `ctl red` dicen 50 MB y esa fuente, en los siete idiomas.
+- **Con la de siempre ya puesta**: el panel ofrece «Versión ligera de la red» con su botón de 50 MB
+  («La misma red a media precisión: el mismo mapa con un 35 % menos de tiempo y 260 MB menos en la
+  tarjeta»), y `ctl red descargar` la baja. Al terminar, el servicio la toma para el siguiente visor sin
+  reiniciarse, y el visor abierto cambia a ella en marcha.
+- Probado con un HOME aparte que solo tenía la de siempre: el panel ofrecía la ligera; `ctl red
+  descargar` la bajó entera (misma suma que la medida) y desde ahí `ctl red` y `odysseyvk mapa`
+  usan la fp16.
+
 ## Redes de profundidad más ligeras: medidas (rama `experimental`)
 
 - Rodolfo: «¿hay modelos de profundidad más ligeros? quiero que se prueben algunos y su consumo de GPU».
