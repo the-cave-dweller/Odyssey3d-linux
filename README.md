@@ -109,8 +109,13 @@ off before), with no ghost of the background beside it.
 
 ![Edges before and after the refinement](docs/img/depth-edges.png)
 
-**The subject stays on the screen.** The plane of the screen is placed on what you are looking
-at, as Samsung's Hub does, so faces and subjects stay sharp and the background opens behind. In
+**Depth and pop-out are remembered.** Normal video and smoothed split video start at Depth 75
+(the screen plane fixed at 0.75) and Pop-out 50; plain split video starts neutral (50 and 0). Move
+either slider and that value is remembered for that kind of video, each one on its own.
+
+**The subject can stay on the screen.** With `profundidad_conv = auto` the plane of the screen is
+placed on what you are looking at, as Samsung's Hub does, so faces and subjects stay sharp and the
+background opens behind. In
 green, what sits on the screen plane (measured with 1.07 on real frames): without saliency the
 plane fell on the space behind the ship (0.36); now it is the ship (0.95). On the globe it moves
 from the back of the frame to the globe's rim (0.27 → 0.39).
@@ -161,6 +166,7 @@ in 3D. The **Program** tab also has "Update automatically" (off by default) and 
 | `relieve = 1,00` | strength of the converter's relief (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | smooth split videos: always / when needed / never |
 | `crosstalk_base = 0,013` | how much of the other eye's image to subtract (ghosting) |
+| `profundidad_conv = 75` / `salida_conv = 50` | starting Depth and Pop-out for normal video (`_suave` smoothed split, `_sbs` split); written when you move the sliders; `profundidad_conv = auto` = automatic screen plane |
 | `hz = 165` | panel refresh rate in 3D (default 120; the G90XF also runs at 165) |
 | `hdr_en_3d = si` | keep HDR during 3D |
 | `atajo_3d = Ctrl+Shift+1` | a shortcut (the panel writes these): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |

@@ -376,9 +376,16 @@ bool fijarEnServeConf(const std::string &clave, const std::string &valor, std::s
     l = clave + " = " + valor;
     puesto = true;
   }
-  if (!puesto) lineas.push_back(clave + " = " + valor);
+  if (!puesto) {
+    /* antes de la linea vacia del final: si no, cada clave nueva dejaba un renglon en blanco */
+    if (!lineas.empty() && recortar(lineas.back()).empty()) lineas.insert(lineas.end() - 1, clave + " = " + valor);
+    else lineas.push_back(clave + " = " + valor);
+  }
+  while (lineas.size() > 1 && recortar(lineas.back()).empty() && recortar(lineas[lineas.size() - 2]).empty())
+    lineas.pop_back();
   std::string salida;
-  for (const std::string &l : lineas) salida += l + "\n";
+  for (size_t i = 0; i < lineas.size(); i++)
+    if (i + 1 < lineas.size() || !lineas[i].empty()) salida += lineas[i] + "\n";
 
   std::error_code ec;
   std::filesystem::create_directories(std::filesystem::path(ruta).parent_path(), ec);

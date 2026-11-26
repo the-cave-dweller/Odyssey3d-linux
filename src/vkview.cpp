@@ -3297,6 +3297,70 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     /* los botones de icono: cual de los dos tipos de 3D esta puesto de verdad (lo dice el conversor) */
     ui.hud.state().modoVisible = (kind == SourceKind::Capture) && !ui.hud.state().legado;
     ui.hud.state().modo3d = ui.convInfo ? (wv.mediaFuente() ? 3 : 1) : 2;
+    /* Profundidad y Salida por modo (v1.10). De fabrica: el conversor y el dividido suavizado
+       arrancan en Profundidad 75 (plano fijo en 0,75, lo que se ve al moverla a 75) y Salida 50; el
+       dividido con su propio relieve, neutro (50 y 0). En cuanto se mueve uno de los dos y se deja
+       quieto un segundo, se guarda ESE valor para ESE modo en serve.conf (`profundidad_conv`,
+       `salida_conv`, `_suave`, `_sbs`) y desde entonces se arranca con el. `profundidad_conv = auto`
+       vuelve al plano automatico (la saliencia elige el plano de cada escena). No se toca con los
+       valores forzados por la linea de mando ni en el modo de legado. */
+    static const bool valoresEnTaller = entornoOdyssey("ODYSSEYVK_VALORES") != nullptr;   /* para probarlo sin video */
+    if (opts.apoyo < 0.0 && opts.relieve < 0 && !ui.hud.state().legado &&
+        (kind == SourceKind::Capture || valoresEnTaller)) {
+      static int modoValores = -1;
+      static int baseDepth = 0, basePop = 0;
+      static double cambioDepth = -1.0, cambioPop = -1.0;
+      static std::map<std::string, std::string> conf = ajuste::leerServeConf();
+      Hud::State &hs = ui.hud.state();
+      const int modo = hs.modo3d;
+      static const char *kSufijo[] = {"", "conv", "sbs", "suave"};
+      const std::string suf = (modo >= 1 && modo <= 3) ? kSufijo[modo] : "";
+      if (!suf.empty() && modo != modoValores) {
+        modoValores = modo;
+        const bool conConversor = modo != 2;
+        auto valor = [&](const std::string &k) {
+          const auto it = conf.find(k);
+          return it == conf.end() ? std::string() : it->second;
+        };
+        const std::string vd = valor("profundidad_" + suf), vp = valor("salida_" + suf);
+        if (conConversor && (vd == "auto" || vd == "automatico")) {
+          apoyoAuto = true;
+          hs.depth = 55;
+        } else {
+          hs.depth = vd.empty() ? (conConversor ? 75 : 50) : std::max(0, std::min(100, std::atoi(vd.c_str())));
+          if (conConversor) apoyoAuto = false;
+        }
+        hs.popout = vp.empty() ? (conConversor ? 50 : 0) : std::max(-50, std::min(50, std::atoi(vp.c_str())));
+        profundidadVista = hs.depth;
+        baseDepth = hs.depth, basePop = hs.popout;
+        cambioDepth = cambioPop = -1.0;
+        std::printf("[valores] %s: profundidad %d%s · salida %d (%s)\n", suf.c_str(), hs.depth,
+                    conConversor ? (apoyoAuto ? " (plano automatico)" : " (plano fijo)") : "", hs.popout,
+                    vd.empty() && vp.empty() ? "de fabrica" : "recordados");
+        std::fflush(stdout);
+      } else if (!suf.empty() && !ui.modoPedido && !ui.convWant && !ui.convToggle && !ui.convFuera) {
+        /* lo movio el usuario: se espera a que lo deje quieto un segundo y se guarda solo ese */
+        auto vigila = [&](int ahora, int &base, double &desde, const char *clave) {
+          if (ahora == base) { desde = -1.0; return; }
+          static std::map<std::string, int> visto;
+          const std::string k = std::string(clave) + "_" + suf;
+          if (desde < 0.0 || visto[k] != ahora) { desde = now; visto[k] = ahora; return; }
+          if (now - desde < 1.0) return;
+          std::string e;
+          if (ajuste::fijarEnServeConf(k, std::to_string(ahora), &e)) {
+            conf[k] = std::to_string(ahora);
+            std::printf("[valores] %s = %d recordado\n", k.c_str(), ahora);
+          } else {
+            std::fprintf(stderr, "[valores] no se pudo guardar %s: %s\n", k.c_str(), e.c_str());
+          }
+          std::fflush(stdout);
+          base = ahora;
+          desde = -1.0;
+        };
+        vigila(hs.depth, baseDepth, cambioDepth, "profundidad");
+        vigila(hs.popout, basePop, cambioPop, "salida");
+      }
+    }
     ui.hud.state().controlOjo = opts.track;   /* desde v0.78 solo dice si se PIDIO rastreo: la fila ya no se pinta */
 #ifdef HAVE_OPENCV
     {

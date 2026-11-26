@@ -112,8 +112,14 @@ Medido en cuadros reales: el borde queda a menos de 2 píxeles de la imagen en e
 
 ![Los bordes antes y después del afinado](docs/img/es/depth-edges.png)
 
-**Lo que miras se queda en la pantalla.** El plano de la pantalla se pone en lo que estás mirando,
-como hace el Hub de Samsung, así que caras y sujetos quedan nítidos y el fondo se abre detrás. En
+**La profundidad y la salida se recuerdan.** El vídeo normal y el dividido suavizado arrancan en
+Profundidad 75 (el plano de la pantalla fijo en 0,75) y Salida 50; el dividido con su propio
+relieve arranca neutro (50 y 0). Mueve cualquiera de los dos y ese valor queda recordado para ese
+tipo de vídeo, cada uno por su lado.
+
+**Lo que miras puede quedarse en la pantalla.** Con `profundidad_conv = auto` el plano de la
+pantalla se pone en lo que estás mirando, como hace el Hub de Samsung, así que caras y sujetos
+quedan nítidos y el fondo se abre detrás. En
 verde, lo que queda en el plano de la pantalla (medido con la 1.07 en cuadros reales): sin
 saliencia el plano caía en el espacio detrás de la nave (0,36); ahora es la nave (0,95). En el
 globo pasa del fondo del cuadro al borde del globo (0,27 → 0,39).
@@ -164,6 +170,7 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 | `relieve = 1,00` | fuerza del relieve del conversor (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | suavizar los vídeos divididos: siempre / si hace falta / nunca |
 | `crosstalk_base = 0,013` | cuánta imagen del otro ojo se resta (fantasma) |
+| `profundidad_conv = 75` / `salida_conv = 50` | Profundidad y Salida con que arranca el vídeo normal (`_suave` el dividido suavizado, `_sbs` el dividido); se escriben al mover los deslizadores; `profundidad_conv = auto` = plano automático |
 | `hz = 165` | frecuencia del panel en 3D (120 de fábrica; el G90XF también va a 165) |
 | `hdr_en_3d = si` | mantener el HDR durante el 3D |
 | `atajo_3d = Ctrl+Shift+1` | un atajo (los escribe el panel): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |

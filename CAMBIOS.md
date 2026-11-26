@@ -3,6 +3,27 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Profundidad 75 y Salida 50 de fábrica, recordadas por modo (v1.10)
+
+- Rodolfo: «on conversion default the depth to 75 and salida to 50 (corrigió el 100), on side by
+  side too, but once user modifies remember each value separately»; en lado a lado, solo el
+  suavizado.
+- El visor, al entrar en cada modo: conversor (`conv`) y dividido suavizado (`suave`) arrancan en
+  Profundidad 75 y Salida 50; el dividido con su propio relieve (`sbs`), neutro (50 y 0). La
+  Profundidad 75 de fábrica deja el plano FIJO en 0,75, que es lo que se veía al mover el deslizador
+  a 75 (moverlo siempre apagaba el plano automático). `profundidad_conv = auto` vuelve al automático
+  (la saliencia elige el plano de cada escena).
+- Al mover uno de los dos (tecla, pastilla o `ctl ajuste`) y dejarlo quieto un segundo, se guarda
+  ese valor para ese modo en serve.conf (`profundidad_conv`, `salida_conv`, `_suave`, `_sbs`), cada
+  uno por su lado, y las sesiones siguientes arrancan con él. No se toca con `--apoyo`/`--relieve`
+  ni en el modo de legado.
+- serve.conf ya no gana un renglón en blanco con cada clave nueva.
+- Comprobado en el visor aparte (gamescope sin pantalla, HOME aislado, `ODYSSEYVK_VALORES=1`):
+  conversor de fábrica «profundidad 75 (plano fijo) · salida 50»; `ctl ajuste apoyo 60` y
+  `relieve 35` → `profundidad_conv = 60` y `salida_conv = 35` guardados por separado; la sesión
+  siguiente arranca «60 · 35 (recordados)»; el dividido, «50 · 0 (de fábrica)». Sin probar: los
+  cambios de modo con los botones de la pastilla en una sesión de verdad.
+
 ## Atajos de teclado personalizables, y el panel se queda con el teclado (v1.09)
 
 - Rodolfo: «Poner una sección de atajos de teclado debajo de PANTALLA, que también deje personalizar
