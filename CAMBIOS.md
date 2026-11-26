@@ -36,6 +36,14 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
      la imagen cambió respecto a la estimación anterior (entre 0,02 y 0,05, poco a poco).
 - Coste en la tarjeta (4090, 3840 × 2160, afinando en cada cuadro): 3,1–5,4 ms por cuadro con x1 y con
   x2,88, sin diferencia medible entre los dos.
+- **«No inició»** (Rodolfo, tras instalar lo de arriba): el visor se quedaba callado al arrancar y la
+  sesión se cerraba a los 11 s. Era el compilador de sombreadores de NVIDIA: `profFuente`, que la
+  búsqueda de cada ojo llama unas treinta veces, tenía de reserva una llamada a `afinar` (solo si
+  falta el pase de afinado), y el compilador la metía entera en cada sitio; con el ancho de rampa
+  nuevo, arrancar sin caché de sombreadores pasó a tardar **18,7 s** (antes de hoy, 8,0). La reserva
+  ahora lee el mapa bilineal: **4,1 s**. Con el pase de afinado en uso (lo normal) la imagen no
+  cambia: dos volcados con el mismo binario difieren más entre sí (el mapa varía de una ejecución a
+  otra) que uno de antes y uno de ahora.
 - Visto en una captura suya y **pendiente**: unos subtítulos amarillos con contorno salen dobles (no
   los ve como texto, así que no se quedan en el plano de la pantalla).
 - Sin probar en el panel.

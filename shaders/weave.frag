@@ -404,7 +404,16 @@ float profFuente(vec2 uv, float gF, float gN) {
         vec2 e = texelFetch(uFino, clamp(ivec2(floor(uv * vec2(tam))), ivec2(0), tam - 1), 0).rg;
         return e.r + e.g / 255.0;
     }
-    return afinar(uv, gF, gN).x;
+    /* Sin el pase de afinado (no pasa con el conversor puesto y el mapa a punto): el mapa tal cual,
+       bilineal. Aqui se llamaba antes a `afinar`, y como la busqueda de cada ojo pide la profundidad
+       unas treinta veces, el compilador de NVIDIA metia `afinar` entera en cada sitio: con lo que se le
+       anadio el 26-nov (el ancho de la rampa) el visor tardaba 18,7 s en arrancar sin la cache de
+       sombreadores, y la primera sesion tras instalar no llegaba a abrirse («no inicio», Rodolfo). */
+    vec2 tam = vec2(textureSize(uDepth, 0));
+    vec2 p = uv * tam - 0.5;
+    vec2 b = floor(p), f = p - b;
+    vec4 g = textureGather(uDepth, (b + 1.0) / tam, 0);       /* w = (b), z = (b + x), x = (b + y), y = (b + 1) */
+    return mix(mix(g.w, g.z, f.x), mix(g.x, g.y, f.x), f.y);
 }
 
 /* La vista de un ojo en `uv`. `cam` es donde esta ese ojo (-1 el izquierdo, +1 el derecho, mas lo que
