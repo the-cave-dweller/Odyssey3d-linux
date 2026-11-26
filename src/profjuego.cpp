@@ -90,9 +90,11 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
   if (lado < 2 || !abrir()) return false;
   volatile OdvkProfCabecera *c = (volatile OdvkProfCabecera *)base_;
   if (c->magia != ODVK_PROF_MAGIA || c->version != ODVK_PROF_VERSION) return false;
-  /* el juego vive (si murio sin borrarla, la memoria queda ahi) */
-  if (c->pid <= 0 || (::kill((pid_t)c->pid, 0) != 0 && errno != EPERM)) {
+  /* el juego vive. Si murio sin borrarla (Cyberpunk sale sin destruir su dispositivo de Vulkan: MEDIDO, se
+     quedaban 24 MB en /dev/shm), la borra el visor */
+  if (c->pid <= 0 || (::kill((pid_t)c->pid, 0) != 0 && errno == ESRCH)) {
     cerrar();
+    shm_unlink(nombreShm().c_str());
     return false;
   }
   c->lectorLatido = monotonoNs();   /* «leo»: la capa copia mientras esto tenga menos de 2 s */

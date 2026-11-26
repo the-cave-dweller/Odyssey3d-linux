@@ -34,7 +34,17 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   (`ODYSSEYVK_CAPA_PRUEBA=1`, solo de taller: comparte la última profundidad creada al acabar cada pasada):
   808 cuadros enteros por la memoria compartida y ninguno a medio escribir; el contenido de vkcube sale
   vacío porque su pasada tira la profundidad al acabar (`storeOp` DONT_CARE), y el de un juego ya se midió
-  en la fase 1 (idéntico bit a bit). Falta: Cyberpunk en 3D con la capa.
+  en la fase 1 (idéntico bit a bit).
+- **MEDIDO en Cyberpunk en 3D** (Rodolfo, instalado con `install.sh` y `ODYSSEYVK=1`, 26-nov 15:08–15:12):
+  la capa creó `/odysseyvk-profundidad-1000` (1920 × 1080 `D32_SFLOAT`, 3 huecos, 23,7 MB) y mandó 18 533
+  cuadros de profundidad al visor, unos 58 por segundo, uno por cuadro del juego; el visor la tomó a los 1,3 s
+  de abrir el 3D (`[red] la profundidad del juego (la de DLSS, 1920x1080 D32_SFLOAT, Z invertida)`) y la
+  mantuvo de 15:09:32 hasta cerrar el 3D. Volvió a la red tres veces al principio (11, 2 y 4 s), la larga
+  con el juego atascado (huecos de 241 ms entre cuadros): una carga o un menú, donde DLSS no corre y no llega
+  profundidad nueva, y a medio segundo sin ella se vuelve a la red, que es lo que debe hacer.
+- **Lo que quedaba**: Cyberpunk sale sin destruir su dispositivo de Vulkan y la memoria compartida (24 MB)
+  se quedaba en `/dev/shm`. Ahora la borra el visor si ve que su juego ya no existe (probado con una de un
+  proceso muerto: borrada y no usada) y la capa al salir el proceso del juego.
 
 ## /dev/shm se llenaba: 7,8 GB de lienzos de la capa del servicio (v1.13)
 

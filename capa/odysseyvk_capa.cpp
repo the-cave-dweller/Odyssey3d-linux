@@ -348,6 +348,21 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
 }
 
 /* ---------- fase 2: la memoria compartida con el visor (capa/protocolo.h) ---------- */
+/* al salir el proceso del juego se borra la que hizo este proceso: muchos juegos (Cyberpunk) salen sin
+   destruir su dispositivo de Vulkan, y quedaba en /dev/shm (el visor tambien la borra si ve que el juego
+   ya no existe) */
+struct BorrarAlSalir {
+  std::string nombre;
+  ~BorrarAlSalir() {
+    if (nombre.empty()) return;
+    const int fd = shm_open(nombre.c_str(), O_RDONLY, 0);
+    if (fd < 0) return;
+    OdvkProfCabecera c{};
+    const bool mia = pread(fd, &c, sizeof c, 0) == (ssize_t)sizeof c && c.pid == (int32_t)getpid();
+    close(fd);
+    if (mia) shm_unlink(nombre.c_str());
+  }
+} g_borrarAlSalir;
 std::string nombreShm() {
   if (const char *e = std::getenv("ODYSSEYVK_PROFUNDIDAD_SHM")) return e;
   return "/odysseyvk-profundidad-" + std::to_string((long)getuid());
@@ -407,6 +422,7 @@ bool crearCompartida(Dispositivo *d, const Imagen &im) {
   }
   d->shm = (uint8_t *)base;
   d->shmTam = total;
+  g_borrarAlSalir.nombre = nombre;
   std::memset(d->shm, 0, ODVK_PROF_CABECERA);
   OdvkProfCabecera *c = (OdvkProfCabecera *)d->shm;
   c->version = ODVK_PROF_VERSION;
