@@ -45,8 +45,9 @@ struct MemoriaTexto {
   int w = 0, h = 0;
   std::vector<float> confianza;   /* 0..1: cuanto lleva viendose cada celda como rotulo */
   std::vector<uint8_t> puesta;    /* la celda esta apoyada */
+  std::vector<float> veto;        /* (v1.12) cuanto hace que la celda cayo en un bloque que no es texto (cuerdas) */
   int cw = 0, ch = 0;
-  void olvidar() { cw = ch = w = h = 0; }
+  void olvidar() { cw = ch = w = h = 0; veto.clear(); }
 };
 
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,

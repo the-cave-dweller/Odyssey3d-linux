@@ -59,6 +59,13 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   cuadros del vídeo: apoyado 7,5–9,4 % → 0 % en cuatro y 5,4 % en el otro (un trozo con solo dos cuerdas
   a la vista); los tres subtítulos (0 cuerdas en sus renglones) y los cuadros sin texto, igual. (Contar
   bordes en vez de crestas no encontraba las cuerdas: con la inclinación se escapaban de la fila.)
+  - **Y con memoria.** En vivo seguía («mejoró pero sigue»): su registro aún saltaba del 1,7 al 10,6 %,
+    porque basta un mapa en el que la mano tape cuerdas para que ese trozo de mástil vuelva a pasar por
+    texto. Lo que una vez salió cuerdas sigue vetado mientras su marca no baje de 0,25 (se gasta un 5 %
+    por mapa: unos 4,5 s a 6 mapas por segundo). MEDIDO con `texto-detect --secuencia` sobre 20 s de su
+    vídeo a 6 mapas por segundo: apoyado medio 1,4 % → 0,1 %, máximo 6,3 % → 1,4 %, mapas por encima del
+    2 % 22 → 0, saltos de más de 3 puntos entre mapas seguidos 10 → 0. Con 20 s del vídeo subtitulado,
+    idéntico con y sin la memoria (los 8 saltos que quedan son los subtítulos que entran y salen).
 - **Probado en su panel**: la mezcla al 10 % («sí bajó»); el alcance a medio grado sirvió («este último
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).

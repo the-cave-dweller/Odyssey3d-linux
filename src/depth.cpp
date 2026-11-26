@@ -1674,6 +1674,8 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
       if (mejorIni >= 0 && mejorFin - mejorIni + 1 >= kLargo) { ini[(size_t)cy] = mejorIni; fin[(size_t)cy] = mejorFin; }
     }
     std::vector<float> lleno = peso;
+    struct Caja { int y0, y1, x0, x1; };
+    std::vector<Caja> vetadas;
     int cy = 0;
     while (cy < ch) {
       if (ini[(size_t)cy] < 0) { cy++; continue; }
@@ -1766,6 +1768,7 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
         std::fprintf(stderr, "[renglon] filas %d..%d columnas %d..%d pendiente %.2f cuerdas %d%s\n", cy, y1, x0, x1, pendiente,
                      cuerdas, inclinado ? " (no es texto: fuera)" : (!centrado ? " (sin centrar)" : (vale ? "" : " (no vale)")));
       if (inclinado) {
+        vetadas.push_back({std::max(0, cy - 2), std::min(ch - 1, y1 + 2), std::max(0, x0 - 2), std::min(cw - 1, x1 + 2)});
         for (int fy = std::max(0, cy - 2); fy <= std::min(ch - 1, y1 + 2); fy++)
           for (int fx = std::max(0, x0 - 2); fx <= std::min(cw - 1, x1 + 2); fx++) lleno[(size_t)fy * cw + fx] = 0.0f;
       } else if (vale && centrado) {
@@ -1773,6 +1776,21 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
           for (int fx = std::max(0, x0 - 1); fx <= std::min(cw - 1, x1 + 1); fx++) lleno[(size_t)fy * cw + fx] = 1.0f;
       }
       cy = y1 + 1;
+    }
+    /* Memoria del veto (v1.12). En movimiento basta un mapa en el que la mano tape cuerdas para que ese
+       trozo de mastil vuelva a pasar por texto y se apoye en la pantalla, y al siguiente se suelte: los
+       trastes parpadeaban entre dos separaciones. MEDIDO con 20 s del video de Rodolfo a 6 mapas por
+       segundo (`texto-detect --secuencia`): sin memoria, 22 de 120 mapas con mas del 2 % apoyado y 10
+       saltos de mas de 3 puntos entre mapas seguidos. Lo que una vez salio cuerdas sigue vetado mientras
+       su marca no baje de 0,25: se gasta un 5 % por mapa (unos 4,5 s a 6 mapas por segundo). */
+    if (memoria) {
+      if (memoria->veto.size() != celdas) memoria->veto.assign(celdas, 0.0f);
+      for (float &v : memoria->veto) v *= 0.95f;
+      for (const Caja &c : vetadas)
+        for (int fy = c.y0; fy <= c.y1; fy++)
+          for (int fx = c.x0; fx <= c.x1; fx++) memoria->veto[(size_t)fy * cw + fx] = 1.0f;
+      for (size_t q = 0; q < celdas; q++)
+        if (memoria->veto[q] > 0.25f) lleno[q] = 0.0f;
     }
     peso.swap(lleno);
   }
