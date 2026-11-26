@@ -2360,7 +2360,7 @@ static int cmdTexto(int argc, char **argv) {
      (v0.74), como en el visor; deja la rejilla de cada uno en <cuadro>-rotulos.pgm. Para medir el
      parpadeo sin sentarse delante. */
   std::vector<std::string> secuencia;
-  bool enSecuencia = false;
+  bool enSecuencia = false, juego = false;
   /* el dispatch pasa los argumentos sin hueco de programa, asi que se recorren desde 0 */
   for (int i = 0; i < argc; i++) {
     const std::string a = argv[i];
@@ -2369,6 +2369,7 @@ static int cmdTexto(int argc, char **argv) {
     else if (a == "--mapa" && i + 1 < argc) mapa = argv[++i];
     else if (a == "--out" && i + 1 < argc) salida = argv[++i];
     else if (a == "--secuencia") enSecuencia = true;
+    else if (a == "--juego") juego = true;   /* v1.13: la regla de los juegos (ver anclarTexto) */
     else if (!a.empty() && a[0] != '-' && enSecuencia) secuencia.push_back(a);
     else if (!a.empty() && a[0] != '-') foto = a;
     else {
@@ -2394,7 +2395,7 @@ static int cmdTexto(int argc, char **argv) {
       }
       std::vector<uint8_t> m2((size_t)sw * (size_t)sh, (uint8_t)(plano * 255.0f + 0.5f)), rej;
       int cw2 = 0, ch2 = 0;
-      const float frac2 = anclarTexto(rgba2.data(), sw, sh, m2, plano, celda, &rej, &cw2, &ch2, &memoria);
+      const float frac2 = anclarTexto(rgba2.data(), sw, sh, m2, plano, celda, &rej, &cw2, &ch2, &memoria, juego);
       std::printf("%s: apoyados %.1f%%\n", ruta.c_str(), frac2 * 100.0f);
       const int es = 8;
       std::vector<uint8_t> g((size_t)cw2 * es * ch2 * es, 0);
@@ -2441,7 +2442,7 @@ static int cmdTexto(int argc, char **argv) {
   }
   std::vector<uint8_t> rejilla;
   int cw = 0, ch = 0;
-  const float frac = anclarTexto(rgba.data(), w, h, m, plano, celda, &rejilla, &cw, &ch);
+  const float frac = anclarTexto(rgba.data(), w, h, m, plano, celda, &rejilla, &cw, &ch, nullptr, juego);
   std::printf("foto %d x %d · plano de apoyo %.2f · celda %d · rejilla %d x %d\n", w, h, plano, celda, cw, ch);
   std::printf("apoyados en la pantalla: %.1f%% de la rejilla\n", frac * 100.0f);
   for (int y = 0; y < ch; y++) {

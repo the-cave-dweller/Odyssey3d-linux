@@ -1413,7 +1413,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
    ODYSSEYVK_TEXTO_FINO sirven para comparar en el panel sin recompilar. */
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
                   int celdaPx, std::vector<uint8_t> *mascara, int *cwOut, int *chOut,
-                  MemoriaTexto *memoria) {
+                  MemoriaTexto *memoria, bool juego) {
   if (!rgba || w < 32 || h < 32 || mapa.size() != (size_t)w * (size_t)h)
     return 0.0f;
   static const float kContraste = [] {
@@ -1597,13 +1597,124 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
       }
       return n;
     };
+    /* (v1.13) En medio del cuadro, solo un renglon de verdad; y en las bandas, bloques mas bajos.
+       MEDIDO con el volcado de Cyberpunk (tercera persona en moto, ciudad con letreros): se apoyaba el
+       23,2 % del cuadro, el 16,9 % fuera de las bandas (fachadas, la baranda, el torso del piloto) y el
+       piloto y la moto salian en franjas planas. En el banco de fotos (`texto-detect --secuencia`, cada
+       una quieta 4 mapas) todo lo marcado en medio era falso: el estampado de una camiseta, un
+       microfono, el mastil de una guitarra; los subtitulos de verdad caen en las bandas. En medio:
+       un BLOQUE (las celdas marcadas que se tocan, perdonando una celda de hueco entre palabras) se
+       queda si su caja es un renglon: 3 filas como mucho, 6 columnas o mas y el doble de ancha que
+       alta (celda por celda no bastaba: dentro de una mancha grande, las celdas de su orilla fina
+       pasaban por renglon). Y si aun asi pasa del 2 % del cuadro, es un mundo con detalle y no
+       rotulos: nada en medio. En las bandas, la regla de siempre celda por celda y despues, por
+       bloques, fuera los de mas de 6 filas (dos renglones de subtitulo con su hueco caben; las
+       manchas de letreros de una ciudad y el mastil entero de una guitarra, no). */
+    const int kAltoBanda = 6;
+    auto enBanda = [&](int cy) {
+      const float centro = ((float)cy + 0.5f) / (float)ch;
+      return centro > 0.76f || centro < 0.12f;
+    };
     std::vector<float> forma(celdas, 0.0f);
-    for (int cy = 0; cy < ch; cy++)
+    for (int cy = 0; cy < ch; cy++) {
+      if (!enBanda(cy)) continue;
       for (int cx = 0; cx < cw; cx++) {
         if (!marcada(cx, cy)) continue;
         const int h = racha(cx, cy, 1, 0), v = racha(cx, cy, 0, 1);
+        /* la de siempre (hasta kAltoMax): con 6 aqui, el mastil de una guitarra salia a trozos sueltos,
+           cada uno bajo, y ya no formaba el renglon largo que el veto de las cuerdas mira */
         if (h >= kRachaMin && (h >= 2 * v || v <= kAltoMax)) forma[(size_t)cy * cw + cx] = 1.0f;
       }
+    }
+    /* los bloques de `fuente` (en medio o en las bandas, sin mezclar): cada uno con su caja */
+    struct Bloque { int x0, y0, x1, y1; std::vector<size_t> celdas; };
+    auto bloques = [&](const std::vector<float> &fuente, bool deBanda) {
+      std::vector<Bloque> lista;
+      std::vector<uint8_t> visto(celdas, 0);
+      for (size_t q0 = 0; q0 < celdas; q0++) {
+        if (visto[q0] || fuente[q0] <= 0.0f || enBanda((int)(q0 / cw)) != deBanda) continue;
+        Bloque b{(int)(q0 % cw), (int)(q0 / cw), (int)(q0 % cw), (int)(q0 / cw), {}};
+        std::vector<size_t> pila{q0};
+        visto[q0] = 1;
+        while (!pila.empty()) {
+          const size_t q = pila.back();
+          pila.pop_back();
+          b.celdas.push_back(q);
+          const int x = (int)(q % cw), y = (int)(q / cw);
+          b.x0 = std::min(b.x0, x), b.x1 = std::max(b.x1, x), b.y0 = std::min(b.y0, y), b.y1 = std::max(b.y1, y);
+          for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -2; dx <= 2; dx++) {
+              if ((dx == -2 || dx == 2) && dy != 0) continue;   /* el hueco entre palabras, solo de lado */
+              const int nx = x + dx, ny = y + dy;
+              if (nx < 0 || nx >= cw || ny < 0 || ny >= ch) continue;
+              const size_t r = (size_t)ny * cw + nx;
+              if (visto[r] || fuente[r] <= 0.0f || enBanda(ny) != deBanda) continue;
+              visto[r] = 1;
+              pila.push_back(r);
+            }
+        }
+        lista.push_back(std::move(b));
+      }
+      return lista;
+    };
+    /* el bloque alto se va con dos celdas de margen, como el veto de las cuerdas (las marcas sueltas
+       de su orilla son del mismo objeto: sin el margen, en el video de la guitarra quedaban trozos del
+       mastil, el 0,9 % del cuadro; con el, el 0,6 %, y el 0,4 % antes de la 1.13), y pasa a la memoria
+       del veto para que no vuelva en el mapa siguiente si sale partido */
+    std::vector<uint8_t> fuera(celdas, 0);
+    for (const Bloque &b : bloques(forma, true))
+      if (b.y1 - b.y0 + 1 > kAltoBanda)
+        for (int fy = std::max(0, b.y0 - 2); fy <= std::min(ch - 1, b.y1 + 2); fy++)
+          for (int fx = std::max(0, b.x0 - 2); fx <= std::min(cw - 1, b.x1 + 2); fx++) fuera[(size_t)fy * cw + fx] = 1;
+    if (memoria && memoria->veto.size() != celdas) memoria->veto.assign(celdas, 0.0f);
+    for (size_t q = 0; q < celdas; q++)
+      if (fuera[q] && enBanda((int)(q / cw))) {
+        forma[q] = 0.0f;
+        if (memoria) memoria->veto[q] = 1.0f;
+      }
+    /* En un juego (v1.13), en las bandas solo lo que va en un renglon largo. MEDIDO en Cyberpunk: la
+       moto del piloto, centrada abajo, quedaba como un bloque de 13 x 4 celdas, la forma de un
+       subtitulo corto, y se apoyaba a franjas en la pantalla. Los subtitulos de un juego son frases:
+       en cada fila de la banda vale la racha de 16 celdas o mas (un cuarto del ancho), perdonando
+       huecos de 4 como el relleno de los renglones de abajo (el detector saca el subtitulo a parches,
+       una palabra o media letra gruesa), y la fila de encima y la de debajo de esa racha (lo alto de
+       las letras y los descendentes). Con cajas no servia: el subtitulo de abajo tocaba el tambor de
+       encima y la caja salia demasiado alta. Uno muy corto («No.») se queda sin apoyo, que es mucho
+       menos malo que partir al personaje. */
+    if (juego) {
+      std::vector<uint8_t> largo(celdas, 0);
+      for (int cy = 0; cy < ch; cy++) {
+        if (!enBanda(cy)) continue;
+        int cx = 0;
+        while (cx < cw) {
+          if (forma[(size_t)cy * cw + cx] <= 0.0f) { cx++; continue; }
+          int a = cx, b = cx, hueco = 0;
+          for (int x = cx + 1; x < cw; x++) {
+            if (forma[(size_t)cy * cw + x] > 0.0f) { b = x; hueco = 0; }
+            else if (++hueco > 4) break;
+          }
+          if (b - a + 1 >= 16)
+            for (int x = a; x <= b; x++) largo[(size_t)cy * cw + x] = 1;
+          cx = b + 1;
+        }
+      }
+      for (int cy = 0; cy < ch; cy++) {
+        if (!enBanda(cy)) continue;
+        for (int cx = 0; cx < cw; cx++) {
+          const size_t q = (size_t)cy * cw + cx;
+          if (forma[q] <= 0.0f) continue;
+          const bool cerca = largo[q] || (cy > 0 && largo[q - cw]) || (cy + 1 < ch && largo[q + cw]);
+          if (!cerca) forma[q] = 0.0f;
+        }
+      }
+    }
+    std::vector<size_t> deMedio;
+    for (const Bloque &b : bloques(peso, false)) {
+      const int ancho = b.x1 - b.x0 + 1, alto = b.y1 - b.y0 + 1;
+      if (alto <= 3 && ancho >= 6 && ancho >= 2 * alto) deMedio.insert(deMedio.end(), b.celdas.begin(), b.celdas.end());
+    }
+    if ((float)deMedio.size() <= 0.02f * (float)celdas)
+      for (size_t q : deMedio) forma[q] = 1.0f;
     peso.swap(forma);
   }
 

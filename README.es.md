@@ -231,7 +231,12 @@ chip dice **Auto** o **Manual** y abre su menú.
   en los topes en vez del 61 % con una salida fija).
 - **Manual**: Profundidad y Salida a mano, con el mismo alcance automático.
 
-Los subtítulos y los rótulos se quedan en el plano de la pantalla, cada renglón de una pieza. En los
+Los subtítulos y los rótulos se quedan en el plano de la pantalla, cada renglón de una pieza. Solo
+cuentan los renglones de texto: las bandas de arriba y de abajo, donde van los subtítulos y los
+cintillos, y en medio del cuadro solo un renglón de verdad, así que una cara, el estampado de una
+camiseta o una ciudad llena de letreros conservan su profundidad. En los juegos (ventanas de Steam o
+gamescope) las bandas solo toman renglones largos de subtítulo, y un personaje en tercera persona en
+la parte de abajo no se aplana. En los
 cantos, el escalón de profundidad sigue el color de la imagen, y lo que un objeto destapa al correrse
 se rellena con el fondo de al lado.
 

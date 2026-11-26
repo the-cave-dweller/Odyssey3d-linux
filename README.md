@@ -224,7 +224,11 @@ says **Auto** or **Manual** and opens its menu.
   the limits instead of 61 % with a fixed pop-out).
 - **Manual**: Depth and Pop-out by hand, with the same automatic reach.
 
-Subtitles and captions stay on the screen plane, each line in one piece. On thin edges the depth
+Subtitles and captions stay on the screen plane, each line in one piece. Only text lines count:
+the top and bottom bands where subtitles and tickers live, and in the middle of the frame only a
+real line of text, so a face, a T-shirt print or a city full of signs keeps its depth. In games
+(Steam or gamescope windows) the bands only take long subtitle lines, so a third-person character
+at the bottom of the screen isn't flattened. On thin edges the depth
 step follows the colour of the picture, and what an object uncovers when it shifts is filled with the
 background next to it.
 

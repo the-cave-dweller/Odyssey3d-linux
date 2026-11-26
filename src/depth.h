@@ -50,9 +50,11 @@ struct MemoriaTexto {
   void olvidar() { cw = ch = w = h = 0; veto.clear(); }
 };
 
+/* `juego` (v1.13): la ventana es un juego. Ahi el centro de abajo es del personaje en tercera persona
+   y los subtitulos son frases: en las bandas solo vale un renglon largo (ver anclarTexto) */
 float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa, float plano,
                   int celdaPx, std::vector<uint8_t> *mascara, int *cw, int *ch,
-                  MemoriaTexto *memoria = nullptr);
+                  MemoriaTexto *memoria = nullptr, bool juego = false);
 
 /* --- los dos planos ------------------------------------------------------------
    El conversor da una profundidad distinta a cada punto, y con eso todo el cuadro se

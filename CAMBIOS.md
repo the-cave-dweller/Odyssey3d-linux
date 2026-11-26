@@ -3,6 +3,36 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los rótulos ya no aplanan el mundo: renglones en medio, y en los juegos solo frases (v1.13)
+
+- Rodolfo: «Yes, fix it» (el detector de rótulos que el volcado de Cyberpunk dejó a la vista: apoyaba en
+  la pantalla el 23,2 % del cuadro y partía al piloto y la moto en franjas planas).
+- **Por qué** (`src/depth.cpp`, `anclarTexto`; `texto-detect --secuencia` con la foto quieta 4 mapas,
+  como un personaje que no se mueve en la pantalla): no era el relleno de los renglones de abajo (no
+  saltó), sino la detección celda por celda y su filtro de forma, que dejaba pasar en todo el cuadro
+  bloques de hasta 10 filas: fachadas y letreros, la baranda, el torso del piloto (16,9 % fuera de las
+  bandas). La memoria los da por quietos al segundo mapa.
+- **Banco** (22 fotos: doce de subtítulos `a`–`f`, `k`/`r`/`ft`, las de `pruebas-texto`, el mástil y
+  Cyberpunk), medido antes y después, en las bandas y en medio. Todo lo marcado en medio era falso: el
+  estampado de una camiseta, un micrófono, el mástil, la ciudad.
+- **En medio**: un bloque (celdas que se tocan, con una de hueco entre palabras) solo si es un renglón:
+  3 filas como mucho, 6 columnas o más, el doble de ancho que de alto; y si aun así pasa del 2 % del
+  cuadro, nada en medio. Celda por celda no bastaba: las celdas de la orilla fina de una mancha grande
+  pasaban.
+- **En las bandas**: la regla de siempre por celda y, por bloques, fuera los de más de 6 filas con dos
+  celdas de margen, que además pasan a la memoria del veto (con 6 ya por celda, el mástil salía a
+  trozos sueltos y el veto de las cuerdas no lo veía).
+- **En los juegos** (`steam_app_*` o gamescope, lo que ya sabía el visor; `ODYSSEYVK_JUEGO=1` para
+  probar; `texto-detect --juego`): en las bandas solo lo que va en una racha de 16 celdas o más por
+  fila (con huecos de 4) y la fila de encima y de debajo. Con cajas no servía: el subtítulo tocaba el
+  tambor de encima. La moto de Cyberpunk era un bloque de 13 × 4, la forma de un subtítulo corto.
+- **Medido**: Cyberpunk 23,2 % → 7,8 % (vídeo) y 1,3 % (juego); en el visor, el mapa de la red pasa de
+  0,888 a 0,908 de parecido con la profundidad de DLSS y, en modo juego, el piloto y la moto salen de
+  una pieza. Subtítulos en modo vídeo casi iguales (10,2 → 10,1 %, 7,5 → 7,4 %, `t1` 15,0 y el cintillo
+  2,4 iguales); en modo juego se quedan los renglones y se van las pegatinas y el pelo que se marcaban
+  (6,7 %, 5,8 %, `t1` 10,8 %). El mástil, 13,0 → 7,3 % (vídeo) y 1,0 % (juego); la guitarra de `k`,
+  0,4 → 0,6 % (vídeo) y 0 % (juego). Las texturas y la foto sin texto siguen en 0.
+
 ## La profundidad del juego contra la de la red: `tools/comparar-profundidad.py` (v1.13)
 
 - Rodolfo, sobre Neural Forge (github.com/labj1987/neural-forge, su ticket #63): «check if any

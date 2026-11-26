@@ -1842,6 +1842,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        int sz = 0;
        bool apoyar = false;
        float ganancia = 0.0f, apoyoFijo = -1.0f;
+       bool juego = false;   /* la ventana es un juego: los rotulos, con la regla de los juegos (v1.13) */
      } trabajo;
      bool hayTrabajo = false, enCurso = false, salir = false;
      std::vector<uint8_t> mapa;   /* mapa terminado y esperando subirse */
@@ -1895,7 +1896,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               con la cabeza. Se hace aqui, con la misma foto que genero este mapa. La memoria no
               se tira en los cambios de plano: un subtitulo que cruza el corte sigue quieto y sigue
               apoyado, y lo demas deja de estar quieto y sale solo en dos mapas. */
-           frac = anclarTexto(t.copia.data(), t.sz, t.sz, m, t.red->focusPlane(), 8, &mk, &gw, &gh, &memoriaTexto);
+           frac = anclarTexto(t.copia.data(), t.sz, t.sz, m, t.red->focusPlane(), 8, &mk, &gw, &gh, &memoriaTexto,
+                              t.juego);
          }
          /* y el reparto por ojo con los huecos rellenos (antes lo hacia el hilo que dibuja) */
          std::vector<uint8_t> rg;
@@ -1940,7 +1942,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      /* `ganancia` es la del conversor (unidades de pantalla por unidad de mapa) y `apoyoFijo` el plano
         de apoyo cuando el usuario lo puso a mano (< 0 = el que saque la red de este mismo cuadro): con
         eso el relleno de huecos por ojo se hace aqui, fuera del hilo que dibuja (v0.69). */
-     void arrancar(DepthNet *red, const uint8_t *chico, int sz, bool apoyar, float ganancia, float apoyoFijo) {
+     void arrancar(DepthNet *red, const uint8_t *chico, int sz, bool apoyar, float ganancia, float apoyoFijo,
+                   bool juego = false) {
        {
          std::lock_guard<std::mutex> g(candado);
          trabajo.red = red;
@@ -1949,6 +1952,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          trabajo.apoyar = apoyar;
          trabajo.ganancia = ganancia;
          trabajo.apoyoFijo = apoyoFijo;
+         trabajo.juego = juego;
          hayTrabajo = true;
          terminado = false;
          error.clear();
@@ -3571,7 +3575,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           red.setPlanos(ui.tune.planos);
           red.setMuestras(ui.tune.muestras);
           hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla, wv.converterGain(),
-                           apoyoAuto ? -1.0f : wv.converterRef());
+                           apoyoAuto ? -1.0f : wv.converterRef(), sobreJuego(ui));
         } else if (++convFallos == 1 || convFallos % 100 == 0) {
           std::fprintf(stderr, "[conversor] no se pudo leer el cuadro pequeno (%d): %s\n", (int)convFallos,
                        cerr.c_str());
