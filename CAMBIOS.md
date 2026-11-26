@@ -3,6 +3,23 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El alcance del relieve, automático en Auto (rama `experimental`)
+
+- Rodolfo: «que el alcance del relieve también lo definas automáticamente».
+- **Criterio**: la zona cómoda de la visión estéreo, ±1° de paralaje respecto a la pantalla (la «regla
+  del grado»). Con la distancia de los ojos que da el rastreo (sin cámara, la pose nominal de 65,1 cm) y
+  el paso de este panel (598 mm / 3840 px = 0,156 mm), el tope de fuera por ojo se pone en medio grado:
+  alcance = d · tan 1° / (2 · 12,67 px · 0,156 mm). A 65 cm, x2,88 (+36,5 / −28,7 px por ojo); a 50 cm,
+  x2,2; a 80 cm, x3,5 (más cerca, menos). Se suaviza en ~1 s; entre x1 y x4.
+- Con él, la Salida automática llena esos topes. MEDIDO con los tres vídeos de YouTube a 65 cm:
+  hablando 79,1 px de relieve entre los ojos (1,5 % pegado), paisaje 107,0 px (1,4 %), película 80,9 px
+  (1,7 %).
+- **El menú de Auto** enseña «Plano · Relieve N px · Alcance xN» en vez de una Salida equivalente: la
+  automática puede pedir más de lo que da el deslizador (en la película, el equivalente de Salida 225).
+  **Al pasar a Manual** se quedan también el alcance (en `exp_topes_red`) y la Salida hasta su tope de
+  50. En el visor aparte: «alcance x2.88 (ojos a 65 cm: +36.5 / -28.7 px por ojo)» y, a Manual,
+  `exp_topes_red = 2,88`. El deslizador de Experimental dice «en Auto se calcula solo».
+
 ## Rendimiento dentro de Programa, Desinstalar plegado y sin el globo del idioma (rama `experimental`)
 
 - Rodolfo: «mete la info de rendimiento en la casilla de Programa, que desinstalar esté debajo de un

@@ -3408,7 +3408,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.state().focoVisible = true;
     hud.state().focoAuto = fo[0] == '1';
     hud.state().menuNormal = std::getenv("ODYSSEYVK_HUD_MENU_NORMAL") != nullptr;
-    hud.state().focoPlano = 70, hud.state().focoSalida = 32;   /* lo que se vio al medir */
+    hud.state().focoPlano = 70, hud.state().focoSalida = 32, hud.state().focoAlcance = 288;   /* lo medido */
+    hud.state().focoRelieve = 81;
   }
   {
   }

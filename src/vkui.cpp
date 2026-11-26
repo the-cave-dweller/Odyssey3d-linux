@@ -1042,7 +1042,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const bool manual = !st_.focoAuto;
       std::vector<std::string> nota;
       if (!manual)
-        nota = renglones(idioma::tr("La saliencia elige el plano de la pantalla en cada escena y la salida se calcula para el mayor relieve sin aplastar la imagen contra los topes."),
+        nota = renglones(idioma::tr("La saliencia elige el plano de la pantalla en cada escena; el alcance se ajusta a la distancia de tus ojos (±1° de paralaje, la zona cómoda) y la salida se calcula para el mayor relieve sin aplastar la imagen contra él."),
                          tam, mw - 2.0f * pad);
       float alto = 78.0f + (manual ? 2.0f * filaAlto : 18.0f * (float)nota.size() + 30.0f);
       if (st_.modoVisible) alto += 46.0f;
@@ -1064,7 +1064,7 @@ void Hud::begin(int w, int h, float altoLogico) {
         textoCabe(opc[k], btnAM_[k].x + bw * 0.5f, btnAM_[k].y + 7.0f, 12.5f, bw - 12.0f, puesto ? 0.06f : ink[0],
                   puesto ? 0.10f : ink[1], puesto ? 0.16f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
         if (hov) {
-          ayuda = idioma::tr(k == 0 ? "Auto: en cada escena la saliencia busca lo que más llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, nítido; la salida se calcula sola para el mayor relieve que cabe sin aplastar la imagen contra los topes. Sigue al contenido y salta en los cortes de escena."
+          ayuda = idioma::tr(k == 0 ? "Auto: en cada escena la saliencia busca lo que más llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, nítido. El alcance se ajusta a la distancia de tus ojos para no pasar de 1° de paralaje (la zona cómoda de la vista) y la salida se calcula para el mayor relieve que cabe sin aplastar la imagen. Sigue al contenido y salta en los cortes de escena."
                                     : "Manual: tú eliges el plano que queda en la pantalla (Profundidad) y cuánto sale y se hunde la imagen (Salida). Al pasar de Auto a Manual se quedan los valores que se estaban calculando.");
           ayudaY = btnAM_[k].y;
         }
@@ -1090,8 +1090,10 @@ void Hud::begin(int w, int h, float altoLogico) {
         for (size_t k = 0; k < nota.size(); k++)
           text(nota[k], mx0 + pad, y + 18.0f * (float)k, tam, dim[0], dim[1], dim[2], 0.90f);
         y += 18.0f * (float)nota.size() + 6.0f;
-        text(idioma::trf("Plano {} · Salida ≈ {}", {std::to_string(st_.focoPlano), std::to_string(st_.focoSalida)}), mx0 + pad, y,
-             12.5f, ink[0], ink[1], ink[2], 0.95f);
+        char alc[16];
+        std::snprintf(alc, sizeof alc, "%d%c%02d", st_.focoAlcance / 100, idioma::decimal(), st_.focoAlcance % 100);
+        text(idioma::trf("Plano {} · Relieve {} px · Alcance x{}", {std::to_string(st_.focoPlano), std::to_string(st_.focoRelieve), alc}),
+             mx0 + pad, y, 12.5f, ink[0], ink[1], ink[2], 0.95f);
         y += 24.0f;
       }
       if (st_.modoVisible) {

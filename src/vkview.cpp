@@ -3570,9 +3570,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          Tope: lo que daria la Salida 50 con `relieve = 2,00` y el mismo alcance, para que una escena
          casi plana no infle el ruido de la red. */
       if (!red.sinRed() && st.focoVisible && apoyoAuto) {
-        static float gAuto = -1.0f;
+        static float gAuto = -1.0f, tAlcance = -1.0f;
         static double tAuto = -1.0;
-        const float T = exTopesRed, p = red.focusPlane();
+        /* el alcance automatico (rama experimental): la zona comoda de la vision estereo es de +-1 grado de
+           paralaje respecto a la pantalla (la «regla del grado»). Con la distancia de los ojos (la del
+           rastreo; sin camara, la pose nominal de 65,1 cm) y el paso de este panel (598 mm / 3840 px), el
+           tope de fuera por ojo se pone en medio grado: alcance = d * tan(1 grado) / (2 * 12,67 px *
+           0,156 mm). A 65 cm sale x2,88 (+36,5 / -28,7 px por ojo); a 50 cm, x2,2; a 80 cm, x3,5. */
+        {
+          const double distMm = std::max(300.0, std::min(1500.0, wv.eye().z * 10.0));
+          const float tComodo = (float)std::max(1.0, std::min(4.0, distMm * std::tan(1.0 * M_PI / 180.0) /
+                                                                         (2.0 * 12.67 * (598.0 / 3840.0))));
+          if (tAlcance < 0.0f) tAlcance = tComodo;
+          else tAlcance += (tComodo - tAlcance) * (float)std::min(1.0, (tAuto < 0.0 ? 1.0 : now - tAuto) / 1.0);
+          wv.setTopeEscala(tAlcance);
+          ui.hud.state().focoAlcance = (int)std::lround(tAlcance * 100.0f);
+        }
+        const float T = tAlcance, p = red.focusPlane();
         const float lo = red.cuantilBajo(), hi = red.cuantilAlto();
         float g = std::min(0.0033f * T / std::max(hi - p, 0.02f), 0.0026f * T / std::max(p - lo, 0.02f));
         g = std::max(gananciaRelieve(0) * 0.5f, std::min(g, (0.00104f + 0.5f * 0.00972f) * 2.0f * T));
@@ -3589,11 +3603,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         const float esc = gananciaRelieve(0) / 0.00104f;
         ui.hud.state().focoPlano = (int)std::lround(p * 100.0f);
         ui.hud.state().focoSalida = (int)std::lround(((gAuto / esc) - 0.00104f) / 0.00972f * 100.0f);
+        /* en el menu se ensena el relieve entre los ojos, no la Salida: la automatica puede pedir mas de lo
+           que da el deslizador (en una pelicula, el equivalente de Salida 225) */
+        ui.hud.state().focoRelieve =
+            (int)std::lround(2.0 * std::min((double)(gAuto * 3840.0f * (hi - lo)), (12.67 + 9.98) * (double)T));
         static double dicho = -10.0;
         if (now - dicho >= 5.0) {
           dicho = now;
-          std::printf("[foco] auto: plano %.2f · salida %.1f px por unidad (Salida %d) · cuantiles %.2f..%.2f · alcance x%.2f\n",
-                      (double)p, (double)gAuto * 3840.0, ui.hud.state().focoSalida, (double)lo, (double)hi, (double)T);
+          std::printf("[foco] auto: plano %.2f · salida %.1f px por unidad (Salida %d) · cuantiles %.2f..%.2f · alcance x%.2f "
+                      "(ojos a %.0f cm: +%.1f / -%.1f px por ojo)\n",
+                      (double)p, (double)gAuto * 3840.0, ui.hud.state().focoSalida, (double)lo, (double)hi, (double)T,
+                      wv.eye().z, 12.67 * T, 9.98 * T);
           std::fflush(stdout);
         }
       }
@@ -3787,6 +3807,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             cambioPop = -1.0;
             std::string e2;
             if (ajuste::fijarEnServeConf("salida_" + suf, std::to_string(hs.popout), &e2)) conf["salida_" + suf] = std::to_string(hs.popout);
+            /* y el alcance que se estaba calculando (el de la pestana Experimental) */
+            exTopesRed = std::max(1.0f, std::min(4.0f, (float)hs.focoAlcance / 100.0f));
+            char tr[16];
+            std::snprintf(tr, sizeof tr, "%.2f", (double)exTopesRed);
+            for (char *q = tr; *q; q++)
+              if (*q == '.') *q = ',';
+            ajuste::fijarEnServeConf("exp_topes_red", tr, &e2);
           }
           profundidadVista = hs.depth;
           baseDepth = hs.depth;

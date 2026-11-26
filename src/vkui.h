@@ -132,7 +132,8 @@ public:
        Auto | Manual; en Auto el menu ensena el plano y la Salida que se calcularon (`focoPlano` 0..100,
        `focoSalida` en unidades del deslizador) */
     bool menuNormal = false;
-    int focoPlano = 0, focoSalida = 0;
+    int focoPlano = 0, focoSalida = 0, focoAlcance = 100;   /* el alcance en centesimas (x2,88 = 288) */
+    int focoRelieve = 0;   /* el relieve entre los ojos que da Auto, en px (cuantiles 2..98 %, con los topes) */
     float rendValor[4] = {0.35f, 1.0f, 2.75f, 2.0f};
     std::string teclasRendimiento;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */

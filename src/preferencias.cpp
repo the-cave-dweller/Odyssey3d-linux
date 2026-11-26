@@ -790,7 +790,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     /* el alcance del relieve con la red: lo que deja meter mas profundidad (se aplica en marcha) */
     Hud::ItemPanel tr;
     tr.tipo = Hud::ItemPanel::Deslizador, tr.rotulo = idioma::tr("Alcance del relieve");
-    tr.nota = idioma::tr("Hasta dónde salen y se hunden las cosas con la red · x1 = los topes de Samsung");
+    tr.nota = idioma::tr("Hasta dónde salen y se hunden las cosas con la red · x1 = los topes de Samsung · en Auto se calcula solo");
     tr.frac = (float)((v.expTopesRed - 1.0) / 3.0);
     tr.valorTexto = "x" + conDecimal(v.expTopesRed, 2);
     tr.ayuda = idioma::tr("Subir la fuerza o la Profundidad no da más 3D si la imagen ya choca con el tope: se aplasta. Medido con Profundidad 100 y relieve x2: a x1 el 85 % del cuadro está pegado al tope (unos 11 px de relieve entre los ojos); a x2,75, el 58 % (47 px); a x4, el 32 % (71 px). Más de ~98 px cansa la vista.");
