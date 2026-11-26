@@ -829,6 +829,67 @@ void DepthNet::profundidadSinRed(std::vector<float> &d) {
     }
 }
 
+/* Las bandas negras de una pelicula (rama experimental): filas (o columnas) pegadas al borde en las
+   que casi todo es negro. «Casi todo»: los subtitulos van dentro de la banda de abajo y son blancos, asi
+   que no se pide el 100 % de puntos negros. Una pantalla entera a negro (un fundido) no cuenta.
+   Bajan al momento (en cuanto la imagen ocupa esas filas) y suben solo si se mantienen ~1,5 s, para que
+   una escena oscura no se coma la imagen de arriba o de abajo. */
+void DepthNet::detectarBandas() {
+  const int n = sz_;
+  /* MEDIDO con la pelicula: las bandas son negro puro (mediana y percentil 80 = 0,000); los bordes de
+     una escena oscura de interior, no (mediana 0,04-0,13). Se pide un 85 % de puntos por debajo de 0,03:
+     los subtitulos (menos del 15 % de la fila) no la rompen y la penumbra de la escena no la imita. */
+  auto negra = [&](int a, bool fila) {
+    int oscuros = 0;
+    for (int k = 0; k < n; k++) {
+      const float v = fila ? guia_[(size_t)a * (size_t)n + (size_t)k] : guia_[(size_t)k * (size_t)n + (size_t)a];
+      if (v < 0.03f) oscuros++;
+    }
+    return oscuros >= n * 85 / 100;
+  };
+  const int tope = n * 4 / 10, minimo = n * 15 / 1000;
+  auto mide = [&](bool fila, bool desdeCero) {
+    int k = 0;
+    while (k < tope && negra(desdeCero ? k : n - 1 - k, fila)) k++;
+    return k >= minimo ? k : 0;
+  };
+  int v[4] = {mide(true, true), mide(true, false), mide(false, true), mide(false, false)};
+  /* un cuadro casi negro (un fundido, una transicion) no dice nada de las bandas: se quedan como
+     estaban. Igual una banda que llega al tope del 40 %: es la escena oscura, no la banda. MEDIDO con la
+     pelicula: en un fundido median 207 + 207 filas, se tomaba por «sin bandas» y estas tardaban 1,5 s en
+     volver (la Salida automatica saltaba un 6,6 % por cuadro en vez de un 1,5). */
+  const bool fundidoV = v[0] + v[1] >= n * 8 / 10, fundidoH = v[2] + v[3] >= n * 8 / 10;
+  int *cur[4] = {&bArr_, &bAb_, &bIz_, &bDe_};
+  bool cambio = false;
+  for (int k = 0; k < 4; k++) {
+    if ((k < 2 ? fundidoV : fundidoH) || v[k] >= tope) continue;
+    if (!bVistas_ && v[k] > 0) {   /* el primer cuadro valido las toma de una: no hay nada que proteger */
+      *cur[k] = bCand_[k] = v[k];
+      cambio = true;
+      continue;
+    }
+    if (v[k] <= *cur[k]) {
+      if (v[k] != *cur[k]) cambio = true;
+      *cur[k] = v[k];
+      bCand_[k] = v[k], bCuenta_[k] = 0;
+    } else if (std::abs(v[k] - bCand_[k]) <= 2) {
+      if (++bCuenta_[k] >= 15) {
+        *cur[k] = bCand_[k];
+        bCuenta_[k] = 0;
+        cambio = true;
+      }
+    } else {
+      bCand_[k] = v[k], bCuenta_[k] = 0;
+    }
+  }
+  if (!fundidoV && !fundidoH) bVistas_ = true;
+  if (cambio) {
+    std::printf("[conversor] bandas negras: arriba %d %% · abajo %d %% · izquierda %d %% · derecha %d %% (en el plano de la pantalla)\n",
+                100 * bArr_ / n, 100 * bAb_ / n, 100 * bIz_ / n, 100 * bDe_ / n);
+    std::fflush(stdout);
+  }
+}
+
 bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &out, std::string *err) {
 #ifdef HAVE_ORT
   if (!ready_ || !rgba || w < 2 || h < 2) return false;
@@ -868,6 +929,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       opBY_[i] = b - 0.5f * (r + g);
     }
   }
+  detectarBandas();
   std::vector<Ort::Value> outs;
   std::vector<float> dRe, dSinRed;
   const float *d = nullptr;
@@ -1112,6 +1174,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       const float cx = 0.5f * (float)sz_, cy = 0.5f * (float)sz_, rmax = std::sqrt(cx * cx + cy * cy);
       for (int y = 1; y < sz_ - 1; y += paso)
         for (int x = 1; x < sz_ - 1; x += paso) {
+          if (enBanda(x, y)) continue;   /* las bandas negras no son el sujeto */
           const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
           const float u = ((float)x + 0.5f) / (float)sz_, v = ((float)y + 0.5f) / (float)sz_;
           vD.push_back(salida[o]);
@@ -1134,6 +1197,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     } else {
       for (int y = 1; y < sz_ - 1; y++) {
         for (int x = 1; x < sz_ - 1; x++) {
+          if (enBanda(x, y)) continue;
           const size_t o = (size_t)y * (size_t)sz_ + (size_t)x;
           const float gx = std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + sz_] - guia_[o - sz_]);
           float w = 0.15f + 5.0f * gx;
@@ -1194,6 +1258,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     int h[256] = {0};
     long cuantos = 0;
     for (size_t i = 0; i < (size_t)sz_ * (size_t)sz_; i += 3) {
+      if (enBanda((int)(i % (size_t)sz_), (int)(i / (size_t)sz_))) continue;
       const float v = salida[i] < 0.0f ? 0.0f : (salida[i] > 1.0f ? 1.0f : salida[i]);
       h[(int)(v * 255.99f)]++;
       cuantos++;
@@ -1258,6 +1323,17 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     }
   }
 
+  /* las bandas negras (rama experimental), en el plano de la pantalla: cero paralaje, como un marco.
+     MEDIDO 26-nov con una pelicula de YouTube: la red les daba 0,64-0,78 de cercania con la imagen en
+     0,20-0,35, y flotaban por delante de la pelicula (pegadas al tope de fuera con la Salida 50 y
+     `relieve = 2,00`). El plano es el que usa la trama (lo dice el visor), o el automatico. */
+  if (bArr_ + bAb_ + bIz_ + bDe_ > 0) {
+    const float pp = planoPantalla_.load();
+    const float pl = pp >= 0.0f ? pp : focusPlane();
+    for (int y = 0; y < sz_; y++)
+      for (int x = 0; x < sz_; x++)
+        if (enBanda(x, y)) salida[(size_t)y * (size_t)sz_ + (size_t)x] = pl;
+  }
   const auto tPlano1 = std::chrono::steady_clock::now();
   out.resize(plane);
   for (size_t i = 0; i < plane; i++) {

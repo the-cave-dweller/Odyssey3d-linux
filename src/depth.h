@@ -112,6 +112,9 @@ public:
   /* los cuantiles 2 y 98 % del ultimo mapa (0..1), para la Salida automatica (rama experimental) */
   float cuantilBajo() const { return cuantilBajo_.load(); }
   float cuantilAlto() const { return cuantilAlto_.load(); }
+  /* el plano que la trama usa como pantalla (0..1; el visor lo dice cada cuadro): ahi se dejan las
+     bandas negras de las peliculas (rama experimental). Negativo = el automatico. */
+  void setPlanoPantalla(float p) { planoPantalla_.store(p); }
   void setSaliencia(bool s) { saliencia_.store(s); }
   int size() const { return sz_; }                    /* el mapa que sale es de sz_ x sz_ */
   /* la entrada de la red (rama experimental): de fabrica 518 x 518 (la imagen 16:9 aplastada a un
@@ -208,6 +211,14 @@ private:
      centro); ODYSSEYVK_SIN_RED_MEZCLA. Sin ella: suelo = 0, imagen = 0,35 (lo mas perceptible). */
   std::atomic<float> mezcla_{0.35f};   /* se cambia en marcha (los preajustes de la pastilla) */
   std::atomic<float> cuantilBajo_{0.0f}, cuantilAlto_{1.0f};
+  std::atomic<float> planoPantalla_{-1.0f};
+  /* las bandas negras, en puntos del mapa desde cada borde (arriba, abajo, izquierda, derecha), y el
+     candidato que tiene que aguantar para crecer */
+  int bArr_ = 0, bAb_ = 0, bIz_ = 0, bDe_ = 0;
+  int bCand_[4] = {0, 0, 0, 0}, bCuenta_[4] = {0, 0, 0, 0};
+  bool bVistas_ = false;   /* ya hubo un cuadro valido (el primero las toma sin esperar) */
+  void detectarBandas();
+  bool enBanda(int x, int y) const { return y < bArr_ || y >= sz_ - bAb_ || x < bIz_ || x >= sz_ - bDe_; }
   std::atomic<bool> saliencia_{[] {
     const char *e = std::getenv("ODYSSEYVK_SALIENCIA");
     if (!e) e = std::getenv("ODYSSEY3D_SALIENCIA");

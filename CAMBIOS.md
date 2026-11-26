@@ -3,6 +3,37 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Las bandas negras de las películas, en el plano de la pantalla (rama `experimental`)
+
+- Rodolfo: «Sí, arréglalas», tras medir con su YouTube que la red les daba 0,64–0,78 de cercanía con
+  la imagen en 0,20–0,35: flotaban por delante de la película.
+- **Detección** en la guía de luminancia, al tamaño del mapa: filas (o columnas) pegadas al borde con
+  un 85 % de puntos por debajo de 0,03. MEDIDO en la película: las bandas son negro puro (mediana y
+  percentil 80 = 0,000); los bordes de una escena oscura de interior tienen mediana 0,04–0,13 (con el
+  primer criterio, 90 % por debajo de 0,09, salían bandas laterales falsas del 8–15 %). Los subtítulos,
+  dentro de la banda de abajo, no la rompen. Un cuadro casi negro (fundido) o una banda que llega al
+  40 % no cuentan: se queda lo que había (antes un fundido las ponía a cero 1,5 s). Bajan al momento,
+  suben si aguantan 15 mapas, y el primer cuadro las toma de una.
+- **Arreglo**: las bandas se quedan con el plano que usa la trama (el visor se lo dice a la red cada
+  cuadro: el automático o la Profundidad), o sea a cero paralaje, como un marco; y no cuentan para el
+  plano automático ni para los cuantiles de la Salida automática. En la película: «bandas negras:
+  arriba 12 % · abajo 12 %», y su profundidad pasa de 0,64–0,78 a la del plano (0,17–0,28). En los
+  otros dos vídeos no aparece ninguna banda.
+- **La Salida automática baja rápido y sube despacio** (0,2 s y 2 s, en vez de 0,6 s para los dos lados):
+  sin las bandas en los cuantiles sigue de verdad a la imagen, que en las escenas oscuras cambia mucho.
+  Medida final con los tres vídeos:
+
+  | Vídeo | Alcance | Auto: pegado (peor 5 %) | Auto: relieve | Fija 50 `relieve` x2: pegado / relieve |
+  |---|---|---|---|---|
+  | Hablando | x1 | 1,5 % (4,2) | 27,5 px | 34,6 % / 39,1 px |
+  | Paisaje | x1 | 1,4 % (2,4) | 37,2 px | 49,7 % / 45,3 px |
+  | Película | x1 | 1,7 % (6,7) | 28,1 px | 15,0 % / 38,7 px |
+  | Hablando | x2,75 | 1,5 % | 75,5 px | 3,5 % / 72,6 px |
+  | Paisaje | x2,75 | 1,4 % | 102,2 px | 0,0 % / 73,5 px |
+  | Película | x2,75 | 1,7 % | 77,2 px | 0,2 % / 51,6 px |
+
+  En la película, quitar las bandas del tope baja lo pegado con la Salida fija del 41,8 % al 15,0 %.
+
 ## El hub del modo normal en azul, con Auto | Manual y la Salida automática (rama `experimental`)
 
 - Rodolfo: «no me gustó el con fondo, quiero solo la parte blanca en un tono más azul claro; quiero que
@@ -62,7 +93,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Las bandas negras de las películas salen hacia delante** (medido, no solo en Auto): la red les da
   0,64–0,78 de cercanía cuando la imagen está en 0,20–0,35, así que flotan por delante de la película
   (con la Salida 50 y `relieve = 2,00`, pegadas al tope de fuera) y se comen el margen de la Salida
-  automática. Queda por arreglar.
+  automática. Arreglado en la entrega siguiente.
 - Rodolfo, después: «que el manual sea una herramientita». En Manual el botón lleva una llave (el mango
   en diagonal y la cabeza abierta, en el mismo azul claro) en vez del chip; en Auto, el chip.
 - Sustituye al chip cuadrado del Foco automático de la entrega anterior.

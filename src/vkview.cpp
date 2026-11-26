@@ -3566,7 +3566,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          98 % del mapa). MEDIDO 26-nov (5 cuadros, con ruido y con barrido): con los topes de fabrica
          queda un 0,9 % pegado y ~28 px de relieve entre los ojos (la Salida 50 con `relieve = 2,00`:
          61 % pegado); con el alcance x2,75, ~77 px y 0,9 % (la fija: 66 px y 31 %). Varia un 1,2 % con el
-         ruido y salta como mucho un 2,6 % en un barrido; se suaviza en ~0,6 s y salta en los cortes.
+         ruido y salta como mucho un 2,6 % en un barrido; se suaviza (abajo) y salta en los cortes.
          Tope: lo que daria la Salida 50 con `relieve = 2,00` y el mismo alcance, para que una escena
          casi plana no infle el ruido de la red. */
       if (!red.sinRed() && st.focoVisible && apoyoAuto) {
@@ -3578,8 +3578,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         g = std::max(gananciaRelieve(0) * 0.5f, std::min(g, (0.00104f + 0.5f * 0.00972f) * 2.0f * T));
         const double dt = tAuto < 0.0 ? 1.0 : now - tAuto;
         tAuto = now;
+        /* baja en ~0,2 s (la escena se hizo mas honda: que no se aplaste) y sube en ~2 s (que no bombee).
+           MEDIDO con tres videos de YouTube: frente a un suavizado parejo de 0,6 s, lo pegado al tope baja
+           del 2,2-3,8 % al 1,4-1,5 % (y en los peores cuadros, del 4-15 % al 2,4-6,2 %), con un 3-8 % menos
+           de relieve y el mismo cambio por cuadro */
         if (gAuto < 0.0f || red.lastCut()) gAuto = g;
-        else gAuto += (g - gAuto) * (float)std::min(1.0, dt / 0.6);
+        else gAuto += (g - gAuto) * (float)std::min(1.0, dt / (g < gAuto ? 0.2 : 2.0));
         ganancia = gAuto;
         /* lo que ensena el menu: el plano y la Salida equivalente del deslizador */
         const float esc = gananciaRelieve(0) / 0.00104f;
@@ -3607,8 +3611,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fflush(stdout);
         }
       }
-      wv.setConverter(ganancia, (apoyoAuto || red.sinRed()) ? red.focusPlane() : (float)st.depth / 100.0f,
-                      wv.hasDepthMap());
+      const float planoTrama = (apoyoAuto || red.sinRed()) ? red.focusPlane() : (float)st.depth / 100.0f;
+      red.setPlanoPantalla(planoTrama);   /* ahi se dejan las bandas negras de las peliculas */
+      wv.setConverter(ganancia, planoTrama, wv.hasDepthMap());
       wv.setSujeto(red.sujeto());   /* el realce de detalle va al sujeto, este donde este el plano (v0.68) */
     }
     /* Apagado el conversor, la trama tiene que enterarse (v0.80). `setConverter` solo se llamaba
