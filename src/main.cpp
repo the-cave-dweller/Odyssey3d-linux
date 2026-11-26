@@ -3633,6 +3633,7 @@ struct ServeCfg {
   std::string expTope;            /* si = tope de arrastre en el suavizado en el tiempo */
   double expAnticipacion = -1.0;  /* ms de anticipacion de la cabeza; < 0 = no puesto (0) */
   std::string expPrioridad;       /* normal | alta | tiempo_real: la cola del visor en la tarjeta */
+  std::string expSinRed;          /* no | suelo | imagen: la profundidad sin red (modo rendimiento) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* si = dejar la sincronizacion adaptativa durante el 3D; de fabrica se apaga (v1.11) */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
@@ -3792,6 +3793,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "exp_mapa") cfg.expMapa = v;
     else if (k == "exp_tope_arrastre") cfg.expTope = strLower(v);
     else if (k == "exp_prioridad") cfg.expPrioridad = strLower(v);
+    else if (k == "exp_sin_red") cfg.expSinRed = strLower(v);
     else if (k == "exp_anticipacion") {
       std::string t = v;
       for (char &c : t) if (c == ',') c = '.';
@@ -4146,6 +4148,10 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       else ::unsetenv("ODYSSEYVK_MAPA");
       if (pila->expTope == "si" || pila->expTope == "1") ::setenv("ODYSSEYVK_TOPE_ARRASTRE", "1", 1);
       else ::unsetenv("ODYSSEYVK_TOPE_ARRASTRE");
+      if (pila->expSinRed == "suelo" || pila->expSinRed == "imagen")
+        ::setenv("ODYSSEYVK_SIN_RED", pila->expSinRed.c_str(), 1);
+      else
+        ::unsetenv("ODYSSEYVK_SIN_RED");
       if (pila->expPrioridad == "alta" || pila->expPrioridad == "tiempo_real")
         ::setenv("ODYSSEYVK_PRIORIDAD", pila->expPrioridad.c_str(), 1);
       else
@@ -5894,6 +5900,8 @@ static int cmdServe(int argc, char **argv) {
           cfg.expRed = nuevo.expRed, cfg.expMapa = nuevo.expMapa, cfg.expTope = nuevo.expTope;
           cfg.expAnticipacion = nuevo.expAnticipacion;
           cfg.expPrioridad = nuevo.expPrioridad;
+          cfg.expSinRed = nuevo.expSinRed;
+          cfg.vrrEn3d = nuevo.vrrEn3d;   /* el VRR del modo rendimiento vale desde el siguiente video */
           cfg.crosstalkBase = nuevo.crosstalkBase;
           cfg.relieve = nuevo.relieve;
           cfg.divididoSuave = nuevo.divididoSuave;

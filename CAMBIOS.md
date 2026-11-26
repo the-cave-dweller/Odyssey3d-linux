@@ -3,6 +3,27 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Modo rendimiento: profundidad sin red y el VRR en la pestaña Experimental (rama `experimental`)
+
+- Rodolfo: «¿hay profundidad sin modelo? quiero probar un modo performance, sin modelo y con
+  variable refresh rate». No la había: el vídeo normal solo tenía la red (y `--mapa-fijo`, un mapa
+  leído de un archivo para el taller).
+- Experimental → MODO RENDIMIENTO:
+  - «Profundidad del vídeo normal» (`exp_sin_red = no|suelo|imagen` → `ODYSSEYVK_SIN_RED`): sin red,
+    la cercanía sale de la propia imagen en la CPU, al tamaño del mapa, y pasa por todo lo demás como
+    la de la red (escala, cortes, suavizado en el tiempo, filtro guiado contra la luminancia, plano de
+    apoyo, cantos finos). `suelo` = la altura (abajo cerca, arriba lejos). `imagen` = 0,50 altura +
+    0,25 nitidez + 0,10 saturación + 0,15 centro (las tres últimas emborronadas en cajas de 1/24 del
+    mapa y llevadas a 0..1 con su percentil 95). Ni modelo, ni CUDA, ni sesión de ONNX.
+  - «Frecuencia variable (VRR) durante el 3D» (`vrr_en_3d`, la clave de siempre): el servicio la
+    toma ahora sin reiniciarse.
+- MEDIDO con `odysseyvk mapa` (persona, nave, globo; `../pruebas/sin-red-suelo-imagen-2026-11-26.jpg`):
+  con la red 14–18 ms por mapa; sin red 8–9 ms (suelo) y 9–12 ms (imagen), todo en la CPU. Lo que
+  sale: `suelo` es un plano inclinado igual en cada cuadro; `imagen` da algo de forma (la persona,
+  la nave) pero también saca hacia delante lo nítido aunque esté lejos (los subtítulos, los bordes
+  del planeta). En el visor aparte: «video normal a 3D con CPU (sin red: imagen)», 9,6 ms por mapa,
+  y el visor ocupa 257 MB en la tarjeta (con la red, ~1,1 GB más el contexto de CUDA).
+
 ## Sin tirones en los juegos: el VRR se apaga durante el 3D (v1.11)
 
 - Rodolfo: «tuve tirones en Cyberpunk». Se buscó en la rama `experimental` (su CAMBIOS.md cuenta cada

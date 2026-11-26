@@ -267,6 +267,9 @@ Valores leer() {
   if (v.expMapa != 770 && v.expMapa != 1022) v.expMapa = 518;
   v.expTope = si(de("exp_tope_arrastre"), false);
   v.expAnticipacion = std::max(0, std::min(60, std::atoi(de("exp_anticipacion").c_str())));
+  v.expSinRed = de("exp_sin_red");
+  if (v.expSinRed != "suelo" && v.expSinRed != "imagen") v.expSinRed = "no";
+  v.vrrEn3d = si(de("vrr_en_3d"), false);
   v.expPrioridad = de("exp_prioridad");
   if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
   if (!v.modelo.empty() && v.modelo[0] == '~') {
@@ -640,7 +643,23 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     i.nota = idioma::tr("Se aplican desde el siguiente vídeo. Lo que funcione pasará a la versión normal.");
     pon(i, "");
     Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("MODO RENDIMIENTO");
+    pon(s, "");
+    Hud::ItemPanel sr;
+    sr.tipo = Hud::ItemPanel::Opciones, sr.rotulo = idioma::tr("Profundidad del vídeo normal");
+    sr.opciones = {idioma::tr("Con la red"), idioma::tr("Sin red · suelo"), idioma::tr("Sin red · imagen")};
+    sr.elegido = v.expSinRed == "suelo" ? 1 : (v.expSinRed == "imagen" ? 2 : 0);
+    pon(sr, "exp_sin_red");
+    Hud::ItemPanel srn;
+    srn.tipo = Hud::ItemPanel::Nota;
+    srn.rotulo = idioma::tr("Sin red no se usa la tarjeta para la profundidad: suelo = abajo cerca y arriba lejos; imagen = además lo nítido, lo saturado y el centro, cerca.");
+    pon(srn, "");
+    Hud::ItemPanel vr;
+    vr.tipo = Hud::ItemPanel::Interruptor, vr.rotulo = idioma::tr("Frecuencia variable (VRR) durante el 3D");
+    vr.nota = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones");
+    vr.valor = v.vrrEn3d;
+    pon(vr, "vrr_en_3d");
+    s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
     pon(s, "");
     Hud::ItemPanel r;
     r.tipo = Hud::ItemPanel::Opciones, r.rotulo = idioma::tr("La red ve el cuadro a su proporción");
@@ -973,6 +992,17 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   if (id == "exp_mapa") {
     static const char *kVal[] = {"518", "770", "1022"};
     if (sub < 0 || sub > 2 || !fija("exp_mapa", kVal[sub])) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_sin_red") {
+    static const char *kVal[] = {"no", "suelo", "imagen"};
+    if (sub < 0 || sub > 2 || !fija("exp_sin_red", kVal[sub])) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "vrr_en_3d") {
+    if (!fija("vrr_en_3d", v.vrrEn3d ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
     return true;
   }

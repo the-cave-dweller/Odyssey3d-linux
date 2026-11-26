@@ -63,6 +63,8 @@ struct Valores {
   bool expTope = false;              /* `exp_tope_arrastre = si` */
   int expAnticipacion = 0;           /* `exp_anticipacion`: ms, 0 = apagada */
   std::string expPrioridad = "normal";   /* `exp_prioridad`: normal | alta | tiempo_real */
+  std::string expSinRed = "no";          /* `exp_sin_red`: no | suelo | imagen */
+  bool vrrEn3d = false;                  /* `vrr_en_3d = si`: el VRR puesto durante el 3D */
 };
 Valores leer();
 

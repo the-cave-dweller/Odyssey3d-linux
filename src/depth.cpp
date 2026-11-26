@@ -434,6 +434,29 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     }
   }
   if (const char *t = entornoOdyssey("ODYSSEYVK_TOPE_ARRASTRE")) topeArrastre_ = t[0] == '1' || t[0] == 's';
+  sinRed_ = 0;
+  if (const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED")) {
+    const std::string v = e;
+    if (v == "suelo") sinRed_ = 1;
+    else if (v == "imagen" || v == "1" || v == "si") sinRed_ = 2;
+  }
+#ifdef HAVE_ORT
+  if (sinRed_) {
+    /* modo rendimiento: ni modelo, ni CUDA, ni sesion; solo el sitio para la foto de entrada */
+    OrtImpl *im = new OrtImpl();
+    im->in.assign((size_t)3 * (size_t)sz_ * (size_t)sz_, 0.0f);
+    inW_ = inH_ = sz_;
+    impl_ = im;
+    ready_ = true;
+    ruta_ = path;
+    dev_ = sinRed_ == 1 ? "CPU (sin red: suelo)" : "CPU (sin red: imagen)";
+    std::printf("[conversor] sin red (rama experimental, modo rendimiento): la profundidad sale de %s · mapa %d x %d\n",
+                sinRed_ == 1 ? "la altura en el cuadro (abajo cerca, arriba lejos)"
+                             : "la altura, la nitidez, el color y el centro de la imagen",
+                sz_, sz_);
+    return true;
+  }
+#endif
   struct stat stt {};
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
@@ -711,6 +734,83 @@ float p99(std::vector<float> v) {
 
 }  // namespace
 
+/* Profundidad sin red (rama experimental, modo rendimiento). Cercania (mas = mas cerca) en el mapa de
+   sz_ x sz_, sacada de la luminancia (guia_) y del color oponente (opRG_, opBY_) que estimate ya
+   tiene a ese tamano. Pistas clasicas de los conversores 2D-3D de televisor:
+   - altura: lo de abajo del cuadro suele ser el suelo cerca, lo de arriba el cielo o el fondo;
+   - nitidez: lo enfocado (con detalle) suele ser el sujeto, por delante de un fondo desenfocado;
+   - color: lo lejano sale mas apagado (perspectiva aerea);
+   - centro: el sujeto suele ir al centro.
+   Las tres ultimas se emborronan mucho (cajas de 1/12 del mapa): son manchas, no detalle; los
+   cantos los pone despues el filtro guiado contra la luminancia, como con la red. */
+void DepthNet::profundidadSinRed(std::vector<float> &d) {
+  const int n = sz_;
+  const size_t plane = (size_t)n * (size_t)n;
+  d.assign(plane, 0.0f);
+  std::vector<float> alt(plane);
+  for (int y = 0; y < n; y++) {
+    const float v = (float)y / (float)(n - 1);
+    const float a = 0.10f + 0.90f * std::pow(v, 1.3f);
+    for (int x = 0; x < n; x++) alt[(size_t)y * n + x] = a;
+  }
+  if (sinRed_ == 1 || guia_.size() != plane) {
+    d = alt;
+    return;
+  }
+  /* caja de radio r con la imagen integral: media de cada punto en su ventana */
+  auto caja = [&](const std::vector<float> &src, int r, std::vector<float> &dst) {
+    std::vector<double> ii((size_t)(n + 1) * (size_t)(n + 1), 0.0);
+    for (int y = 0; y < n; y++) {
+      double fila = 0.0;
+      for (int x = 0; x < n; x++) {
+        fila += src[(size_t)y * n + x];
+        ii[(size_t)(y + 1) * (n + 1) + (x + 1)] = ii[(size_t)y * (n + 1) + (x + 1)] + fila;
+      }
+    }
+    dst.resize(plane);
+    for (int y = 0; y < n; y++) {
+      const int y0 = std::max(0, y - r), y1 = std::min(n, y + r + 1);
+      for (int x = 0; x < n; x++) {
+        const int x0 = std::max(0, x - r), x1 = std::min(n, x + r + 1);
+        const double s2 = ii[(size_t)y1 * (n + 1) + x1] - ii[(size_t)y0 * (n + 1) + x1] -
+                          ii[(size_t)y1 * (n + 1) + x0] + ii[(size_t)y0 * (n + 1) + x0];
+        dst[(size_t)y * n + x] = (float)(s2 / (double)((y1 - y0) * (x1 - x0)));
+      }
+    }
+  };
+  std::vector<float> nit(plane, 0.0f), sat(plane, 0.0f), nitB, satB;
+  for (int y = 1; y < n - 1; y++)
+    for (int x = 1; x < n - 1; x++) {
+      const size_t o = (size_t)y * n + x;
+      nit[o] = std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + n] - guia_[o - n]);
+      sat[o] = std::sqrt(opRG_[o] * opRG_[o] + opBY_[o] * opBY_[o]);
+    }
+  const int r = std::max(4, n / 24);
+  caja(nit, r, nitB);
+  caja(sat, r, satB);
+  /* a 0..1 con el percentil 95 de cada pista, para que un punto raro no mande */
+  auto normaliza = [&](std::vector<float> &v) {
+    std::vector<float> m;
+    m.reserve(plane / 16 + 1);
+    for (size_t i = 0; i < plane; i += 16) m.push_back(v[i]);
+    const size_t k = m.size() * 95 / 100;
+    std::nth_element(m.begin(), m.begin() + (long)k, m.end());
+    const float tope = std::max(1e-5f, m[k]);
+    for (float &x : v) x = std::min(1.0f, x / tope);
+  };
+  normaliza(nitB);
+  normaliza(satB);
+  const float cx = 0.5f * (float)(n - 1), cy = 0.5f * (float)(n - 1), rmax = std::sqrt(cx * cx + cy * cy);
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      const size_t o = (size_t)y * n + x;
+      float t = 1.0f - std::sqrt(((float)x - cx) * ((float)x - cx) + ((float)y - cy) * ((float)y - cy)) / rmax;
+      t = t < 0.0f ? 0.0f : t;
+      const float centro = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);   /* smootherstep, como la saliencia */
+      d[o] = 0.50f * alt[o] + 0.25f * nitB[o] + 0.10f * satB[o] + 0.15f * centro;
+    }
+}
+
 bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &out, std::string *err) {
 #ifdef HAVE_ORT
   if (!ready_ || !rgba || w < 2 || h < 2) return false;
@@ -750,6 +850,19 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       opBY_[i] = b - 0.5f * (r + g);
     }
   }
+  std::vector<Ort::Value> outs;
+  std::vector<float> dRe, dSinRed;
+  const float *d = nullptr;
+  size_t n = 0;
+  const auto tRed0 = std::chrono::steady_clock::now();
+  auto tRed1 = tRed0;
+  if (sinRed_) {
+    /* modo rendimiento: la profundidad de la propia imagen, sin red */
+    profundidadSinRed(dSinRed);
+    d = dSinRed.data();
+    n = plane;
+    tRed1 = std::chrono::steady_clock::now();
+  } else {
   /* normalizacion de la foto: la misma con la que se entreno el modelo */
   static const float mean[3] = {0.485f, 0.456f, 0.406f}, sd[3] = {0.229f, 0.224f, 0.225f};
   for (int c = 0; c < 3; c++) {
@@ -762,22 +875,19 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   Ort::Value tin =
       Ort::Value::CreateTensor<float>(mem, im->in.data(), im->in.size(), shape.data(), shape.size());
   const char *inN = im->inN.c_str(), *outN = im->outN.c_str();
-  std::vector<Ort::Value> outs;
-  const auto tRed0 = std::chrono::steady_clock::now();
   try {
     outs = im->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);
   } catch (const std::exception &e) {
     if (err) *err = std::string("el modelo fallo: ") + resumenOrt(e.what());
     return false;
   }
-  const auto tRed1 = std::chrono::steady_clock::now();
-  const float *d = outs[0].GetTensorData<float>();
+  tRed1 = std::chrono::steady_clock::now();
+  d = outs[0].GetTensorData<float>();
   auto info = outs[0].GetTensorTypeAndShapeInfo();
-  size_t n = info.GetElementCount();
+  n = info.GetElementCount();
   if (!n) return false;
   /* la red contesta a su tamano: si no es el del mapa (rama experimental), se remuestrea aqui y
      todo lo de abajo (corte, escala, filtros, planos) trabaja con el mapa cuadrado de sz_ */
-  std::vector<float> dRe;
   {
     auto shp = info.GetShape();
     int ow = 0, oh = 0;
@@ -797,6 +907,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       n = plane;
     }
   }
+  }   /* fin de la red */
 
   /* el modelo dice cuanto de cerca esta cada punto, en unidades suyas: lo llevamos a 0..1 con el
      minimo y el maximo, mirando solo una muestra de puntos para que un pixel raro no mande. */

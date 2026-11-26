@@ -187,6 +187,11 @@ private:
   std::string ruta_;      /* la ruta de la red abierta ahora */
   int sz_ = 518;
   int inW_ = 518, inH_ = 518;           /* la entrada de la red (ver entradaAncho) */
+  /* Sin red (rama experimental, modo rendimiento): ODYSSEYVK_SIN_RED=suelo|imagen. La profundidad sale
+     de la propia imagen en la CPU (la altura; con «imagen», tambien la nitidez, el color y el centro)
+     y pasa por todo lo demas igual que la de la red. 0 = la red, 1 = suelo, 2 = imagen. */
+  int sinRed_ = 0;
+  void profundidadSinRed(std::vector<float> &d);
   bool topeArrastre_ = false;           /* rama experimental: tope de 1/16 al arrastre del suavizado */
   int gpu_ = 0;
   std::string dev_ = "nada";

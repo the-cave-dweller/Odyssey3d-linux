@@ -219,6 +219,14 @@ T = {
 "Alta": ("High", "Haute", "Hoch", "高", "高", ),
 "Tiempo real": ("Real time", "Temps réel", "Echtzeit", "实时", "リアルタイム", ),
 "Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.": ("With a game filling the GPU, the 3D frame goes ahead of the game instead of waiting its turn; the game loses a little.", "Avec un jeu qui remplit la carte, l'image 3D passe devant le jeu au lieu d'attendre son tour ; le jeu perd un peu.", "Wenn ein Spiel die Grafikkarte auslastet, kommt das 3D-Bild vor dem Spiel dran statt zu warten; das Spiel verliert etwas.", "游戏占满显卡时，3D 画面优先于游戏处理，无需排队；游戏会稍有损失。", "ゲームが GPU を占有していても、3D の画面が順番を待たずに先に処理されます。ゲームは少し遅くなります。", ),
+"MODO RENDIMIENTO": ("PERFORMANCE MODE", "MODE PERFORMANCE", "LEISTUNGSMODUS", "性能模式", "パフォーマンスモード", ),
+"Profundidad del vídeo normal": ("Depth for normal video", "Profondeur de la vidéo normale", "Tiefe für normale Videos", "普通视频的深度", "通常動画の奥行き", ),
+"Con la red": ("With the network", "Avec le réseau", "Mit dem Netz", "使用网络", "ネットワークで", ),
+"Sin red · suelo": ("No network · floor", "Sans réseau · sol", "Ohne Netz · Boden", "无网络 · 地面", "ネットなし · 床", ),
+"Sin red · imagen": ("No network · image", "Sans réseau · image", "Ohne Netz · Bild", "无网络 · 画面", "ネットなし · 画像", ),
+"Sin red no se usa la tarjeta para la profundidad: suelo = abajo cerca y arriba lejos; imagen = además lo nítido, lo saturado y el centro, cerca.": ("Without the network the GPU isn't used for depth: floor = bottom near, top far; image = also sharp, saturated and central things near.", "Sans réseau la carte n'est pas utilisée pour la profondeur : sol = bas proche, haut lointain ; image = en plus le net, le saturé et le centre proches.", "Ohne Netz wird die Grafikkarte nicht für die Tiefe genutzt: Boden = unten nah, oben fern; Bild = zusätzlich Scharfes, Gesättigtes und die Mitte nah.", "无网络时显卡不用于计算深度：地面 = 下近上远；画面 = 另外清晰、饱和及中央的部分更近。", "ネットなしでは GPU を奥行きに使いません。床 = 下が近く上が遠い。画像 = さらに鮮明・鮮やか・中央のものを近くに。", ),
+"Frecuencia variable (VRR) durante el 3D": ("Variable refresh (VRR) during 3D", "Fréquence variable (VRR) pendant la 3D", "Variable Bildrate (VRR) während 3D", "3D 时启用可变刷新率（VRR）", "3D 中の可変リフレッシュレート（VRR）", ),
+"De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones": ("Off by default: with it, games below the refresh rate stuttered", "Désactivée d'usine : avec elle, les jeux sous la fréquence saccadaient", "Ab Werk aus: damit ruckelten Spiele unter der Bildrate", "默认关闭：开启时，低于刷新率的游戏会卡顿", "初期設定ではオフ：オンだとリフレッシュレート未満のゲームがカクついていました", ),
 "el idioma cambia al momento": ("the language changes right away", "la langue change tout de suite", "die Sprache wechselt sofort", "语言立即切换", "言語はすぐに切り替わります"),
 }
 
