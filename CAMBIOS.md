@@ -103,6 +103,21 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
+## «El juego tapa el 3D» se cierra sola a los 4 s (v1.12)
+
+- Rodolfo: «autoclose this game covers the 3d warning, 4 second countdown». La tarjeta salía a la
+  segunda vez que un juego a pantalla completa exclusiva mandaba el visor detrás y se quedaba hasta
+  darle a Entendido (o 60 s), encima del juego.
+- **Ahora** (`src/main.cpp`, `src/vkui.*`): `mostrarAviso` admite una cuenta atrás; esta tarjeta la
+  lleva de 4 s. El botón dice cuánto le queda, «Entendido (4)» … «(1)» (el número baja cada segundo:
+  el bucle del servicio mira cada 200 ms como mucho y repinta la capa solo cuando cambia), y a cero se
+  cierra con `[serve] la tarjeta de aviso se cierra sola (4 s)` en el registro. Entendido y el aspa la
+  siguen cerrando antes. La otra tarjeta de aviso (el juego se cerró a los N s de entrar en 3D) sigue
+  sin cuenta.
+- **Probado**: pintada con `ctl hud` (`ODYSSEYVK_HUD_AVISO=tapa`, `ODYSSEYVK_HUD_AVISO_CUENTA=N`, nuevo)
+  en inglés y en español, con 4 y con 1. La cuenta en marcha con un juego de verdad, sin probar: hace
+  falta un juego a pantalla completa exclusiva que tape el visor dos veces.
+
 ## Atajos de una tecla sola (v1.12)
 
 - Rodolfo: «allow one key being assigned too, on the keyboard shortcuts».

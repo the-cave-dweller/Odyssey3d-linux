@@ -1251,10 +1251,14 @@ void Hud::begin(int w, int h, float altoLogico) {
       textoCabe(l, ax + borde, ly, 12.5f, aw - 2.0f * borde, ink[0], ink[1], ink[2], 0.90f);
       ly += 20.0f;
     }
-    askLuego_ = {ax + borde, ay + ah - 48.0f, std::max(120.0f, textWidth(idioma::tr("Entendido"), 14.0f) + 40.0f), 32.0f};
+    /* con cuenta atras (v1.12), el boton dice cuanto le queda: «Entendido (3)» */
+    const std::string entendido = st_.askAvisoCuenta > 0
+                                      ? std::string(idioma::tr("Entendido")) + " (" + std::to_string(st_.askAvisoCuenta) + ")"
+                                      : std::string(idioma::tr("Entendido"));
+    askLuego_ = {ax + borde, ay + ah - 48.0f, std::max(120.0f, textWidth(entendido, 14.0f) + 40.0f), 32.0f};
     const bool hL = askLuego_.inside(mx_, my_);
     mask9(askLuego_, 0, 16.0f, accent[0], accent[1], accent[2], hL ? 1.0f : 0.92f);
-    text(idioma::tr("Entendido"), askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
+    text(entendido, askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
   } else if (st_.ask) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;

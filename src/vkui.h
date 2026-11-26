@@ -74,6 +74,9 @@ public:
        y hasta tres renglones */
     std::string askAviso;
     std::vector<std::string> askAvisoLineas;
+    /* (v1.12) los segundos que le quedan al aviso antes de cerrarse solo; > 0 los ensena en el boton,
+       «Entendido (3)». Los cuenta el servicio */
+    int askAvisoCuenta = 0;
     bool remember = false;
     /* la misma casilla, pero dentro del video (en la pastilla): `recordarVisible` la ensena y
        `recordar` dice si esta aplicacion pasa directa al 3D sin preguntar. La pone el visor cuando

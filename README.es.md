@@ -176,7 +176,8 @@ que sigue suave y atenuado detrás; cuando la barra se esconde, el corte se va c
 interruptor 2D | 3D. Arráncalo desde ahí y el juego entra solo en 3D al ponerse a pantalla
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
 a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
-visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta.
+visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego
+tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón).
 
 ![La pestaña Juegos](docs/img/es/games.png)
 

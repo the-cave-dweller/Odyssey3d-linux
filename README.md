@@ -169,7 +169,8 @@ soft and dimmed behind them; when the bar hides, the cut goes away with it.
 Launch from the tab and the game enters 3D on its own when it goes fullscreen. Games must run in
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
 game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
-OdysseyVK says so with a card.
+OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a
+4-second countdown on its button).
 
 ![Games tab](docs/img/games.png)
 

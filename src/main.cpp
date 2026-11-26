@@ -3454,6 +3454,16 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.state().askAvisoLineas = {idioma::tr("Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar."),
                                   idioma::tr("A pantalla completa exclusiva choca con el visor al cambiar de modo."),
                                   idioma::tr("Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.")};
+    /* ODYSSEYVK_HUD_AVISO=tapa (v1.12): el de «el juego tapa el 3D», con su cuenta atras en 4 (o en
+       ODYSSEYVK_HUD_AVISO_CUENTA) */
+    if (!std::strcmp(std::getenv("ODYSSEYVK_HUD_AVISO"), "tapa")) {
+      hud.state().askAviso = idioma::tr("El juego tapa el 3D");
+      hud.state().askAvisoLineas = {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
+                                    idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se ve encima."),
+                                    idioma::tr("Con gamescope igual: también tiene que ir sin bordes.")};
+      const char *c = std::getenv("ODYSSEYVK_HUD_AVISO_CUENTA");
+      hud.state().askAvisoCuenta = c ? std::atoi(c) : 4;
+    }
   }
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
   if (const char *raton = std::getenv("ODYSSEYVK_HUD_RATON")) {
@@ -4986,14 +4996,18 @@ static int cmdServe(int argc, char **argv) {
      caidas de un juego y el del visor que un juego a pantalla completa manda detras. */
   bool tarjetaAviso = false;
   double tarjetaAvisoT = 0.0;
+  double avisoCuenta = 0.0;     /* (v1.12) > 0: el aviso se cierra solo a esos segundos, con la cuenta en el boton */
   std::string hijoApp;          /* la aplicacion de la sesion en curso */
   int visorEscondidas = 0;      /* cuantas veces un juego mando el visor detras en esta sesion */
   /* v1.07: el texto del aviso se guarda como receta (los textos en español y sus datos), no ya
      traducido: si se cambia el idioma con la tarjeta puesta, se vuelve a escribir en el nuevo.
      Antes salia «了解» en el boton y el titulo y los renglones seguian en español. */
   std::function<void(std::string &, std::vector<std::string> &)> avisoTexto;
-  auto mostrarAviso = [&](std::function<void(std::string &, std::vector<std::string> &)> texto, double ahora) {
+  auto mostrarAviso = [&](std::function<void(std::string &, std::vector<std::string> &)> texto, double ahora,
+                          double cuenta = 0.0) {
     if (!hayTarjeta || !ov || ov->askVisible()) return;
+    avisoCuenta = cuenta;
+    ov->hud().state().askAvisoCuenta = (int)std::ceil(cuenta);
     avisoTexto = std::move(texto);
     std::string titulo;
     std::vector<std::string> lineas;
@@ -5547,13 +5561,15 @@ static int cmdServe(int argc, char **argv) {
                al juego). MEDIDO con Cyberpunk y con gamescope (26-nov 00:22): el visor devuelto dos
                veces por sesion y el juego siempre delante. La salida es que el juego vaya en ventana
                sin bordes: se avisa con la tarjeta a la segunda vez. */
+            /* (v1.12) se cierra solo a los 4 s, con la cuenta en el boton (Rodolfo: «autoclose this
+               game covers the 3d warning, 4 second countdown»): tapaba el juego hasta darle a Entendido */
             if (esJuego(hijoApp) && ++visorEscondidas == 2)
               mostrarAviso([](std::string &t, std::vector<std::string> &l) {
                 t = idioma::tr("El juego tapa el 3D");
                 l = {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
                      idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se ve encima."),
                      idioma::tr("Con gamescope igual: también tiene que ir sin bordes.")};
-              }, now);
+              }, now, 4.0);
             if (!avisoAparecerHecho) {
               avisoAparecerHecho = true;
               std::printf("[ventana] %s\n", pudo
@@ -6014,10 +6030,23 @@ static int cmdServe(int argc, char **argv) {
     if (tarjetaAviso) {
       std::string acto = ov->takeAction();
       if (acto.empty() && now - tarjetaAvisoT > 60.0) acto = "luego";
+      /* la cuenta atras (v1.12): el numero del boton baja cada segundo y a cero se cierra */
+      if (acto.empty() && avisoCuenta > 0.0) {
+        const int quedan = (int)std::ceil(avisoCuenta - (now - tarjetaAvisoT));
+        if (quedan <= 0) {
+          acto = "cuenta";
+        } else if (quedan != ov->hud().state().askAvisoCuenta) {
+          ov->hud().state().askAvisoCuenta = quedan;
+          ov->repaint();
+        }
+      }
       if (!acto.empty()) {
+        if (acto == "cuenta") std::printf("[serve] la tarjeta de aviso se cierra sola (%.0f s)\n", avisoCuenta);
         ov->hideAsk();
         ov->hud().state().askAviso.clear();
         ov->hud().state().askAvisoLineas.clear();
+        ov->hud().state().askAvisoCuenta = 0;
+        avisoCuenta = 0.0;
         tarjetaAviso = false;
       }
     }
@@ -6286,6 +6315,8 @@ static int cmdServe(int argc, char **argv) {
           ov->hideAsk();
           ov->hud().state().askActualizacion.clear();
           ov->hud().state().askAviso.clear();
+          ov->hud().state().askAvisoCuenta = 0;
+          avisoCuenta = 0.0;
           tarjetaActualizacion = false;
           tarjetaAviso = false;
         }
