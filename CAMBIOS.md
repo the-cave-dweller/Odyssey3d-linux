@@ -3,6 +3,19 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## README nuevo para GitHub, en inglés y español; el manual pasa a docs/ (v0.96)
+
+- Rodolfo: «reescribe el README para GitHub, no menciones lo que ya no aplica, y da comandos ya
+  listos para copiar y pegar para instalar al inicio de todo… imágenes detallando las ventajas del
+  depth… la guía métela en otro archivo… en inglés, con una pestaña de Español a un lado».
+- `README.md` (inglés) y `README.es.md` (español), enlazados entre sí arriba: qué hace, instalar
+  en tres órdenes para copiar (paquetes, clonar + `install.sh`, arrancar el servicio y `doctor`),
+  uso, las ventajas con imágenes (`docs/img/`: mapa de profundidad, bordes antes y después, plano
+  del sujeto, barra del reproductor, juegos, panel, primer arranque), actualizaciones, las claves
+  de `serve.conf` que importan, hardware y créditos.
+- El manual largo en español pasa tal cual a `docs/GUIA.md`; `docs/GUIDE.md` es la guía corta en
+  inglés (órdenes, teclas, claves, problemas típicos). Sin cambios en el programa.
+
 ## Actualizaciones desde GitHub con tarjeta, botón junto al aspa y pestaña Programa con desinstalar (v0.95)
 
 - Rodolfo: un popup cuando el programa detecte una actualización en su GitHub
