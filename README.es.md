@@ -147,6 +147,17 @@ globo pasa del fondo del cuadro al borde del globo (0,27 → 0,39).
 
 ![El plano de apoyo antes y ahora](docs/img/es/subject-plane.png)
 
+**Ver de qué está hecho el 3D.** `Ctrl+Mayús+9` cambia el 3D por una vista plana de la profundidad
+que usa el visor, con los cantos afinados y los subtítulos apoyados: en gris la profundidad (blanco =
+cerca), en naranja dónde pesa la saliencia (en Auto es la que elige el plano de la pantalla; el
+naranja más vivo es lo que más pesó en ese cuadro) y en cian lo que cae en el plano de la pantalla, lo
+que se queda quieto y nítido. Bajo la pastilla sale qué es cada color; otra vez el atajo y vuelve el
+3D. Hace falta el conversor (un vídeo normal o uno dividido suavizado) y vale igual en Neural que en
+Rendimiento. Abajo, el mismo cuadro de la nave: la saliencia cubre la nave y el plano de la pantalla
+le recorre el casco.
+
+![La vista de depuración de la profundidad de un cuadro](docs/img/es/depth-debug.png)
+
 **Los vídeos divididos demasiado hondos se domestican.** Algunos vídeos lado a lado separan lo
 cercano varios centímetros, más de lo que la lente puede enseñar. El «vídeo dividido suavizado» usa
 la imagen izquierda y el relieve del conversor, solo cuando hace falta.

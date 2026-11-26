@@ -127,6 +127,12 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   fila nueva en los atajos del panel. El arranque de Vulkan pasó por 1,0 s las dos primeras veces (la
   caché de sombreadores, por el cambio) y volvió a 0,2 s.
 - Traducciones: cuatro textos nuevos.
+- **En el README** («share the new mode on the readme with capture»): un párrafo en «Qué hace bueno
+  el 3D» y `docs/img/depth-debug.png` (y su versión en español): el cuadro de la nave de las otras
+  imágenes y su vista de depuración, sacada del visor aparte con `ODYSSEYVK_VER_PROFUNDIDAD=1` y
+  `--dump` (el cuadro, a 3840 × 2160, que es lo que pide `ODYSSEYVK_FUENTE_PNG`). La saliencia cubre la
+  nave y el plano de la pantalla (0,92 del rango) le recorre el casco. La imagen sin rótulos está en
+  `docs/img/fuente/` y `tools/capturas-readme.py` le pone los de cada idioma.
 
 ## Los ajustes, más compactos (v1.12)
 

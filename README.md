@@ -142,6 +142,16 @@ from the back of the frame to the globe's rim (0.27 → 0.39).
 
 ![Subject plane before and after](docs/img/subject-plane.png)
 
+**See what the 3D is built from.** `Ctrl+Shift+9` swaps the 3D for a flat view of the depth the
+viewer is using, refined edges and anchored subtitles included: gray is the depth (white = near),
+orange is where saliency weighs (in Auto it picks the screen plane; the brightest orange is what
+weighed most in that frame) and cyan is what sits on the screen plane, the part that stays still and
+sharp. A line under the pill explains the colours; press it again to go back to 3D. It needs the
+converter (a normal video or a smoothed split one) and works in Neural and Performance alike. Below,
+the same ship frame: saliency covers the ship and the screen plane runs along its hull.
+
+![The depth debug view of a frame](docs/img/depth-debug.png)
+
 **Split videos that are too deep get tamed.** Some side-by-side videos separate near objects by
 several centimetres, more than the lens can show. "Smoothed split video" uses the left image and
 the converter's relief instead, automatically when needed.

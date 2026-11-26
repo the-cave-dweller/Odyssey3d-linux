@@ -123,6 +123,13 @@ ROTULOS = {
         (0, 40, [(10, (225, 225, 230), "video frame", "cuadro del vídeo"),
                  (826, (225, 225, 230), "depth map from the network (white = near)", "mapa de profundidad de la red (blanco = cerca)")]),
     ]),
+    # (v1.12) la vista de depuracion de la profundidad: el cuadro de la nave y lo que ensena Ctrl+Mayus+9
+    # en el visor aparte (tools/prueba-aparte.sh con ODYSSEYVK_VER_PROFUNDIDAD=1 y --dump)
+    "depth-debug.png": (22, [
+        (0, 40, [(10, (225, 225, 230), "video frame", "cuadro del vídeo"),
+                 (826, (225, 225, 230), "Ctrl+Shift+9: orange = saliency · cyan = screen plane",
+                  "Ctrl+Mayús+9: naranja = saliencia · cian = plano de la pantalla")]),
+    ]),
     "subject-plane.png": (15, [
         (0, 22, [(6, (225, 225, 230), "before: edges + centre", "antes: bordes + centro"),
                  (486, (225, 225, 230), "now: saliency, like Samsung's Hub", "ahora: saliencia, como el Hub de Samsung")]),
