@@ -6208,8 +6208,10 @@ int main(int argc, char **argv) {
     if (cmd == "doctor") return cmdDoctor(o, waylandSocket);
     if (cmd == "play") {
       if (o.file.empty()) {
-        std::fprintf(stderr, "falta el archivo: odysseyvk play ARCHIVO\n");
-        return 2;
+        /* sin archivo (el lanzador fijado en la barra de tareas, v1.05): el panel de ajustes */
+        std::fprintf(stderr, "sin archivo: se abre el panel de ajustes (para un video: odysseyvk play ARCHIVO)\n");
+        char *args[] = {argv[0], (char *)"ajustes", nullptr};
+        return cmdAjustes(0, args + 2);
       }
       return runViewer(o, SourceKind::Mpv);
     }

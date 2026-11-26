@@ -3,6 +3,16 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El icono fijado en la barra de tareas abre los ajustes (v1.05)
+
+- Rodolfo: «una vez fijado al administrador de tareas el icono no abre el overlay». MEDIDO en su
+  registro (00:42:09 y 00:42:15): KDE tomó la ventana del panel como «odysseyvk-play», porque
+  `odysseyvk-play.desktop` (el de abrir vídeos con el programa) llevaba `StartupWMClass=odysseyvk`;
+  el icono fijado era ese lanzador y al picarlo corría `odysseyvk play` sin archivo: «falta el
+  archivo», código 2.
+- `StartupWMClass=odysseyvk` pasa a `odysseyvk.desktop` (el que abre los ajustes), y `odysseyvk play`
+  sin archivo abre los ajustes en vez de fallar: así funciona también el icono que ya está fijado.
+
 ## El panel de ajustes en la barra de tareas (v1.04)
 
 - Rodolfo, con la 1.03 y el panel abierto: no está «en el panel de abajo, en el gestor de tareas».

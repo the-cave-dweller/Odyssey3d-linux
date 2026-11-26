@@ -14,4 +14,3 @@ Icon=odysseyvk
 Terminal=false
 Categories=AudioVideo;Video;
 MimeType=video/x-matroska;video/mp4;video/x-msvideo;video/webm;
-StartupWMClass=odysseyvk

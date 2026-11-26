@@ -9,6 +9,7 @@ Comment=Settings and games of the Samsung Odyssey 3D hub
 Comment[es_MX]=Ajustes y juegos del hub del Samsung Odyssey 3D
 Exec=odysseyvk ajustes
 TryExec=odysseyvk
+StartupWMClass=odysseyvk
 Icon=odysseyvk
 Terminal=false
 Categories=AudioVideo;Video;
