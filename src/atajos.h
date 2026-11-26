@@ -41,7 +41,8 @@ std::string normaliza(const std::string &combo);
 /* que no se coma una tecla suelta en todo el escritorio: hace falta Ctrl, Alt o Meta */
 bool tieneModificador(const std::string &combo);
 /* el renglon de las teclas de la pastilla cuando alguna no es la de fabrica (vacio si todas lo son) */
-std::string renglonPastilla(bool legado);
+/* `rendimiento` (rama experimental): el renglon de la pastilla del modo rendimiento, sin Profundidad ni Salida */
+std::string renglonPastilla(bool legado, bool rendimiento = false);
 
 }  // namespace atajos
 

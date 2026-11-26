@@ -496,6 +496,20 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
     case Hud::HitPreajuste3:
       ui.preajustePedido = (int)hit - (int)Hud::HitPreajuste1;   /* lo aplica el bucle: tiene la red y la trama */
       break;
+    case Hud::HitRendimientoMenu:
+      /* el boton del rayo: abre y cierra el menu del modo rendimiento */
+      st.menuRendimiento = !st.menuRendimiento;
+      std::printf("[rendimiento] menu del rayo %s\n", st.menuRendimiento ? "abierto" : "cerrado");
+      std::fflush(stdout);
+      break;
+    case Hud::HitRendMezcla:
+    case Hud::HitRendFuerza:
+    case Hud::HitRendAlcance:
+    case Hud::HitRendParalaje:
+      /* un deslizador del menu del rayo: el clic ya pone el valor, y arrastrando lo sigue */
+      ui.dragging = hit;
+      ui.hud.dragTo(hit, (float)ui.mx);
+      break;
     case Hud::HitModoNormal:
     case Hud::HitModoDividido:
     case Hud::HitModoSuave: {
@@ -597,6 +611,13 @@ static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
   const char *tag = nullptr;
   if (accion == "3d") { ui.hud.toggle3D(); tag = "3D/2D"; }
   else if (accion == "capa" || accion == "capa2") cambioCapa(ui, !ui.hud.overlayVisible(), origen);
+  /* en el modo rendimiento no hay Profundidad ni Salida: la separacion la pone el menu del rayo */
+  else if (ui.hud.state().rendimiento && (accion == "prof-" || accion == "prof+" || accion == "relieve-" || accion == "relieve+")) {
+    std::printf("[rendimiento] %s no hace nada en el modo rendimiento (%s): la separacion la pone el menu del rayo\n",
+                accion.c_str(), origen);
+    std::fflush(stdout);
+    return;
+  }
   else if (accion == "prof-") { ui.hud.nudgeDepth(-5); tag = "profundidad -"; }
   else if (accion == "prof+") { ui.hud.nudgeDepth(+5); tag = "profundidad +"; }
   else if (accion == "relieve-") { ui.hud.nudgePopout(-5); tag = "relieve -"; }
@@ -622,6 +643,7 @@ static void cargaAtajos(VkUi &ui) {
   for (const auto &par : atajos::combos()) ui.atajosPuestos[par.second] = par.first;
   if (!ui.atajosPuestos.count("Ctrl+Shift+2")) ui.atajosPuestos["Ctrl+Shift+2"] = "capa2";
   ui.hud.state().teclas = atajos::renglonPastilla(ui.hud.state().legado);
+  ui.hud.state().teclasRendimiento = atajos::renglonPastilla(ui.hud.state().legado, true);
 }
 
 /* la tecla de GLFW escrita como los atajos ("Ctrl+Shift+K"); vacia si no es de las que valen */
@@ -2023,6 +2045,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (tok == "normal") hit = Hud::HitModoNormal, tiene = true;
         if (tok == "dividido") hit = Hud::HitModoDividido, tiene = true;
         if (tok == "suave") hit = Hud::HitModoSuave, tiene = true;
+        if (tok == "rayo") hit = Hud::HitRendimientoMenu, tiene = true;   /* el boton del rayo (rama experimental) */
         float ax = 0, ay = 0, aw = 0, ah = 0;
         ui.hud.pillBounds(&ax, &ay, &aw, &ah);
         std::printf("[golpe] %s -> lienzo (%.0f,%.0f) -> golpe %d · pastilla %.0f,%.0f %.0fx%.0f escala %.2f\n",
@@ -2030,6 +2053,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     (double)ui.hud.scale());
         std::fflush(stdout);
         if (tiene) applyHit(ui, hit);
+        /* un golpe es un clic entero: si cayo en un deslizador, el valor es el de ese punto y se suelta */
+        if (tiene && ui.dragging != Hud::HitNone) {
+          ui.hud.dragTo(ui.dragging, cx);
+          ui.dragging = Hud::HitNone;
+        }
         hechos++;
       }
     }
@@ -3299,29 +3327,59 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          ODYSSEYVK_SIN_RED_RELIEVE (x1..x3), y los topes por ojo agrandados lo mismo */
       /* un preajuste pedido (la pastilla o la orden `preajuste` del panel): se pone en marcha y se
          guarda en serve.conf, asi el panel lo ensena y la sesion siguiente arranca con el */
-      if (ui.preajustePedido >= 0 && ui.preajustePedido < 3) {
-        const rendimiento::Preajuste &p = rendimiento::kPreajustes[ui.preajustePedido];
-        exGanancia = p.ganancia, exTopes = p.topes, exParalaje = p.paralaje;
-        red.setMezcla(p.mezcla);
-        auto conComaV = [](double v) {
-          char b[32];
-          std::snprintf(b, sizeof b, "%.2f", v);
-          for (char *q = b; *q; q++)
-            if (*q == '.') *q = ',';
-          return std::string(b);
+      {
+        Hud::State &hs = ui.hud.state();
+        /* guarda los cuatro valores puestos en serve.conf: el panel y la sesion siguiente arrancan con ellos */
+        auto guardaRend = [&](const char *que) {
+          auto conComaV = [](double v) {
+            char b[32];
+            std::snprintf(b, sizeof b, "%.2f", v);
+            for (char *q = b; *q; q++)
+              if (*q == '.') *q = ',';
+            return std::string(b);
+          };
+          std::string e;
+          ajuste::fijarEnServeConf("exp_sin_red_mezcla", conComaV(red.mezcla()), &e);
+          ajuste::fijarEnServeConf("exp_sin_red_relieve", conComaV(exGanancia), &e);
+          ajuste::fijarEnServeConf("exp_sin_red_topes", conComaV(exTopes), &e);
+          ajuste::fijarEnServeConf("exp_sin_red_paralaje", conComaV(exParalaje), &e);
+          std::printf("[rendimiento] %s: mezcla %.0f %% · relieve x%.2f · topes x%.2f (+%.1f / -%.1f px) · paralaje x%.1f%s%s\n",
+                      que, 100.0 * red.mezcla(), (double)exGanancia, (double)exTopes, 12.67 * exTopes, 9.98 * exTopes,
+                      exParalaje, e.empty() ? "" : " · no se guardo: ", e.c_str());
+          std::fflush(stdout);
         };
-        std::string e;
-        ajuste::fijarEnServeConf("exp_sin_red_mezcla", conComaV(p.mezcla), &e);
-        ajuste::fijarEnServeConf("exp_sin_red_relieve", conComaV(p.ganancia), &e);
-        ajuste::fijarEnServeConf("exp_sin_red_topes", conComaV(p.topes), &e);
-        ajuste::fijarEnServeConf("exp_sin_red_paralaje", conComaV(p.paralaje), &e);
-        static const char *kNombre[3] = {"suave", "medio", "intenso"};
-        std::printf("[rendimiento] preajuste %s: mezcla %.0f %% · relieve x%.2f · topes x%.2f (+%.1f / -%.1f px) · "
-                    "paralaje x%.1f%s%s\n",
-                    kNombre[ui.preajustePedido], 100.0 * p.mezcla, (double)p.ganancia, (double)p.topes,
-                    12.67 * p.topes, 9.98 * p.topes, (double)p.paralaje, e.empty() ? "" : " · no se guardo: ", e.c_str());
-        std::fflush(stdout);
-        ui.preajustePedido = -1;
+        /* el menu del rayo: lo que se movio en sus cuatro deslizadores se pone en marcha al momento y,
+           con el raton suelto y quieto medio segundo, se guarda */
+        static bool sembrado = false;
+        static double rendCambio = -1.0;
+        const float vivo[4] = {red.mezcla(), exGanancia, exTopes, (float)exParalaje};
+        if (!sembrado) {
+          for (int k = 0; k < 4; k++) hs.rendValor[k] = vivo[k];
+          sembrado = true;
+        }
+        bool movido = false;
+        for (int k = 0; k < 4; k++)
+          if (std::fabs(hs.rendValor[k] - vivo[k]) > 1e-4f) movido = true;
+        if (movido && ui.preajustePedido < 0) {
+          red.setMezcla(hs.rendValor[0]);
+          exGanancia = hs.rendValor[1], exTopes = hs.rendValor[2], exParalaje = hs.rendValor[3];
+          rendCambio = now;
+        }
+        if (rendCambio >= 0.0 && ui.dragging == Hud::HitNone && now - rendCambio >= 0.5) {
+          guardaRend("a mano");
+          rendCambio = -1.0;
+        }
+        /* un preajuste pedido (el menu del rayo o la orden `preajuste`): se pone en marcha y se guarda */
+        if (ui.preajustePedido >= 0 && ui.preajustePedido < 3) {
+          const rendimiento::Preajuste &p = rendimiento::kPreajustes[ui.preajustePedido];
+          exGanancia = p.ganancia, exTopes = p.topes, exParalaje = p.paralaje;
+          red.setMezcla(p.mezcla);
+          hs.rendValor[0] = p.mezcla, hs.rendValor[1] = p.ganancia, hs.rendValor[2] = p.topes, hs.rendValor[3] = p.paralaje;
+          static const char *kNombre[3] = {"preajuste suave", "preajuste medio", "preajuste intenso"};
+          guardaRend(kNombre[ui.preajustePedido]);
+          rendCambio = -1.0;
+          ui.preajustePedido = -1;
+        }
       }
       const float exRel = red.sinRed() ? exGanancia : 1.0f;
       wv.setTopeEscala(red.sinRed() ? exTopes : 1.0f);
@@ -3335,7 +3393,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fflush(stdout);
         }
       }
-      const float ganancia = gananciaRelieve(st.popout) * exRel;
+      /* sin red (modo rendimiento) la base es la de los preajustes medidos: ni la Salida ni el `relieve`
+         global cuentan, y el plano de la pantalla es el automatico (rendimiento.h) */
+      const float ganancia = (red.sinRed() ? rendimiento::kGananciaBase : gananciaRelieve(st.popout)) * exRel;
       /* El plano de apoyo (lo que se queda quieto en la pantalla) lo sigue la red: toma el pico del
          histograma del mapa ya limpio, o sea el sujeto. Con el sujeto apoyado en la pantalla el
          relieve se abre hacia atras y cansa menos la vista con el mismo relieve. Si el usuario mueve
@@ -3350,7 +3410,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fflush(stdout);
         }
       }
-      wv.setConverter(ganancia, apoyoAuto ? red.focusPlane() : (float)st.depth / 100.0f,
+      wv.setConverter(ganancia, (apoyoAuto || red.sinRed()) ? red.focusPlane() : (float)st.depth / 100.0f,
                       wv.hasDepthMap());
       wv.setSujeto(red.sujeto());   /* el realce de detalle va al sujeto, este donde este el plano (v0.68) */
     }
@@ -3393,6 +3453,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     ui.hud.state().modo3d = ui.convInfo ? (wv.mediaFuente() ? 3 : 1) : 2;
     /* la pastilla de rendimiento: con el conversor puesto y sin red */
     ui.hud.state().rendimiento = convActivo && red.sinRed();
+    if (!ui.hud.state().rendimiento) ui.hud.state().menuRendimiento = false;
     ui.hud.state().preajuste = rendimiento::cual(red.mezcla(), exGanancia, exTopes, (float)exParalaje);
     /* Profundidad y Salida por modo (v1.10). De fabrica: el conversor y el dividido suavizado
        arrancan en Profundidad 75 (plano fijo en 0,75, lo que se ve al moverla a 75) y Salida 50; el

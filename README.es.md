@@ -193,10 +193,11 @@ Cada una vale desde el siguiente vídeo; lo que funcione pasa a la versión norm
 
 Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`),
 sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).
-Es más basta que la de la red, pero más estable. La pastilla se vuelve ámbar, con un rayo y tres
-preajustes medidos, **Suave · Medio · Intenso**, que se aplican al momento. En este modo la
-frecuencia variable queda como la tenga el escritorio. Pasa el ratón por cada opción del modo
-rendimiento para ver qué cambia.
+Es más basta que la de la red, pero más estable. La pastilla se vuelve ámbar y, en vez de
+Profundidad y Salida, lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos
+(**Suave · Medio · Intenso**) y cuatro deslizadores finos (mezcla, fuerza, alcance y paralaje de la
+cabeza), que se aplican al momento; al pasar el ratón por cada uno se ve qué cambia. En este modo la
+frecuencia variable queda como la tenga el escritorio.
 
 ## Documentación
 

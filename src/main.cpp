@@ -7,6 +7,7 @@
 #include "camera.h"
 #include "track.h"
 #include "atajos.h"
+#include "rendimiento.h"
 #include "panel.h"
 #include "mpris.h"
 #include "ajuste.h"
@@ -3298,13 +3299,21 @@ static int cmdHudSelfTest(int argc, char **argv) {
     if (std::getenv("ODYSSEYVK_HUD_MENU_IDIOMA")) hud.state().menuIdioma = true;
   }
   /* ODYSSEYVK_HUD_RENDIMIENTO=0|1|2 (rama experimental): la pastilla del modo rendimiento con ese
-     preajuste puesto (-1 = valores a mano) */
+     preajuste puesto (-1 = valores a mano); con ODYSSEYVK_HUD_MENU_RENDIMIENTO=1, su menu abierto */
   if (const char *r = std::getenv("ODYSSEYVK_HUD_RENDIMIENTO")) {
     hud.state().rendimiento = true;
     hud.state().preajuste = std::atoi(r);
+    if (hud.state().preajuste >= 0 && hud.state().preajuste < 3) {
+      const rendimiento::Preajuste &p = rendimiento::kPreajustes[hud.state().preajuste];
+      const float v[4] = {p.mezcla, p.ganancia, p.topes, p.paralaje};
+      for (int k = 0; k < 4; k++) hud.state().rendValor[k] = v[k];
+    }
+    const char *m = std::getenv("ODYSSEYVK_HUD_MENU_RENDIMIENTO");
+    hud.state().menuRendimiento = m && m[0] == '1';
   }
   /* la pastilla con los atajos de serve.conf (v1.09), como la pone el visor */
   hud.state().teclas = atajos::renglonPastilla(o.legado);
+  hud.state().teclasRendimiento = atajos::renglonPastilla(o.legado, true);
   {
   }
   /* ODYSSEYVK_HUD_ACTUALIZACION=0.99 (taller, v0.95): la tarjeta de la orilla avisando de esa version */

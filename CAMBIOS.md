@@ -3,6 +3,34 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Modo rendimiento: el menú del rayo en la pastilla, sin Profundidad ni Salida (rama `experimental`)
+
+- Rodolfo: «¿profundidad y salida hacen falta en ese modo?», y «el menú de modo rendimiento ponlo
+  como un menú desplegable junto al rayito en el hub, que no esté en las settings; también quítale
+  depth y popout».
+- **No hacían falta.** Sin red, la Salida y el `relieve` global solo multiplicaban la misma ganancia
+  que la «Fuerza del relieve», y la Profundidad movía el plano de la pantalla lejos de donde se
+  midieron los preajustes (el plano automático, el sujeto). En el serve.conf de Rodolfo había
+  `profundidad_conv = 0`: el plano al fondo, todo saliendo de la pantalla y buena parte contra el
+  tope. Ahora, sin red, la base es fija (`rendimiento::kGananciaBase`: Salida 50 con `relieve = 2,00`,
+  con la que se midieron) y el plano es el automático. Ctrl+Shift+3/4/5/6 no hacen nada en este modo
+  (lo dice el registro), y los valores guardados para el vídeo con la red no se tocan.
+- **La pastilla del modo rendimiento**: interruptor, un botón ámbar con el rayo, el preajuste puesto
+  («A mano» si no es ninguno) y una flechita, y el engranaje. El renglón de las teclas pierde
+  Profundidad y Salida (también con atajos cambiados).
+- **El menú del rayo** cuelga debajo de la pastilla: los tres preajustes y cuatro deslizadores
+  (mezcla suelo ↔ imagen, fuerza del relieve, alcance del relieve, paralaje de la cabeza). Se ponen
+  en marcha al moverlos y, con el ratón suelto medio segundo, se guardan en serve.conf. Al pasar el
+  ratón, a su izquierda sale la ayuda de cada uno (la misma que tenía el panel). La región de entrada
+  del visor crece con el menú abierto.
+- **El panel**: Experimental → MODO RENDIMIENTO se queda solo con «Profundidad del vídeo normal» (Con
+  la red / Sin red, que es lo que enciende el modo y vale desde el siguiente vídeo) y el VRR cuando va
+  con la red. Los preajustes y los cuatro deslizadores salieron de allí.
+- En el visor aparte, con clics simulados (`ODYSSEY_GOLPE=…;rayo;3392,532;…;3640,314`, que ahora
+  cuenta un golpe sobre un deslizador como clic entero): «menu del rayo abierto», «a mano: … relieve
+  x1.25», «preajuste intenso: mezcla 50 % · relieve x1.50 · topes x2.75 · paralaje x3.0», y serve.conf
+  con las cuatro claves.
+
 ## Modo rendimiento: la pastilla con rayo, tres preajustes medidos y ayudas al pasar el ratón (rama `experimental`)
 
 - Rodolfo: «crea un hub distinto con un rayo para modo performance, con 3 botones preset que midas

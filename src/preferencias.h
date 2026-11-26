@@ -64,10 +64,6 @@ struct Valores {
   int expAnticipacion = 0;           /* `exp_anticipacion`: ms, 0 = apagada */
   std::string expPrioridad = "normal";   /* `exp_prioridad`: normal | alta | tiempo_real */
   std::string expSinRed = "no";          /* `exp_sin_red`: no | si (suelo e imagen, de antes, valen como si) */
-  double expSinRedMezcla = 0.35;         /* `exp_sin_red_mezcla`: 0 = suelo .. 1 = pistas de la imagen */
-  double expSinRedRelieve = 1.0;         /* `exp_sin_red_relieve`: la ganancia, x0,5..x2 */
-  double expSinRedTopes = 2.75;          /* `exp_sin_red_topes`: los topes por ojo, x1..x4 */
-  double expSinRedParalaje = 2.0;        /* `exp_sin_red_paralaje`: x1..x4 */
   bool vrrEn3d = false;                  /* `vrr_en_3d = si`: el VRR puesto durante el 3D */
 };
 Valores leer();

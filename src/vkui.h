@@ -107,11 +107,17 @@ public:
     bool menuIdioma = false;
     /* el renglon de las teclas de la pastilla cuando hay atajos cambiados (v1.09); vacio = el de fabrica */
     std::string teclas;
-    /* la pastilla del modo rendimiento (rama experimental): el conversor va sin red. Lleva un rayo,
-       el acento ambar y tres preajustes en vez de los botones de tipo de video; `preajuste` = el
-       puesto (0 suave, 1 medio, 2 intenso; -1 = valores a mano) */
+    /* la pastilla del modo rendimiento (rama experimental): el conversor va sin red. Lleva el acento
+       ambar y, en vez de Profundidad, Salida y los botones de tipo de video, un boton con el rayo que
+       despliega el menu del modo: los tres preajustes y los cuatro deslizadores finos.
+       `preajuste` = el puesto (0 suave, 1 medio, 2 intenso; -1 = valores a mano); `rendValor` =
+       mezcla, fuerza, alcance y paralaje (los rangos, en rendimiento.h); `menuRendimiento` = abierto.
+       `teclasRendimiento` es el renglon de las teclas con atajos cambiados (vacio = el de fabrica). */
     bool rendimiento = false;
     int preajuste = -1;
+    bool menuRendimiento = false;
+    float rendValor[4] = {0.35f, 1.0f, 2.75f, 2.0f};
+    std::string teclasRendimiento;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -152,9 +158,15 @@ public:
     HitModoDividido,   /* ... video dividido ... */
     HitModoSuave,      /* ... y video dividido suavizado (v0.83) */
     HitEngranaje,      /* el engranaje de la pastilla: abre el panel de ajustes */
-    HitPreajuste1,     /* los tres preajustes de la pastilla de rendimiento (rama experimental) */
+    HitPreajuste1,     /* los tres preajustes del menu del rayo (rama experimental) */
     HitPreajuste2,
     HitPreajuste3,
+    HitRendimientoMenu,   /* el boton del rayo: abre y cierra su menu */
+    HitRendMezcla,        /* los cuatro deslizadores del menu del rayo */
+    HitRendFuerza,
+    HitRendAlcance,
+    HitRendParalaje,
+    HitRendFondo,         /* dentro del menu del rayo, sobre nada que se pique */
     HitPanel,          /* dentro del panel de ajustes, sobre nada que se pique */
     HitPanelCerrar,
     HitPanelActualizar,   /* el boton de la actualizacion, junto al aspa (v0.95) */
@@ -297,13 +309,18 @@ private:
      cabe, corta con «…» (v1.07: el frances y el aleman son mas largos que el español) */
   float textoCabe(const std::string &s, float x, float y, float size, float maxAncho, float cr, float cg, float cb,
                   float ca, bool center = false);
+  /* un texto partido en renglones de hasta `maxAncho` (las palabras sin espacios, como el chino o el
+     japones, se parten por letras): lo usan las cajas de ayuda */
+  std::vector<std::string> renglones(const std::string &s, float size, float maxAncho) const;
+  /* la caja de ayuda con su texto ya partido, con la esquina de arriba a la izquierda en (x, y) */
+  void cajaAyuda(const std::vector<std::string> &lineas, float x, float y, float size);
 
   /* máscaras del atlas: 0 píxel blanco, 1 píldora, 2 tarjeta */
   Rect white_, pill_, card_;
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
-      icoRayo_;
+      icoRayo_, icoBajar_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -337,7 +354,9 @@ private:
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
   Rect askActualizar_, askLuego_, askNoAvisar_;
   Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_, btnEngranaje_;
-  Rect btnPre_[3];   /* los preajustes de la pastilla de rendimiento */
+  Rect btnPre_[3];   /* los preajustes del menu del rayo */
+  /* el boton del rayo de la pastilla, su menu desplegado y las pistas de sus cuatro deslizadores */
+  Rect btnRayo_, menuRend_, rendTrack_[4], rendFila_[4];
   /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
   struct ZonaItem {
     Rect caja;

@@ -29,6 +29,28 @@ inline constexpr Preajuste kPreajustes[3] = {
 };
 inline constexpr int kDeFabrica = 1;
 
+/* En el modo rendimiento la pastilla no lleva Profundidad ni Salida, y el `relieve` global tampoco
+   cuenta: la separacion la ponen solo estos cuatro valores. La base es la ganancia con la que se
+   midieron los preajustes (Salida 50 con `relieve = 2,00`), y el plano de la pantalla es el
+   automatico (el sujeto, el pico del mapa), el mismo que dio `odysseyvk mapa` al medirlos. */
+inline constexpr float kGananciaBase = (0.00104f + 0.5f * 0.00972f) * 2.0f;
+
+/* los cuatro deslizadores del menu del rayo: de donde a donde y a que paso se redondean */
+struct Rango {
+  float lo, hi, paso;
+};
+inline constexpr Rango kRangos[4] = {
+    {0.0f, 1.0f, 0.01f},    /* mezcla: 0 % suelo .. 100 % imagen */
+    {0.5f, 2.0f, 0.05f},    /* fuerza del relieve */
+    {1.0f, 4.0f, 0.05f},    /* alcance del relieve (los topes) */
+    {1.0f, 4.0f, 0.1f},     /* paralaje de la cabeza */
+};
+inline float ajusta(int k, float v) {
+  const Rango &r = kRangos[k];
+  v = std::round(v / r.paso) * r.paso;
+  return v < r.lo ? r.lo : (v > r.hi ? r.hi : v);
+}
+
 /* cual de los tres es (por sus cuatro numeros); -1 si son valores a mano */
 inline int cual(float mezcla, float ganancia, float topes, float paralaje) {
   for (int k = 0; k < 3; k++) {

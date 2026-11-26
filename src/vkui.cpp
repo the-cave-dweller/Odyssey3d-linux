@@ -1,6 +1,7 @@
 /* vkui.cpp — atlas (fuentes + máscaras), disposición de la interfaz y manejo del ratón. */
 #include "vkui.h"
 #include "idioma.h"
+#include "rendimiento.h"
 
 #include <algorithm>
 #include <cctype>
@@ -203,9 +204,8 @@ bool Hud::buildAtlas(std::string *err) {
     cupo = subir(n, n, globo, &icoGlobo_) && cupo;
     /* el rayo del modo rendimiento (rama experimental): un poligono relleno, con 4x4 muestras por
        punto para el borde suave */
-    {
-      static const float P[][2] = {{38, 4}, {14, 36}, {29, 36}, {24, 60}, {50, 26}, {35, 26}, {44, 4}};
-      const int np = (int)(sizeof P / sizeof P[0]);
+    /* y la flechita que dice que el boton del rayo despliega un menu: una V gruesa, igual de rellena */
+    auto poligono = [&](const float (*P)[2], int np, Rect *dest) {
       auto dentro = [&](float x, float y) {
         bool c = false;
         for (int a = 0, b = np - 1; a < np; b = a++)
@@ -214,17 +214,21 @@ bool Hud::buildAtlas(std::string *err) {
             c = !c;
         return c;
       };
-      std::vector<uint8_t> rayo((size_t)n * n);
+      std::vector<uint8_t> m((size_t)n * n);
       for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {
           int k = 0;
           for (int sy = 0; sy < 4; sy++)
             for (int sx = 0; sx < 4; sx++)
               if (dentro((float)i + (sx + 0.5f) / 4.0f, (float)j + (sy + 0.5f) / 4.0f)) k++;
-          rayo[(size_t)j * n + i] = (uint8_t)(k * 255 / 16);
+          m[(size_t)j * n + i] = (uint8_t)(k * 255 / 16);
         }
-      cupo = subir(n, n, rayo, &icoRayo_) && cupo;
-    }
+      return subir(n, n, m, dest);
+    };
+    static const float kRayo[][2] = {{38, 4}, {14, 36}, {29, 36}, {24, 60}, {50, 26}, {35, 26}, {44, 4}};
+    static const float kBajar[][2] = {{8, 22}, {16, 14}, {32, 30}, {48, 14}, {56, 22}, {32, 46}};
+    cupo = poligono(kRayo, 7, &icoRayo_) && cupo;
+    cupo = poligono(kBajar, 6, &icoBajar_) && cupo;
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -686,6 +690,8 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnEngranaje_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnNormal_ = btnDividido_ = btnSuave_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   for (Rect &b : btnPre_) b = {-10.0f, -10.0f, 0.0f, 0.0f};
+  btnRayo_ = menuRend_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  for (int k = 0; k < 4; k++) rendTrack_[k] = rendFila_[k] = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
     const bool leg = st_.legado;
@@ -695,21 +701,16 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
        Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
     const bool hayModo = st_.modoVisible && !leg && !st_.rendimiento;
-    /* los tres preajustes del modo rendimiento: el rayo y tres botones con su palabra */
+    /* el modo rendimiento: un boton con el rayo, el preajuste puesto y la flechita de su menu */
     const char *nombrePre[3] = {idioma::tr("Suave"), idioma::tr("Medio"), idioma::tr("Intenso")};
-    float anchoPre[3] = {0, 0, 0};
+    const std::string nombreRend = st_.preajuste >= 0 && st_.preajuste < 3 ? nombrePre[st_.preajuste] : idioma::tr("A mano");
     float anchoRendimiento = 0.0f;
-    if (st_.rendimiento) {
-      anchoRendimiento = 26.0f;
-      for (int k = 0; k < 3; k++) {
-        anchoPre[k] = std::max(52.0f, textWidth(nombrePre[k], 12.5f) + 20.0f);
-        anchoRendimiento += anchoPre[k] + (k ? 6.0f : 0.0f);
-      }
-    }
+    if (st_.rendimiento) anchoRendimiento = 12.0f + 22.0f + 8.0f + textWidth(nombreRend, 13.0f) + 10.0f + 12.0f + 12.0f;
     /* v1.07: en chino o japones la casilla es corta y los dos botones no cabian: el bloque mide al menos 128 */
     const float anchoBloque = st_.rendimiento ? anchoRendimiento
                               : (st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f));
-    float pw = aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
+    /* en el modo rendimiento no hay Profundidad ni Salida: el boton del rayo va junto al interruptor */
+    float pw = st_.rendimiento ? aire + anchoSw + aire : aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
     pw = std::min(pw, (float)vw - 48.0f);
@@ -755,13 +756,17 @@ void Hud::begin(int w, int h, float altoLogico) {
     };
     /* En modo de legado el de la izquierda es el plano que se queda quieto en la pantalla (lo que la
        ventana de ajustes llama `apoyo`); con el conversor es cuanta profundidad saca la red. */
-    depTrack_ = {sw3D_.x + anchoSw + 26.0f, y0 + 41.0f, anchoDes, 4.0f};
-    popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
-    slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
-           std::to_string(st_.depth));
-    slider(&popTrack_, &popKnob_, idioma::tr("Salida"), (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
+    if (!st_.rendimiento) {
+      depTrack_ = {sw3D_.x + anchoSw + 26.0f, y0 + 41.0f, anchoDes, 4.0f};
+      popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
+      slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
+             std::to_string(st_.depth));
+      slider(&popTrack_, &popKnob_, idioma::tr("Salida"), (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
+    } else {
+      depTrack_ = popTrack_ = depKnob_ = popKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+    }
 
-    const float bloqueX = popTrack_.x + anchoDes + 26.0f;
+    const float bloqueX = st_.rendimiento ? sw3D_.x + anchoSw + 26.0f : popTrack_.x + anchoDes + 26.0f;
     const float sitioEngranaje = st_.engranaje ? 44.0f : 0.0f;
     const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + sitioEngranaje + aire <= x0 + pw + 0.5f;
     /* ---- el engranaje: abre el panel de ajustes por encima del video (v0.84) ---- */
@@ -815,21 +820,23 @@ void Hud::begin(int w, int h, float altoLogico) {
       }
     }
 
-    /* ---- el modo rendimiento: el rayo y los tres preajustes (rama experimental) ---- */
+    /* ---- el modo rendimiento: el boton del rayo (rama experimental) ----
+       Dice el preajuste puesto («A mano» si los valores no son los de ninguno) y despliega debajo
+       de la pastilla el menu del modo. Abierto, va relleno de ambar. */
     if (cabeBloque && st_.rendimiento) {
       const float by = y0 + 18.0f, bh = 30.0f;
-      icono({bloqueX, by + 3.0f, 24.0f, 24.0f}, icoRayo_, std::min(1.0f, accent[0] + 0.05f), std::min(1.0f, accent[1] + 0.1f),
-            accent[2] + 0.1f, 1.0f);
-      float bx = bloqueX + 26.0f;
-      for (int k = 0; k < 3; k++) {
-        btnPre_[k] = {bx, by, anchoPre[k], bh};
-        const bool puesto = st_.preajuste == k, hov = btnPre_[k].inside(mx_, my_);
-        if (puesto) mask9(btnPre_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
-        else mask9(btnPre_[k], 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
-        text(nombrePre[k], bx + anchoPre[k] * 0.5f, by + 7.0f, 12.5f, puesto ? 0.10f : ink[0], puesto ? 0.08f : ink[1],
-             puesto ? 0.04f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
-        bx += anchoPre[k] + 6.0f;
-      }
+      btnRayo_ = {bloqueX, by, anchoBloque, bh};
+      const bool abierto = st_.menuRendimiento, hov = btnRayo_.inside(mx_, my_);
+      if (abierto) mask9(btnRayo_, 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
+      else mask9(btnRayo_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+      const float t[3] = {abierto ? 0.10f : ink[0], abierto ? 0.08f : ink[1], abierto ? 0.04f : ink[2]};
+      if (abierto)
+        icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, icoRayo_, t[0], t[1], t[2], 1.0f);
+      else
+        icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, icoRayo_, std::min(1.0f, accent[0] + 0.05f),
+              std::min(1.0f, accent[1] + 0.1f), accent[2] + 0.1f, 1.0f);
+      text(nombreRend, bloqueX + 42.0f, by + 6.5f, 13.0f, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.90f);
+      icono({btnRayo_.x + btnRayo_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.80f);
     }
 
     /* ---- «no volver a preguntar», dentro del video ----
@@ -850,15 +857,101 @@ void Hud::begin(int w, int h, float altoLogico) {
     }
 
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
-    const std::string teclas = !st_.teclas.empty() ? st_.teclas
-                               : idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
-                                             {idioma::tr(leg ? "plano" : "profundidad")});
+    /* en el modo rendimiento las teclas de Profundidad y Salida no hacen nada: no salen */
+    const std::string teclas =
+        st_.rendimiento ? (!st_.teclasRendimiento.empty() ? st_.teclasRendimiento
+                                                          : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · F1 oculta · Esc sale")))
+        : !st_.teclas.empty() ? st_.teclas
+                              : idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
+                                            {idioma::tr(leg ? "plano" : "profundidad")});
     float cabe = pw - 2.0f * aire - sitioEngranaje;
     /* con la casilla de «no volver a preguntar» debajo de los botones, el renglon no pasa de ella
        (v1.09: con atajos cambiados el renglon es largo y se metia debajo de su letra) */
-    if (cabeBloque && (st_.recordarVisible || st_.rendimiento)) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
+    if (cabeBloque && st_.recordarVisible && !st_.rendimiento) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
+
+    /* ---- el menu del rayo (rama experimental) ----
+       Cuelga debajo de la pastilla, pegado a su orilla derecha: los tres preajustes y los cuatro
+       deslizadores finos del modo rendimiento, que se ponen en marcha al moverlos. Al pasar el raton
+       por un preajuste o por una fila, a su izquierda sale la caja con lo que cambia. Recto, como la
+       pastilla. */
+    if (st_.rendimiento && st_.menuRendimiento && btnRayo_.w > 0.0f) {
+      const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f;
+      const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;
+      const char *nota = idioma::tr("Volver a la red: Ajustes → Experimental");
+      const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
+      menuRend_ = {mx0, my0, mw, mh};
+      solid(mx0, my0, mw, mh, 0.115f, 0.12f, 0.135f, 0.94f);
+      solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
+      text(idioma::tr("MODO RENDIMIENTO"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
+      std::string ayuda;
+      float ayudaY = 0.0f;
+      /* los tres preajustes, en una fila */
+      const std::string ayudaPre[3] = {
+          idioma::tr("Mezcla 25 % · relieve x0,75 · topes x2 · paralaje x1,5. Hasta ~32 px entre los ojos y casi nada aplastado: para sesiones largas."),
+          idioma::tr("Mezcla 35 % · relieve x1 · topes x2,75 · paralaje x2. Hasta ~43 px entre los ojos y casi nada aplastado: el de fábrica."),
+          idioma::tr("Mezcla 50 % · relieve x1,5 · topes x2,75 · paralaje x3. Hasta ~52 px entre los ojos; un 20 % del cuadro toca el tope. Más 3D, cansa antes.")};
+      const float bw = (mw - 2.0f * pad - 12.0f) / 3.0f;
+      for (int k = 0; k < 3; k++) {
+        btnPre_[k] = {mx0 + pad + (float)k * (bw + 6.0f), my0 + 36.0f, bw, 30.0f};
+        const bool puesto = st_.preajuste == k, hov = btnPre_[k].inside(mx_, my_);
+        if (puesto) mask9(btnPre_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
+        else mask9(btnPre_[k], 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+        textoCabe(nombrePre[k], btnPre_[k].x + bw * 0.5f, btnPre_[k].y + 7.0f, 12.5f, bw - 12.0f, puesto ? 0.10f : ink[0],
+                  puesto ? 0.08f : ink[1], puesto ? 0.04f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
+        if (hov) ayuda = ayudaPre[k], ayudaY = btnPre_[k].y;
+      }
+      /* los cuatro deslizadores: mezcla, fuerza, alcance y paralaje (rangos en rendimiento.h) */
+      const char *rotulo[4] = {idioma::tr("Mezcla: suelo ↔ imagen"), idioma::tr("Fuerza del relieve"),
+                               idioma::tr("Alcance del relieve"), idioma::tr("Paralaje de la cabeza")};
+      const std::string ayudaFila[4] = {
+          idioma::tr("Hacia 0 %: un plano inclinado, estable, igual en cada cuadro. Hacia 100 %: lo cercano se separa más del fondo, pero también sale hacia delante lo nítido aunque esté lejos (los subtítulos)."),
+          idioma::tr("Más fuerza = más 3D. Pero si la fuerza pasa del alcance, el relieve se aplasta contra el tope y se ve como recortes planos: súbelo junto con el alcance."),
+          idioma::tr("Los topes por ojo (+12,67 / -9,98 px de fábrica), multiplicados. Más alcance deja más 3D sin aplastar; demasiado cansa la vista (unos 98 px entre los ojos ya molestaban)."),
+          idioma::tr("Con `paralaje = 0,5` en serve.conf, x2 es la geometría real. Más exagera el efecto de ventana al mover la cabeza; menos lo calma.")};
+      auto conComa = [](float v, int dec) {
+        char b[32];
+        std::snprintf(b, sizeof b, "%.*f", dec, (double)v);
+        for (char *q = b; *q; q++)
+          if (*q == '.') *q = idioma::decimal();
+        return std::string(b);
+      };
+      for (int k = 0; k < 4; k++) {
+        const float fy = my0 + 78.0f + (float)k * filaAlto;
+        rendFila_[k] = {mx0, fy, mw, filaAlto};
+        const rendimiento::Rango &r = rendimiento::kRangos[k];
+        const float v = st_.rendValor[k];
+        const float frac = std::max(0.0f, std::min(1.0f, (v - r.lo) / (r.hi - r.lo)));
+        const std::string valor = k == 0 ? std::to_string((int)std::lround(v * 100.0f)) + " %"
+                                         : "x" + conComa(v, k == 3 ? 1 : 2);
+        const bool hov = rendFila_[k].inside(mx_, my_);
+        if (hov) solid(mx0, fy, mw, filaAlto, 1.0f, 1.0f, 1.0f, 0.04f);
+        const float vw2 = textWidth(valor, 12.0f);
+        textoCabe(rotulo[k], mx0 + pad, fy + 6.0f, 12.0f, mw - 2.0f * pad - vw2 - 12.0f, dim[0], dim[1], dim[2], dim[3]);
+        text(valor, mx0 + mw - pad - vw2, fy + 6.0f, 12.0f, ink[0], ink[1], ink[2], ink[3]);
+        rendTrack_[k] = {mx0 + pad + 8.0f, fy + 32.0f, mw - 2.0f * pad - 16.0f, 4.0f};
+        const Rect &t = rendTrack_[k];
+        solid(t.x, t.y, t.w, 4.0f, 0.30f, 0.32f, 0.35f, 0.9f);
+        const float kx = t.x + frac * t.w, kr = 8.0f;
+        solid(t.x, t.y, kx - t.x, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+        solid(kx - kr, t.y + 2.0f - kr, 2.0f * kr, 2.0f * kr, 0.95f, 0.96f, 0.98f, 1.0f);
+        if (hov && ayuda.empty()) ayuda = ayudaFila[k], ayudaY = fy;
+      }
+      textoCabe(nota, mx0 + pad, my0 + mh - 22.0f, 11.0f, mw - 2.0f * pad, dim[0], dim[1], dim[2], 0.70f);
+      /* la caja de ayuda, a la izquierda del menu (o debajo, si a la izquierda no cabe) */
+      if (!ayuda.empty()) {
+        const float tam = 12.5f;
+        const std::vector<std::string> lineas = renglones(ayuda, tam, 360.0f);
+        float aw = 0.0f;
+        for (const std::string &l : lineas) aw = std::max(aw, textWidth(l, tam));
+        aw += 24.0f;
+        const float ah = 14.0f + 19.0f * (float)lineas.size();
+        float ax = mx0 - 10.0f - aw, ay = std::min(ayudaY, (float)vh - 12.0f - ah);
+        if (ax < 12.0f) ax = std::max(12.0f, mx0 + mw - aw), ay = my0 + mh + 8.0f;
+        cajaAyuda(lineas, ax, ay, tam);
+      }
+    }
   }
 
   /* ---- la tarjeta de la orilla (abajo a la derecha) ----
@@ -1044,10 +1137,82 @@ void Hud::begin(int w, int h, float altoLogico) {
      casilla); se quita sola. */
   if (!info_.empty() && st_.overlayOn) {
     const float tam = 12.0f, tw = textWidth(info_, tam);
-    const float der = pillPanel_.x + pillPanel_.w, arriba = pillPanel_.y + pillPanel_.h + 6.0f;
+    const float der = pillPanel_.x + pillPanel_.w;
+    const float arriba = menuRend_.w > 0.0f ? menuRend_.y + menuRend_.h + 6.0f : pillPanel_.y + pillPanel_.h + 6.0f;
     solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.115f, 0.12f, 0.135f, 0.90f);
     text(info_, der - tw - 10.0f, arriba + 5.0f, tam, ink[0], ink[1], ink[2], 0.92f);
   }
+}
+
+std::vector<std::string> Hud::renglones(const std::string &s, float tam, float maxW) const {
+  std::vector<std::string> lineas;
+  std::string linea, palabra;
+  auto cierra = [&](const std::string &w) {
+    const std::string prueba = linea.empty() ? w : linea + " " + w;
+    if (textWidth(prueba, tam) <= maxW || linea.empty()) {
+      /* una «palabra» sin espacios mas ancha que la caja (chino, japones): se parte por letras */
+      if (linea.empty() && textWidth(w, tam) > maxW) {
+        std::string trozo;
+        size_t i = 0;
+        while (i < w.size()) {
+          const size_t a = i;
+          nextCp(w, i);
+          const std::string c = w.substr(a, i - a);
+          if (textWidth(trozo + c, tam) > maxW && !trozo.empty()) {
+            lineas.push_back(trozo);
+            trozo.clear();
+          }
+          trozo += c;
+        }
+        linea = trozo;
+      } else {
+        linea = prueba;
+      }
+    } else {
+      lineas.push_back(linea);
+      linea.clear();
+      if (textWidth(w, tam) > maxW) {
+        std::string trozo;
+        size_t i = 0;
+        while (i < w.size()) {
+          const size_t a = i;
+          nextCp(w, i);
+          const std::string c = w.substr(a, i - a);
+          if (textWidth(trozo + c, tam) > maxW && !trozo.empty()) {
+            lineas.push_back(trozo);
+            trozo.clear();
+          }
+          trozo += c;
+        }
+        linea = trozo;
+      } else {
+        linea = w;
+      }
+    }
+  };
+  for (char ch : s) {
+    if (ch == ' ') {
+      if (!palabra.empty()) cierra(palabra);
+      palabra.clear();
+    } else {
+      palabra += ch;
+    }
+  }
+  if (!palabra.empty()) cierra(palabra);
+  if (!linea.empty()) lineas.push_back(linea);
+  return lineas;
+}
+
+void Hud::cajaAyuda(const std::vector<std::string> &lineas, float x, float y, float tam) {
+  const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
+  float w = 0.0f;
+  for (const std::string &l : lineas) w = std::max(w, textWidth(l, tam));
+  w += 24.0f;
+  const float h = 14.0f + 19.0f * (float)lineas.size();
+  mask9({x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f}, 0, 10.0f, 0.42f, 0.43f, 0.50f, 0.85f);
+  mask9({x, y, w, h}, 0, 9.0f, 0.10f, 0.105f, 0.13f, 0.98f);
+  for (size_t k = 0; k < lineas.size(); k++)
+  text(lineas[k], x + 12.0f, y + 8.0f + 19.0f * (float)k, tam, ink[0], ink[1], ink[2], 0.95f);
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -1420,62 +1585,8 @@ void Hud::dibujaPanel(int vw, int vh) {
   }
   /* la ayuda del valor bajo el raton: una caja de hasta 460 puntos, partida en renglones */
   if (!ayudaRaton.empty()) {
-    const float tam = 12.5f, maxW = 460.0f;
-    std::vector<std::string> lineas;
-    std::string linea, palabra;
-    auto cierra = [&](const std::string &w) {
-      const std::string prueba = linea.empty() ? w : linea + " " + w;
-      if (textWidth(prueba, tam) <= maxW || linea.empty()) {
-        /* una «palabra» sin espacios mas ancha que la caja (chino, japones): se parte por letras */
-        if (linea.empty() && textWidth(w, tam) > maxW) {
-          std::string trozo;
-          size_t i = 0;
-          while (i < w.size()) {
-            const size_t a = i;
-            nextCp(w, i);
-            const std::string c = w.substr(a, i - a);
-            if (textWidth(trozo + c, tam) > maxW && !trozo.empty()) {
-              lineas.push_back(trozo);
-              trozo.clear();
-            }
-            trozo += c;
-          }
-          linea = trozo;
-        } else {
-          linea = prueba;
-        }
-      } else {
-        lineas.push_back(linea);
-        linea.clear();
-        if (textWidth(w, tam) > maxW) {
-          std::string trozo;
-          size_t i = 0;
-          while (i < w.size()) {
-            const size_t a = i;
-            nextCp(w, i);
-            const std::string c = w.substr(a, i - a);
-            if (textWidth(trozo + c, tam) > maxW && !trozo.empty()) {
-              lineas.push_back(trozo);
-              trozo.clear();
-            }
-            trozo += c;
-          }
-          linea = trozo;
-        } else {
-          linea = w;
-        }
-      }
-    };
-    for (char ch : ayudaRaton) {
-      if (ch == ' ') {
-        if (!palabra.empty()) cierra(palabra);
-        palabra.clear();
-      } else {
-        palabra += ch;
-      }
-    }
-    if (!palabra.empty()) cierra(palabra);
-    if (!linea.empty()) lineas.push_back(linea);
+    const float tam = 12.5f;
+    const std::vector<std::string> lineas = renglones(ayudaRaton, tam, 460.0f);
     float w = 0.0f;
     for (const std::string &l : lineas) w = std::max(w, textWidth(l, tam));
     w += 24.0f;
@@ -1483,10 +1594,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     float bx = std::min(mx_ + 14.0f, px + pw - 12.0f - w), by = my_ + 18.0f;
     if (by + h > py + ph - 8.0f) by = my_ - 10.0f - h;   /* sin sitio debajo: encima del raton */
     bx = std::max(px + 12.0f, bx);
-    mask9({bx - 1.0f, by - 1.0f, w + 2.0f, h + 2.0f}, 0, 10.0f, 0.42f, 0.43f, 0.50f, 0.85f);
-    mask9({bx, by, w, h}, 0, 9.0f, 0.10f, 0.105f, 0.13f, 0.98f);
-    for (size_t k = 0; k < lineas.size(); k++)
-      text(lineas[k], bx + 12.0f, by + 8.0f + 19.0f * (float)k, tam, ink[0], ink[1], ink[2], 0.95f);
+    cajaAyuda(lineas, bx, by, tam);
   }
   /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
   if (ha && !rotuloActualizar.empty() && !st_.menuIdioma) {
@@ -1599,10 +1707,17 @@ bool Hud::askBounds(float *x, float *y, float *w, float *h) const {
 
 bool Hud::pillBounds(float *x, float *y, float *w, float *h) const {
   if (!st_.overlayOn || pillPanel_.w <= 0.0f) return false;
-  if (x) *x = pillPanel_.x * sc_;
-  if (y) *y = pillPanel_.y * sc_;
-  if (w) *w = pillPanel_.w * sc_;
-  if (h) *h = pillPanel_.h * sc_;
+  /* con el menu del rayo abierto, la caja que lo abarca todo: la region de entrada lo necesita */
+  float x0 = pillPanel_.x, y0 = pillPanel_.y, x1 = x0 + pillPanel_.w, y1 = y0 + pillPanel_.h;
+  if (menuRend_.w > 0.0f) {
+    x0 = std::min(x0, menuRend_.x);
+    x1 = std::max(x1, menuRend_.x + menuRend_.w);
+    y1 = std::max(y1, menuRend_.y + menuRend_.h);
+  }
+  if (x) *x = x0 * sc_;
+  if (y) *y = y0 * sc_;
+  if (w) *w = (x1 - x0) * sc_;
+  if (h) *h = (y1 - y0) * sc_;
   return true;
 }
 
@@ -1639,12 +1754,24 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (!st_.overlayOn) return HitNone;
   if (sw3D_.inside(mx, my)) return Hit3D;   /* el interruptor ON/OFF ; se pica en toda la pista */
   float pad = 10.0f;
-  Rect dt = {depTrack_.x - pad, depTrack_.y - pad, depTrack_.w + 2.0f * pad, depTrack_.h + 2.0f * pad};
-  Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
-  if (dt.inside(mx, my)) return HitDepth;
-  if (pt.inside(mx, my)) return HitPopout;
-  for (int k = 0; k < 3; k++)
-    if (btnPre_[k].inside(mx, my)) return (Hit)(HitPreajuste1 + k);
+  /* el modo rendimiento: el boton del rayo y, abierto, su menu (los preajustes y cuatro deslizadores) */
+  if (st_.rendimiento) {
+    if (btnRayo_.inside(mx, my)) return HitRendimientoMenu;
+    if (st_.menuRendimiento && menuRend_.inside(mx, my)) {
+      for (int k = 0; k < 3; k++)
+        if (btnPre_[k].inside(mx, my)) return (Hit)(HitPreajuste1 + k);
+      for (int k = 0; k < 4; k++) {
+        const Rect &t = rendTrack_[k];
+        if (Rect{t.x - pad, t.y - 14.0f, t.w + 2.0f * pad, t.h + 26.0f}.inside(mx, my)) return (Hit)(HitRendMezcla + k);
+      }
+      return HitRendFondo;
+    }
+  } else {
+    Rect dt = {depTrack_.x - pad, depTrack_.y - pad, depTrack_.w + 2.0f * pad, depTrack_.h + 2.0f * pad};
+    Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
+    if (dt.inside(mx, my)) return HitDepth;
+    if (pt.inside(mx, my)) return HitPopout;
+  }
   if (btnNormal_.inside(mx, my)) return HitModoNormal;
   if (btnDividido_.inside(mx, my)) return HitModoDividido;
   if (chkRecordar_.inside(mx, my)) return HitRecordar;
@@ -1660,5 +1787,12 @@ void Hud::dragTo(Hit which, float mxa) {
   } else if (which == HitPopout) {
     float f = (mx - popTrack_.x) / std::max(1.0f, popTrack_.w);
     st_.popout = std::max(-50, std::min(50, (int)std::lround(f * 100.0f)));
+  } else if (which >= HitRendMezcla && which <= HitRendParalaje) {
+    /* los deslizadores del menu del rayo: el visor ve el valor nuevo y lo pone en marcha */
+    const int k = (int)which - (int)HitRendMezcla;
+    const Rect &t = rendTrack_[k];
+    const float f = std::max(0.0f, std::min(1.0f, (mx - t.x) / std::max(1.0f, t.w)));
+    const rendimiento::Rango &r = rendimiento::kRangos[k];
+    st_.rendValor[k] = rendimiento::ajusta(k, r.lo + f * (r.hi - r.lo));
   }
 }
