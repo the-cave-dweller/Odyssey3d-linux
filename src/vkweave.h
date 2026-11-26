@@ -138,6 +138,9 @@ public:
     long n = 0, gpuN = 0;
   };
   TiemposCuadro tomaTiempos();
+  /* agranda los topes por ojo (+12,67 / -9,98 px) por ese factor: el modo rendimiento sin red exagera
+     el 3D, y sin agrandar los topes el relieve de mas se aplastaba contra ellos (rama experimental) */
+  void setTopeEscala(float f) { topeEscala_ = f < 1.0f ? 1.0f : (f > 4.0f ? 4.0f : f); }
   bool resize(int w, int h);   /* intercambio perdido (ventana cambiada o fuera de fecha) */
   bool lost() const { return lost_; }
   void waitIdle();
@@ -274,6 +277,7 @@ private:
     const float v = e ? (float)std::atof(e) : 0.0f;
     return (v > -0.05f && v < 0.05f) ? v : 0.0f;
   }();
+  float topeEscala_ = 1.0f;   /* los topes por ojo, agrandados (modo rendimiento sin red: exagerar el 3D) */
   bool conTope_ = [] {
     const char *e = entornoOdyssey("ODYSSEYVK_TOPE");
     return !e || e[0] != '0';

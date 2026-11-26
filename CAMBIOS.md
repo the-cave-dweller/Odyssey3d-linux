@@ -3,6 +3,25 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Modo rendimiento: mezcla suelo ↔ imagen y el 3D exagerado sin red (rama `experimental`)
+
+- Rodolfo: «¿no se puede exagerar más el paralaje solo en el modo rendimiento?», «¿y si se pueden
+  mezclar ambos modos?», «ajústalo a lo que sería más perceptible de inicio».
+- «Profundidad del vídeo normal»: Con la red / Sin red (`exp_sin_red = no|si`; `suelo` e `imagen`
+  de antes valen como `si`). «Mezcla sin red: suelo ↔ imagen» (`exp_sin_red_mezcla` 0..1 →
+  `ODYSSEYVK_SIN_RED_MEZCLA`): cercanía = (1 − m)·altura + m·pistas, con pistas = 0,50 nitidez +
+  0,20 saturación + 0,30 centro. De fábrica m = 0,35: el suelo da un relieve claro y estable y las
+  pistas le dan forma a lo cercano (`../pruebas/sin-red-mezclas-2026-11-26.jpg`: 0, 35 y 70 %).
+- «Exagerar el relieve sin red» (`exp_sin_red_relieve` x1..x3 → `ODYSSEYVK_SIN_RED_RELIEVE`): la
+  ganancia del relieve Y los topes por ojo (+12,67 / −9,98 px) multiplicados; sin agrandar los topes,
+  el relieve de más se aplastaba contra ellos. «Exagerar el paralaje de la cabeza sin red»
+  (`exp_sin_red_paralaje` x1..x4 → `ODYSSEYVK_SIN_RED_PARALAJE`): la ganancia del paralaje de
+  movimiento, con su tope de una vista subiendo hasta dos. Solo valen con el conversor sin red.
+- De fábrica, lo más perceptible: relieve x2 (topes +25,3 / −20,0 px), paralaje x2 (con
+  `paralaje = 0,5` queda en 1, la geometría real), mezcla 35 %. El registro lo dice: «[conversor]
+  sin red: relieve x2.0 (topes por ojo +25.3 / -20.0 px) · paralaje de la cabeza x2».
+- En el visor aparte: 9,7 ms por mapa en la CPU, cuadro en la tarjeta 1,6–2,0 ms.
+
 ## Modo rendimiento: profundidad sin red y el VRR en la pestaña Experimental (rama `experimental`)
 
 - Rodolfo: «¿hay profundidad sin modelo? quiero probar un modo performance, sin modelo y con

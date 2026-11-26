@@ -437,8 +437,15 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   sinRed_ = 0;
   if (const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED")) {
     const std::string v = e;
-    if (v == "suelo") sinRed_ = 1;
-    else if (v == "imagen" || v == "1" || v == "si") sinRed_ = 2;
+    if (v == "suelo") sinRed_ = 1, mezcla_ = 0.0f;
+    else if (v == "imagen" || v == "1" || v == "si") sinRed_ = 2, mezcla_ = 0.35f;
+  }
+  if (const char *m = entornoOdyssey("ODYSSEYVK_SIN_RED_MEZCLA")) {
+    std::string t = m;
+    for (char &c : t)
+      if (c == ',') c = '.';
+    const float v = (float)std::atof(t.c_str());
+    if (v >= 0.0f && v <= 1.0f) mezcla_ = v;
   }
 #ifdef HAVE_ORT
   if (sinRed_) {
@@ -449,11 +456,10 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     impl_ = im;
     ready_ = true;
     ruta_ = path;
-    dev_ = sinRed_ == 1 ? "CPU (sin red: suelo)" : "CPU (sin red: imagen)";
-    std::printf("[conversor] sin red (rama experimental, modo rendimiento): la profundidad sale de %s · mapa %d x %d\n",
-                sinRed_ == 1 ? "la altura en el cuadro (abajo cerca, arriba lejos)"
-                             : "la altura, la nitidez, el color y el centro de la imagen",
-                sz_, sz_);
+    dev_ = "CPU (sin red)";
+    std::printf("[conversor] sin red (rama experimental, modo rendimiento): la profundidad sale de la imagen, "
+                "%.0f %% suelo (abajo cerca, arriba lejos) y %.0f %% pistas (nitidez, color, centro) · mapa %d x %d\n",
+                100.0f * (1.0f - mezcla_), 100.0f * mezcla_, sz_, sz_);
     return true;
   }
 #endif
@@ -753,7 +759,7 @@ void DepthNet::profundidadSinRed(std::vector<float> &d) {
     const float a = 0.10f + 0.90f * std::pow(v, 1.3f);
     for (int x = 0; x < n; x++) alt[(size_t)y * n + x] = a;
   }
-  if (sinRed_ == 1 || guia_.size() != plane) {
+  if (mezcla_ <= 0.0f || guia_.size() != plane) {
     d = alt;
     return;
   }
@@ -807,7 +813,9 @@ void DepthNet::profundidadSinRed(std::vector<float> &d) {
       float t = 1.0f - std::sqrt(((float)x - cx) * ((float)x - cx) + ((float)y - cy) * ((float)y - cy)) / rmax;
       t = t < 0.0f ? 0.0f : t;
       const float centro = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);   /* smootherstep, como la saliencia */
-      d[o] = 0.50f * alt[o] + 0.25f * nitB[o] + 0.10f * satB[o] + 0.15f * centro;
+      /* las pistas de la imagen, en su propio 0..1 (antes iban 0,25 / 0,10 / 0,15 junto a 0,50 de altura) */
+      const float pistas = 0.50f * nitB[o] + 0.20f * satB[o] + 0.30f * centro;
+      d[o] = (1.0f - mezcla_) * alt[o] + mezcla_ * pistas;
     }
 }
 

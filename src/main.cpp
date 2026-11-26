@@ -3634,6 +3634,11 @@ struct ServeCfg {
   double expAnticipacion = -1.0;  /* ms de anticipacion de la cabeza; < 0 = no puesto (0) */
   std::string expPrioridad;       /* normal | alta | tiempo_real: la cola del visor en la tarjeta */
   std::string expSinRed;          /* no | suelo | imagen: la profundidad sin red (modo rendimiento) */
+  /* de fabrica, lo mas perceptible de entrada (Rodolfo: «ajustalo a lo que seria mas perceptible de
+     inicio»): relieve y paralaje al doble, y 35 % de pistas de la imagen sobre el suelo */
+  double expSinRedRelieve = 2.0;  /* x1..x3: el relieve entre los ojos, exagerado sin red */
+  double expSinRedMezcla = 0.35;  /* 0..1: suelo <-> pistas de la imagen */
+  double expSinRedParalaje = 2.0; /* x1..x4: el paralaje de la cabeza, exagerado sin red */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* si = dejar la sincronizacion adaptativa durante el 3D; de fabrica se apaga (v1.11) */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
@@ -3794,6 +3799,18 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "exp_tope_arrastre") cfg.expTope = strLower(v);
     else if (k == "exp_prioridad") cfg.expPrioridad = strLower(v);
     else if (k == "exp_sin_red") cfg.expSinRed = strLower(v);
+    else if (k == "exp_sin_red_mezcla") {
+      std::string t = v;
+      for (char &c : t) if (c == ',') c = '.';
+      cfg.expSinRedMezcla = std::max(0.0, std::min(1.0, std::atof(t.c_str())));
+    }
+    else if (k == "exp_sin_red_relieve" || k == "exp_sin_red_paralaje") {
+      std::string t = v;
+      for (char &c : t) if (c == ',') c = '.';
+      const double x = std::atof(t.c_str());
+      if (k == "exp_sin_red_relieve") cfg.expSinRedRelieve = std::max(1.0, std::min(3.0, x));
+      else cfg.expSinRedParalaje = std::max(1.0, std::min(4.0, x));
+    }
     else if (k == "exp_anticipacion") {
       std::string t = v;
       for (char &c : t) if (c == ',') c = '.';
@@ -4148,10 +4165,20 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       else ::unsetenv("ODYSSEYVK_MAPA");
       if (pila->expTope == "si" || pila->expTope == "1") ::setenv("ODYSSEYVK_TOPE_ARRASTRE", "1", 1);
       else ::unsetenv("ODYSSEYVK_TOPE_ARRASTRE");
-      if (pila->expSinRed == "suelo" || pila->expSinRed == "imagen")
-        ::setenv("ODYSSEYVK_SIN_RED", pila->expSinRed.c_str(), 1);
+      if (pila->expSinRed == "si" || pila->expSinRed == "suelo" || pila->expSinRed == "imagen")
+        ::setenv("ODYSSEYVK_SIN_RED", pila->expSinRed == "si" ? "imagen" : pila->expSinRed.c_str(), 1);
       else
         ::unsetenv("ODYSSEYVK_SIN_RED");
+      if (pila->expSinRedMezcla >= 0.0) {
+        std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedMezcla);
+        ::setenv("ODYSSEYVK_SIN_RED_MEZCLA", valor, 1);
+      } else {
+        ::unsetenv("ODYSSEYVK_SIN_RED_MEZCLA");
+      }
+      std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedRelieve);
+      ::setenv("ODYSSEYVK_SIN_RED_RELIEVE", valor, 1);
+      std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedParalaje);
+      ::setenv("ODYSSEYVK_SIN_RED_PARALAJE", valor, 1);
       if (pila->expPrioridad == "alta" || pila->expPrioridad == "tiempo_real")
         ::setenv("ODYSSEYVK_PRIORIDAD", pila->expPrioridad.c_str(), 1);
       else
@@ -5901,6 +5928,8 @@ static int cmdServe(int argc, char **argv) {
           cfg.expAnticipacion = nuevo.expAnticipacion;
           cfg.expPrioridad = nuevo.expPrioridad;
           cfg.expSinRed = nuevo.expSinRed;
+          cfg.expSinRedRelieve = nuevo.expSinRedRelieve, cfg.expSinRedParalaje = nuevo.expSinRedParalaje;
+          cfg.expSinRedMezcla = nuevo.expSinRedMezcla;
           cfg.vrrEn3d = nuevo.vrrEn3d;   /* el VRR del modo rendimiento vale desde el siguiente video */
           cfg.crosstalkBase = nuevo.crosstalkBase;
           cfg.relieve = nuevo.relieve;

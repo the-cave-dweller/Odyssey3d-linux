@@ -3268,7 +3268,29 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* "3D Salida" (relieve) manda aqui: 0 deja la imagen plana y con 50 las dos vistas se
          separan lo que separa el programa de Samsung (ver gananciaRelieve). Antes de cambiar la
          curva: con 50 px de separacion no se notaba y con 98 molestaba a los ojos. */
-      const float ganancia = gananciaRelieve(st.popout);
+      /* modo rendimiento sin red (rama experimental): el relieve entre los ojos, exagerado por
+         ODYSSEYVK_SIN_RED_RELIEVE (x1..x3), y los topes por ojo agrandados lo mismo */
+      static const float kExageraRelieve = [] {
+        const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED_RELIEVE");
+        std::string t = e ? e : "";
+        for (char &c : t)
+          if (c == ',') c = '.';
+        const float v = t.empty() ? 2.0f : (float)std::atof(t.c_str());   /* de fabrica x2 */
+        return (v >= 1.0f && v <= 3.0f) ? v : 2.0f;
+      }();
+      const float exRel = red.sinRed() ? kExageraRelieve : 1.0f;
+      wv.setTopeEscala(exRel);
+      {
+        static bool dicho = false;
+        if (red.sinRed() && !dicho) {
+          dicho = true;
+          const char *pe = entornoOdyssey("ODYSSEYVK_SIN_RED_PARALAJE");
+          std::printf("[conversor] sin red: relieve x%.1f (topes por ojo +%.1f / -%.1f px) · paralaje de la cabeza x%s\n",
+                      (double)exRel, 12.67 * exRel, 9.98 * exRel, pe ? pe : "2");
+          std::fflush(stdout);
+        }
+      }
+      const float ganancia = gananciaRelieve(st.popout) * exRel;
       /* El plano de apoyo (lo que se queda quieto en la pantalla) lo sigue la red: toma el pico del
          histograma del mapa ya limpio, o sea el sujeto. Con el sujeto apoyado en la pantalla el
          relieve se abre hacia atras y cansa menos la vista con el mismo relieve. Si el usuario mueve
@@ -3571,8 +3593,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                El factor d^2 / (d^2 + z^2) deja en nada lo de milimetros (0,3 cm -> 20 %) y casi entero
                un movimiento de verdad (3 cm -> 96 %), sin escalon. */
             const double d = x - xReposo, zona = 0.6;
-            objetivo = d * (d * d / (d * d + zona * zona)) / 3.25 * kParalaje;
-            objetivo = objetivo < -1.0 ? -1.0 : (objetivo > 1.0 ? 1.0 : objetivo);
+            /* modo rendimiento sin red (rama experimental): el paralaje de la cabeza, exagerado por
+               ODYSSEYVK_SIN_RED_PARALAJE (x1..x4); el tope de una vista sube con el, hasta dos */
+            static const double kExagera = [] {
+              const char *e = entornoOdyssey("ODYSSEYVK_SIN_RED_PARALAJE");
+              std::string t = e ? e : "";
+              for (char &c : t)
+                if (c == ',') c = '.';
+              const double v = t.empty() ? 2.0 : std::atof(t.c_str());   /* de fabrica x2 */
+              return (v >= 1.0 && v <= 4.0) ? v : 2.0;
+            }();
+            const double ex = (convActivo && red.sinRed()) ? kExagera : 1.0;
+            const double topeVistas = std::min(2.0, ex);
+            objetivo = d * (d * d / (d * d + zona * zona)) / 3.25 * kParalaje * ex;
+            objetivo = objetivo < -topeVistas ? -topeVistas : (objetivo > topeVistas ? topeVistas : objetivo);
           }
           paralajeListo = true;
           /* paso bajo de 120 ms (antes 60): el paralaje es una ayuda, importa mas que vaya liso */

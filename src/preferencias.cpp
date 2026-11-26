@@ -268,8 +268,26 @@ Valores leer() {
   v.expTope = si(de("exp_tope_arrastre"), false);
   v.expAnticipacion = std::max(0, std::min(60, std::atoi(de("exp_anticipacion").c_str())));
   v.expSinRed = de("exp_sin_red");
-  if (v.expSinRed != "suelo" && v.expSinRed != "imagen") v.expSinRed = "no";
+  {
+    const std::string antes = v.expSinRed;
+    v.expSinRed = (antes == "si" || antes == "suelo" || antes == "imagen") ? "si" : "no";
+    std::string t = de("exp_sin_red_mezcla");
+    for (char &c : t)
+      if (c == ',') c = '.';
+    v.expSinRedMezcla = t.empty() ? (antes == "suelo" ? 0.0 : 0.35) : std::max(0.0, std::min(1.0, std::atof(t.c_str())));
+  }
   v.vrrEn3d = si(de("vrr_en_3d"), false);
+  {
+    auto num = [&](const char *k, double defecto, double lo, double hi) {
+      std::string t = de(k);
+      for (char &c : t)
+        if (c == ',') c = '.';
+      const double x = t.empty() ? defecto : std::atof(t.c_str());
+      return std::max(lo, std::min(hi, x));
+    };
+    v.expSinRedRelieve = num("exp_sin_red_relieve", 2.0, 1.0, 3.0);
+    v.expSinRedParalaje = num("exp_sin_red_paralaje", 2.0, 1.0, 4.0);
+  }
   v.expPrioridad = de("exp_prioridad");
   if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
   if (!v.modelo.empty() && v.modelo[0] == '~') {
@@ -647,13 +665,27 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     pon(s, "");
     Hud::ItemPanel sr;
     sr.tipo = Hud::ItemPanel::Opciones, sr.rotulo = idioma::tr("Profundidad del vídeo normal");
-    sr.opciones = {idioma::tr("Con la red"), idioma::tr("Sin red · suelo"), idioma::tr("Sin red · imagen")};
-    sr.elegido = v.expSinRed == "suelo" ? 1 : (v.expSinRed == "imagen" ? 2 : 0);
+    sr.opciones = {idioma::tr("Con la red"), idioma::tr("Sin red")};
+    sr.elegido = v.expSinRed == "si" ? 1 : 0;
     pon(sr, "exp_sin_red");
-    Hud::ItemPanel srn;
-    srn.tipo = Hud::ItemPanel::Nota;
-    srn.rotulo = idioma::tr("Sin red no se usa la tarjeta para la profundidad: suelo = abajo cerca y arriba lejos; imagen = además lo nítido, lo saturado y el centro, cerca.");
-    pon(srn, "");
+    Hud::ItemPanel mz;
+    mz.tipo = Hud::ItemPanel::Deslizador, mz.rotulo = idioma::tr("Mezcla sin red: suelo ↔ imagen");
+    mz.nota = idioma::tr("0 % = abajo cerca y arriba lejos · 100 % = lo nítido, lo saturado y el centro, cerca");
+    mz.frac = (float)v.expSinRedMezcla;
+    mz.valorTexto = std::to_string((int)std::lround(v.expSinRedMezcla * 100.0)) + " %";
+    pon(mz, "exp_sin_red_mezcla");
+    Hud::ItemPanel er;
+    er.tipo = Hud::ItemPanel::Deslizador, er.rotulo = idioma::tr("Exagerar el relieve sin red");
+    er.nota = idioma::tr("La separación entre los ojos y sus topes, multiplicadas · solo sin red");
+    er.frac = (float)((v.expSinRedRelieve - 1.0) / 2.0);
+    er.valorTexto = "x" + conDecimal(v.expSinRedRelieve, 1);
+    pon(er, "exp_sin_red_relieve");
+    Hud::ItemPanel ep;
+    ep.tipo = Hud::ItemPanel::Deslizador, ep.rotulo = idioma::tr("Exagerar el paralaje de la cabeza sin red");
+    ep.nota = idioma::tr("Cuánto se desliza lo cercano al mover la cabeza · solo sin red");
+    ep.frac = (float)((v.expSinRedParalaje - 1.0) / 3.0);
+    ep.valorTexto = "x" + conDecimal(v.expSinRedParalaje, 1);
+    pon(ep, "exp_sin_red_paralaje");
     Hud::ItemPanel vr;
     vr.tipo = Hud::ItemPanel::Interruptor, vr.rotulo = idioma::tr("Frecuencia variable (VRR) durante el 3D");
     vr.nota = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones");
@@ -995,10 +1027,26 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
     return true;
   }
+  if (id == "exp_sin_red_mezcla") {
+    if (!soltado) return false;
+    const double x = std::round(std::max(0.0f, std::min(1.0f, frac)) * 20.0) / 20.0;   /* de 5 en 5 % */
+    if (!fija(id, conComa(x, 2))) return false;
+    if (aviso) *aviso = idioma::trf("{} % imagen · desde el siguiente vídeo", {std::to_string((int)std::lround(x * 100.0))});
+    return true;
+  }
   if (id == "exp_sin_red") {
-    static const char *kVal[] = {"no", "suelo", "imagen"};
-    if (sub < 0 || sub > 2 || !fija("exp_sin_red", kVal[sub])) return false;
+    static const char *kVal[] = {"no", "si"};
+    if (sub < 0 || sub > 1 || !fija("exp_sin_red", kVal[sub])) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_sin_red_relieve" || id == "exp_sin_red_paralaje") {
+    if (!soltado) return false;
+    const bool rel = id == "exp_sin_red_relieve";
+    const double tramo = rel ? 2.0 : 3.0;
+    const double x = std::round((1.0 + std::max(0.0f, std::min(1.0f, frac)) * tramo) * 10.0) / 10.0;
+    if (!fija(id, conComa(x, 1))) return false;
+    if (aviso) *aviso = idioma::trf("x{} · desde el siguiente vídeo", {conDecimal(x, 1)});
     return true;
   }
   if (id == "vrr_en_3d") {

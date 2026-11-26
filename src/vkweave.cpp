@@ -807,8 +807,8 @@ void VkWeave::fillUbo(uint8_t *dst) {
      pone mas filo, asi que este numero es el que manda cuanto relieve conserva el borde de un
      objeto. 0 en el shader significa "el de fabrica", por eso se manda siempre positivo. */
   t5[0] = temblorPx_;
-  t5[1] = conTope_ ? 12.67f : 0.0f;
-  t5[2] = conTope_ ? 9.98f : 0.0f;
+  t5[1] = conTope_ ? 12.67f * topeEscala_ : 0.0f;
+  t5[2] = conTope_ ? 9.98f * topeEscala_ : 0.0f;
   t5[3] = cantoS_;
   /* ODYSSEYVK_FASE_TEMBLOR  temblor de la propia fase de la trama, en ciclos de la lente.
      Por defecto 0 (como venia). Con 0,1 la franja de 4,3 px de la trama baja unas cinco veces
