@@ -252,7 +252,7 @@ variable queda como la tenga el escritorio.
 
 ## Profundidad exacta en los juegos con DLSS
 
-En los juegos que usan DLSS, OdysseyVK puede usar la profundidad del propio juego en vez de adivinarla
+Desde la 1.14, en los juegos que usan DLSS, OdysseyVK puede usar la profundidad del propio juego en vez de adivinarla
 con la red: la que el juego le da a DLSS en cada cuadro, exacta y quieta, a la resolución de render
 del juego (en Cyberpunk 2077, 1920×1080). Hace falta una tarjeta NVIDIA, DLSS puesto en el juego
 (cualquier modo) y, en Steam, esto en las opciones de lanzamiento del juego:

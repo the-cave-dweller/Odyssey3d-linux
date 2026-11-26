@@ -243,7 +243,7 @@ see what it changes. In this mode variable refresh is left as the desktop has it
 
 ## Exact depth in DLSS games
 
-In games that use DLSS, OdysseyVK can use the game's own depth instead of guessing it with the
+Since 1.14, in games that use DLSS, OdysseyVK can use the game's own depth instead of guessing it with the
 depth network: the depth buffer the game hands to DLSS every frame, exact and steady, at the game's
 render resolution (in Cyberpunk 2077, 1920×1080). It needs an NVIDIA card, DLSS on in the game (any
 mode) and, in Steam, this in the game's launch options:

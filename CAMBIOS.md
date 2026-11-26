@@ -3,7 +3,31 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
-## Lo que la tarjeta lee por nosotros ya no se suelta antes de leerlo; el ajuste del HUD apaga también la copia en el juego (v1.13)
+## Versión 1.14: la profundidad de DLSS, el HUD del juego plano y el cuadrito de FPS (v1.14)
+
+- Rodolfo: «Sí, prepárala». El actualizador solo compara el número de `VERSION`, y desde la 1.13 publicada
+  (`4c17842`) hay 22 cambios más con el mismo número: con 1.14 se ofrecen.
+- **Lo que trae** (cada cosa en su entrada, abajo):
+  - **La profundidad de DLSS sin Neural Forge**: la capa de Vulkan de OdysseyVK, con `ODYSSEYVK=1` en las
+    opciones de lanzamiento del juego, copia la profundidad que el juego le da a DLSS y el visor la usa en vez de
+    la red: exacta, en vivo, con su propio plano de la pantalla, 7 ms por mapa, en cualquier modo de DLSS.
+  - **El HUD del juego plano en la pantalla**, con su máscara exacta: la imagen donde el juego dibuja el HUD
+    (medida en Cyberpunk), reducida en la tarjeta del juego; los menús también.
+  - **DLSS a la vista**: Ajustes → Visor 3D dice de dónde viene la profundidad (y los FPS del juego y de la capa,
+    y cuánto tapa el HUD); un cuadrito junto a la pastilla con los FPS («DLSS»: juego y capa; «Modelo de serie»:
+    el juego); y Ajustes → Juegos con DLSS apaga cada cosa.
+  - **Arreglos**: el visor ya no se cae con una profundidad del juego a medio escribir; Cyberpunk ya no se cae al
+    entrar y salir del menú (lo que la tarjeta del juego lee por la capa ya no se suelta antes de leerlo); /dev/shm
+    ya no se llena (7,8 GB de lienzos); el actualizador, probado de punta a punta.
+- **Probado en Cyberpunk** (Rodolfo, 17:47, DLSS en Ultra Performance, entrando y saliendo del menú): sin caídas,
+  con 32 imágenes de profundidad apartadas que antes eran 32 caídas. **Sin probar**: otros juegos con DLSS (la
+  regla del HUD solo se midió en Cyberpunk; si un juego dibuja su HUD de otra forma, no cambia nada) y la capa
+  junto a Neural Forge.
+- README: la sección de DLSS dice «desde la 1.14», y sus capturas se rehicieron (`tools/capturas-readme.py`: la de
+  Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
+  las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
+
+## Lo que la tarjeta lee por nosotros ya no se suelta antes de leerlo; el ajuste del HUD apaga también la copia en el juego (v1.14)
 
 - **Confirmado en Cyberpunk** (Rodolfo: «arreglado, gracias»; partida de 17:47 a 17:49, Ultra Performance,
   entrando y saliendo del menú): 32 apartadas. El juego destruyó imágenes de profundidad, y soltó su memoria, que
@@ -38,7 +62,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   `ODYSSEYVK_CAPA_APLAZAR_TODO=1` (de taller: todo pasa por el aplazado) 46 apartadas en 20 s, 15 soltadas en
   marcha y 31 al cerrar, a 60 fps.
 
-## Corrección: las caídas de Cyberpunk desde las 16:50 son todas el mismo fallo de la tarjeta, y la causa no está clara (v1.13)
+## Corrección: las caídas de Cyberpunk desde las 16:50 son todas el mismo fallo de la tarjeta, y la causa no está clara (v1.14)
 
 - Rodolfo: «otra vez se trabó» (17:25, ya con la elección de la profundidad de abajo puesta). MEDIDO en el núcleo:
   **las cuatro** (16:50:42, 17:02:17, 17:07:22 y 17:25:05) son `NVRM: Xid 31 … MMU Fault: ENGINE CE0 … FAULT_P*E
@@ -55,7 +79,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   `gpucrash` del 10 y del 14 de noviembre, antes de que existiera la capa, con el mismo «Device Removed» en
   `TXAA_Blurs`. Hace falta una prueba que separe las dos cosas antes de tocar más.
 
-## Cyberpunk ya no se cae al entrar y salir del menú: solo se copia una profundidad que el juego está usando (v1.13)
+## Cyberpunk ya no se cae al entrar y salir del menú: solo se copia una profundidad que el juego está usando (v1.14)
 
 - Rodolfo: «cyberpunk now crashed when entering the menu and leaving». MEDIDO: el núcleo dice
   `NVRM: Xid 31 … MMU Fault: ENGINE CE0 HUBCLIENT_CE1 … FAULT_PTE ACCESS_TYPE_VIRT_READ` a las 17:07:22 (el motor
@@ -75,7 +99,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - Probado sin juego que los ganchos siempre puestos no cambian nada (el visor con la capa: 60 fps, sin
   caídas). La elección en sí solo se puede ver en el juego.
 
-## DLSS a la vista: en Ajustes, en un cuadro junto a la pastilla, y con sus interruptores (v1.13)
+## DLSS a la vista: en Ajustes, en un cuadro junto a la pastilla, y con sus interruptores (v1.14)
 
 - Rodolfo: «when not dlss the title of the fps box should say Stock model». Sin DLSS, con la red sobre un juego,
   el cuadrito dice **«Modelo de serie»** (en inglés «Stock model») con los cuadros nuevos del juego que llegan al
@@ -108,7 +132,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   dice Juego 117 fps y Capa 58 fps; el `estado`, `fps_juego = 116.8` y `fps_capa = 58.4`; la ventana de
   ajustes, pintada con `ctl hud`, enseña las filas nuevas y la sección.
 
-## El juego ya no se congela al cambiar el modo de DLSS; el HUD con los menús encima (v1.13)
+## El juego ya no se congela al cambiar el modo de DLSS; el HUD con los menús encima (v1.14)
 
 - Rodolfo: «i think game froze after changing the dlss resolution». MEDIDO en el registro de la capa: al pasar
   DLSS de 1920 × 1080 a 1280 × 720 la capa rehízo la memoria compartida para la medida nueva y **ahí se paró
@@ -132,7 +156,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   máscaras enteras y ninguna a medio escribir. La unión en el visor con el simulador (`--hud2`): una capa 9,3 % del
   mapa, dos capas 13,6 %. El bloqueo en sí no se puede reproducir sin el juego (depende de sus semáforos).
 
-## Fase 3c: el HUD del juego, plano en la pantalla con su máscara exacta (v1.13)
+## Fase 3c: el HUD del juego, plano en la pantalla con su máscara exacta (v1.14)
 
 - Rodolfo: «Sí, conéctala». **La capa** (siempre que comparte la profundidad; `ODYSSEYVK_HUD=0` lo quita)
   sigue los destinos de dibujo (`vkCmdBeginRendering`, sin contar dibujos: eso sigue siendo de la sonda) y
@@ -159,7 +183,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     escribir, el contenido es el destino reducido, a 60 fps y sin caídas.
 - Falta verlo en Cyberpunk: que la regla salte ahí y cómo se ve.
 
-## Fase 3b: encontrada la capa del HUD de Cyberpunk (v1.13)
+## Fase 3b: encontrada la capa del HUD de Cyberpunk (v1.14)
 
 - Vuelta de Rodolfo con la sonda de los destinos (16:23 a 16:27): cuatro ventanas (la primera en un menú, 25
   dibujos con destino; las otras tres en juego, 100 a 118), sin caídas y **sin ninguna pasada clásica**: todo va
@@ -177,7 +201,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - Sobre el cuadro presentado algunos rótulos salen corridos unos píxeles (el HUD se mece al moverse, y la
   copia puede ser del cuadro siguiente): en el 3D la máscara irá un poco engordada.
 
-## Fase 3b, el HUD: la sonda de los destinos de dibujo (v1.13)
+## Fase 3b, el HUD: la sonda de los destinos de dibujo (v1.14)
 
 - Rodolfo: «Sí, prepárala» (buscar la imagen donde el juego dibuja el HUD: su alfa sería la máscara exacta).
 - Con la misma sonda (`ODYSSEYVK_CAPA_SONDA=1`) la capa sigue también **cada dibujo con destino**
@@ -196,7 +220,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   contenido de verdad, el dibujo siguiente reconocido como la cadena de presentación, el cuadro presentado
   escrito, sin caídas y a 60 fps.
 
-## Fase 3, el HUD: lo que dijo la sonda en Cyberpunk (v1.13)
+## Fase 3, el HUD: lo que dijo la sonda en Cyberpunk (v1.14)
 
 - Vuelta de Rodolfo con `ODYSSEYVK_CAPA_VOLCAR_CADA=45`: tres volcados (16:07 a 16:09), dos con juego y el
   cuadro presentado del mismo momento (a pie y conduciendo); el primero cayó en una pantalla de carga. De paso,
@@ -214,7 +238,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - Lo exacto sería la imagen donde el juego dibuja el HUD: su alfa ES la máscara, sin ajustes ni falsos.
   Siguiente paso: buscarla con la sonda (los destinos de dibujo de cada cuadro después de DLSS).
 
-## El visor ya no se cae con una profundidad del juego a medio escribir (v1.13)
+## El visor ya no se cae con una profundidad del juego a medio escribir (v1.14)
 
 - Rodolfo: «no cargo el layer». La capa sí cargó (la sonda dejó dos volcados), lo que se cayó fue **el visor**:
   SIGSEGV en `DepthNet::estimate` a las 15:54:10, justo cuando pasó a «Z normal». MEDIDO en el volcado de ese
@@ -229,7 +253,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   turnan): con el cuadro malo antes se caía igual (SIGSEGV en `estimate`, reproducido); ahora, turnando el
   malo y uno bueno salpicado de NaN cada 3 s durante 25 s, 9 cambios red ↔ juego, sin caída y a 60 fps.
 
-## Fase 3, el HUD: la sonda de las imágenes de color de DLSS (v1.13)
+## Fase 3, el HUD: la sonda de las imágenes de color de DLSS (v1.14)
 
 - Rodolfo: «Yes, start phase 3» (la «capa de DLSS» para el HUD: el HUD no tiene profundidad y toma la de lo
   que tiene detrás; DLSS trabaja con la escena ANTES de que el juego dibuje el HUD, así que comparar sus
@@ -255,7 +279,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Probado con vkcube (`ODYSSEYVK_CAPA_PRESENTE_TRAS=120`, de taller): el cuadro 120 sale tal cual y vkcube
   sigue.
 
-## Profundidad de DLSS: su propio plano de la pantalla, más rápida, y los modos de DLSS (v1.13)
+## Profundidad de DLSS: su propio plano de la pantalla, más rápida, y los modos de DLSS (v1.14)
 
 - Rodolfo, con una captura de la vista de profundidad en Cyberpunk (el piloto en naranja y el plano de la
   pantalla en el asfalto, detrás de él): «performance is better?, also notice that you will need to retrain
@@ -280,7 +304,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   tomó la nueva sola (un segundo con la red en medio). Sin probar: la resolución dinámica, donde el juego
   dibuja en una parte de la imagen y la capa copia la imagen entera.
 
-## La profundidad de DLSS en vivo en el 3D: fase 2, y la capa con `ODYSSEYVK=1` (v1.13)
+## La profundidad de DLSS en vivo en el 3D: fase 2, y la capa con `ODYSSEYVK=1` (v1.14)
 
 - Rodolfo: «Change the parameter to ODYSSEYVK=1, and then start phase 2».
 - **El interruptor**: la capa se enciende con `ODYSSEYVK=1` en las opciones de lanzamiento del juego (antes
@@ -323,20 +347,20 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   se quedaba en `/dev/shm`. Ahora la borra el visor si ve que su juego ya no existe (probado con una de un
   proceso muerto: borrada y no usada) y la capa al salir el proceso del juego.
 
-## /dev/shm se llenaba: 7,8 GB de lienzos de la capa del servicio (v1.13)
+## /dev/shm se llenaba: 7,8 GB de lienzos de la capa del servicio (v1.14)
 
 - Al probar la fase 2: 1183 archivos `odysseyvk-XXXXXX` en `/dev/shm` (en RAM), 7,8 GB de un día. Los creaba
   `src/overlay.cpp` con `mkstemp` para cada lienzo de la pastilla, el panel o las tarjetas y no borraba el
   nombre. Ahora se borra en cuanto se crea (el compositor solo necesita el descriptor). Los que había se
   borraron (borrar el nombre no molesta a quien aún lo tiene abierto): la memoria usada bajó de 36 a 28 GB.
 
-## El actualizador, probado de punta a punta (v1.13)
+## El actualizador, probado de punta a punta (v1.14)
 
 - `~/.local/state/odysseyvk/actualizar.log` del 26-nov a las 13:56: con la 1.12 instalada, el botón
   Actualizar bajó la 1.13 de GitHub, la compiló, la instaló pidiendo la clave por pkexec (la ventana de
   polkit, lo que nunca se había probado), reinició el servicio y acabó en «hecho (0)».
 
-## La profundidad de DLSS sin Neural Forge: la capa de Vulkan de OdysseyVK, fase 1 (prueba) (v1.13)
+## La profundidad de DLSS sin Neural Forge: la capa de Vulkan de OdysseyVK, fase 1 (prueba) (v1.14)
 
 - Rodolfo: «I actually want my users to be able to use this without neural forge, just with the game
   dlss itself».
