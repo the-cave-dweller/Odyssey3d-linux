@@ -66,6 +66,19 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     vídeo a 6 mapas por segundo: apoyado medio 1,4 % → 0,1 %, máximo 6,3 % → 1,4 %, mapas por encima del
     2 % 22 → 0, saltos de más de 3 puntos entre mapas seguidos 10 → 0. Con 20 s del vídeo subtitulado,
     idéntico con y sin la memoria (los 8 saltos que quedan son los subtítulos que entran y salen).
+- **Sin el minuto de espera al salir de pantalla completa.** Rodolfo: «ya arrancó pero súper lento». Su
+  registro: dos sesiones cerradas porque él sacó el vídeo de pantalla completa a los 11 y 12 s, y el
+  servicio aplicó «la sesión se cerró apenas empezó: esperamos un minuto» (dos sesiones de menos de 20 s
+  seguidas); el 3D volvió a los 60 s exactos. Esa espera es la red contra el bucle de lanzar y cerrar
+  cuando el cambio de modo del panel le quita a KWin la pantalla completa del vídeo unos 5 s (v0.5x),
+  pero la rama de «salió de pantalla completa» ya solo corre con la sesión asentada y fuera de ese
+  cambio. Ahora, si la sesión la cierra esa salida, no cuenta como muerte y la espera es de 1,5 s; las
+  muertes de verdad (el visor que se cae solo, o lo que se cierra durante el cambio de modo) siguen con
+  sus 8 s y su minuto. Desde la 1.12 el 3D entra solo, así que entrar y salir es lo normal. No se puede
+  probar sin sus ventanas: compila, y queda para probarlo en el panel.
+- Lo de «no está el modo Auto» era otra cosa: desinstaló y volvió a instalar, y Desinstalar borra la red
+  de profundidad (sin ella no hay Auto, la pastilla cae a la del vídeo dividido); además pasó el
+  interruptor a Rendimiento un rato. Con la red bajada de nuevo y Neural puesto, Auto en su registro.
 - **Probado en su panel**: la mezcla al 10 % («sí bajó»); el alcance a medio grado sirvió («este último
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).

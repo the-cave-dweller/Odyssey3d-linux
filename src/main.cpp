@@ -5064,6 +5064,9 @@ static int cmdServe(int argc, char **argv) {
      la pantalla completa al navegador (no cuando uno elige 2D plano, entrega la pantalla con Tab o
      saca el visor con ESC: en esos casos el video sigue sonando y la pantalla completa es suya). */
   bool videoSeFue = false;
+  /* (v1.12) la sesion la cerro una salida de pantalla completa con la sesion ya asentada: la quito el
+     usuario (o la aplicacion), no se cayo el visor; al recogerla no cuenta como muerte (ver el enfriado) */
+  bool salioDePantallaCompleta = false;
   int reposoW = 0, reposoH = 0;   /* tamano logico del panel SIN sesion 3D (para saber si el 3D lo cambia) */
   bool vueltaPendiente = false;   /* se dejo la ventana a pantalla completa al cerrar: quitarsela al volver el monitor */
   std::string caidaUuid;          /* ventana de navegador a la que KWin saco de pantalla completa al empezar */
@@ -5235,6 +5238,8 @@ static int cmdServe(int argc, char **argv) {
       if (r == hijo) {
         const bool eraForzada = forzado;   /* la del escritorio la quito uno a proposito */
         forzado = false;
+        const bool porElUsuario = salioDePantallaCompleta;
+        salioDePantallaCompleta = false;
         std::printf("[serve] sesion 3D terminada (%s)\n",
                     hijoUuid.empty() ? "el overlay del escritorio" : hijoUuid.c_str());
         std::fflush(stdout);
@@ -5293,6 +5298,16 @@ static int cmdServe(int argc, char **argv) {
              por que enfriar nada y el boton puede volver a montarlo al momento. */
           muertesSeguidas = 0;
           enfriadoHasta = now;
+        } else if (porElUsuario) {
+          /* (v1.12) El video salio de pantalla completa con la sesion ya asentada (fuera del cambio de
+             modo del panel, que es lo que hacia el bucle): lo hizo el usuario o la aplicacion, y la
+             ventana ya no esta a pantalla completa, asi que no hay bucle posible. Antes contaba como
+             muerte si la sesion habia durado menos de 20 s, y dos seguidas costaban un minuto sin 3D:
+             «ya arranco pero super lento», Rodolfo (su registro: dos salidas a los 11 y 12 s, y el 3D
+             volvio a los 60 s exactos). Desde la 1.12 el 3D entra solo, sin tarjeta, y entrar y salir
+             de pantalla completa es lo normal. Queda un respiro de 1,5 s. */
+          muertesSeguidas = 0;
+          enfriadoHasta = now + 1.5;
         } else {
           if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
           else muertesSeguidas = 0;
@@ -5803,6 +5818,8 @@ static int cmdServe(int argc, char **argv) {
           if (fueraVideoDesde <= 0.0) fueraVideoDesde = now;
           if (!cerrandoSesion && now - fueraVideoDesde >= paciencia && hijo > 0) {
             cerrandoSesion = true;
+            /* (v1.12) si la cierra la salida de pantalla completa, al recogerla no hay espera */
+            salioDePantallaCompleta = std::strcmp(motivo, "la ventana del video salio de pantalla completa") == 0;
             std::printf("[ventana] %s (%s): cerramos la sesion 3D y devolvemos el panel a 2D\n",
                         motivo, hijoUuid.c_str());
             std::fflush(stdout);
