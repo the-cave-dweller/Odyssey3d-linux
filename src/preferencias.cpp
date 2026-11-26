@@ -19,6 +19,11 @@
 #include "ajuste.h"
 #include "util.h"
 
+#ifdef HAVE_OPENCV
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+#endif
+
 namespace prefs {
 namespace {
 
@@ -65,6 +70,36 @@ std::vector<std::string> todosVdf(const std::string &txt, const std::string &cla
     p = i;
   }
   return sal;
+}
+
+/* La caratula vertical de un juego en la cache de Steam: `library_600x900.jpg`, suelta o dentro de
+   una carpeta con nombre de huella; si no, `library_capsule.jpg`, que en la cache nueva es lo mismo. */
+void cargaCaratula(const std::string &raizSteam, Juego &j) {
+#ifdef HAVE_OPENCV
+  const std::string dir = raizSteam + "/appcache/librarycache/" + j.id;
+  std::error_code ec;
+  std::string mejor, segunda;
+  for (auto it = std::filesystem::recursive_directory_iterator(dir, ec); !ec && it != std::filesystem::recursive_directory_iterator();
+       it.increment(ec)) {
+    const std::string n = it->path().filename().string();
+    if (n == "library_600x900.jpg") mejor = it->path().string();
+    else if (n == "library_capsule.jpg") segunda = it->path().string();
+  }
+  const std::string ruta = !mejor.empty() ? mejor : segunda;
+  if (ruta.empty()) return;
+  cv::Mat m = cv::imread(ruta, cv::IMREAD_COLOR);
+  if (m.empty() || m.cols < 16 || m.rows < 16) return;
+  cv::Mat chico, rgba;
+  cv::resize(m, chico, cv::Size(280, 420), 0, 0, cv::INTER_AREA);
+  cv::cvtColor(chico, rgba, cv::COLOR_BGR2RGBA);
+  auto px = std::make_shared<std::vector<uint8_t>>((size_t)rgba.cols * rgba.rows * 4u);
+  for (int y = 0; y < rgba.rows; y++) std::memcpy(px->data() + (size_t)y * rgba.cols * 4u, rgba.ptr(y), (size_t)rgba.cols * 4u);
+  j.cara = px;
+  j.caraW = rgba.cols, j.caraH = rgba.rows;
+#else
+  (void)raizSteam;
+  (void)j;
+#endif
 }
 
 bool esHerramienta(const std::string &nombre) {
@@ -147,6 +182,7 @@ std::vector<Juego> juegosSteam() {
       if (j.id.empty() || esHerramienta(j.nombre) || !(std::atoi(valorVdf(txt, "StateFlags").c_str()) & 4)) continue;
       if (std::find(ids.begin(), ids.end(), j.id) != ids.end()) continue;
       ids.push_back(j.id);
+      cargaCaratula(raices.front(), j);
       sal.push_back(j);
     }
   }
@@ -197,7 +233,10 @@ Valores leer() {
   };
   const std::string modo = strLower(de("modo"));
   v.modo = (modo == "conv" || modo == "sbs" || modo == "suave") ? (modo == "suave" ? "sbs" : modo) : "ask";
-  v.divididoSuave = si(de("dividido_suavizado"), true);
+  {
+    const std::string ds = strLower(de("dividido_suavizado"));
+    v.suavizar = (ds == "auto" || ds == "automatico") ? 2 : (si(ds, true) ? 1 : 0);
+  }
   v.rastreo = si(de("rastreo"), false);
   v.hdr = si(de("hdr_en_3d"), false);
   v.atajos = si(de("atajos_globales"), true);
@@ -253,9 +292,9 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     m.elegido = v.modo == "conv" ? 1 : (v.modo == "sbs" ? 2 : 0);
     pon(m, "modo");
     Hud::ItemPanel d;
-    d.tipo = Hud::ItemPanel::Interruptor, d.rotulo = "Suavizar los vídeos divididos";
-    d.nota = "Usa una de sus dos imágenes y el relieve del conversor: nada sale doble";
-    d.valor = v.divididoSuave;
+    d.tipo = Hud::ItemPanel::Opciones, d.rotulo = "Suavizar los vídeos divididos";
+    d.opciones = {"Siempre", "Si hace falta", "Nunca"};
+    d.elegido = v.suavizar == 1 ? 0 : (v.suavizar == 2 ? 1 : 2);
     pon(d, "dividido_suavizado");
     Hud::ItemPanel r;
     r.tipo = Hud::ItemPanel::Deslizador, r.rotulo = "Fuerza del relieve";
@@ -291,6 +330,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       pon(n, "");
     }
     for (const auto &par : v.recordadas) {
+      if (par.first.rfind("steam_app_", 0) == 0) continue;   /* los juegos se llevan en su pestana */
       Hud::ItemPanel fila;
       fila.tipo = Hud::ItemPanel::Fila, fila.rotulo = par.first, fila.valorTexto = nombreModo(par.second);
       fila.quitar = true;
@@ -378,12 +418,16 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     for (const Juego &j : juegos) {
       Hud::ItemPanel fila;
       fila.tipo = Hud::ItemPanel::Juego, fila.rotulo = j.nombre;
-      fila.valorTexto = j.ultimaVez > 0 ? "" : "sin estrenar";
+      fila.img = j.cara, fila.imgW = j.caraW, fila.imgH = j.caraH;
+      /* 3D salvo que este apuntado como «sin 3D»: su ventana se llama steam_app_<id> */
+      fila.valor = true;
+      for (const auto &par : v.recordadas)
+        if (par.first == "steam_app_" + j.id && par.second == "flat") fila.valor = false;
       pon(fila, "juego:" + j.id);
     }
     Hud::ItemPanel n;
     n.tipo = Hud::ItemPanel::Nota;
-    n.rotulo = "Al ponerse el juego a pantalla completa, OdysseyVK ofrece el 3D como con un vídeo.";
+    n.rotulo = "3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.";
     pon(n, "");
   }
 }
@@ -404,10 +448,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     return true;
   }
   if (id == "dividido_suavizado") {
-    const bool nuevo = !v.divididoSuave;
-    if (!fija(id, nuevo ? "si" : "no")) return false;
-    avisarVisor({}, {{"dividido_suavizado", nuevo ? "si" : "no"}});
-    if (aviso) *aviso = nuevo ? "los vídeos divididos se suavizan" : "los vídeos divididos se ven con su propio relieve";
+    static const char *kVal[] = {"si", "auto", "no"};
+    static const char *kDice[] = {"los vídeos divididos se suavizan siempre",
+                                  "con su propio relieve mientras quepa; suavizado solo si algo sale doble",
+                                  "los vídeos divididos se ven siempre con su propio relieve"};
+    if (sub < 0 || sub > 2 || !fija(id, kVal[sub])) return false;
+    avisarVisor({}, {{"dividido_suavizado", kVal[sub]}});
+    if (aviso) *aviso = kDice[sub];
     return true;
   }
   if (id == "rastreo" || id == "hdr_en_3d" || id == "atajos_globales") {
@@ -441,6 +488,20 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id.rfind("juego:", 0) == 0) {
     const std::string ap = id.substr(6);
+    bool en3d = true;
+    for (const auto &par : v.recordadas)
+      if (par.first == "steam_app_" + ap && par.second == "flat") en3d = false;
+    if (sub == 1) {
+      /* la pastillita: ese juego entra en 3D solo (conversor) o se deja en 2D sin preguntar */
+      if (!ajuste::fijarAutoEnServeConf("steam_app_" + ap, en3d ? "flat" : "conv", &e)) {
+        if (aviso) *aviso = "no se pudo guardar: " + e;
+        return false;
+      }
+      if (aviso) *aviso = en3d ? "ese juego se queda en 2D" : "ese juego entra solo en 3D";
+      return true;
+    }
+    /* al arrancarlo se apunta lo que diga su pastillita, para que el servicio no pregunte */
+    ajuste::fijarAutoEnServeConf("steam_app_" + ap, en3d ? "conv" : "flat", &e);
     std::string nombre = ap;
     for (const Juego &j : juegos)
       if (j.id == ap) nombre = j.nombre;

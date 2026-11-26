@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Lanzador con carátulas y 3D por juego; suavizado automático (v0.88)
+
+- Rodolfo, con la 0.87 (el panel se arrastra «sin saltos»): «sigue con el lanzador y el suavizado».
+- **Lanzador**: los juegos van en rejilla de cinco con su carátula. `src/preferencias.cpp` la busca en
+  `appcache/librarycache/ID` (`library_600x900.jpg`, suelta o en carpeta de huella; si no,
+  `library_capsule.jpg`) y la reduce a 280 × 420 con OpenCV. El atlas de la interfaz es de un canal,
+  así que las imágenes van aparte y las pinta solo el pintado de CPU, con las esquinas redondeadas
+  por cuenta propia (`Hud::imagenes_`). Sin carátula, la ficha de color con la inicial.
+- **3D por juego y arranque solo**: MEDIDO en su registro, la ventana de un juego de Steam se llama
+  `steam_app_ID` (Stray: `steam_app_1332010`). La pastillita de cada carta apunta `auto =
+  steam_app_ID:conv` o `:flat`, que el servicio ya sabía seguir: con `conv` lanza el 3D sin
+  preguntar. Al arrancar un juego desde el panel se apunta lo que diga su pastillita.
+- **Suavizado automático** (`dividido_suavizado = auto`, `--suavizado-auto`): con el medidor de
+  separación cuatro veces por segundo; por encima de 8 mm pasa al suavizado, y vuelve tras 4 s por
+  debajo de 5 mm. En el panel, «Suavizar los vídeos divididos» pasa a tres opciones.
+- MEDIDO sin panel: en el compositor aparte, un cuadro con un objeto a 4 cm → «el video separa 40 mm:
+  se pasa solo al suavizado»; uno con hasta 7 mm → no cambia; arrancando suavizado con las dos
+  mitades iguales → «vuelve a caber (0 mm)» y el conversor se apaga. Lógica en una carpeta aparte: la
+  pastillita de Stray deja `steam_app_1332010:flat` y luego `:conv`; las tres opciones dejan `auto`,
+  `no` y `si`. La pestaña pintada con sus cinco carátulas (10 ms a 2560x1440).
+- **No probado**: nada en el panel; lanzar un juego y que entre solo en 3D; el suavizado automático
+  con un vídeo de verdad (el cambio de uno a otro es un corte, sin fundido).
+
 ## El panel se arrastra sin tirones (v0.87)
 
 - Rodolfo, con la 0.86: la pausa ya se respeta (MEDIDO en su registro: pausa a los 3 s, sin

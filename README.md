@@ -541,7 +541,10 @@ uso, la memoria y la temperatura de cada tarjeta gráfica):
 
 * **Ajustes**, solo lo de todos los días:
   * qué hacer al ver un vídeo a pantalla completa: preguntar, vídeo normal o vídeo dividido (`modo`);
-  * suavizar los vídeos divididos (`dividido_suavizado`; es el único sitio donde se quita);
+  * suavizar los vídeos divididos (`dividido_suavizado = si | auto | no`): siempre, solo si hace falta
+    (v0.88: el vídeo se ve con su propio relieve mientras lo más cercano y lo más lejano no pasen de
+    8 mm de separación; al pasarse entra el suavizado y sale cuando lleva 4 s por debajo de 5 mm) o
+    nunca;
   * fuerza del relieve del conversor (`relieve`) y reducir el fantasma (`crosstalk_base`, se nota al
     momento con un vídeo abierto);
   * seguir la cabeza con la cámara (`rastreo`), mantener el HDR durante el 3D (`hdr_en_3d`), atajos
@@ -549,9 +552,10 @@ uso, la memoria y la temperatura de cada tarjeta gráfica):
   * las aplicaciones que pasan sin preguntar (`auto = app:modo`), con un aspa para olvidar cada una.
 * **Juegos**: la biblioteca de Steam, leída de sus propios ficheros (`libraryfolders.vdf` y los
   `appmanifest_*.acf` de cada biblioteca; sin Proton ni los Steam Linux Runtime), los jugados hace
-  menos primero. Se pica uno y arranca (`steam steam://rungameid/ID`); cuando el juego se pone a
-  pantalla completa el servicio ofrece el 3D como con cualquier ventana. Es la primera piedra del
-  lanzador: todavía sin carátulas y sin elegir el 3D por juego.
+  menos primero, en rejilla con su carátula (la de la caché de Steam, `appcache/librarycache`). Se
+  pica una carátula y el juego arranca (`steam steam://rungameid/ID`). La pastillita **3D / 2D** de
+  cada juego dice si entra solo en 3D al ponerse a pantalla completa o se deja como está: se guarda
+  como `auto = steam_app_ID:conv` o `:flat`, que es como se llama la ventana de un juego de Steam.
 
 Todo se escribe en `~/.config/odysseyvk/serve.conf` y el servicio lo relee solo cuando cambia (ya
 no hace falta reiniciarlo para esas claves). La ventana de siempre, con los veinte números de la

@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,6 +43,10 @@ public:
     std::vector<std::string> opciones;
     float frac = 0.0f;               /* deslizador, 0..1 */
     bool quitar = false;             /* fila con aspa para quitarla */
+    /* la caratula de un juego (RGBA, imgW x imgH). El atlas de la interfaz es de un solo canal, asi
+       que las imagenes van aparte y solo las pinta el pintado de CPU (el del panel). */
+    std::shared_ptr<const std::vector<uint8_t>> img;
+    int imgW = 0, imgH = 0;
   };
 
   struct State {
@@ -238,6 +243,13 @@ private:
   /* recorte de todo lo que se pinte mientras este puesto (la lista del panel, que corre) */
   Rect recorte_;
   bool hayRecorte_ = false;
+  struct ImagenCpu {
+    Rect caja, recorte;      /* en puntos del lienzo virtual */
+    const uint8_t *px = nullptr;
+    int w = 0, h = 0;
+    float radio = 0.0f;
+  };
+  std::vector<ImagenCpu> imagenes_;
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
              bool center = false);
   float textWidth(const std::string &s, float size) const;

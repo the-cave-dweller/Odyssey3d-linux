@@ -58,6 +58,10 @@ struct ViewerOpts {
   /* Que hace el boton de «video dividido» de la pastilla (v0.84): de normal lo pone SUAVIZADO; con
      `--sin-suavizado` (suavizado = no en los ajustes) lo teje tal cual, con el relieve que trae. */
   bool suavizado = true;
+  /* `--suavizado-auto` (dividido_suavizado = auto, v0.88): el video dividido se teje con su propio
+     relieve mientras quepa en lo que aguanta el panel, y se pasa solo al suavizado mientras algo se
+     salga (lo dice el medidor de separacion). */
+  bool suavizadoAuto = false;
   bool noCorr = false;     /* sin mapas de correccion del panel */
   bool solid = false;      /* fuente plana (para medir la trama) */
   bool topBottom = false;  /* video arriba/abajo */

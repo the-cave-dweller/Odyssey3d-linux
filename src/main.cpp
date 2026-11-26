@@ -1825,6 +1825,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--recordado") o.recordado = true;
     else if (a == "--conversor-en-espera") enEspera = true;
     else if (a == "--sin-suavizado") o.suavizado = false;
+    else if (a == "--suavizado-auto") o.suavizadoAuto = true;
     else if (a == "--suave") {
       /* video dividido suavizado: una de sus dos imagenes y el relieve del conversor */
       o.suave = true;
@@ -3379,6 +3380,7 @@ struct ServeCfg {
      el interruptor de los ajustes del programa. (`suavizado` a secas ya era otra cosa: el filtro del
      rastreo de la cabeza.) */
   bool divididoSuave = true;
+  bool divididoAuto = false;   /* dividido_suavizado = auto: solo mientras el video se salga (v0.88) */
   double canto = -1.0;      /* ancho del puente del canto; -1 = el de fabrica (0,004) */
   double faseTemblor = -1.0;/* temblor de la fase de la trama, en ciclos; -1 = apagado (0) */
   double rampaX = 999.0;    /* rampa de fase en x, ciclos por pixel de panel; 999 = sin ajustar */
@@ -3529,6 +3531,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     }
     else if (k == "dividido_suavizado") {
       const std::string s = strLower(v);
+      cfg.divididoAuto = (s == "auto" || s == "automatico");
       cfg.divididoSuave = !(s == "no" || s == "0" || s == "off" || s == "apagado" || s == "quitado");
     }
     else if (k == "crosstalk_base") {
@@ -3639,15 +3642,17 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     /* y lo mismo con el suavizado de los videos divididos, que tambien se cambia desde los ajustes */
     if (const auto it = conf.find("dividido_suavizado"); it != conf.end()) {
       const std::string v = strLower(it->second);
+      pila->divididoAuto = (v == "auto" || v == "automatico");
       pila->divididoSuave = !(v == "no" || v == "0" || v == "off" || v == "apagado" || v == "quitado");
     } else {
       pila->divididoSuave = true;
+      pila->divididoAuto = false;
     }
   }
   /* El modo que de verdad se lanza. «Dividido» (`sbs`, y el `suave` que guardo la 0.83) es UNA
      eleccion; que salga suavizado o tal cual lo dicen los ajustes del programa. */
   const std::string modo = (pila && (modoPedido == "sbs" || modoPedido == "suave"))
-                               ? std::string(pila->divididoSuave ? "suave" : "sbs")
+                               ? std::string(pila->divididoSuave && !pila->divididoAuto ? "suave" : "sbs")
                                : modoPedido;
   pid_t pid = ::fork();
   if (pid != 0) return pid;
@@ -3771,6 +3776,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "suave") args.push_back("--suave");
   /* y el boton de video dividido de la pastilla hace lo mismo que los ajustes */
   if (pila && !pila->divididoSuave) args.push_back("--sin-suavizado");
+  if (pila && pila->divididoAuto) args.push_back("--suavizado-auto");
   /* La red y sus numeros viajan tambien con el video dividido (v0.79): desde la pastilla se puede
      pasar a video normal en marcha, y sin esto el visor abria la otra red, no la de serve.conf.
      Pasarlas no abre nada: la red solo se carga cuando el conversor se enciende. */
@@ -5286,6 +5292,7 @@ static int cmdServe(int argc, char **argv) {
           const bool cambio = nuevo.modo != cfg.modo || nuevo.rastreo != cfg.rastreo || nuevo.hdrEn3d != cfg.hdrEn3d ||
                               nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
                               nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
+                              nuevo.divididoAuto != cfg.divididoAuto ||
                               nuevo.porApp != cfg.porApp;
           cfg.modo = nuevo.modo;
           cfg.rastreo = nuevo.rastreo;
@@ -5294,10 +5301,11 @@ static int cmdServe(int argc, char **argv) {
           cfg.crosstalkBase = nuevo.crosstalkBase;
           cfg.relieve = nuevo.relieve;
           cfg.divididoSuave = nuevo.divididoSuave;
+          cfg.divididoAuto = nuevo.divididoAuto;
           cfg.porApp = nuevo.porApp;
           if (cambio) {
             std::printf("[serve] serve.conf cambio: modo=%s · rastreo %s · dividido %s · %d aplicacion(es) sin preguntar\n",
-                        cfg.modo.c_str(), cfg.rastreo ? "si" : "no", cfg.divididoSuave ? "suavizado" : "tal cual",
+                        cfg.modo.c_str(), cfg.rastreo ? "si" : "no", cfg.divididoAuto ? "suavizado si hace falta" : (cfg.divididoSuave ? "suavizado" : "tal cual"),
                         (int)cfg.porApp.size());
             std::fflush(stdout);
           }

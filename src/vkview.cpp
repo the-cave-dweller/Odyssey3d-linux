@@ -121,6 +121,7 @@ struct VkUi {
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
   int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
   bool suavizado = true;     /* el boton de dividido lo pone suavizado (los ajustes del programa lo quitan) */
+  bool suavizadoAuto = false; /* ...o lo decide solo el medidor de separacion (v0.88) */
   std::string modoElegido;   /* "conv" / "sbs" / "tb": con que tipo de 3D se guarda el «no volver a preguntar» */
   /* el boton de la pastilla y las teclas 1 y 2: 1 = la red de Samsung (mde_*.onnx), 2 = la nativa
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
@@ -472,7 +473,8 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
          hace el bucle del visor, que es quien tiene la red. */
       /* el boton de video dividido lo pone suavizado, salvo que los ajustes del programa digan otra
          cosa (v0.84). HitModoSuave ya no tiene boton: queda para la prueba por nombre. */
-      const int modo = hit == Hud::HitModoNormal ? 1 : (hit == Hud::HitModoSuave ? 3 : (ui.suavizado ? 3 : 2));
+      const int modo = hit == Hud::HitModoNormal ? 1
+                       : (hit == Hud::HitModoSuave ? 3 : (ui.suavizadoAuto ? 2 : (ui.suavizado ? 3 : 2)));
       if (st.modo3d == modo && st.weaveOn) break;   /* ya estaba en ese */
       st.ask = false;
       st.weaveOn = true;
@@ -1283,6 +1285,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                    : (opts.suave ? "suave" : (opts.conver ? "conv" : (opts.topBottom ? "tb" : "sbs")));
   ui.hud.state().recordar = opts.recordado;
   ui.suavizado = opts.suavizado;
+  ui.suavizadoAuto = opts.suavizadoAuto;
   ui.hud.state().engranaje = !opts.noHud;
   ui.hud.state().suavizado = opts.suavizado;
   ui.hud.state().ratonLibre = !opts.noPassthrough;
@@ -2046,13 +2049,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           const auto ordenSuave = palabras.find("dividido_suavizado");
           if (ordenSuave != palabras.end()) {
             const std::string v = strLower(ordenSuave->second);
-            const bool quiere = !(v == "no" || v == "0" || v == "off" || v == "apagar" || v == "quitar");
-            if (quiere != ui.suavizado) {
+            const bool autoQ = (v == "auto" || v == "automatico");
+            const bool quiere = autoQ || !(v == "no" || v == "0" || v == "off" || v == "apagar" || v == "quitar");
+            if (quiere != ui.suavizado || autoQ != ui.suavizadoAuto) {
               ui.suavizado = quiere;
+              ui.suavizadoAuto = autoQ;
               ui.hud.state().suavizado = quiere;
-              std::printf("[formato] los ajustes %s el suavizado del video dividido\n", quiere ? "ponen" : "quitan");
+              std::printf("[formato] los ajustes dejan el suavizado del video dividido en: %s\n",
+                          autoQ ? "solo si hace falta" : (quiere ? "siempre" : "nunca"));
               std::fflush(stdout);
-              if (ui.hud.state().modo3d >= 2 && ui.hud.state().weaveOn) ui.modoPedido = quiere ? 3 : 2;
+              if (!autoQ && ui.hud.state().modo3d >= 2 && ui.hud.state().weaveOn) ui.modoPedido = quiere ? 3 : 2;
             }
           }
           const auto ordenVista = palabras.find("vista");
@@ -2805,13 +2811,42 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (!med.dividido) pNoDividido++;
           pCentroMin = std::min(pCentroMin, med.centro), pCentroMax = std::max(pCentroMax, med.centro);
           pMaxAbajo = std::max(pMaxAbajo, med.maxAbajo), pMaxArriba = std::max(pMaxArriba, med.maxArriba);
-          if (med.dividido && now - ultimaSeparacion >= 1.0) {
+          if (med.dividido && now - ultimaSeparacion >= (ui.suavizadoAuto ? 0.25 : 1.0)) {
             ultimaSeparacion = now;
             const Separacion sp = medirSeparacion(chica.data(), lado, lado);
             if (sp.valida) {
               sepNormal.push_back(sp.normal);
               sepCerca.push_back(sp.cerca);
               sepLejos.push_back(sp.lejos);
+            }
+            /* Suavizado automatico (v0.88). El video dividido se teje con su propio relieve mientras
+               quepa; en cuanto lo mas cercano o lo mas lejano pasa de 8 mm de separacion (el doble de
+               lo que saca el conversor de este panel) se pasa al suavizado, y se vuelve cuando lleva
+               4 s seguidos por debajo de 5 mm. Los dos umbrales y la espera son para que no baile. */
+            if (ui.suavizadoAuto && sp.valida && ui.hud.state().modo3d >= 2 && ui.hud.state().weaveOn && !ui.modoPedido) {
+              static double cabeDesde = -1.0, cambioEn = -100.0;
+              const float peor = std::max(sp.cerca, -sp.lejos);
+              Hud::State &hs = ui.hud.state();
+              if (peor > 8.0f / 598.0f) {
+                cabeDesde = -1.0;
+                if (hs.modo3d == 2 && now - cambioEn >= 1.0) {
+                  ui.modoPedido = 3;
+                  cambioEn = now;
+                  std::printf("[relieve] el video separa %.0f mm: se pasa solo al suavizado\n", 598.0 * peor);
+                  std::fflush(stdout);
+                }
+              } else if (peor < 5.0f / 598.0f) {
+                if (cabeDesde < 0.0) cabeDesde = now;
+                if (hs.modo3d == 3 && now - cabeDesde >= 4.0 && now - cambioEn >= 4.0) {
+                  ui.modoPedido = 2;
+                  hs.depth = 50, hs.popout = 0;   /* sin el empuje del conversor */
+                  cambioEn = now;
+                  std::printf("[relieve] el video vuelve a caber (%.0f mm): otra vez con su propio relieve\n", 598.0 * peor);
+                  std::fflush(stdout);
+                }
+              } else {
+                cabeDesde = -1.0;
+              }
             }
           }
           if (now - parteDesde >= 20.0) {

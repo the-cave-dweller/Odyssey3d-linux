@@ -418,6 +418,40 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
       }
     }
   }
+  /* las caratulas: encima de todo lo anterior, con las esquinas redondeadas por cuenta propia */
+  for (const ImagenCpu &im : imagenes_) {
+    if (!im.px || im.w <= 0 || im.h <= 0) continue;
+    const float cx0 = im.caja.x * sc_, cy0 = im.caja.y * sc_, cw = im.caja.w * sc_, ch = im.caja.h * sc_;
+    const float rx0 = std::max(cx0, im.recorte.x * sc_), ry0 = std::max(cy0, im.recorte.y * sc_);
+    const float rx1 = std::min(cx0 + cw, (im.recorte.x + im.recorte.w) * sc_);
+    const float ry1 = std::min(cy0 + ch, (im.recorte.y + im.recorte.h) * sc_);
+    const int px0 = std::max(0, (int)std::ceil(rx0 - ox - 0.5f)), py0 = std::max(0, (int)std::ceil(ry0 - oy - 0.5f));
+    const int px1 = std::min(ancho, (int)std::ceil(rx1 - ox - 0.5f)), py1 = std::min(alto, (int)std::ceil(ry1 - oy - 0.5f));
+    const float rad = im.radio * sc_;
+    for (int py = py0; py < py1; py++) {
+      const float y = (float)py + 0.5f + oy - cy0;
+      const float fy = std::max(0.0f, std::min((float)im.h - 1.001f, y / ch * (float)im.h - 0.5f));
+      const int iy = (int)fy;
+      const float ty = fy - (float)iy;
+      for (int px = px0; px < px1; px++) {
+        const float x = (float)px + 0.5f + ox - cx0;
+        /* cobertura del rectangulo redondeado */
+        const float dx = std::max(0.0f, std::max(rad - x, x - (cw - rad))), dy = std::max(0.0f, std::max(rad - y, y - (ch - rad)));
+        const float a = std::max(0.0f, std::min(1.0f, rad + 0.5f - std::hypot(dx, dy)));
+        if (a <= 0.0f) continue;
+        const float fx = std::max(0.0f, std::min((float)im.w - 1.001f, x / cw * (float)im.w - 0.5f));
+        const int ix = (int)fx;
+        const float tx = fx - (float)ix;
+        const uint8_t *p00 = im.px + ((size_t)iy * im.w + ix) * 4u, *p10 = p00 + 4, *p01 = p00 + (size_t)im.w * 4u, *p11 = p01 + 4;
+        float *d = acum.data() + ((size_t)py * (size_t)ancho + (size_t)px) * 4u;
+        for (int c = 0; c < 3; c++) {
+          const float col = ((p00[c] * (1 - tx) + p10[c] * tx) * (1 - ty) + (p01[c] * (1 - tx) + p11[c] * tx) * ty) / 255.0f;
+          d[c] = col * a + d[c] * (1.0f - a);
+        }
+        d[3] = a + d[3] * (1.0f - a);
+      }
+    }
+  }
 }
 
 const Hud::Glyph *Hud::glifo(unsigned cp) const {
@@ -465,6 +499,7 @@ void Hud::nudgePopout(int d) { st_.popout = std::max(-50, std::min(50, st_.popou
 
 void Hud::begin(int w, int h, float altoLogico) {
   v_.clear();
+  imagenes_.clear();
   W_ = w;
   H_ = h;
   /* La interfaz se dibuja en un lienzo virtual y luego se escala al pixel real del panel.
@@ -810,28 +845,50 @@ void Hud::dibujaPanel(int vw, int vh) {
       default: return it.nota.empty() ? 46.0f : 60.0f;
     }
   };
-  contenidoAlto_ = 0.0f;
-  for (const ItemPanel &it : st_.items) contenidoAlto_ += alto(it);
+  /* donde va cada fila (y contada desde el principio de la lista). Los juegos no van en fila sino
+     en rejilla de cinco caratulas (v0.88): los seguidos se van colocando de izquierda a derecha. */
+  const int kCols = 5;
+  const float hueco = 14.0f, anchoCarta = (panelCuerpo_.w - 32.0f - 10.0f - hueco * (float)(kCols - 1)) / (float)kCols;
+  const float altoCarta = anchoCarta * 1.5f + 40.0f;
+  std::vector<Rect> sitio(st_.items.size());
+  {
+    float yy = 0.0f, filaY = 0.0f;
+    int col = 0;
+    for (size_t i = 0; i < st_.items.size(); i++) {
+      const ItemPanel &it = st_.items[i];
+      if (it.tipo == ItemPanel::Juego) {
+        if (col == 0) {
+          filaY = yy + 6.0f;
+          yy += altoCarta + hueco;
+        }
+        sitio[i] = {izq + (float)col * (anchoCarta + hueco), filaY, anchoCarta, altoCarta};
+        col = (col + 1) % kCols;
+      } else {
+        col = 0;
+        sitio[i] = {panelCuerpo_.x + 4.0f, yy, panelCuerpo_.w - 14.0f, alto(it)};
+        yy += alto(it);
+      }
+    }
+    contenidoAlto_ = yy;
+  }
   const float tope = std::max(0.0f, contenidoAlto_ - panelCuerpo_.h);
   st_.corrida = std::max(0.0f, std::min(tope, st_.corrida));
   zonas_.assign(st_.items.size(), ZonaItem{});
   recorte_ = panelCuerpo_;
   hayRecorte_ = true;
-  float y = panelCuerpo_.y - st_.corrida;
   const bool dentro = panelCuerpo_.inside(mx_, my_);
   for (size_t i = 0; i < st_.items.size(); i++) {
     const ItemPanel &it = st_.items[i];
-    const float h = alto(it);
+    const float h = sitio[i].h, y = panelCuerpo_.y - st_.corrida + sitio[i].y;
     ZonaItem &z = zonas_[i];
-    z.caja = {panelCuerpo_.x + 4.0f, y, panelCuerpo_.w - 14.0f, h};
+    z.caja = {sitio[i].x, y, sitio[i].w, h};
     if (y + h < panelCuerpo_.y || y > panelCuerpo_.y + panelCuerpo_.h) {   /* fuera de la vista */
       z.caja = {-10.0f, -10.0f, 0.0f, 0.0f};
-      y += h;
       continue;
     }
     const bool hov = dentro && z.caja.inside(mx_, my_);
     const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego;
-    if (hov && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
+    if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
       mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
     const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
     switch (it.tipo) {
@@ -895,37 +952,55 @@ void Hud::dibujaPanel(int vw, int vh) {
         break;
       }
       case ItemPanel::Juego: {
-        /* la ficha de color con la inicial: el color sale del nombre, siempre el mismo para cada juego */
-        unsigned semilla = 2166136261u;
-        for (unsigned char ch : it.rotulo) semilla = (semilla ^ ch) * 16777619u;
-        const float tono = (float)(semilla % 360u) / 60.0f, xq = 1.0f - std::fabs(std::fmod(tono, 2.0f) - 1.0f);
-        float cr = 0.0f, cg = 0.0f, cb = 0.0f;
-        switch ((int)tono) {
-          case 0: cr = 1, cg = xq; break;
-          case 1: cr = xq, cg = 1; break;
-          case 2: cg = 1, cb = xq; break;
-          case 3: cg = xq, cb = 1; break;
-          case 4: cr = xq, cb = 1; break;
-          default: cr = 1, cb = xq; break;
+        /* una carta: la caratula (o, si Steam no la tiene, una ficha de color con la inicial), el
+           nombre debajo y a su derecha la pastillita 3D / 2D. Se pica la carta y arranca; la
+           pastillita cambia si ese juego entra en 3D solo. */
+        const Rect cara{z.caja.x, y, z.caja.w, z.caja.w * 1.5f};
+        if (hov) mask9({cara.x - 3.0f, cara.y - 3.0f, cara.w + 6.0f, cara.h + 6.0f}, 1, 13.0f, accent[0], accent[1], accent[2], 1.0f);
+        if (it.img && it.imgW > 0 && it.imgH > 0) {
+          imagenes_.push_back({cara, panelCuerpo_, it.img->data(), it.imgW, it.imgH, 10.0f});
+        } else {
+          unsigned semilla = 2166136261u;
+          for (unsigned char ch : it.rotulo) semilla = (semilla ^ ch) * 16777619u;
+          const float tono = (float)(semilla % 360u) / 60.0f, xq = 1.0f - std::fabs(std::fmod(tono, 2.0f) - 1.0f);
+          float cr = 0.0f, cg = 0.0f, cb = 0.0f;
+          switch ((int)tono) {
+            case 0: cr = 1, cg = xq; break;
+            case 1: cr = xq, cg = 1; break;
+            case 2: cg = 1, cb = xq; break;
+            case 3: cg = xq, cb = 1; break;
+            case 4: cr = xq, cb = 1; break;
+            default: cr = 1, cb = xq; break;
+          }
+          mask9(cara, 1, 10.0f, 0.22f + 0.38f * cr, 0.20f + 0.34f * cg, 0.30f + 0.42f * cb, 1.0f);
+          size_t n = 0;
+          nextCp(it.rotulo, n);
+          text(it.rotulo.substr(0, n), cara.x + cara.w * 0.5f, cara.y + cara.h * 0.5f - 24.0f, 44.0f, 1.0f, 1.0f, 1.0f, 0.96f, true);
         }
-        const Rect ficha{izq, y + 8.0f, 40.0f, 40.0f};
-        mask9(ficha, 1, 10.0f, 0.22f + 0.38f * cr, 0.20f + 0.34f * cg, 0.30f + 0.42f * cb, 1.0f);
-        size_t n = 0;
-        nextCp(it.rotulo, n);
-        text(it.rotulo.substr(0, n), ficha.x + 20.0f, ficha.y + 9.0f, 19.0f, 1.0f, 1.0f, 1.0f, 0.96f, true);
-        text(it.rotulo, izq + 56.0f, y + 17.0f, 16.0f, ink[0], ink[1], ink[2], 1.0f);
-        if (hov) {
-          const float w = textWidth("Jugar", 13.5f) + 30.0f;
-          const Rect b{der - w, y + 13.0f, w, 30.0f};
-          mask9(b, 0, 15.0f, accent[0], accent[1], accent[2], 1.0f);
-          text("Jugar", b.x + b.w * 0.5f, b.y + 6.5f, 13.5f, 1.0f, 1.0f, 1.0f, 1.0f, true);
-        } else if (!it.valorTexto.empty()) {
-          text(it.valorTexto, der - textWidth(it.valorTexto, 12.0f), y + 20.0f, 12.0f, dim[0], dim[1], dim[2], 0.80f);
+        /* el nombre, cortado a lo que quepa */
+        const Rect chip{cara.x + cara.w - 38.0f, cara.y + cara.h + 10.0f, 38.0f, 22.0f};
+        z.subs.push_back(chip);
+        std::string nombre = it.rotulo;
+        const float cabeN = cara.w - 46.0f;
+        if (textWidth(nombre, 13.0f) > cabeN) {
+          std::string corto;
+          size_t k = 0;
+          while (k < nombre.size()) {
+            const size_t antes = k;
+            nextCp(nombre, k);
+            if (textWidth(corto + nombre.substr(antes, k - antes) + "..", 13.0f) > cabeN) break;
+            corto += nombre.substr(antes, k - antes);
+          }
+          nombre = corto + "..";
         }
+        text(nombre, cara.x + 2.0f, cara.y + cara.h + 13.0f, 13.0f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.90f);
+        const bool hc2 = dentro && chip.inside(mx_, my_);
+        if (it.valor) mask9(chip, 0, 11.0f, accent[0], accent[1], accent[2], hc2 ? 1.0f : 0.92f);
+        else mask9(chip, 0, 11.0f, 0.30f, 0.31f, 0.36f, hc2 ? 1.0f : 0.92f);
+        text(it.valor ? "3D" : "2D", chip.x + chip.w * 0.5f, chip.y + 3.5f, 12.0f, 1.0f, 1.0f, 1.0f, it.valor ? 1.0f : 0.80f, true);
         break;
       }
     }
-    y += h;
   }
   hayRecorte_ = false;
   /* la barrita de la derecha, solo si hay mas lista que caja */
@@ -973,7 +1048,9 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     if (item) *item = (int)i;
     switch (it.tipo) {
       case ItemPanel::Interruptor:
+        return HitPanelItem;
       case ItemPanel::Juego:
+        if (!z.subs.empty() && z.subs[0].inside(mx, my) && sub) *sub = 1;
         return HitPanelItem;
       case ItemPanel::Opciones:
         for (size_t k = 0; k < z.subs.size(); k++)

@@ -20,6 +20,7 @@
 #ifndef ODYSSEY_PREFERENCIAS_H
 #define ODYSSEY_PREFERENCIAS_H
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,6 +33,9 @@ struct Juego {
   std::string id;          /* el appid de Steam */
   std::string nombre;
   long long ultimaVez = 0; /* LastPlayed, en segundos; 0 = nunca */
+  /* la caratula de la cache de Steam, ya reducida a RGBA de caraW x caraH (vacia si no la hay) */
+  std::shared_ptr<const std::vector<uint8_t>> cara;
+  int caraW = 0, caraH = 0;
 };
 /* Los juegos instalados en todas las bibliotecas de Steam, los jugados hace menos primero. No
    entran las herramientas (Proton, los Steam Linux Runtime, los redistribuibles). */
@@ -41,7 +45,7 @@ bool lanzarJuego(const std::string &id, std::string *err = nullptr);
 
 struct Valores {
   std::string modo = "ask";       /* ask · conv · sbs */
-  bool divididoSuave = true;
+  int suavizar = 1;               /* los videos divididos: 0 nunca · 1 siempre · 2 solo si hace falta */
   bool rastreo = false;
   bool hdr = false;
   bool atajos = true;
