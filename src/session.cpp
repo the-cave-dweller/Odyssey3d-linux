@@ -152,6 +152,7 @@ void Rig::bringUp(const ViewerOpts &o) {
     }
   }
 
+  marcaArranque("panel");
   /* 2) lente lenticular: autenticación HMAC-SHA3 y conmutación a 3D. */
   if (!o.noLens) {
     std::string port = Lens::findPort();
@@ -168,6 +169,7 @@ void Rig::bringUp(const ViewerOpts &o) {
     }
   }
 
+  marcaArranque("lente");
   /* 3) scaler MediaTek: modo 3D de la tarjeta del monitor. */
   if (!o.noScaler) {
     std::string dev = Scaler::findDevice();
@@ -182,6 +184,7 @@ void Rig::bringUp(const ViewerOpts &o) {
       std::fprintf(stderr, "[aviso] no se pudo activar el modo 3D: %s\n", scaler.lastError().c_str());
     }
   }
+  marcaArranque("scaler");
 }
 
 void Rig::shutDown() {

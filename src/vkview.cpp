@@ -1426,6 +1426,7 @@ static std::string estadoVentana(const std::string &uuid, bool *viva) {
 #endif
 
 int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
+  marcaArranque("hasta el visor");
   std::string sock = ensureWaylandEnv();
   if (sock.empty())
     std::fprintf(stderr, "[aviso] no se detecta sesion Wayland (WAYLAND_DISPLAY vacio): glfw puede fallar\n");
@@ -1480,6 +1481,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      encontraba la ventana del visor, no bajaba el juego y el juego quedaba encima del 3D. */
   glfwWindowHintString(GLFW_WAYLAND_APP_ID, "odysseyvk");
   GLFWwindow *win = glfwCreateWindow(W, H, NOMBRE_APP, (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
+  marcaArranque("ventana");
   if (!win) {
     const char *desc = nullptr;
     int code = glfwGetError(&desc);
@@ -1668,7 +1670,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     rig.shutDown();
     glfwTerminate();
     return 1;
-  }
+  }  marcaArranque("vulkan");
+
   wv.setPanelPixels(fbW, fbH);
   wv.setField(LensField{}, EyePose{opts.eyeX, opts.eyeY, opts.eyeZ});
 
@@ -1974,7 +1977,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   }
   if (convActivo) {
     std::string rerr;
-    if (!arrancarRed(convGpu, &rerr)) {
+    const bool redLista = arrancarRed(convGpu, &rerr);
+    marcaArranque("red");
+    if (!redLista) {
       std::fprintf(stderr, "[conversor] %s\n", rerr.c_str());
       convActivo = false;
     } else if (!wv.prepareConverter(red.size(), &rerr)) {
@@ -2072,7 +2077,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       fo.set.maxReprojectionPx = 40.0;
     }
     std::string trk;
-    if (!feed.start(fo, &trk))
+    const bool camaraLista = feed.start(fo, &trk);
+    marcaArranque("camara");
+    if (!camaraLista)
       std::fprintf(stderr, "[rastreo] no arranco: %s\n", trk.c_str());
     else {
       rastreoVivo = true;
@@ -2141,6 +2148,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     haveCap = true;
     std::printf("[captura] pidiendo el flujo de la ventana %s\n", opts.captureUuid.c_str());
+    marcaArranque("pedir la captura");
     /* el formato lo eligio el usuario en la tarjeta; si se equivoco, la imagen se ve doble
        y desplazada, que es la queja tipica: decir como se deshace sin cerrar la sesion */
     /* El aviso del formato solo tiene sentido cuando la imagen trae dos vistas. Con el conversor
@@ -2903,6 +2911,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     } else if (kind == SourceKind::Capture && haveCap) {
       cap.pump();
       if (cap.frameCount() != lastFrameCount) {
+        if (lastFrameCount == 0) marcaArranque("primer cuadro capturado");
         lastFrameCount = cap.frameCount();
         ultimoNuevo = now;
         reintentos = 0;  /* el flujo revive: presupuesto nuevo de reintentos */
@@ -3556,6 +3565,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (red.lastCut())
             std::printf("[conversor] cambio de plano (%ld): se reinicia la escala de profundidad y el apoyo\n",
                         red.cutCount());
+          if (convHechas == 0) marcaArranque("primer mapa");
           if (++convHechas == 1 || convHechas % 150 == 0)
             std::printf("[conversor] profundidad en %.1f ms con %s (cuadro %lld)\n", convMs,
                         red.device().c_str(), (long long)convHechas);
@@ -4187,6 +4197,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (trabajo > periodo) tirTrabajoLargos++;
     }
     const bool frameBien = wv.frame(&err);
+    /* (v1.12) la linea del arranque: en el primer cuadro con relieve (o con imagen, sin conversor) */
+    {
+      static bool arranqueDicho = false;
+      if (!arranqueDicho && frameBien && (convActivo ? convHechas >= 1 : lastFrameCount > 0)) {
+        arranqueDicho = true;
+        marcaArranque("primer cuadro en 3D");
+        std::printf("[arranque] %s\n", resumenArranque().c_str());
+        std::fflush(stdout);
+      }
+    }
     {   /* cuanto espero la presentacion a la tarjeta y al refresco, y el hueco entre presentaciones */
       const double t1 = glfwGetTime(), periodo = 1.0 / (hz > 0 ? (double)hz : 120.0);
       tirPresentaMax = std::max(tirPresentaMax, t1 - tirPresenta0);

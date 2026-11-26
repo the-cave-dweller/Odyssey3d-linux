@@ -9,6 +9,10 @@
 #include <sstream>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <ctime>
+#include <string>
+#include <utility>
+#include <vector>
 
 std::string strTrim(const std::string &s) {
   size_t a = 0, b = s.size();
@@ -159,6 +163,50 @@ static std::string carpetaRedes() {
 }
 std::string rutaRedLigera() { return carpetaRedes() + "depth_anything_v2_small_fp16.onnx"; }
 std::string rutaRedVieja() { return carpetaRedes() + "depth_anything_v2_small.onnx"; }
+
+namespace {
+/* segundos desde el arranque del sistema en que empezo este proceso (campo 22 de /proc/self/stat,
+   en tics de reloj); -1 si no se pudo leer */
+double inicioProceso() {
+  static const double inicio = [] {
+    std::ifstream f("/proc/self/stat");
+    std::string todo((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    const size_t p = todo.rfind(')');
+    if (p == std::string::npos) return -1.0;
+    std::istringstream rest(todo.substr(p + 2));
+    std::string campo;
+    for (int i = 3; i <= 22 && (rest >> campo); i++) {
+      if (i == 22) return std::atof(campo.c_str()) / (double)sysconf(_SC_CLK_TCK);
+    }
+    return -1.0;
+  }();
+  return inicio;
+}
+std::vector<std::pair<std::string, double>> &marcas() {
+  static std::vector<std::pair<std::string, double>> m;
+  return m;
+}
+}  // namespace
+
+void marcaArranque(const char *paso) {
+  timespec ts{};
+  clock_gettime(CLOCK_BOOTTIME, &ts);
+  const double ahora = (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec, ini = inicioProceso();
+  marcas().push_back({paso, ini >= 0.0 ? (ahora - ini) * 1000.0 : -1.0});
+}
+
+std::string resumenArranque() {
+  std::string s;
+  double antes = 0.0;
+  char buf[96];
+  for (const auto &m : marcas()) {
+    std::snprintf(buf, sizeof buf, "%s%s %.0f", s.empty() ? "" : " · ", m.first.c_str(), m.second - antes);
+    s += buf;
+    antes = m.second;
+  }
+  std::snprintf(buf, sizeof buf, " · total %.0f ms", antes);
+  return s + buf;
+}
 std::string rutaRedNuestra() {
   if (fileExists(rutaRedLigera())) return rutaRedLigera();
   if (fileExists(rutaRedVieja())) return rutaRedVieja();

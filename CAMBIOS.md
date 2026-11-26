@@ -78,6 +78,14 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     cerraba, en bucle cada ~6 s («me pasó como 4 veces»: cuatro vueltas en su registro entre las
     10:18:53 y las 10:19:12, con el panel parpadeando). Los 8 s cubren esa vigilia; con el servicio
     anterior, en su registro de las 10:17, la salida y la vuelta fueron limpias.
+- **La línea `[arranque]`** («¿ayuda al rendimiento cargar el modelo en RAM?»): el archivo de la red ya
+  vive en la caché del sistema (leerlo tarda 5 ms) y cada mapa tarda lo mismo (13–14 ms); lo que cuesta es
+  arrancar la red en la tarjeta en cada sesión (~0,7–0,8 s de los ~2,3 s que tarda el 3D en entrar).
+  Para repartir el resto, el visor apunta cada paso del arranque desde que empezó el proceso (de
+  `/proc/self/stat`; el reloj del registro no sirve porque el visor escribe por tandas) y, en el primer
+  cuadro en 3D, escribe `[arranque] hasta el visor · panel · lente · scaler · ventana · vulkan · red ·
+  camara · pedir la captura · primer cuadro capturado · primer mapa · primer cuadro en 3D · total`. En el
+  visor aparte (sin panel, lente, scaler, cámara ni captura): 1210 ms, de ellos red 812 y vulkan 222.
 - Lo de «no está el modo Auto» era otra cosa: desinstaló y volvió a instalar, y Desinstalar borra la red
   de profundidad (sin ella no hay Auto, la pastilla cae a la del vídeo dividido); además pasó el
   interruptor a Rendimiento un rato. Con la red bajada de nuevo y Neural puesto, Auto en su registro.
