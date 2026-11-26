@@ -436,11 +436,16 @@ struct Overlay::Impl {
   static Bloque *nuevoBloque(wl_shm *shm, int w, int h, std::string *err) {
     const int stride = w * 4;
     const size_t tam = (size_t)stride * (size_t)h;
+    /* (v1.13) el nombre se borra en cuanto se crea: el compositor solo necesita el descriptor. Antes se
+       quedaba en /dev/shm para siempre (en RAM): MEDIDO el 26-nov, 1183 archivos y 7,8 GB de un dia de
+       uso, uno por cada lienzo de la pastilla, el panel o las tarjetas */
     char plantilla[] = "/dev/shm/odysseyvk-XXXXXX";
     int fd = ::mkstemp(plantilla);
+    if (fd >= 0) ::unlink(plantilla);
     if (fd < 0) {
       char plantilla2[] = "/tmp/odysseyvk-XXXXXX";
       fd = ::mkstemp(plantilla2);
+      if (fd >= 0) ::unlink(plantilla2);
       if (fd < 0) {
         if (err) *err = "no se pudo crear el mapa de memoria";
         return nullptr;
