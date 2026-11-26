@@ -1,5 +1,6 @@
 /* bandeja.cpp — ver bandeja.h. */
 #include "bandeja.h"
+#include "idioma.h"
 
 #include <systemd/sd-bus.h>
 #include <unistd.h>
@@ -26,7 +27,7 @@ int propiedad(sd_bus *, const char *, const char *, const char *prop, sd_bus_mes
     sd_bus_message_append(reply, "s", "odysseyvk");
     sd_bus_message_open_container(reply, 'a', "(iiay)");
     sd_bus_message_close_container(reply);
-    sd_bus_message_append(reply, "ss", "OdysseyVK", "Clic: ajustes · clic central: juegos");
+    sd_bus_message_append(reply, "ss", "OdysseyVK", idioma::tr("Clic: ajustes · clic central: juegos"));
     return sd_bus_message_close_container(reply);
   }
   return -EINVAL;

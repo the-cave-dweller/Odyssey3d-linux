@@ -12,8 +12,9 @@ What you get:
 - **Side-by-side and top-bottom videos** in 3D, from any player or browser in fullscreen.
 - **Normal 2D video → 3D** with a depth network that runs on your GPU (open model, downloaded once).
 - **Games** from your Steam library, each with its own 2D/3D switch.
-- A floating **settings panel** over the desktop or the video, auto-updates from this repository,
-  and a one-click uninstall.
+- A floating **settings panel** over the desktop or the video, in **7 languages** (English,
+  Español, Français, Deutsch, 中文, 日本語, Русский), updates from this repository and a one-click
+  uninstall.
 
 ![The pill and the card](docs/img/pill.png)
 
@@ -30,12 +31,8 @@ sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulk
 git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh
 ```
 
-`install.sh` compiles, asks for your password once (binary, udev rule and calibration data), and
-installs the user service plus the menu entry. Then:
-
-```bash
-systemctl --user start odysseyvk-serve
-```
+`install.sh` compiles, asks for your password once (binary, udev rule and calibration data),
+installs the menu entry and starts the user service. Then check that the monitor is seen:
 
 ```bash
 odysseyvk doctor
@@ -49,7 +46,7 @@ monitor: it resets its internal hub and the lens, scaler and camera disappear un
 The first time the service starts without a depth network, the settings panel opens by itself
 and offers to download it (95 MB, Depth Anything V2 Small, from
 [huggingface.co/XnetShadow/depth_anything_v2_small](https://huggingface.co/XnetShadow/depth_anything_v2_small)).
-From a terminal that is:
+When the download finishes the panel closes and the network loads. From a terminal it is:
 
 ```bash
 odysseyvk ctl red descargar
@@ -61,8 +58,8 @@ odysseyvk ctl red descargar
 
 Put a video in fullscreen. A card appears in the corner: **Normal video** (one image, converted
 to 3D) or **Split video** (side-by-side). Pick one; the pill in the top-right corner stays while
-the 3D is on, with the ON/OFF switch, depth, pop-out and the gear that opens the settings panel.
-Tick "remember" and that app goes straight to 3D next time.
+the 3D is on, with the ON/OFF switch, depth, pop-out, the two video-type buttons and the gear that
+opens the settings panel. Tick "Don't ask again" and that app goes straight to 3D next time.
 
 Keys (they also work while the video or game has the keyboard):
 
@@ -74,15 +71,26 @@ Keys (they also work while the video or game has the keyboard):
 | `Ctrl+Shift+F1` | hide / show the pill |
 | `Esc` (in the viewer) | leave 3D |
 
-Settings live in the panel (gear on the pill, or the OdysseyVK entry in the app menu) and in
+The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
+taskbar icon or the system-tray icon (click: settings, middle click: games). Its tabs are
+**Settings**, **Games**, **Performance** (frame rate, converter time, GPUs) and **Program**
+(version, updates, taskbar and tray, uninstall). Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
+
+### Language
+
+The globe next to the update arrow switches the language at once: the panel, the pill, the
+cards and the tray tooltip. English is the default; the same choice is in **Program → Other →
+Language**. Chinese and Japanese use the Noto Sans CJK font (`noto-fonts-cjk` on Arch).
+
+![The language list](docs/img/language.png)
 
 ## What makes the 3D good
 
 **Depth from a single image.** For normal videos a depth network looks at each frame and tells
 how far every pixel is; the viewer then shifts the image for each eye accordingly. The near and
-far limits are the ones Samsung's own software uses, so nothing ever goes beyond what the lens
-can show cleanly.
+far limits are the ones Samsung's own software uses, so nothing goes beyond what the lens can
+show cleanly.
 
 ![A frame and its depth map](docs/img/depth-map.png)
 
@@ -90,12 +98,15 @@ can show cleanly.
 edges land a few millimetres away from the real outline. OdysseyVK refines every edge against the
 colour of the image, per pixel, so each object's border is where you see it in both eyes. Measured
 on real frames: the edge is within 2 pixels of the picture for 96 % of edges (it was 26 pixels
-off before).
+off before), with no ghost of the background beside it.
 
 ![Edges before and after the refinement](docs/img/depth-edges.png)
 
 **The subject stays on the screen.** The plane of the screen is placed on what you are looking
-at (the Hub's saliency idea), so faces and subjects stay sharp and the background opens behind.
+at, as Samsung's Hub does, so faces and subjects stay sharp and the background opens behind. In
+green, what sits on the screen plane (measured with 1.07 on real frames): without saliency the
+plane fell on the space behind the ship (0.36); now it is the ship (0.95). On the globe it moves
+from the back of the frame to the globe's rim (0.27 → 0.39).
 
 ![Subject plane before and after](docs/img/subject-plane.png)
 
@@ -104,23 +115,28 @@ several centimetres, more than the lens can show. "Smoothed split video" uses th
 the converter's relief instead, automatically when needed.
 
 **The player's controls stay whole.** In a split video the player paints its bar across both
-halves. OdysseyVK finds those rows and shows the controls once, over the video, blurred and
-dimmed behind them, so the bar is where you click.
+halves. OdysseyVK finds those rows and shows the controls once, over the video, which goes on
+soft and dimmed behind them; when the bar hides, the cut goes away with it.
 
 ![The player bar over a split video](docs/img/player-bar.png)
 
 **Games.** The Games tab lists your Steam library with covers; each game has a 2D | 3D switch.
-Launch from the tab and the game enters 3D on its own.
+Launch from the tab and the game enters 3D on its own when it goes fullscreen. Games must run in
+**borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
+game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
+OdysseyVK says so with a card.
 
 ![Games tab](docs/img/games.png)
+
+![The card a game gets when it closes in 3D](docs/img/card.png)
 
 ## Keeping it up to date
 
 The service checks this repository every six hours. With a new version, a card appears in the
-corner with **Update**, **Later** and a small "don't notify"; the button next to the close cross
-in the panel turns yellow (green arrow = up to date). Update downloads, builds, installs (polkit
-asks your password in a window), restarts the service and reopens the video or game that was in
-3D. The **Program** tab also has "Update automatically" (off by default) and **Uninstall**.
+corner with **Update**, **Later** and a small "Don't notify about updates"; the arrow next to the
+close cross in the panel turns yellow (green = up to date). Update downloads, builds, installs
+(a window asks for your password), restarts the service and reopens the video or game that was
+in 3D. The **Program** tab also has "Update automatically" (off by default) and **Uninstall**.
 
 ![Program tab and the update card](docs/img/settings-program.png)
 
@@ -130,20 +146,22 @@ asks your password in a window), restarts the service and reopens the video or g
 
 | Key | Meaning |
 |---|---|
+| `idioma = en \| es \| fr \| de \| zh \| ja \| ru` | interface language (English by default) |
 | `modo = ask \| conv \| sbs` | ask with the card / always normal video / always split video |
-| `auto = app:conv` | an app that goes straight to 3D (the card's "remember" writes these) |
+| `auto = app:conv` | an app that goes straight to 3D (the card's "Don't ask again" writes these) |
 | `pantalla = DP-4` | which output is the Odyssey |
 | `rastreo = si` | follow your eyes with the monitor's IR camera |
 | `relieve = 1,00` | strength of the converter's relief (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | smooth split videos: always / when needed / never |
 | `crosstalk_base = 0,013` | how much of the other eye's image to subtract (ghosting) |
-| `hz = 165` | panel refresh rate in 3D (default 120) |
+| `hz = 165` | panel refresh rate in 3D (default 120; the G90XF also runs at 165) |
 | `hdr_en_3d = si` | keep HDR during 3D |
+| `barra_tareas = no` / `bandeja = no` | hide OdysseyVK from the taskbar / the system tray |
 | `actualizaciones = no` / `actualizar_auto = si` | no update card / install updates automatically |
-| `actualizaciones_cada = 6` | hours between checks of this repository (6 by default) |
+| `actualizaciones_cada = 6` | hours between checks of this repository |
 
-Everything else (lens pitch calibration, head tracking, two-plane mode, workshop variables) is in
-the guides.
+Numbers use a decimal comma in this file. Everything else (lens pitch calibration, head tracking,
+workshop variables) is in the guides.
 
 ## Documentation
 
@@ -163,3 +181,5 @@ Built on the work of [macdissey-3d](https://github.com/Fulviuus/macdissey-3d) (m
 [Linux_3D_SBS_Player](https://github.com/m-j-tilley/Linux_3D_SBS_Player) (lens model), with
 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) for depth and
 [YuNet](https://github.com/opencv/opencv_zoo) for face detection. MIT license.
+
+The screenshots are made with `python3 tools/capturas-readme.py`.

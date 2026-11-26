@@ -72,7 +72,8 @@ bool esOrden(const std::string &nombre) {
 static bool esOrdenTexto(const std::string &nombre) {
   return nombre == "camara" || nombre == "mono" || nombre == "capa" || nombre == "3d" ||
          nombre == "legado" || nombre == "vista" || nombre == "barra" || nombre == "dividido_suavizado" ||
-         nombre == "cargar_red";   /* `cargar_red = si` (v0.94): la red de profundidad recien bajada, al visor */
+         nombre == "cargar_red" ||   /* `cargar_red = si` (v0.94): la red de profundidad recien bajada, al visor */
+         nombre == "idioma";          /* `idioma = fr` (v1.07): el panel cambio el idioma; la pastilla tambien */
 }
 
 bool esPalabra(const std::string &nombre) { return esOrdenTexto(nombre); }

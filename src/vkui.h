@@ -96,6 +96,9 @@ public:
        flecha si hay una pendiente, flecha verde si esta al dia, gris si no se ha mirado. */
     std::string actualizacion;
     bool alDia = false;
+    /* el boton del idioma (v1.07), a la izquierda del de la actualizacion: abierto, cuelga debajo la
+       lista de los siete idiomas */
+    bool menuIdioma = false;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -139,6 +142,8 @@ public:
     HitPanel,          /* dentro del panel de ajustes, sobre nada que se pique */
     HitPanelCerrar,
     HitPanelActualizar,   /* el boton de la actualizacion, junto al aspa (v0.95) */
+    HitPanelIdioma,       /* el boton del idioma (v1.07): abre y cierra la lista */
+    HitPanelIdiomaOpcion, /* un idioma de la lista: `sub` = cual (idioma::Lengua) */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
@@ -272,12 +277,16 @@ private:
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
              bool center = false);
   float textWidth(const std::string &s, float size) const;
+  /* como text(), pero sin pasar de `maxAncho`: primero achica la letra hasta un 80 % y, si aun no
+     cabe, corta con «…» (v1.07: el frances y el aleman son mas largos que el español) */
+  float textoCabe(const std::string &s, float x, float y, float size, float maxAncho, float cr, float cg, float cb,
+                  float ca, bool center = false);
 
   /* máscaras del atlas: 0 píxel blanco, 1 píldora, 2 tarjeta */
   Rect white_, pill_, card_;
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
-  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_;
+  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -317,7 +326,8 @@ private:
     std::vector<Rect> subs;   /* las opciones de un segmentado, o el aspa de una fila */
     Rect pista;               /* la pista de un deslizador */
   };
-  Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_;
+  Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_;
+  std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelPestanas_;
   std::vector<ZonaItem> zonas_;
   float contenidoAlto_ = 0.0f;

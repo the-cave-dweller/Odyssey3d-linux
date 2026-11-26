@@ -25,6 +25,7 @@
 #include "hoyos.h"
 #include <condition_variable>
 #endif
+#include "idioma.h"
 #include "vkui.h"
 #include "vkweave.h"
 
@@ -389,9 +390,9 @@ std::string infoLine(const Hud::State &st, const std::string &extra) {
     if (!out.empty()) out += " · ";
     out += s;
   };
-  if (st.weaveOn && !(st.hud & 1)) suma("la lente 3D no respondió");
-  if (st.weaveOn && !st.legado && !(st.hud & 2)) suma("el scaler del monitor no respondió");
-  if (st.controlOjo && !st.rastreoVivo) suma("sin cámara: la trama va con la posición de fábrica");
+  if (st.weaveOn && !(st.hud & 1)) suma(idioma::tr("la lente 3D no respondió"));
+  if (st.weaveOn && !st.legado && !(st.hud & 2)) suma(idioma::tr("el scaler del monitor no respondió"));
+  if (st.controlOjo && !st.rastreoVivo) suma(idioma::tr("sin cámara: la trama va con la posición de fábrica"));
   size_t i = 0;
   while (i < extra.size() && (extra[i] == ' ' || (unsigned char)extra[i] == 0xC2 || (unsigned char)extra[i] == 0xB7)) i++;
   suma(extra.substr(i));   /* las frases viejas venian con su " · " delante */
@@ -513,7 +514,7 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       static const char *kAviso[] = {"", "vídeo normal", "vídeo dividido: el relieve del propio vídeo",
                                      "vídeo dividido suavizado: el relieve lo pone el conversor"};
       ui.modoElegido = kClave[modo];
-      ui.extraInfo = kAviso[modo];
+      ui.extraInfo = idioma::tr(kAviso[modo]);
       ui.extraHasta = glfwGetTime() + 4.0;
       std::printf("[formato] desde la pastilla: %s\n", kNombre[modo]);
       std::fflush(stdout);
@@ -542,11 +543,10 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       std::string e;
       if (!ajuste::pedirRecordar(app, quiere ? ui.modoElegido : std::string("no"), &e)) {
         std::fprintf(stderr, "[recordar] %s\n", e.c_str());
-        ui.extraInfo = "no se pudo guardar la elección";
+        ui.extraInfo = idioma::tr("no se pudo guardar la elección");
       } else {
         st.recordar = quiere;
-        ui.extraInfo = quiere ? app + " pasa directo al 3D, sin preguntar"
-                              : "la próxima vez se vuelve a preguntar por " + app;
+        ui.extraInfo = idioma::trf(quiere ? "{} pasa directo al 3D, sin preguntar" : "la próxima vez se vuelve a preguntar por {}", {app});
         std::printf("[recordar] %s: %s\n", app.c_str(), quiere ? ui.modoElegido.c_str() : "se vuelve a preguntar");
         std::fflush(stdout);
       }
@@ -2085,6 +2085,22 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           /* `cargar_red = si` (v0.94): el panel de ajustes acaba de bajar la red abierta. Si el conversor
              estaba pedido y sin red, se carga ahora y el video pasa a 3D sin cerrar nada. (`red = N`
              es otra orden, la de cambiar de red con el conversor ya en marcha.) */
+          /* `idioma = fr` (v1.07): el panel de ajustes cambio el idioma. La pastilla y sus avisos
+             salen ya en el nuevo: se rehace el atlas de letras (con las chinas o japonesas si toca). */
+          const auto ordenIdioma = palabras.find("idioma");
+          if (ordenIdioma != palabras.end()) {
+            const int l = idioma::deCodigo(ordenIdioma->second);
+            if (l >= 0 && l != idioma::actual()) {
+              idioma::poner(l);
+              std::string herr2;
+              if (ui.hud.buildAtlas(&herr2))
+                wv.setAtlas(ui.hud.atlasPixels(), ui.hud.atlasW(), ui.hud.atlasH());
+              else
+                std::fprintf(stderr, "[interfaz] atlas: %s\n", herr2.c_str());
+              std::printf("[interfaz] idioma: %s\n", idioma::codigo(l));
+              std::fflush(stdout);
+            }
+          }
           const auto ordenRed = palabras.find("cargar_red");
           if (ordenRed != palabras.end()) {
             if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra())) ui.rutaRed[2] = rutaRedNuestra();
@@ -2186,10 +2202,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (!convActivo) {
         if (!red.ready() && !arrancarRed(convGpu, &cerr0)) {
           std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
-          ui.extraInfo = "el conversor de vídeo normal no abrió", ui.extraHasta = glfwGetTime() + 8.0;
+          ui.extraInfo = idioma::tr("el conversor de vídeo normal no abrió"), ui.extraHasta = glfwGetTime() + 8.0;
         } else if ((!wv.converterReady() || wv.converterSize() != red.size()) && !wv.prepareConverter(red.size(), &cerr0)) {
           std::fprintf(stderr, "[conversor] %s\n", cerr0.c_str());
-          ui.extraInfo = "el conversor de vídeo normal no abrió", ui.extraHasta = glfwGetTime() + 8.0;
+          ui.extraInfo = idioma::tr("el conversor de vídeo normal no abrió"), ui.extraHasta = glfwGetTime() + 8.0;
         } else {
           convActivo = true;
           ui.hud.state().weaveOn = true;   /* hace falta la trama: el relieve sale de ahi */
@@ -2256,7 +2272,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());
           ui.hud.state().red = slotRed(red.modelPath());
           std::fflush(stderr);
-          ui.extraInfo = "la otra red no abrio: seguimos con la anterior";
+          ui.extraInfo = idioma::tr("la otra red no abrió: seguimos con la anterior");
           ui.extraHasta = glfwGetTime() + 9.0;
         }
       }
@@ -2276,7 +2292,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     "apuntada en el fichero de ajuste y se abrira al reabrir el visor\n",
                     ui.redRutaPedida.c_str(), nombreCorto(ui.redRutaPedida).c_str());
         std::fflush(stdout);
-        ui.extraInfo = "cambiar de red toca cerrar y abrir el visor";
+        ui.extraInfo = idioma::tr("cambiar de red toca cerrar y abrir el visor");
         ui.extraHasta = glfwGetTime() + 9.0;
         ui.redRutaPedida.clear();
       } else if (!red.ready()) {
@@ -2297,7 +2313,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (!fileExists(pedida)) {
           std::fprintf(stderr, "[conversor] la red pedida no existe: %s\n", pedida.c_str());
           std::fflush(stderr);
-          ui.extraInfo = "esa red no existe: " + nombreCorto(pedida);
+          ui.extraInfo = idioma::trf("esa red no existe: {}", {nombreCorto(pedida)});
           ui.extraHasta = glfwGetTime() + 9.0;
         } else {
           hiloRed.esperar();
@@ -2322,7 +2338,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             ui.hud.state().red = slotRed(red.modelPath());
             ajuste::registrar("modelo", nombreCorto(anterior), nombreCorto(pedida) + " (no abrio)",
                               nombreCorto(red.modelPath()), "la ventana de ajustes");
-            ui.extraInfo = "la red pedida no abrio: seguimos con la anterior";
+            ui.extraInfo = idioma::tr("la red pedida no abrió: seguimos con la anterior");
             ui.extraHasta = glfwGetTime() + 9.0;
           }
         }

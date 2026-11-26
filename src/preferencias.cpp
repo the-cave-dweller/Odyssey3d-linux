@@ -1,5 +1,6 @@
 /* preferencias.cpp — ver preferencias.h. */
 #include "preferencias.h"
+#include "idioma.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -136,11 +137,21 @@ std::string conComa(double v, int decimales) {
   return s;
 }
 
+namespace {
+/* para ensenar (no para serve.conf, que va siempre con coma): con la coma o el punto del idioma */
+std::string conDecimal(double v, int decimales) {
+  std::string s = conComa(v, decimales);
+  for (char &c : s)
+    if (c == ',') c = idioma::decimal();
+  return s;
+}
+}  // namespace
+
 const char *nombreModo(const std::string &m) {
-  if (m == "conv") return "vídeo normal";
-  if (m == "sbs" || m == "suave") return "vídeo dividido";
-  if (m == "tb") return "arriba y abajo";
-  if (m == "flat") return "sin 3D";
+  if (m == "conv") return idioma::tr("vídeo normal");
+  if (m == "sbs" || m == "suave") return idioma::tr("vídeo dividido");
+  if (m == "tb") return idioma::tr("arriba y abajo");
+  if (m == "flat") return idioma::tr("sin 3D");
   return m.c_str();
 }
 
@@ -198,7 +209,7 @@ std::vector<Juego> juegosSteam() {
 bool lanzarJuego(const std::string &id, std::string *err) {
   for (char c : id)
     if (c < '0' || c > '9') {
-      if (err) *err = "ese no es un juego de Steam";
+      if (err) *err = idioma::tr("ese no es un juego de Steam");
       return false;
     }
   const std::string url = "steam://rungameid/" + id;
@@ -330,7 +341,7 @@ bool descargar(std::string *err) {
   g_descarga.pid = pid;
   g_descarga.fallo = false;
   g_descarga.bytes = 0;
-  g_descarga.texto = "descargando… 0 de 95 MB";
+  g_descarga.texto = idioma::trf("descargando… {} de 95 MB", {"0"});
   return true;
 }
 
@@ -343,9 +354,7 @@ bool vigilarDescarga() {
     const long bytes = ::stat(g_descarga.parte.c_str(), &sb) == 0 ? (long)sb.st_size : 0;
     if (bytes == g_descarga.bytes) return false;
     g_descarga.bytes = bytes;
-    char t[96];
-    std::snprintf(t, sizeof t, "descargando… %ld de 95 MB", bytes / 1000000);
-    g_descarga.texto = t;
+    g_descarga.texto = idioma::trf("descargando… {} de 95 MB", {std::to_string(bytes / 1000000)});
     return true;
   }
   g_descarga.pid = 0;
@@ -353,15 +362,15 @@ bool vigilarDescarga() {
   struct stat sb {};
   const bool entera = ::stat(g_descarga.parte.c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
   if (bien && entera && ::rename(g_descarga.parte.c_str(), rutaRedNuestra().c_str()) == 0) {
-    g_descarga.texto = "lista: la red abierta ya está en su carpeta";
+    g_descarga.texto = idioma::tr("lista: la red abierta ya está en su carpeta");
     g_descarga.fallo = false;
   } else {
     ::unlink(g_descarga.parte.c_str());
     g_descarga.fallo = true;
     g_descarga.texto = !bien ? (r > 0 && WIFEXITED(estado) && WEXITSTATUS(estado) == 127
-                                    ? "falta `curl`: instálalo y vuelve a intentarlo"
-                                    : "la descarga falló (¿hay conexión?): vuelve a intentarlo")
-                             : "el archivo bajó incompleto: vuelve a intentarlo";
+                                    ? idioma::tr("falta `curl`: instálalo y vuelve a intentarlo")
+                                    : idioma::tr("la descarga falló (¿hay conexión?): vuelve a intentarlo"))
+                             : idioma::tr("el archivo bajó incompleto: vuelve a intentarlo");
   }
   return true;
 }
@@ -513,27 +522,27 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
     ids.push_back(id);
   };
   Hud::ItemPanel s;
-  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = abierta ? "RED DE PROFUNDIDAD" : "FALTA LA RED DE PROFUNDIDAD";
+  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr(abierta ? "RED DE PROFUNDIDAD" : "FALTA LA RED DE PROFUNDIDAD");
   pon(s, "");
   if (!abierta) {
     Hud::ItemPanel i;
     i.tipo = Hud::ItemPanel::Info;
-    i.rotulo = "Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).";
-    i.nota = "Depth Anything V2 pequeña, 95 MB, de huggingface.co/XnetShadow/depth_anything_v2_small; queda en ~/.local/share/odysseyvk/modelos.";
+    i.rotulo = idioma::tr("Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).");
+    i.nota = idioma::tr("Depth Anything V2 pequeña, 95 MB, de huggingface.co/XnetShadow/depth_anything_v2_small; queda en ~/.local/share/odysseyvk/modelos.");
     pon(i, "");
   }
   Hud::ItemPanel b;
   b.tipo = Hud::ItemPanel::Boton;
-  b.rotulo = abierta ? "Red de profundidad" : "Descargar la red para tener profundidad";
+  b.rotulo = idioma::tr(abierta ? "Red de profundidad" : "Descargar la red para tener profundidad");
   b.nota = textoDescarga();
-  b.valorTexto = descargaEnMarcha() ? "Bajando…" : (abierta ? "Lista" : "Descargar (95 MB)");
+  b.valorTexto = idioma::tr(descargaEnMarcha() ? "Bajando…" : (abierta ? "Lista" : "Descargar (95 MB)"));
   b.valor = !descargaEnMarcha() && !abierta;
   pon(b, "descargar_red");
 }
 }  // namespace
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  st.pestanas = {"Ajustes", "Juegos", "Rendimiento", "Programa"};
+  st.pestanas = {idioma::tr("Ajustes"), idioma::tr("Juegos"), idioma::tr("Rendimiento"), idioma::tr("Programa")};
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
@@ -547,59 +556,65 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
   if (st.pestana == 3) {
     /* Programa (v0.95): la version, la actualizacion y el desinstalador */
     Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "VERSIÓN";
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VERSIÓN");
     pon(s, "");
     Hud::ItemPanel f;
-    f.tipo = Hud::ItemPanel::Fila, f.rotulo = "Instalada", f.valorTexto = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+    f.tipo = Hud::ItemPanel::Fila, f.rotulo = idioma::tr("Instalada"), f.valorTexto = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     pon(f, "");
     Hud::ItemPanel g;
-    g.tipo = Hud::ItemPanel::Fila, g.rotulo = "En GitHub";
-    if (comprobacionEnMarcha()) g.valorTexto = "comprobando…";
-    else if (act.remota.empty()) g.valorTexto = "sin comprobar todavía";
+    g.tipo = Hud::ItemPanel::Fila, g.rotulo = idioma::tr("En GitHub");
+    if (comprobacionEnMarcha()) g.valorTexto = idioma::tr("comprobando…");
+    else if (act.remota.empty()) g.valorTexto = idioma::tr("sin comprobar todavía");
     else {
       char cuando[64] = {0};
       const time_t t = (time_t)act.hora;
       std::strftime(cuando, sizeof cuando, "%H:%M", std::localtime(&t));
-      g.valorTexto = "OdysseyVK " + act.remota + (act.pendiente ? " · hay una versión nueva" : " · estás al día") + " (visto a las " + cuando + ")";
+      g.valorTexto = idioma::trf(act.pendiente ? "OdysseyVK {} · hay una versión nueva (visto a las {})" : "OdysseyVK {} · estás al día (visto a las {})", {act.remota, cuando});
     }
     pon(g, "");
     Hud::ItemPanel b;
     b.tipo = Hud::ItemPanel::Boton;
-    b.rotulo = act.pendiente ? "Actualizar a OdysseyVK " + act.remota : "Buscar actualizaciones";
-    b.nota = act.pendiente ? "Se baja de GitHub, se compila, se instala (pide tu clave) y el servicio se reinicia; el vídeo o juego en 3D se reabre."
-                           : "Mira el repositorio " + std::string(kRepoGitHub).substr(8);
-    b.valorTexto = comprobacionEnMarcha() ? "Comprobando…" : (act.pendiente ? "Actualizar" : "Buscar");
+    b.rotulo = act.pendiente ? idioma::trf("Actualizar a OdysseyVK {}", {act.remota}) : std::string(idioma::tr("Buscar actualizaciones"));
+    b.nota = act.pendiente ? std::string(idioma::tr("Se baja de GitHub, se compila, se instala (pide tu clave) y el servicio se reinicia; el vídeo o juego en 3D se reabre."))
+                           : idioma::trf("Mira el repositorio {}", {std::string(kRepoGitHub).substr(8)});
+    b.valorTexto = idioma::tr(comprobacionEnMarcha() ? "Comprobando…" : (act.pendiente ? "Actualizar" : "Buscar"));
     b.valor = !comprobacionEnMarcha();
     pon(b, act.pendiente ? "actualizar" : "buscar_actualizacion");
     Hud::ItemPanel a;
-    a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = "Avisar cuando haya una versión nueva";
-    a.nota = "Una tarjeta en la orilla de la pantalla con el botón de actualizar; sin esto, solo el botón junto al aspa";
+    a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = idioma::tr("Avisar cuando haya una versión nueva");
+    a.nota = idioma::tr("Una tarjeta en la orilla de la pantalla con el botón de actualizar; sin esto, solo el botón junto al aspa");
     a.valor = v.avisarActualizaciones;
     pon(a, "actualizaciones");
     Hud::ItemPanel au;
-    au.tipo = Hud::ItemPanel::Interruptor, au.rotulo = "Actualizar automáticamente";
-    au.nota = "En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)";
+    au.tipo = Hud::ItemPanel::Interruptor, au.rotulo = idioma::tr("Actualizar automáticamente");
+    au.nota = idioma::tr("En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)");
     au.valor = v.actualizarAuto;
     pon(au, "actualizar_auto");
     /* Otros (v1.02): si la ventana del visor 3D sale en la barra de tareas del panel y en Alt+Tab */
-    s.rotulo = "OTROS";
+    s.rotulo = idioma::tr("OTROS");
     pon(s, "");
+    /* el idioma (v1.07): lo mismo que el boton del globo de la cabecera */
+    Hud::ItemPanel li;
+    li.tipo = Hud::ItemPanel::Opciones, li.rotulo = idioma::tr("Idioma");
+    for (int k = 0; k < idioma::kLenguas; k++) li.opciones.push_back(idioma::nombre(k));
+    li.elegido = idioma::actual();
+    pon(li, "idioma");
     Hud::ItemPanel bt;
-    bt.tipo = Hud::ItemPanel::Interruptor, bt.rotulo = "Mostrar OdysseyVK en la barra de tareas";
-    bt.nota = "En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos";
+    bt.tipo = Hud::ItemPanel::Interruptor, bt.rotulo = idioma::tr("Mostrar OdysseyVK en la barra de tareas");
+    bt.nota = idioma::tr("En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos");
     bt.valor = v.enBarraTareas;
     pon(bt, "barra_tareas");
     Hud::ItemPanel sw;
-    sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = "Mostrar OdysseyVK en la bandeja del sistema";
-    sw.nota = "El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos";
+    sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = idioma::tr("Mostrar OdysseyVK en la bandeja del sistema");
+    sw.nota = idioma::tr("El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos");
     sw.valor = v.enBandeja;
     pon(sw, "bandeja");
-    s.rotulo = "DESINSTALAR";
+    s.rotulo = idioma::tr("DESINSTALAR");
     pon(s, "");
     Hud::ItemPanel d;
-    d.tipo = Hud::ItemPanel::Boton, d.rotulo = "Desinstalar OdysseyVK";
-    d.nota = "Quita el programa, el servicio y la red de profundidad (pide tu clave); tu configuración se queda.";
-    d.valorTexto = g_confirmarDesinstalar > ::time(nullptr) ? "¿Seguro? Pica otra vez" : "Desinstalar";
+    d.tipo = Hud::ItemPanel::Boton, d.rotulo = idioma::tr("Desinstalar OdysseyVK");
+    d.nota = idioma::tr("Quita el programa, el servicio y la red de profundidad (pide tu clave); tu configuración se queda.");
+    d.valorTexto = idioma::tr(g_confirmarDesinstalar > ::time(nullptr) ? "¿Seguro? Pica otra vez" : "Desinstalar");
     d.valor = true;
     d.peligro = true;
     pon(d, "desinstalar");
@@ -609,49 +624,49 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     /* sin ninguna red de profundidad no hay video normal a 3D: lo primero que se ve es como bajarla */
     filasDeLaRed(st, v, ids);
     Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "VÍDEO";
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VÍDEO");
     pon(s, "");
     Hud::ItemPanel m;
-    m.tipo = Hud::ItemPanel::Opciones, m.rotulo = "Al ver un vídeo a pantalla completa";
-    m.opciones = {"Preguntar", "Vídeo normal", "Vídeo dividido"};
+    m.tipo = Hud::ItemPanel::Opciones, m.rotulo = idioma::tr("Al ver un vídeo a pantalla completa");
+    m.opciones = {idioma::tr("Preguntar"), idioma::tr("Vídeo normal"), idioma::tr("Vídeo dividido")};
     m.elegido = v.modo == "conv" ? 1 : (v.modo == "sbs" ? 2 : 0);
     pon(m, "modo");
     Hud::ItemPanel d;
-    d.tipo = Hud::ItemPanel::Opciones, d.rotulo = "Suavizar los vídeos divididos";
-    d.opciones = {"Siempre", "Si hace falta", "Nunca"};
+    d.tipo = Hud::ItemPanel::Opciones, d.rotulo = idioma::tr("Suavizar los vídeos divididos");
+    d.opciones = {idioma::tr("Siempre"), idioma::tr("Si hace falta"), idioma::tr("Nunca")};
     d.elegido = v.suavizar == 1 ? 0 : (v.suavizar == 2 ? 1 : 2);
     pon(d, "dividido_suavizado");
     Hud::ItemPanel r;
-    r.tipo = Hud::ItemPanel::Deslizador, r.rotulo = "Fuerza del relieve";
-    r.nota = "Para el vídeo normal y el dividido suavizado · desde el siguiente vídeo";
-    r.frac = (float)((v.relieve - 0.5) / 1.5), r.valorTexto = conComa(v.relieve, 2);
+    r.tipo = Hud::ItemPanel::Deslizador, r.rotulo = idioma::tr("Fuerza del relieve");
+    r.nota = idioma::tr("Para el vídeo normal y el dividido suavizado · desde el siguiente vídeo");
+    r.frac = (float)((v.relieve - 0.5) / 1.5), r.valorTexto = conDecimal(v.relieve, 2);
     pon(r, "relieve");
 
-    s.rotulo = "PANTALLA";
+    s.rotulo = idioma::tr("PANTALLA");
     pon(s, "");
     Hud::ItemPanel f;
-    f.tipo = Hud::ItemPanel::Deslizador, f.rotulo = "Reducir el fantasma";
-    f.nota = "Cuánta imagen del otro ojo se resta · se nota al momento";
-    f.frac = (float)(v.fantasma / 0.10), f.valorTexto = conComa(v.fantasma * 100.0, 1) + " %";
+    f.tipo = Hud::ItemPanel::Deslizador, f.rotulo = idioma::tr("Reducir el fantasma");
+    f.nota = idioma::tr("Cuánta imagen del otro ojo se resta · se nota al momento");
+    f.frac = (float)(v.fantasma / 0.10), f.valorTexto = conDecimal(v.fantasma * 100.0, 1) + " %";
     pon(f, "crosstalk_base");
     Hud::ItemPanel c;
-    c.tipo = Hud::ItemPanel::Interruptor, c.rotulo = "Seguir la cabeza con la cámara";
-    c.nota = "Desde el siguiente vídeo", c.valor = v.rastreo;
+    c.tipo = Hud::ItemPanel::Interruptor, c.rotulo = idioma::tr("Seguir la cabeza con la cámara");
+    c.nota = idioma::tr("Desde el siguiente vídeo"), c.valor = v.rastreo;
     pon(c, "rastreo");
     Hud::ItemPanel h;
-    h.tipo = Hud::ItemPanel::Interruptor, h.rotulo = "Mantener el HDR durante el 3D";
-    h.nota = "Desde el siguiente vídeo", h.valor = v.hdr;
+    h.tipo = Hud::ItemPanel::Interruptor, h.rotulo = idioma::tr("Mantener el HDR durante el 3D");
+    h.nota = idioma::tr("Desde el siguiente vídeo"), h.valor = v.hdr;
     pon(h, "hdr_en_3d");
     Hud::ItemPanel a;
-    a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = "Atajos de teclado en todo el escritorio";
-    a.nota = "Ctrl+Shift+1…8 y F1 valen aunque el teclado lo tenga el vídeo o el juego", a.valor = v.atajos;
+    a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = idioma::tr("Atajos de teclado en todo el escritorio");
+    a.nota = idioma::tr("Ctrl+Shift+1…8 y F1 valen aunque el teclado lo tenga el vídeo o el juego"), a.valor = v.atajos;
     pon(a, "atajos_globales");
 
-    s.rotulo = "APLICACIONES QUE NO PREGUNTAN";
+    s.rotulo = idioma::tr("APLICACIONES QUE NO PREGUNTAN");
     pon(s, "");
     if (v.recordadas.empty()) {
       Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota, n.rotulo = "Ninguna: se pregunta siempre (o se sigue lo de arriba).";
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("Ninguna: se pregunta siempre (o se sigue lo de arriba).");
       pon(n, "");
     }
     for (const auto &par : v.recordadas) {
@@ -670,14 +685,14 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       pon(f, "");
     };
     Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "VISOR 3D";
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VISOR 3D");
     pon(s, "");
     const auto hub = ajuste::leerEstadoHub();
     const auto ses = hub.find("sesion");
     const bool abierta = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
     if (!abierta) {
       Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota, n.rotulo = "No hay ningún vídeo ni juego en 3D ahora mismo.";
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No hay ningún vídeo ni juego en 3D ahora mismo.");
       pon(n, "");
     } else {
       const auto e = ajuste::leerEstado();
@@ -686,18 +701,18 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
         return it == e.end() ? std::string("-") : it->second;
       };
       std::string fps = de("fps"), ms = de("mapa_ms"), modelo = de("modelo");
-      for (char &c : fps) if (c == '.') c = ',';
-      for (char &c : ms) if (c == '.') c = ',';
+      for (char &c : fps) if (c == '.') c = idioma::decimal();
+      for (char &c : ms) if (c == '.') c = idioma::decimal();
       const size_t barra = modelo.rfind('/');
       if (barra != std::string::npos) modelo = modelo.substr(barra + 1);
-      fila("Cuadros por segundo", fps);
+      fila(idioma::tr("Cuadros por segundo"), fps);
       const bool conv = de("conversor") == "puesto";
-      fila("Conversor de relieve", conv ? "puesto · " + ms + " ms por mapa" : "apagado");
-      if (conv) fila("Red de profundidad", modelo + " · " + de("tarjeta"));
-      fila("Cámara", de("facetracking") == "abierto" ? de("camara_nota") : "sin abrir");
+      fila(idioma::tr("Conversor de relieve"), conv ? idioma::trf("puesto · {} ms por mapa", {ms}) : std::string(idioma::tr("apagado")));
+      if (conv) fila(idioma::tr("Red de profundidad"), modelo + " · " + de("tarjeta"));
+      fila(idioma::tr("Cámara"), de("facetracking") == "abierto" ? de("camara_nota") : std::string(idioma::tr("sin abrir")));
     }
     filasDeLaRed(st, v, ids);
-    s.rotulo = "TARJETAS GRÁFICAS";
+    s.rotulo = idioma::tr("TARJETAS GRÁFICAS");
     pon(s, "");
     bool alguna = false;
     if (FILE *f = ::popen("nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu "
@@ -721,7 +736,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
         std::snprintf(txt, sizeof txt, "%s %% · %.1f de %.0f GB · %.0f °C", c[1].c_str(), std::atof(c[2].c_str()) / 1024.0,
                       std::atof(c[3].c_str()) / 1024.0, std::atof(c[4].c_str()));
         std::string t = txt;
-        for (char &ch : t) if (ch == '.') ch = ',';
+        for (char &ch : t) if (ch == '.') ch = idioma::decimal();
         fila(nombre, t);
         alguna = true;
       }
@@ -729,7 +744,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     }
     if (!alguna) {
       Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota, n.rotulo = "nvidia-smi no respondió: no hay datos de las tarjetas.";
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("nvidia-smi no respondió: no hay datos de las tarjetas.");
       pon(n, "");
     }
   } else {
@@ -738,7 +753,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     pon(s, "");
     if (juegos.empty()) {
       Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota, n.rotulo = "No encontré juegos instalados en las bibliotecas de Steam.";
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No encontré juegos instalados en las bibliotecas de Steam.");
       pon(n, "");
     }
     for (const Juego &j : juegos) {
@@ -753,7 +768,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     }
     Hud::ItemPanel n;
     n.tipo = Hud::ItemPanel::Nota;
-    n.rotulo = "3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.";
+    n.rotulo = idioma::tr("3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.");
     pon(n, "");
   }
 }
@@ -763,14 +778,14 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   std::string e;
   auto fija = [&](const std::string &k, const std::string &val) {
     if (ajuste::fijarEnServeConf(k, val, &e)) return true;
-    if (aviso) *aviso = "no se pudo guardar: " + e;
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
     return false;
   };
   const Valores v = leer();
   if (id == "modo") {
     static const char *kModo[] = {"ask", "conv", "sbs"};
     if (sub < 0 || sub > 2 || !fija("modo", kModo[sub])) return false;
-    if (aviso) *aviso = sub == 0 ? "se preguntará con la tarjeta" : "desde el siguiente vídeo, sin preguntar";
+    if (aviso) *aviso = idioma::tr(sub == 0 ? "se preguntará con la tarjeta" : "desde el siguiente vídeo, sin preguntar");
     return true;
   }
   if (id == "dividido_suavizado") {
@@ -780,13 +795,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
                                   "los vídeos divididos se ven siempre con su propio relieve"};
     if (sub < 0 || sub > 2 || !fija(id, kVal[sub])) return false;
     avisarVisor({}, {{"dividido_suavizado", kVal[sub]}});
-    if (aviso) *aviso = kDice[sub];
+    if (aviso) *aviso = idioma::tr(kDice[sub]);
     return true;
   }
   if (id == "rastreo" || id == "hdr_en_3d" || id == "atajos_globales") {
     const bool ahora = id == "rastreo" ? v.rastreo : (id == "hdr_en_3d" ? v.hdr : v.atajos);
     if (!fija(id, ahora ? "no" : "si")) return false;
-    if (aviso) *aviso = "se aplica desde el siguiente vídeo";
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
     return true;
   }
   if (id == "crosstalk_base") {
@@ -794,32 +809,43 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     avisarVisor({{"crosstalk_base", val}}, {});   /* se ve al momento, tambien mientras se arrastra */
     if (!soltado) return false;
     if (!fija(id, conComa(val, 4))) return false;
-    if (aviso) *aviso = "se resta el " + conComa(val * 100.0, 1) + " % de la imagen del otro ojo";
+    if (aviso) *aviso = idioma::trf("se resta el {} % de la imagen del otro ojo", {conDecimal(val * 100.0, 1)});
     return true;
   }
   if (id == "relieve") {
     if (!soltado) return false;
     const double val = std::round((0.5 + std::max(0.0f, std::min(1.0f, frac)) * 1.5) / 0.05) * 0.05;
     if (!fija(id, conComa(val, 2))) return false;
-    if (aviso) *aviso = "fuerza del relieve " + conComa(val, 2) + " · desde el siguiente vídeo";
+    if (aviso) *aviso = idioma::trf("fuerza del relieve {} · desde el siguiente vídeo", {conDecimal(val, 2)});
+    return true;
+  }
+  if (id == "idioma") {
+    /* el idioma de la interfaz (v1.07): se guarda, se pone en este proceso (el panel rehace su atlas
+       de letras) y se le manda al visor si hay uno abierto; el servicio lo ve en su proxima mirada */
+    if (sub < 0 || sub >= idioma::kLenguas) return false;
+    if (sub == idioma::actual()) return false;
+    if (!fija("idioma", idioma::codigo(sub))) return false;
+    idioma::poner(sub);
+    avisarVisor({}, {{"idioma", idioma::codigo(sub)}});
+    if (aviso) *aviso = std::string(idioma::tr("Idioma")) + ": " + idioma::nombre(sub) + " · " + idioma::tr("el idioma cambia al momento");
     return true;
   }
   if (id == "actualizaciones") {
     if (!fija("actualizaciones", v.avisarActualizaciones ? "no" : "si")) return false;
-    if (aviso) *aviso = v.avisarActualizaciones ? "no se avisará de versiones nuevas; el botón junto al aspa las sigue marcando"
-                                                : "se avisará con un aviso del escritorio";
+    if (aviso) *aviso = idioma::tr(v.avisarActualizaciones ? "no se avisará de versiones nuevas; el botón junto al aspa las sigue marcando"
+                                                           : "se avisará con una tarjeta en la orilla de la pantalla");
     return true;
   }
   if (id == "barra_tareas" || id == "bandeja") {
     const bool ahora = id == "barra_tareas" ? v.enBarraTareas : v.enBandeja;
     if (!fija(id, ahora ? "no" : "si")) return false;
-    if (aviso) *aviso = id == "barra_tareas" ? std::string(ahora ? "el visor 3D ya no sale en la barra de tareas" : "el visor 3D vuelve a salir en la barra de tareas")
-                                             : std::string(ahora ? "sin icono en la bandeja del sistema" : "con icono en la bandeja del sistema");
+    if (aviso) *aviso = id == "barra_tareas" ? idioma::tr(ahora ? "OdysseyVK ya no sale en la barra de tareas" : "OdysseyVK vuelve a salir en la barra de tareas")
+                                             : idioma::tr(ahora ? "sin icono en la bandeja del sistema" : "con icono en la bandeja del sistema");
     return true;
   }
   if (id == "actualizar_auto") {
     if (!fija("actualizar_auto", v.actualizarAuto ? "no" : "si")) return false;
-    if (aviso) *aviso = v.actualizarAuto ? "las versiones nuevas ya no se instalan solas" : "las versiones nuevas se instalarán solas";
+    if (aviso) *aviso = idioma::tr(v.actualizarAuto ? "las versiones nuevas ya no se instalan solas" : "las versiones nuevas se instalarán solas");
     return true;
   }
   if (id == "buscar_actualizacion") {
@@ -827,7 +853,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = "mirando la versión de GitHub…";
+    if (aviso) *aviso = idioma::tr("mirando la versión de GitHub…");
     return true;
   }
   if (id == "actualizar") {
@@ -835,7 +861,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = "actualizando: se compila, se pide tu clave para instalar y el servicio se reinicia";
+    if (aviso) *aviso = idioma::tr("actualizando: se compila, se pide tu clave para instalar y el servicio se reinicia");
     if (cerrar) *cerrar = true;
     return true;
   }
@@ -843,7 +869,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     const long ahora = (long)::time(nullptr);
     if (g_confirmarDesinstalar <= ahora) {
       g_confirmarDesinstalar = ahora + 12;
-      if (aviso) *aviso = "¿seguro? pica otra vez en los próximos 12 segundos para desinstalar";
+      if (aviso) *aviso = idioma::tr("¿seguro? pica otra vez en los próximos 12 segundos para desinstalar");
       return true;
     }
     g_confirmarDesinstalar = 0;
@@ -851,7 +877,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = "desinstalando OdysseyVK…";
+    if (aviso) *aviso = idioma::tr("desinstalando OdysseyVK…");
     if (cerrar) *cerrar = true;
     return true;
   }
@@ -860,15 +886,15 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = "bajando la red abierta (95 MB)…";
+    if (aviso) *aviso = idioma::tr("bajando la red abierta (95 MB)…");
     return true;
   }
   if (id.rfind("auto:", 0) == 0) {
     if (!ajuste::fijarAutoEnServeConf(id.substr(5), std::string(), &e)) {
-      if (aviso) *aviso = "no se pudo guardar: " + e;
+      if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
       return false;
     }
-    if (aviso) *aviso = "se volverá a preguntar por " + id.substr(5);
+    if (aviso) *aviso = idioma::trf("se volverá a preguntar por {}", {id.substr(5)});
     return true;
   }
   if (id.rfind("juego:", 0) == 0) {
@@ -879,10 +905,10 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (sub == 1) {
       /* la pastillita: ese juego entra en 3D solo (conversor) o se deja en 2D sin preguntar */
       if (!ajuste::fijarAutoEnServeConf("steam_app_" + ap, en3d ? "flat" : "conv", &e)) {
-        if (aviso) *aviso = "no se pudo guardar: " + e;
+        if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
         return false;
       }
-      if (aviso) *aviso = en3d ? "ese juego se queda en 2D" : "ese juego entra solo en 3D";
+      if (aviso) *aviso = idioma::tr(en3d ? "ese juego se queda en 2D" : "ese juego entra solo en 3D");
       return true;
     }
     /* al arrancarlo se apunta lo que diga su pastillita, para que el servicio no pregunte */
@@ -894,7 +920,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = "arrancando " + nombre + "…";
+    if (aviso) *aviso = idioma::trf("arrancando {}…", {nombre});
     if (cerrar) *cerrar = true;
     return true;
   }

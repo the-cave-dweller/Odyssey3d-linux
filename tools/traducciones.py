@@ -1,0 +1,245 @@
+# -*- coding: utf-8 -*-
+"""Las traducciones de la interfaz (v1.07). Cada clave es el texto en español tal como esta en el
+codigo; los valores, en ingles, frances, aleman, chino (simplificado), japones y ruso (este en traducciones_ru.py). `{}` marca donde va
+un dato. Este archivo genera src/idioma_tabla.inc:  python3 tools/traducciones.py"""
+T = {
+"No volver a preguntar": ("Don't ask again", "Ne plus demander", "Nicht mehr fragen", "不再询问", "今後確認しない"),
+"Plano de apoyo": ("Screen plane", "Plan d'appui", "Bildebene", "支撑平面", "基準面"),
+"Profundidad": ("Depth", "Profondeur", "Tiefe", "深度", "奥行き"),
+"Salida": ("Pop-out", "Jaillissement", "Pop-out", "出屏", "飛び出し"),
+"Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale": ("Ctrl+Shift+  1 3D · 3/4 {} · 5/6 pop-out · F1 hides · Esc exits", "Ctrl+Maj+  1 la 3D · 3/4 {} · 5/6 jaillissement · F1 masque · Échap quitte", "Strg+Umschalt+  1 3D · 3/4 {} · 5/6 Pop-out · F1 ausblenden · Esc beendet", "Ctrl+Shift+  1 开关3D · 3/4 {} · 5/6 出屏 · F1 隐藏 · Esc 退出", "Ctrl+Shift+  1 3D · 3/4 {} · 5/6 飛び出し · F1 隠す · Esc 終了"),
+"plano": ("plane", "plan", "Ebene", "平面", "基準面"),
+"profundidad": ("depth", "profondeur", "Tiefe", "深度", "奥行き"),
+"Hay una versión nueva de OdysseyVK": ("A new version of OdysseyVK is available", "Une nouvelle version d'OdysseyVK est disponible", "Eine neue Version von OdysseyVK ist da", "OdysseyVK 有新版本", "OdysseyVK の新しいバージョンがあります"),
+"OdysseyVK {} en GitHub · tienes la {}": ("OdysseyVK {} on GitHub · you have {}", "OdysseyVK {} sur GitHub · vous avez la {}", "OdysseyVK {} auf GitHub · installiert ist {}", "GitHub 上为 OdysseyVK {} · 当前为 {}", "GitHub に OdysseyVK {} · 現在 {}"),
+"Se instala sola (pide tu clave) y el vídeo o juego que haya en 3D se reabre.": ("It installs itself (asks for your password) and reopens any video or game in 3D.", "Elle s'installe seule (mot de passe demandé) et rouvre la vidéo ou le jeu en 3D.", "Installiert sich selbst (fragt nach dem Passwort); Video oder Spiel in 3D öffnet sich wieder.", "自动安装（需要密码），正在 3D 中的视频或游戏会重新打开。", "自動でインストールされ（パスワードが必要）、3D 中の動画やゲームは開き直されます。"),
+"Actualizar": ("Update", "Mettre à jour", "Aktualisieren", "更新", "更新"),
+"Luego": ("Later", "Plus tard", "Später", "稍后", "後で"),
+"No avisar de actualizaciones": ("Don't notify about updates", "Ne pas signaler les mises à jour", "Nicht über Updates informieren", "不再提示更新", "更新を通知しない"),
+"Entendido": ("Got it", "Compris", "Verstanden", "知道了", "了解"),
+"¿Qué tipo de vídeo estás viendo?": ("What kind of video are you watching?", "Quel type de vidéo regardez-vous ?", "Welche Art von Video siehst du?", "你在看哪种视频？", "どの種類の動画を見ていますか？"),
+"Vídeo normal: una sola imagen; se convierte a 3D.": ("Normal video: a single image; it gets converted to 3D.", "Vidéo normale : une seule image, convertie en 3D.", "Normales Video: ein einzelnes Bild, wird in 3D umgewandelt.", "普通视频：单一画面，会被转换为 3D。", "通常の動画：1 枚の映像を 3D に変換します。"),
+"Vídeo dividido: trae dos imágenes, una al lado de la otra.": ("Split video: two images, side by side.", "Vidéo divisée : deux images côte à côte.", "Geteiltes Video: zwei Bilder nebeneinander.", "分屏视频：左右并排的两幅画面。", "分割動画：左右に並んだ 2 枚の映像。"),
+"Elige la opción correcta para la conversión 3D.": ("Choose the right option for the 3D conversion.", "Choisissez la bonne option pour la conversion 3D.", "Wähle die passende Option für die 3D-Umwandlung.", "请为 3D 转换选择正确的选项。", "3D 変換に合う方を選んでください。"),
+"Vídeo normal": ("Normal video", "Vidéo normale", "Normales Video", "普通视频", "通常の動画"),
+"Vídeo dividido": ("Split video", "Vidéo divisée", "Geteiltes Video", "分屏视频", "分割動画"),
+"una sola imagen": ("a single image", "une seule image", "ein einzelnes Bild", "单一画面", "1 枚の映像"),
+"dos imágenes lado a lado": ("two images side by side", "deux images côte à côte", "zwei Bilder nebeneinander", "左右两幅画面", "左右 2 枚の映像"),
+"Guardar el tipo de vídeo y no volver a preguntar": ("Remember the video type and don't ask again", "Retenir le type de vidéo et ne plus demander", "Videotyp merken und nicht mehr fragen", "记住视频类型，不再询问", "動画の種類を保存して今後確認しない"),
+"Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.": ("An update is pending: OdysseyVK {}. Click to install it.", "Mise à jour en attente : OdysseyVK {}. Cliquez pour l'installer.", "Update verfügbar: OdysseyVK {}. Zum Installieren klicken.", "有待安装的更新：OdysseyVK {}。点击安装。", "保留中の更新：OdysseyVK {}。クリックでインストール。"),
+"OdysseyVK está al día. Pica para volver a comprobarlo.": ("OdysseyVK is up to date. Click to check again.", "OdysseyVK est à jour. Cliquez pour vérifier à nouveau.", "OdysseyVK ist aktuell. Klicken, um erneut zu prüfen.", "OdysseyVK 已是最新。点击重新检查。", "OdysseyVK は最新です。クリックで再確認。"),
+"Aún no se ha buscado ninguna actualización. Pica para buscarla.": ("No update check yet. Click to check.", "Aucune vérification pour l'instant. Cliquez pour vérifier.", "Noch nicht nach Updates gesucht. Zum Suchen klicken.", "尚未检查更新。点击检查。", "まだ更新を確認していません。クリックで確認。"),
+"Idioma": ("Language", "Langue", "Sprache", "语言", "言語"),
+"Ajustes": ("Settings", "Réglages", "Einstellungen", "设置", "設定"),
+"Juegos": ("Games", "Jeux", "Spiele", "游戏", "ゲーム"),
+"Rendimiento": ("Performance", "Performances", "Leistung", "性能", "パフォーマンス"),
+"Programa": ("Program", "Programme", "Programm", "程序", "プログラム"),
+"OdysseyVK — Ajustes": ("OdysseyVK — Settings", "OdysseyVK — Réglages", "OdysseyVK — Einstellungen", "OdysseyVK — 设置", "OdysseyVK — 設定"),
+"Clic: ajustes · clic central: juegos": ("Click: settings · middle click: games", "Clic : réglages · clic du milieu : jeux", "Klick: Einstellungen · Mittelklick: Spiele", "单击：设置 · 中键：游戏", "クリック：設定 · 中クリック：ゲーム"),
+"vídeo normal": ("normal video", "vidéo normale", "normales Video", "普通视频", "通常の動画"),
+"vídeo dividido": ("split video", "vidéo divisée", "geteiltes Video", "分屏视频", "分割動画"),
+"arriba y abajo": ("top-bottom", "haut-bas", "oben-unten", "上下", "上下"),
+"sin 3D": ("no 3D", "sans 3D", "ohne 3D", "无 3D", "3D なし"),
+"vídeo dividido: el relieve del propio vídeo": ("split video: the video's own depth", "vidéo divisée : le relief de la vidéo", "geteiltes Video: die eigene Tiefe des Videos", "分屏视频：使用视频自身的立体感", "分割動画：動画そのものの立体感"),
+"vídeo dividido suavizado: el relieve lo pone el conversor": ("smoothed split video: depth from the converter", "vidéo divisée adoucie : relief du convertisseur", "geglättetes geteiltes Video: Tiefe vom Konverter", "平滑分屏视频：立体感由转换器生成", "なめらかな分割動画：立体感は変換器が作成"),
+"no se pudo guardar la elección": ("couldn't save the choice", "impossible d'enregistrer le choix", "Auswahl konnte nicht gespeichert werden", "无法保存选择", "選択を保存できませんでした"),
+"{} pasa directo al 3D, sin preguntar": ("{} goes straight to 3D, without asking", "{} passe directement en 3D, sans demander", "{} wechselt direkt in 3D, ohne zu fragen", "{} 将直接进入 3D，不再询问", "{} は確認なしで直接 3D になります"),
+"la próxima vez se vuelve a preguntar por {}": ("next time it will ask again for {}", "la prochaine fois, on redemandera pour {}", "beim nächsten Mal wird für {} wieder gefragt", "下次会再次询问 {}", "次回は {} について再度確認します"),
+"el conversor de vídeo normal no abrió": ("the normal-video converter didn't start", "le convertisseur de vidéo normale n'a pas démarré", "der Konverter für normale Videos startete nicht", "普通视频转换器未能启动", "通常動画の変換器が起動しませんでした"),
+"la otra red no abrió: seguimos con la anterior": ("the other network didn't load: keeping the previous one", "l'autre réseau n'a pas chargé : on garde le précédent", "das andere Netz lud nicht: das vorherige bleibt", "另一个网络未能加载：继续使用之前的", "もう一方のネットワークを読み込めず、前のものを使います"),
+"cambiar de red toca cerrar y abrir el visor": ("switching network needs reopening the viewer", "changer de réseau impose de rouvrir la visionneuse", "Netzwechsel erfordert einen Neustart des Viewers", "切换网络需要重新打开查看器", "ネットワークの切り替えにはビューアの再起動が必要です"),
+"esa red no existe: {}": ("that network doesn't exist: {}", "ce réseau n'existe pas : {}", "dieses Netz existiert nicht: {}", "该网络不存在：{}", "そのネットワークは存在しません：{}"),
+"la red pedida no abrió: seguimos con la anterior": ("the requested network didn't load: keeping the previous one", "le réseau demandé n'a pas chargé : on garde le précédent", "das angeforderte Netz lud nicht: das vorherige bleibt", "所请求的网络未能加载：继续使用之前的", "要求したネットワークを読み込めず、前のものを使います"),
+"la lente 3D no respondió": ("the 3D lens didn't respond", "la lentille 3D n'a pas répondu", "die 3D-Linse antwortete nicht", "3D 透镜无响应", "3D レンズが応答しません"),
+"el scaler del monitor no respondió": ("the monitor's scaler didn't respond", "le scaler de l'écran n'a pas répondu", "der Scaler des Monitors antwortete nicht", "显示器缩放器无响应", "モニターのスケーラーが応答しません"),
+"sin cámara: la trama va con la posición de fábrica": ("no camera: weaving uses the factory position", "pas de caméra : position d'usine", "keine Kamera: Werksposition", "无摄像头：使用出厂位置", "カメラなし：工場出荷時の位置で表示"),
+"RED DE PROFUNDIDAD": ("DEPTH NETWORK", "RÉSEAU DE PROFONDEUR", "TIEFENNETZ", "深度网络", "深度ネットワーク"),
+"FALTA LA RED DE PROFUNDIDAD": ("DEPTH NETWORK MISSING", "RÉSEAU DE PROFONDEUR MANQUANT", "TIEFENNETZ FEHLT", "缺少深度网络", "深度ネットワークがありません"),
+"Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).": ("Without it there is no depth data: normal video can't be turned into 3D (split video can).", "Sans lui, pas de données de profondeur : la vidéo normale ne passe pas en 3D (la divisée oui).", "Ohne es keine Tiefendaten: normale Videos können nicht in 3D (geteilte schon).", "没有它就没有深度数据：普通视频无法转为 3D（分屏视频可以）。", "これがないと深度データがなく、通常の動画を 3D にできません（分割動画は可）。"),
+"Depth Anything V2 pequeña, 95 MB, de huggingface.co/XnetShadow/depth_anything_v2_small; queda en ~/.local/share/odysseyvk/modelos.": ("Depth Anything V2 Small, 95 MB, from huggingface.co/XnetShadow/depth_anything_v2_small; saved in ~/.local/share/odysseyvk/modelos.", "Depth Anything V2 Small, 95 Mo, depuis huggingface.co/XnetShadow/depth_anything_v2_small ; dans ~/.local/share/odysseyvk/modelos.", "Depth Anything V2 Small, 95 MB, von huggingface.co/XnetShadow/depth_anything_v2_small; in ~/.local/share/odysseyvk/modelos.", "Depth Anything V2 Small，95 MB，来自 huggingface.co/XnetShadow/depth_anything_v2_small；保存在 ~/.local/share/odysseyvk/modelos。", "Depth Anything V2 Small（95 MB）、huggingface.co/XnetShadow/depth_anything_v2_small から ~/.local/share/odysseyvk/modelos へ。"),
+"Red de profundidad": ("Depth network", "Réseau de profondeur", "Tiefennetz", "深度网络", "深度ネットワーク"),
+"Descargar la red para tener profundidad": ("Download the network to get depth", "Télécharger le réseau pour la profondeur", "Netz herunterladen, um Tiefe zu erhalten", "下载网络以获得深度", "深度を得るためネットワークをダウンロード"),
+"Bajando…": ("Downloading…", "Téléchargement…", "Lädt…", "下载中…", "ダウンロード中…"),
+"Lista": ("Ready", "Prêt", "Bereit", "就绪", "準備完了"),
+"Descargar (95 MB)": ("Download (95 MB)", "Télécharger (95 Mo)", "Herunterladen (95 MB)", "下载（95 MB）", "ダウンロード（95 MB）"),
+"descargando… {} de 95 MB": ("downloading… {} of 95 MB", "téléchargement… {} sur 95 Mo", "lädt… {} von 95 MB", "下载中… {} / 95 MB", "ダウンロード中… {} / 95 MB"),
+"lista: la red abierta ya está en su carpeta": ("done: the open network is in its folder", "terminé : le réseau ouvert est dans son dossier", "fertig: das offene Netz liegt in seinem Ordner", "完成：开放网络已放入其文件夹", "完了：オープンネットワークを保存しました"),
+"falta `curl`: instálalo y vuelve a intentarlo": ("`curl` is missing: install it and try again", "`curl` manquant : installez-le et réessayez", "`curl` fehlt: installieren und erneut versuchen", "缺少 `curl`：请安装后重试", "`curl` がありません。インストールして再試行してください"),
+"la descarga falló (¿hay conexión?): vuelve a intentarlo": ("the download failed (connection?): try again", "le téléchargement a échoué (connexion ?) : réessayez", "Download fehlgeschlagen (Verbindung?): erneut versuchen", "下载失败（网络连接？）：请重试", "ダウンロードに失敗しました（接続？）。再試行してください"),
+"el archivo bajó incompleto: vuelve a intentarlo": ("the file came down incomplete: try again", "le fichier est incomplet : réessayez", "die Datei ist unvollständig: erneut versuchen", "文件不完整：请重试", "ファイルが不完全です。再試行してください"),
+"VERSIÓN": ("VERSION", "VERSION", "VERSION", "版本", "バージョン"),
+"Instalada": ("Installed", "Installée", "Installiert", "已安装", "インストール済み"),
+"En GitHub": ("On GitHub", "Sur GitHub", "Auf GitHub", "GitHub 上", "GitHub"),
+"comprobando…": ("checking…", "vérification…", "prüfe…", "检查中…", "確認中…"),
+"sin comprobar todavía": ("not checked yet", "pas encore vérifié", "noch nicht geprüft", "尚未检查", "未確認"),
+"OdysseyVK {} · hay una versión nueva (visto a las {})": ("OdysseyVK {} · new version available (checked at {})", "OdysseyVK {} · nouvelle version disponible (vérifié à {})", "OdysseyVK {} · neue Version verfügbar (geprüft um {})", "OdysseyVK {} · 有新版本（检查于 {}）", "OdysseyVK {} · 新しいバージョンあり（{} に確認）"),
+"OdysseyVK {} · estás al día (visto a las {})": ("OdysseyVK {} · up to date (checked at {})", "OdysseyVK {} · à jour (vérifié à {})", "OdysseyVK {} · aktuell (geprüft um {})", "OdysseyVK {} · 已是最新（检查于 {}）", "OdysseyVK {} · 最新です（{} に確認）"),
+"Actualizar a OdysseyVK {}": ("Update to OdysseyVK {}", "Mettre à jour vers OdysseyVK {}", "Auf OdysseyVK {} aktualisieren", "更新到 OdysseyVK {}", "OdysseyVK {} に更新"),
+"Buscar actualizaciones": ("Check for updates", "Rechercher des mises à jour", "Nach Updates suchen", "检查更新", "更新を確認"),
+"Se baja de GitHub, se compila, se instala (pide tu clave) y el servicio se reinicia; el vídeo o juego en 3D se reabre.": ("Downloads from GitHub, builds, installs (asks for your password) and restarts the service; the 3D video or game reopens.", "Téléchargée depuis GitHub, compilée et installée (mot de passe demandé) ; le service redémarre et la 3D se rouvre.", "Lädt von GitHub, kompiliert, installiert (fragt nach dem Passwort), startet den Dienst neu; 3D öffnet sich wieder.", "从 GitHub 下载、编译、安装（需要密码）并重启服务；3D 中的视频或游戏会重新打开。", "GitHub から取得・ビルド・インストール（パスワードが必要）し、サービスを再起動。3D は開き直されます。"),
+"Mira el repositorio {}": ("Checks the repository {}", "Consulte le dépôt {}", "Prüft das Repository {}", "检查仓库 {}", "リポジトリ {} を確認"),
+"Comprobando…": ("Checking…", "Vérification…", "Prüfe…", "检查中…", "確認中…"),
+"Buscar": ("Check", "Vérifier", "Suchen", "检查", "確認"),
+"Avisar cuando haya una versión nueva": ("Notify when there is a new version", "Prévenir quand une nouvelle version sort", "Bei neuer Version benachrichtigen", "有新版本时提醒", "新しいバージョンを通知"),
+"Una tarjeta en la orilla de la pantalla con el botón de actualizar; sin esto, solo el botón junto al aspa": ("A card at the screen edge with an update button; otherwise only the button next to the close cross", "Une carte au bord de l'écran avec le bouton de mise à jour ; sinon, le bouton près de la croix", "Eine Karte am Bildschirmrand mit Update-Knopf; sonst nur der Knopf neben dem Kreuz", "在屏幕边缘显示带更新按钮的卡片；关闭时仅显示关闭按钮旁的按钮", "画面の端に更新ボタン付きのカード。オフなら閉じるボタン横のボタンのみ"),
+"Actualizar automáticamente": ("Update automatically", "Mettre à jour automatiquement", "Automatisch aktualisieren", "自动更新", "自動更新"),
+"En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)": ("As soon as there is a new version it installs itself (it still asks for your password)", "Dès qu'une nouvelle version sort, elle s'installe seule (mot de passe toujours demandé)", "Neue Versionen installieren sich sofort selbst (Passwort wird trotzdem abgefragt)", "有新版本时自动安装（仍需输入密码）", "新しいバージョンが出たら自動でインストール（パスワードは必要）"),
+"OTROS": ("OTHER", "AUTRES", "SONSTIGES", "其他", "その他"),
+"Mostrar OdysseyVK en la barra de tareas": ("Show OdysseyVK in the taskbar", "Afficher OdysseyVK dans la barre des tâches", "OdysseyVK in der Taskleiste anzeigen", "在任务栏显示 OdysseyVK", "タスクバーに OdysseyVK を表示"),
+"En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos": ("In the bottom panel's task manager: the 3D viewer and these settings while open", "Dans le gestionnaire de tâches du panneau du bas : la visionneuse 3D et ces réglages", "In der Fensterliste unten: der 3D-Viewer und diese Einstellungen, solange offen", "在下方面板的任务管理器中：3D 查看器和打开时的本设置", "下部パネルのタスクマネージャーに：3D ビューアと開いている間のこの設定"),
+"Mostrar OdysseyVK en la bandeja del sistema": ("Show OdysseyVK in the system tray", "Afficher OdysseyVK dans la zone de notification", "OdysseyVK im Systemabschnitt anzeigen", "在系统托盘显示 OdysseyVK", "システムトレイに OdysseyVK を表示"),
+"El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos": ("The icon next to the clock: click opens these settings, middle click the games", "L'icône près de l'horloge : clic pour ces réglages, clic du milieu pour les jeux", "Das Symbol neben der Uhr: Klick öffnet diese Einstellungen, Mittelklick die Spiele", "时钟旁的图标：单击打开本设置，中键打开游戏", "時計の横のアイコン：クリックでこの設定、中クリックでゲーム"),
+"DESINSTALAR": ("UNINSTALL", "DÉSINSTALLER", "DEINSTALLIEREN", "卸载", "アンインストール"),
+"Desinstalar OdysseyVK": ("Uninstall OdysseyVK", "Désinstaller OdysseyVK", "OdysseyVK deinstallieren", "卸载 OdysseyVK", "OdysseyVK をアンインストール"),
+"Quita el programa, el servicio y la red de profundidad (pide tu clave); tu configuración se queda.": ("Removes the program, the service and the depth network (asks for your password); your settings stay.", "Supprime le programme, le service et le réseau (mot de passe demandé) ; vos réglages restent.", "Entfernt Programm, Dienst und Tiefennetz (fragt nach dem Passwort); Einstellungen bleiben.", "移除程序、服务和深度网络（需要密码）；你的配置会保留。", "プログラム、サービス、深度ネットワークを削除（パスワードが必要）。設定は残ります。"),
+"¿Seguro? Pica otra vez": ("Sure? Click again", "Sûr ? Cliquez encore", "Sicher? Nochmal klicken", "确定？再点一次", "本当に？もう一度"),
+"Desinstalar": ("Uninstall", "Désinstaller", "Deinstallieren", "卸载", "アンインストール"),
+"VÍDEO": ("VIDEO", "VIDÉO", "VIDEO", "视频", "動画"),
+"Al ver un vídeo a pantalla completa": ("When a video goes fullscreen", "Quand une vidéo passe en plein écran", "Wenn ein Video im Vollbild läuft", "视频全屏播放时", "動画を全画面にしたとき"),
+"Preguntar": ("Ask", "Demander", "Fragen", "询问", "確認する"),
+"Suavizar los vídeos divididos": ("Smooth split videos", "Adoucir les vidéos divisées", "Geteilte Videos glätten", "平滑分屏视频", "分割動画をなめらかに"),
+"Siempre": ("Always", "Toujours", "Immer", "总是", "常に"),
+"Si hace falta": ("When needed", "Si besoin", "Bei Bedarf", "需要时", "必要なとき"),
+"Nunca": ("Never", "Jamais", "Nie", "从不", "しない"),
+"Fuerza del relieve": ("Depth strength", "Force du relief", "Tiefenstärke", "立体强度", "立体感の強さ"),
+"Para el vídeo normal y el dividido suavizado · desde el siguiente vídeo": ("For normal and smoothed split video · from the next video", "Vidéo normale et divisée adoucie · dès la prochaine vidéo", "Für normale und geglättete Videos · ab dem nächsten Video", "用于普通视频和平滑分屏视频 · 从下一个视频起", "通常動画となめらかな分割動画 · 次の動画から"),
+"PANTALLA": ("DISPLAY", "ÉCRAN", "BILDSCHIRM", "显示", "画面"),
+"Reducir el fantasma": ("Reduce ghosting", "Réduire les images fantômes", "Geisterbilder reduzieren", "减少重影", "ゴーストを減らす"),
+"Cuánta imagen del otro ojo se resta · se nota al momento": ("How much of the other eye's image is subtracted · applies instantly", "Part de l'image de l'autre œil soustraite · effet immédiat", "Wie viel vom anderen Auge abgezogen wird · wirkt sofort", "减去另一只眼图像的程度 · 立即生效", "反対の目の映像をどれだけ差し引くか · すぐに反映"),
+"Seguir la cabeza con la cámara": ("Track your head with the camera", "Suivre la tête avec la caméra", "Kopf mit der Kamera verfolgen", "用摄像头追踪头部", "カメラで頭を追跡"),
+"Desde el siguiente vídeo": ("From the next video", "Dès la prochaine vidéo", "Ab dem nächsten Video", "从下一个视频起", "次の動画から"),
+"Mantener el HDR durante el 3D": ("Keep HDR during 3D", "Garder le HDR pendant la 3D", "HDR während 3D beibehalten", "3D 时保持 HDR", "3D 中も HDR を維持"),
+"Atajos de teclado en todo el escritorio": ("Keyboard shortcuts across the desktop", "Raccourcis clavier sur tout le bureau", "Tastenkürzel im ganzen Desktop", "在整个桌面使用快捷键", "デスクトップ全体でショートカット"),
+"Ctrl+Shift+1…8 y F1 valen aunque el teclado lo tenga el vídeo o el juego": ("Ctrl+Shift+1…8 and F1 work even when the video or game has the keyboard", "Ctrl+Maj+1…8 et F1 marchent même si la vidéo ou le jeu a le clavier", "Strg+Umschalt+1…8 und F1 gehen auch, wenn Video oder Spiel die Tastatur hat", "即使键盘焦点在视频或游戏上，Ctrl+Shift+1…8 和 F1 也有效", "動画やゲームがキーボードを使っていても Ctrl+Shift+1…8 と F1 が有効"),
+"APLICACIONES QUE NO PREGUNTAN": ("APPS THAT DON'T ASK", "APPLIS QUI NE DEMANDENT PAS", "APPS OHNE NACHFRAGE", "不再询问的应用", "確認しないアプリ"),
+"Ninguna: se pregunta siempre (o se sigue lo de arriba).": ("None: it always asks (or follows the setting above).", "Aucune : on demande toujours (ou on suit le réglage ci-dessus).", "Keine: es wird immer gefragt (oder die Einstellung oben gilt).", "无：总是询问（或按上面的设置）。", "なし：常に確認します（または上の設定に従います）。"),
+"VISOR 3D": ("3D VIEWER", "VISIONNEUSE 3D", "3D-VIEWER", "3D 查看器", "3D ビューア"),
+"No hay ningún vídeo ni juego en 3D ahora mismo.": ("No video or game is in 3D right now.", "Aucune vidéo ni aucun jeu en 3D pour le moment.", "Gerade läuft kein Video oder Spiel in 3D.", "当前没有视频或游戏处于 3D。", "現在 3D の動画やゲームはありません。"),
+"Cuadros por segundo": ("Frames per second", "Images par seconde", "Bilder pro Sekunde", "帧率", "フレームレート"),
+"Conversor de relieve": ("Depth converter", "Convertisseur de relief", "Tiefenkonverter", "立体转换器", "立体変換器"),
+"puesto · {} ms por mapa": ("on · {} ms per map", "activé · {} ms par carte", "an · {} ms pro Karte", "开启 · 每张图 {} 毫秒", "オン · 1 マップ {} ms"),
+"apagado": ("off", "désactivé", "aus", "关闭", "オフ"),
+"Cámara": ("Camera", "Caméra", "Kamera", "摄像头", "カメラ"),
+"sin abrir": ("not open", "non ouverte", "nicht geöffnet", "未打开", "未使用"),
+"TARJETAS GRÁFICAS": ("GRAPHICS CARDS", "CARTES GRAPHIQUES", "GRAFIKKARTEN", "显卡", "グラフィックカード"),
+"nvidia-smi no respondió: no hay datos de las tarjetas.": ("nvidia-smi didn't respond: no card data.", "nvidia-smi n'a pas répondu : pas de données.", "nvidia-smi antwortete nicht: keine Kartendaten.", "nvidia-smi 无响应：没有显卡数据。", "nvidia-smi が応答せず、カード情報がありません。"),
+"No encontré juegos instalados en las bibliotecas de Steam.": ("No installed games found in the Steam libraries.", "Aucun jeu installé dans les bibliothèques Steam.", "Keine installierten Spiele in den Steam-Bibliotheken.", "在 Steam 库中未找到已安装的游戏。", "Steam ライブラリにゲームがありません。"),
+"3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.": ("3D: the game enters 3D on its own when it goes fullscreen. 2D: it's left as is.", "3D : le jeu passe seul en 3D en plein écran. 2D : il reste tel quel.", "3D: Das Spiel wechselt im Vollbild selbst in 3D. 2D: bleibt wie es ist.", "3D：游戏全屏时自动进入 3D。2D：保持原样。", "3D：全画面になるとゲームが自動で 3D に。2D：そのまま。"),
+"no se pudo guardar: {}": ("couldn't save: {}", "impossible d'enregistrer : {}", "konnte nicht speichern: {}", "无法保存：{}", "保存できませんでした：{}"),
+"se preguntará con la tarjeta": ("it will ask with the card", "on demandera avec la carte", "es wird mit der Karte gefragt", "将用卡片询问", "カードで確認します"),
+"desde el siguiente vídeo, sin preguntar": ("from the next video, without asking", "dès la prochaine vidéo, sans demander", "ab dem nächsten Video, ohne zu fragen", "从下一个视频起，不再询问", "次の動画から確認なしで"),
+"los vídeos divididos se suavizan siempre": ("split videos are always smoothed", "les vidéos divisées sont toujours adoucies", "geteilte Videos werden immer geglättet", "分屏视频总是平滑", "分割動画を常になめらかに"),
+"con su propio relieve mientras quepa; suavizado solo si algo sale doble": ("with their own depth while it fits; smoothed only if something doubles", "avec leur relief tant qu'il tient ; adoucies si quelque chose se dédouble", "mit eigener Tiefe, solange sie passt; geglättet nur bei Doppelbildern", "在合适时使用自身立体感；只有出现重影时才平滑", "収まる限り動画の立体感で。二重に見えるときだけなめらかに"),
+"los vídeos divididos se ven siempre con su propio relieve": ("split videos always use their own depth", "les vidéos divisées gardent toujours leur relief", "geteilte Videos nutzen immer ihre eigene Tiefe", "分屏视频总是使用自身立体感", "分割動画は常に動画の立体感で"),
+"se aplica desde el siguiente vídeo": ("applies from the next video", "s'applique dès la prochaine vidéo", "gilt ab dem nächsten Video", "从下一个视频起生效", "次の動画から適用"),
+"se resta el {} % de la imagen del otro ojo": ("{} % of the other eye's image is subtracted", "{} % de l'image de l'autre œil est soustrait", "{} % des Bildes des anderen Auges werden abgezogen", "减去另一只眼图像的 {} %", "反対の目の映像を {} % 差し引きます"),
+"fuerza del relieve {} · desde el siguiente vídeo": ("depth strength {} · from the next video", "force du relief {} · dès la prochaine vidéo", "Tiefenstärke {} · ab dem nächsten Video", "立体强度 {} · 从下一个视频起生效", "立体感の強さ {} · 次の動画から"),
+"no se avisará de versiones nuevas; el botón junto al aspa las sigue marcando": ("new versions won't be announced; the button next to the cross still shows them", "les nouvelles versions ne seront plus signalées ; le bouton près de la croix les indique", "neue Versionen werden nicht gemeldet; der Knopf neben dem Kreuz zeigt sie weiter", "不再提示新版本；关闭按钮旁的按钮仍会标记", "新しいバージョンは通知しません。閉じるボタン横には表示されます"),
+"se avisará con una tarjeta en la orilla de la pantalla": ("a card at the screen edge will announce them", "une carte au bord de l'écran les signalera", "eine Karte am Bildschirmrand meldet sie", "将在屏幕边缘用卡片提示", "画面の端のカードで通知します"),
+"OdysseyVK ya no sale en la barra de tareas": ("OdysseyVK no longer shows in the taskbar", "OdysseyVK n'apparaît plus dans la barre des tâches", "OdysseyVK erscheint nicht mehr in der Taskleiste", "OdysseyVK 不再显示在任务栏", "OdysseyVK をタスクバーに表示しません"),
+"OdysseyVK vuelve a salir en la barra de tareas": ("OdysseyVK shows in the taskbar again", "OdysseyVK réapparaît dans la barre des tâches", "OdysseyVK erscheint wieder in der Taskleiste", "OdysseyVK 重新显示在任务栏", "OdysseyVK をタスクバーに表示します"),
+"sin icono en la bandeja del sistema": ("no icon in the system tray", "pas d'icône dans la zone de notification", "kein Symbol im Systemabschnitt", "系统托盘中不显示图标", "システムトレイにアイコンを表示しません"),
+"con icono en la bandeja del sistema": ("icon in the system tray", "icône dans la zone de notification", "Symbol im Systemabschnitt", "系统托盘中显示图标", "システムトレイにアイコンを表示します"),
+"las versiones nuevas ya no se instalan solas": ("new versions no longer install themselves", "les nouvelles versions ne s'installent plus seules", "neue Versionen installieren sich nicht mehr selbst", "新版本不再自动安装", "新しいバージョンを自動でインストールしません"),
+"las versiones nuevas se instalarán solas": ("new versions will install themselves", "les nouvelles versions s'installeront seules", "neue Versionen installieren sich selbst", "新版本将自动安装", "新しいバージョンを自動でインストールします"),
+"mirando la versión de GitHub…": ("checking the version on GitHub…", "vérification de la version sur GitHub…", "prüfe die Version auf GitHub…", "正在检查 GitHub 上的版本…", "GitHub のバージョンを確認中…"),
+"actualizando: se compila, se pide tu clave para instalar y el servicio se reinicia": ("updating: it builds, asks for your password to install and restarts the service", "mise à jour : compilation, mot de passe pour installer, puis redémarrage du service", "aktualisiere: kompiliert, fragt nach dem Passwort und startet den Dienst neu", "正在更新：编译、需要密码安装并重启服务", "更新中：ビルドし、パスワードを求めてインストールし、サービスを再起動します"),
+"¿seguro? pica otra vez en los próximos 12 segundos para desinstalar": ("sure? click again within 12 seconds to uninstall", "sûr ? recliquez dans les 12 secondes pour désinstaller", "sicher? innerhalb von 12 Sekunden erneut klicken", "确定吗？12 秒内再点一次即可卸载", "本当に？12 秒以内にもう一度クリックでアンインストール"),
+"desinstalando OdysseyVK…": ("uninstalling OdysseyVK…", "désinstallation d'OdysseyVK…", "OdysseyVK wird deinstalliert…", "正在卸载 OdysseyVK…", "OdysseyVK をアンインストール中…"),
+"bajando la red abierta (95 MB)…": ("downloading the open network (95 MB)…", "téléchargement du réseau ouvert (95 Mo)…", "lade das offene Netz (95 MB)…", "正在下载开放网络（95 MB）…", "オープンネットワークをダウンロード中（95 MB）…"),
+"se volverá a preguntar por {}": ("it will ask again for {}", "on redemandera pour {}", "für {} wird wieder gefragt", "将再次询问 {}", "{} について再度確認します"),
+"ese juego se queda en 2D": ("that game stays in 2D", "ce jeu reste en 2D", "dieses Spiel bleibt in 2D", "该游戏保持 2D", "このゲームは 2D のまま"),
+"ese juego entra solo en 3D": ("that game enters 3D on its own", "ce jeu passe seul en 3D", "dieses Spiel wechselt selbst in 3D", "该游戏将自动进入 3D", "このゲームは自動で 3D に"),
+"arrancando {}…": ("launching {}…", "lancement de {}…", "starte {}…", "正在启动 {}…", "{} を起動中…"),
+"ese no es un juego de Steam": ("that is not a Steam game", "ce n'est pas un jeu Steam", "das ist kein Steam-Spiel", "这不是 Steam 游戏", "Steam のゲームではありません"),
+"actualizando a OdysseyVK {}: se compila, se pide tu clave y el servicio se reinicia": ("updating to OdysseyVK {}: it builds, asks for your password and restarts the service", "mise à jour vers OdysseyVK {} : compilation, mot de passe, puis redémarrage du service", "aktualisiere auf OdysseyVK {}: kompiliert, fragt nach dem Passwort, startet den Dienst neu", "正在更新到 OdysseyVK {}：编译、需要密码并重启服务", "OdysseyVK {} に更新中：ビルドし、パスワードを求め、サービスを再起動します"),
+"no se pudo mirar GitHub (¿hay conexión?)": ("couldn't reach GitHub (connection?)", "impossible de joindre GitHub (connexion ?)", "GitHub nicht erreichbar (Verbindung?)", "无法访问 GitHub（网络连接？）", "GitHub に接続できません（接続？）"),
+"hay una versión nueva: OdysseyVK {}": ("a new version is available: OdysseyVK {}", "une nouvelle version est disponible : OdysseyVK {}", "eine neue Version ist verfügbar: OdysseyVK {}", "有新版本：OdysseyVK {}", "新しいバージョンがあります：OdysseyVK {}"),
+"estás al día (OdysseyVK {})": ("you're up to date (OdysseyVK {})", "vous êtes à jour (OdysseyVK {})", "du bist aktuell (OdysseyVK {})", "已是最新（OdysseyVK {}）", "最新です（OdysseyVK {}）"),
+"red descargada: el 3D de vídeo normal ya puede calcular la profundidad": ("network downloaded: normal-video 3D can now compute depth", "réseau téléchargé : la 3D des vidéos normales peut calculer la profondeur", "Netz heruntergeladen: 3D für normale Videos kann jetzt Tiefe berechnen", "网络已下载：普通视频的 3D 现在可以计算深度", "ダウンロード完了：通常動画の 3D で深度を計算できます"),
+"El juego tapa el 3D": ("The game covers the 3D", "Le jeu masque la 3D", "Das Spiel verdeckt das 3D", "游戏遮住了 3D", "ゲームが 3D を覆っています"),
+"A pantalla completa exclusiva el escritorio pone al juego sobre el visor.": ("In exclusive fullscreen the desktop puts the game above the viewer.", "En plein écran exclusif, le bureau place le jeu au-dessus de la visionneuse.", "Im exklusiven Vollbild legt der Desktop das Spiel über den Viewer.", "独占全屏时，桌面会把游戏置于查看器之上。", "排他的全画面ではデスクトップがゲームをビューアの上に置きます。"),
+"Ponlo en ventana sin bordes (borderless): así el 3D se ve encima.": ("Set it to a borderless window: then the 3D shows on top.", "Passez-le en fenêtre sans bordure : la 3D s'affiche par-dessus.", "Stelle es auf randloses Fenster: dann liegt das 3D oben.", "请改为无边框窗口：这样 3D 就会显示在上层。", "ボーダーレスウィンドウにすると 3D が上に表示されます。"),
+"Con gamescope igual: también tiene que ir sin bordes.": ("Same with gamescope: it also has to be borderless.", "Pareil avec gamescope : il doit aussi être sans bordure.", "Mit gamescope ebenso: auch randlos.", "gamescope 也一样：同样需要无边框。", "gamescope でも同じく、ボーダーレスにしてください。"),
+"El juego se cerró a los {} s de entrar en 3D": ("The game closed {} s after entering 3D", "Le jeu s'est fermé {} s après le passage en 3D", "Das Spiel endete {} s nach dem Wechsel in 3D", "游戏在进入 3D {} 秒后关闭", "ゲームは 3D になって {} 秒後に終了しました"),
+"Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar.": ("If it crashed, open it in a borderless window and try again.", "S'il a planté, lancez-le en fenêtre sans bordure et réessayez.", "Falls es abstürzte: im randlosen Fenster starten und erneut versuchen.", "如果崩溃了，请改用无边框窗口后再试。", "クラッシュした場合はボーダーレスウィンドウで開き直してください。"),
+"A pantalla completa exclusiva choca con el visor al cambiar de modo.": ("In exclusive fullscreen it clashes with the viewer when switching modes.", "En plein écran exclusif, il entre en conflit avec la visionneuse.", "Im exklusiven Vollbild kollidiert es beim Moduswechsel mit dem Viewer.", "独占全屏在切换模式时会与查看器冲突。", "排他的全画面ではモード切替時にビューアと衝突します。"),
+"Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.": ("To keep it in 2D, flip its switch in the Games tab.", "Pour le laisser en 2D, changez son interrupteur dans l'onglet Jeux.", "Für 2D den Schalter im Tab Spiele umstellen.", "如需保持 2D，请在“游戏”页切换它的开关。", "2D のままにするには「ゲーム」タブでスイッチを切り替えてください。"),
+"Actualizando OdysseyVK": ("Updating OdysseyVK", "Mise à jour d'OdysseyVK", "OdysseyVK wird aktualisiert", "正在更新 OdysseyVK", "OdysseyVK を更新中"),
+"Se baja de GitHub y se compila; luego se pide tu clave para instalar.": ("Downloading from GitHub and building; then your password is asked to install.", "Téléchargement depuis GitHub et compilation ; puis le mot de passe est demandé pour installer.", "Lädt von GitHub und kompiliert; danach wird zum Installieren das Passwort abgefragt.", "正在从 GitHub 下载并编译；随后需要输入密码进行安装。", "GitHub から取得してビルドします。その後インストールのためパスワードを求めます。"),
+"OdysseyVK: la actualización falló": ("OdysseyVK: the update failed", "OdysseyVK : la mise à jour a échoué", "OdysseyVK: Aktualisierung fehlgeschlagen", "OdysseyVK：更新失败", "OdysseyVK：更新に失敗しました"),
+"No se pudo bajar el repositorio (¿hay conexión y git?). Detalle en {}": ("Couldn't download the repository (connection and git?). Details in {}", "Impossible de télécharger le dépôt (connexion et git ?). Détails dans {}", "Repository konnte nicht geladen werden (Verbindung und git?). Details in {}", "无法下载仓库（网络连接和 git？）。详情见 {}", "リポジトリを取得できません（接続と git？）。詳細：{}"),
+"No se pudo compilar o instalar. Detalle en {}": ("Couldn't build or install. Details in {}", "Impossible de compiler ou d'installer. Détails dans {}", "Kompilieren oder Installieren fehlgeschlagen. Details in {}", "无法编译或安装。详情见 {}", "ビルドまたはインストールに失敗しました。詳細：{}"),
+"OdysseyVK {} instalado": ("OdysseyVK {} installed", "OdysseyVK {} installé", "OdysseyVK {} installiert", "OdysseyVK {} 已安装", "OdysseyVK {} をインストールしました"),
+"El servicio se ha reiniciado con la versión nueva.": ("The service restarted with the new version.", "Le service a redémarré avec la nouvelle version.", "Der Dienst wurde mit der neuen Version neu gestartet.", "服务已用新版本重启。", "サービスは新しいバージョンで再起動しました。"),
+"Instalado, pero el servicio no corre: systemctl --user restart odysseyvk-serve": ("Installed, but the service isn't running: systemctl --user restart odysseyvk-serve", "Installé, mais le service ne tourne pas : systemctl --user restart odysseyvk-serve", "Installiert, aber der Dienst läuft nicht: systemctl --user restart odysseyvk-serve", "已安装，但服务未运行：systemctl --user restart odysseyvk-serve", "インストール済みですがサービスが動いていません：systemctl --user restart odysseyvk-serve"),
+"Desinstalando OdysseyVK": ("Uninstalling OdysseyVK", "Désinstallation d'OdysseyVK", "OdysseyVK wird deinstalliert", "正在卸载 OdysseyVK", "OdysseyVK をアンインストール中"),
+"Se pide tu clave para quitar el programa del sistema.": ("Your password is needed to remove the program from the system.", "Le mot de passe est demandé pour retirer le programme du système.", "Zum Entfernen des Programms wird das Passwort abgefragt.", "需要输入密码以从系统中移除程序。", "システムからプログラムを削除するためパスワードを求めます。"),
+"OdysseyVK desinstalado": ("OdysseyVK uninstalled", "OdysseyVK désinstallé", "OdysseyVK deinstalliert", "OdysseyVK 已卸载", "OdysseyVK をアンインストールしました"),
+"OdysseyVK: quedó el programa del sistema": ("OdysseyVK: the system program is still there", "OdysseyVK : le programme système est resté", "OdysseyVK: das Systemprogramm ist noch da", "OdysseyVK：系统程序仍然保留", "OdysseyVK：システムのプログラムが残っています"),
+"Tu configuración sigue en {}/odysseyvk.": ("Your settings remain in {}/odysseyvk.", "Vos réglages restent dans {}/odysseyvk.", "Deine Einstellungen bleiben in {}/odysseyvk.", "你的配置仍在 {}/odysseyvk。", "設定は {}/odysseyvk に残っています。"),
+"No se dio la clave: queda {} y la regla udev.": ("No password given: {} and the udev rule remain.", "Mot de passe non saisi : {} et la règle udev restent.", "Kein Passwort: {} und die udev-Regel bleiben.", "未输入密码：{} 和 udev 规则仍保留。", "パスワードが入力されず、{} と udev ルールが残っています。"),
+"el idioma cambia al momento": ("the language changes right away", "la langue change tout de suite", "die Sprache wechselt sofort", "语言立即切换", "言語はすぐに切り替わります"),
+}
+
+from traducciones_ru import RU
+assert len(RU) == len(T), (len(RU), len(T))
+T = {k: v + (r,) for (k, v), r in zip(T.items(), RU)}
+
+def esc(s):
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+def revisar():
+    """Cada texto que el codigo pasa por idioma::tr / idioma::trf tiene que estar en la tabla."""
+    import os, re, glob
+    raiz = os.path.join(os.path.dirname(__file__), "..", "src")
+    lit = re.compile(r'"((?:[^"\\]|\\.)*)"')
+    faltan = []
+    vistos = 0
+    for f in sorted(glob.glob(os.path.join(raiz, "*.cpp"))):
+        txt = open(f, encoding="utf-8").read()
+        for m in re.finditer(r'idioma::trf?\(', txt):
+            i, prof = m.end(), 1
+            while i < len(txt) and prof:
+                c = txt[i]
+                if c == '"':
+                    j = i + 1
+                    while txt[j] != '"':
+                        j += 2 if txt[j] == "\\" else 1
+                    i = j
+                elif c == '(':
+                    prof += 1
+                elif c == ')':
+                    prof -= 1
+                i += 1
+            arg = txt[m.end():i - 1]
+            if m.group(0).startswith("idioma::trf"):
+                arg = re.sub(r'\{[^{}]*\}\s*$', '', arg)   # la lista de datos no se traduce
+            for t in lit.findall(arg):
+                t = t.encode().decode("unicode_escape").encode("latin-1").decode("utf-8")
+                vistos += 1
+                if t not in T:
+                    faltan.append((os.path.basename(f), txt.count("\n", 0, m.start()) + 1, t))
+    # los que van en tablas del codigo y se traducen con tr(tabla[i]): a mano
+    for t in ("los vídeos divididos se suavizan siempre", "con su propio relieve mientras quepa; suavizado solo si algo sale doble",
+              "los vídeos divididos se ven siempre con su propio relieve", "vídeo normal",
+              "vídeo dividido: el relieve del propio vídeo", "vídeo dividido suavizado: el relieve lo pone el conversor"):
+        vistos += 1
+        if t not in T:
+            faltan.append(("tabla", 0, t))
+    for f, n, t in faltan:
+        print("FALTA %s:%d  %s" % (f, n, t))
+    print(vistos, "textos en el codigo;", len(faltan), "sin traducir")
+    return not faltan
+
+if __name__ == "__main__":
+    import os, sys
+    if len(sys.argv) > 1 and sys.argv[1] == "revisar":
+        sys.exit(0 if revisar() else 1)
+    destino = os.path.join(os.path.dirname(__file__), "..", "src", "idioma_tabla.inc")
+    with open(destino, "w", encoding="utf-8") as f:
+        f.write("/* generado por tools/traducciones.py: no editar a mano */\n")
+        for k, v in T.items():
+            assert len(v) == 6, k
+            f.write('{"%s", {"%s", "%s", "%s", "%s", "%s", "%s"}},\n' % ((esc(k),) + tuple(esc(x) for x in v)))
+    print(len(T), "textos")

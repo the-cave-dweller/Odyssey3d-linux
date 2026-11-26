@@ -3,6 +3,45 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El idioma: inglés de fábrica y seis más (v1.07)
+
+- Rodolfo: «Crea un botón de idioma, haz el default el inglés, pero mantén Español, Francés, Alemán,
+  Chino y Japonés»; y luego «añade el idioma ruso».
+- `src/idioma.h/.cpp`: los textos siguen escritos en español en el código y `idioma::tr()` /
+  `idioma::trf()` (con `{}` para los datos) los cambian por los del idioma puesto. La tabla
+  (177 textos × 6 idiomas) sale de `tools/traducciones.py` (+ `traducciones_ru.py`) a
+  `src/idioma_tabla.inc`; `python3 tools/traducciones.py revisar` comprueba que cada texto que el
+  código pasa por `tr` está en la tabla (200 usos, 0 sin traducir).
+- `idioma = en|es|fr|de|zh|ja|ru` en serve.conf; sin la clave, inglés. `ODYSSEYVK_IDIOMA` lo pisa
+  (pruebas).
+- Panel: un globo con el código (EN, ES…) a la izquierda de la flecha de actualizar; picado cuelga
+  la lista de los siete idiomas, cada uno con su nombre en su idioma. La misma elección está en
+  Programa → Otros → Idioma. El cambio es al momento: el panel rehace su atlas de letras, al visor
+  abierto le llega la orden `idioma` (la pastilla cambia sin cerrar el vídeo) y el servicio lo ve
+  en su siguiente mirada a serve.conf (tarjetas y rótulo de la bandeja). La entrada de la barra de
+  tareas cambia de título.
+- El atlas de letras carga además los signos de fuera del latino-1 que use el idioma: el ruso y la
+  «œ» francesa salen de DejaVu; el chino y el japonés de Noto Sans CJK (la cara SC o JP de la
+  colección), con el atlas a 1024×1024 (lleno hasta 544). La búsqueda de esos signos es binaria.
+- Lo que el idioma descolocaba, MEDIDO pintando cada pestaña en los siete idiomas: las notas largas
+  (francés, alemán, ruso) se achican hasta un 80 % y, si aún no caben, se cortan con «…»; los
+  botones de las tarjetas miden lo que su palabra; las pestañas rusas se achican para no meterse
+  debajo del globo; en chino y japonés la casilla de la pastilla es corta y los dos botones de tipo
+  de vídeo se montaban: el bloque mide al menos 128.
+- Los decimales que se enseñan van con punto en inglés, chino y japonés (serve.conf sigue con coma).
+- El guion y el guion bajo se perdían en letra chica (salía «the cave dweller»): su caja ya no
+  baja de 1,3 puntos.
+- La medición del plano de apoyo (v0.65), repetida con la 1.07 (`odysseyvk mapa --sueltas`,
+  `ODYSSEYVK_FOCO_IIR=1`, `ODYSSEYVK_SALIENCIA=0` contra 1, misma red abierta): nave (voy-01..04)
+  0,30/0,30/0,36/0,33 → **0,98/0,95/0,95/0,95**, igual que en la v0.65; globo (core-01..03)
+  0,36/0,27/0,27 → 0,33/0,30/0,39 (en la v0.65 el core-03 daba 0,42). La elección del plano no ha
+  cambiado desde entonces; lo que mejoró después son los bordes del mapa (v0.89), que se afinan en
+  el sombreador y no salen en este mapa de la red. Los dos vídeos con caras ya no están guardados:
+  la imagen nueva lleva solo la nave y el globo.
+- README en inglés y español con capturas nuevas de la 1.07 (las de la interfaz en cada idioma, en
+  `docs/img` y `docs/img/es`) y los rótulos de las de profundidad en cada idioma; se rehacen con
+  `python3 tools/capturas-readme.py`.
+
 ## El botón de desinstalar, en rojo suave (v1.06)
 
 - Rodolfo: «cambia el color del botón de desinstalar por un rojo suave». Los botones del panel

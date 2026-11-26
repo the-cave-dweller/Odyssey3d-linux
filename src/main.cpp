@@ -13,6 +13,7 @@
 #include "barra.h"
 #include "preferencias.h"
 #include "bandeja.h"
+#include "idioma.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
 #include "overlay.h"
@@ -2181,7 +2182,7 @@ static int cmdActualizar(int argc, char **argv) {
   const char *home = std::getenv("HOME");
   const std::string fuente = std::string(home ? home : "/tmp") + "/.local/share/odysseyvk/fuente";
   std::printf("[actualizar] OdysseyVK %s · fuente en %s\n", ODYSSEYVK_VERSION, fuente.c_str());
-  avisoEscritorio("Actualizando OdysseyVK", "Se baja de GitHub y se compila; luego se pide tu clave para instalar.");
+  avisoEscritorio(idioma::tr("Actualizando OdysseyVK"), idioma::tr("Se baja de GitHub y se compila; luego se pide tu clave para instalar."));
   std::string orden;
   if (fileExists(fuente + "/.git/HEAD"))
     orden = "git -C " + comilla(fuente) + " fetch -q origin main && git -C " + comilla(fuente) + " reset -q --hard origin/main";
@@ -2189,7 +2190,7 @@ static int cmdActualizar(int argc, char **argv) {
     orden = "git clone -q --depth 1 " + std::string(prefs::kRepoGitHub) + " " + comilla(fuente);
   std::printf("[actualizar] %s\n", orden.c_str());
   if (std::system(orden.c_str()) != 0) {
-    avisoEscritorio("OdysseyVK: la actualización falló", "No se pudo bajar el repositorio (¿hay conexión y git?). Detalle en " + registro);
+    avisoEscritorio(idioma::tr("OdysseyVK: la actualización falló"), idioma::trf("No se pudo bajar el repositorio (¿hay conexión y git?). Detalle en {}", {registro}));
     return 1;
   }
   std::string nueva;
@@ -2221,12 +2222,12 @@ static int cmdActualizar(int argc, char **argv) {
   }
   std::printf("[actualizar] %s\n", orden.c_str());
   if (std::system(orden.c_str()) != 0) {
-    avisoEscritorio("OdysseyVK: la actualización falló", "No se pudo compilar o instalar. Detalle en " + registro);
+    avisoEscritorio(idioma::tr("OdysseyVK: la actualización falló"), idioma::trf("No se pudo compilar o instalar. Detalle en {}", {registro}));
     return 1;
   }
   /* install.sh ya reinicio el servicio (v0.97); aqui solo se comprueba que corre */
   const int rc = std::system("systemctl --user is-active --quiet odysseyvk-serve.service");
-  avisoEscritorio("OdysseyVK " + nueva + " instalado", rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no corre: systemctl --user restart odysseyvk-serve");
+  avisoEscritorio(idioma::trf("OdysseyVK {} instalado", {nueva}), idioma::tr(rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no corre: systemctl --user restart odysseyvk-serve"));
   std::printf("[actualizar] hecho (%d)\n", rc);
   return rc == 0 ? 0 : 1;
 }
@@ -2244,7 +2245,7 @@ static int cmdDesinstalar(int argc, char **argv) {
   std::string bin = n > 0 ? std::string(propio, (size_t)n) : std::string("/usr/local/bin/odysseyvk");
   const std::string bindir = bin.substr(0, bin.rfind('/'));
   const std::string prefijo = bindir.substr(0, bindir.rfind('/'));
-  avisoEscritorio("Desinstalando OdysseyVK", "Se pide tu clave para quitar el programa del sistema.");
+  avisoEscritorio(idioma::tr("Desinstalando OdysseyVK"), idioma::tr("Se pide tu clave para quitar el programa del sistema."));
   std::system("systemctl --user disable --now odysseyvk-serve.service 2>/dev/null");
   const std::string conf = std::string(std::getenv("XDG_CONFIG_HOME") ? std::getenv("XDG_CONFIG_HOME") : (casa + "/.config"));
   const std::string datos = std::string(std::getenv("XDG_DATA_HOME") ? std::getenv("XDG_DATA_HOME") : (casa + "/.local/share"));
@@ -2256,8 +2257,8 @@ static int cmdDesinstalar(int argc, char **argv) {
                                                       " /etc/udev/rules.d/70-odysseyvk.rules; rm -rf " + comilla(prefijo + "/share/odysseyvk"));
   const int rc = std::system(raiz.c_str());
   std::system(("rm -rf " + comilla(std::string(std::getenv("XDG_STATE_HOME") ? std::getenv("XDG_STATE_HOME") : (casa + "/.local/state")) + "/odysseyvk")).c_str());
-  avisoEscritorio(rc == 0 ? "OdysseyVK desinstalado" : "OdysseyVK: quedó el programa del sistema",
-                  rc == 0 ? "Tu configuración sigue en " + conf + "/odysseyvk." : "No se dio la clave: queda " + bin + " y la regla udev.");
+  avisoEscritorio(idioma::tr(rc == 0 ? "OdysseyVK desinstalado" : "OdysseyVK: quedó el programa del sistema"),
+                  rc == 0 ? idioma::trf("Tu configuración sigue en {}/odysseyvk.", {conf}) : idioma::trf("No se dio la clave: queda {} y la regla udev.", {bin}));
   return rc == 0 ? 0 : 1;
 }
 
@@ -3047,7 +3048,7 @@ static int cmdAjustes(int argc, char **argv) {
     return 1;
   }
   /* la entrada en la barra de tareas mientras el panel esta abierto (v1.04), si no se apago */
-  if (prefs::leer().enBarraTareas) ov.ponEntradaBarra("OdysseyVK — Ajustes");
+  if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
               grande ? "al doble: hay una sesion 3D" : "tamano de escritorio", (int)juegos.size());
   std::fflush(stdout);
@@ -3061,21 +3062,37 @@ static int cmdAjustes(int argc, char **argv) {
     return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
   };
   double cerrarEn = -1.0, miradaHub = 0.0, miradaRend = 0.0;
+  int idiomaDelAtlas = idioma::actual();
   while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
     ov.waitAndDispatch(100);
     Overlay::Golpe g;
     bool repintar = false;
     while (ov.takeGolpe(g)) {
+      /* la lista de idiomas se cierra con cualquier clic que no sea en ella o en su boton */
+      const bool clicIdioma = g.tipo == (int)Hud::HitPanelIdioma || g.tipo == (int)Hud::HitPanelIdiomaOpcion;
+      if (st.menuIdioma && !clicIdioma) {
+        st.menuIdioma = false;
+        repintar = true;
+      }
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelIdioma) {
+        st.menuIdioma = !st.menuIdioma;
+        repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelIdiomaOpcion) {
+        st.menuIdioma = false;
+        std::string aviso;
+        bool cerrar = false;
+        if (prefs::aplicar("idioma", g.sub, 0.0f, true, juegos, &aviso, &cerrar)) st.pie = aviso;
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelActualizar) {
         /* el boton junto al aspa (v0.95): con una version nueva, se instala; si no, se vuelve a mirar */
         std::string e;
         if (!st.actualizacion.empty()) {
-          st.pie = prefs::lanzarActualizacion(&e) ? "actualizando a OdysseyVK " + st.actualizacion + ": se compila, se pide tu clave y el servicio se reinicia" : e;
+          st.pie = prefs::lanzarActualizacion(&e) ? idioma::trf("actualizando a OdysseyVK {}: se compila, se pide tu clave y el servicio se reinicia", {st.actualizacion}) : e;
           if (e.empty()) cerrarEn = reloj() + 2.5;
         } else {
-          st.pie = prefs::comprobarActualizacion(&e) ? "mirando la versión de GitHub…" : e;
+          st.pie = prefs::comprobarActualizacion(&e) ? std::string(idioma::tr("mirando la versión de GitHub…")) : e;
         }
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
@@ -3099,6 +3116,18 @@ static int cmdAjustes(int argc, char **argv) {
         if (cerrar) cerrarEn = reloj() + 1.2;   /* que de tiempo a leer «arrancando ...» */
       }
     }
+    /* el idioma cambio (por el globo o por la fila de Programa): el atlas de letras se rehace con
+       las del idioma nuevo (el chino y el japones traen las suyas) y las filas se vuelven a escribir */
+    if (idioma::actual() != idiomaDelAtlas) {
+      idiomaDelAtlas = idioma::actual();
+      std::string e;
+      if (!ov.hud().buildAtlas(&e)) std::fprintf(stderr, "[ajustes] atlas: %s\n", e.c_str());
+      if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
+      std::printf("[ajustes] idioma: %s\n", idioma::codigo(idiomaDelAtlas));
+      std::fflush(stdout);
+      rellenar();
+      repintar = true;
+    }
     /* la pestana de rendimiento se refresca sola, una vez por segundo */
     if (st.pestana == 2 && reloj() - miradaRend >= 1.0) {
       miradaRend = reloj();
@@ -3108,8 +3137,8 @@ static int cmdAjustes(int argc, char **argv) {
     /* la comprobacion de la version (v0.95): al acabar se repinta con lo que haya dicho GitHub */
     if (prefs::comprobacionEnMarcha() && prefs::vigilarComprobacion()) {
       const prefs::Actualizacion a = prefs::estadoActualizacion();
-      st.pie = a.remota.empty() ? "no se pudo mirar GitHub (¿hay conexión?)"
-                                : (a.pendiente ? "hay una versión nueva: OdysseyVK " + a.remota : "estás al día (OdysseyVK " + a.remota + ")");
+      st.pie = a.remota.empty() ? std::string(idioma::tr("no se pudo mirar GitHub (¿hay conexión?)"))
+                                : idioma::trf(a.pendiente ? "hay una versión nueva: OdysseyVK {}" : "estás al día (OdysseyVK {})", {a.remota});
       rellenar();
       repintar = true;
     }
@@ -3125,7 +3154,7 @@ static int cmdAjustes(int argc, char **argv) {
              la ve en su proxima mirada, y este panel se cierra solo (v0.94) */
           std::string e;
           ajuste::escribir(std::map<std::string, double>(), std::string(), {{"cargar_red", "si"}}, &e);
-          st.pie = "red descargada: el 3D de vídeo normal ya puede calcular la profundidad";
+          st.pie = idioma::tr("red descargada: el 3D de vídeo normal ya puede calcular la profundidad");
           cerrarEn = reloj() + 2.5;
         }
       }
@@ -3217,9 +3246,11 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.state().pestana = std::max(0, std::min(3, std::atoi(pn)));
     std::vector<std::string> ids;
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
-    hud.state().pie = "se aplica desde el siguiente vídeo";
+    hud.state().pie = idioma::tr("se aplica desde el siguiente vídeo");
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
+    /* ODYSSEYVK_HUD_MENU_IDIOMA=1 (v1.07): con la lista de idiomas abierta */
+    if (std::getenv("ODYSSEYVK_HUD_MENU_IDIOMA")) hud.state().menuIdioma = true;
   }
   /* ODYSSEYVK_HUD_ACTUALIZACION=0.99 (taller, v0.95): la tarjeta de la orilla avisando de esa version */
   if (const char *av = std::getenv("ODYSSEYVK_HUD_ACTUALIZACION")) {
@@ -3232,10 +3263,10 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (std::getenv("ODYSSEYVK_HUD_AVISO")) {
     hud.state().ask = true;
     hud.state().panel = false;
-    hud.state().askAviso = "El juego se cerró a los 48 s de entrar en 3D";
-    hud.state().askAvisoLineas = {"Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar.",
-                                  "A pantalla completa exclusiva choca con el visor al cambiar de modo.",
-                                  "Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos."};
+    hud.state().askAviso = idioma::trf("El juego se cerró a los {} s de entrar en 3D", {"48"});
+    hud.state().askAvisoLineas = {idioma::tr("Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar."),
+                                  idioma::tr("A pantalla completa exclusiva choca con el visor al cambiar de modo."),
+                                  idioma::tr("Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.")};
   }
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
   if (const char *raton = std::getenv("ODYSSEYVK_HUD_RATON")) {
@@ -5198,9 +5229,9 @@ static int cmdServe(int argc, char **argv) {
                veces por sesion y el juego siempre delante. La salida es que el juego vaya en ventana
                sin bordes: se avisa con la tarjeta a la segunda vez. */
             if (esJuego(hijoApp) && ++visorEscondidas == 2)
-              mostrarAviso("El juego tapa el 3D", {"A pantalla completa exclusiva el escritorio pone al juego sobre el visor.",
-                                                   "Ponlo en ventana sin bordes (borderless): así el 3D se ve encima.",
-                                                   "Con gamescope igual: también tiene que ir sin bordes."}, now);
+              mostrarAviso(idioma::tr("El juego tapa el 3D"), {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
+                                                               idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se ve encima."),
+                                                               idioma::tr("Con gamescope igual: también tiene que ir sin bordes.")}, now);
             if (!avisoAparecerHecho) {
               avisoAparecerHecho = true;
               std::printf("[ventana] %s\n", pudo
@@ -5480,11 +5511,10 @@ static int cmdServe(int argc, char **argv) {
             /* un juego cuya ventana desaparece a los pocos minutos de entrar en 3D: lo mas probable es
                que se haya caido (v1.00). Se avisa con lo que suele arreglarlo. */
             if (esJuego(hijoApp) && std::string(motivo) == "la ventana del video ya no esta" && hijoDesde > 0.0 && now - hijoDesde < 300.0) {
-              char t[128];
-              std::snprintf(t, sizeof t, "El juego se cerró a los %.0f s de entrar en 3D", now - hijoDesde);
-              mostrarAviso(t, {"Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar.",
-                               "A pantalla completa exclusiva choca con el visor al cambiar de modo.",
-                               "Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos."}, now);
+              const std::string t = idioma::trf("El juego se cerró a los {} s de entrar en 3D", {std::to_string((long)std::lround(now - hijoDesde))});
+              mostrarAviso(t, {idioma::tr("Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar."),
+                               idioma::tr("A pantalla completa exclusiva choca con el visor al cambiar de modo."),
+                               idioma::tr("Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.")}, now);
             }
             /* KWin guarda, para cada configuracion de pantallas, como estaba cada ventana, y al
                volver a esa configuracion se lo repone (v0.75). Medido el 25-nov: a las 11:25:32,
@@ -5711,6 +5741,18 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.divididoAuto != cfg.divididoAuto ||
                               nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo ||
                               nuevo.actualizaciones != cfg.actualizaciones || nuevo.actualizarAuto != cfg.actualizarAuto;
+          /* el idioma (v1.07): la tarjeta de la orilla y el icono de la bandeja pasan al nuevo ya; el
+             atlas de letras de la capa se rehace con las del idioma (las chinas y japonesas aparte) */
+          if (const int l = idioma::leerDeConfig(); !std::getenv("ODYSSEYVK_IDIOMA") && (l < 0 ? idioma::EN : l) != idioma::actual()) {
+            idioma::poner(l < 0 ? idioma::EN : l);
+            if (ov) {
+              std::string e2;
+              if (!ov->hud().buildAtlas(&e2)) std::fprintf(stderr, "[serve] atlas: %s\n", e2.c_str());
+              if (ov->askVisible()) ov->repaint();
+            }
+            std::printf("[serve] idioma: %s\n", idioma::codigo(idioma::actual()));
+            std::fflush(stdout);
+          }
           cfg.actualizaciones = nuevo.actualizaciones;
           cfg.barraTareas = nuevo.barraTareas;
           if (nuevo.bandeja && !cfg.bandeja) bandejaIntento = -100.0;   /* encendida en el panel: ponerla ya, sin esperar al reintento */
@@ -6055,6 +6097,8 @@ int main(int argc, char **argv) {
   /* Desde v0.57 el proyecto se llama OdysseyVK: si el usuario todavia tiene sus datos en la
      carpeta del nombre viejo, los copiamos antes de tocar nada (no borramos lo viejo). */
   migrarDatosDeViejoNombre();
+  /* el idioma de la interfaz (v1.07): `idioma =` de serve.conf, ingles si no esta */
+  idioma::cargar();
   /* Las órdenes de panel hablán con KWin por Wayland: aseguramos el socket en el entorno. */
   const std::string waylandSocket = ensureWaylandEnv();
 

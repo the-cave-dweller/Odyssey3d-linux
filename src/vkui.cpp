@@ -1,7 +1,9 @@
 /* vkui.cpp — atlas (fuentes + máscaras), disposición de la interfaz y manejo del ratón. */
 #include "vkui.h"
+#include "idioma.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -20,6 +22,18 @@ const char *kFontPaths[] = {
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 };
 constexpr int kFontPx = 26;   /* tamaño horneado del atlas; luego se escala el cuadro */
+/* el tipo de los idiomas chino y japones (v1.07): DejaVu no trae esas letras. Es una coleccion
+   (.ttc) con una cara por idioma; se escoge la que diga JP o SC en su nombre. */
+const char *kCjkPaths[] = {
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.otf",
+    "/usr/share/fonts/TTF/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+};
 
 unsigned nextCp(const std::string &s, size_t &i) {
   unsigned char c = (unsigned char)s[i];
@@ -73,8 +87,13 @@ float distSegmento(float px, float py, float ax, float ay, float bx, float by) {
 }  // namespace
 
 bool Hud::buildAtlas(std::string *err) {
+  /* con chino o japones entran ~300 letras mas de 26 px: el atlas crece al doble de alto */
+  const int lengua = idioma::actual();
   aw_ = 1024;
-  ah_ = 512;
+  ah_ = idioma::esCjk(lengua) ? 1024 : 512;
+  extra_.clear();
+  for (Glyph &g : glyphs_) g = Glyph{};
+  hasText_ = false;
   atlas_.assign((size_t)aw_ * (size_t)ah_, 0);
   shelfX_ = 1;
   shelfY_ = 1;
@@ -165,6 +184,23 @@ bool Hud::buildAtlas(std::string *err) {
         engranaje[(size_t)j * (size_t)n + (size_t)i] = cubre(std::max(r - borde, 9.5f - r));
       }
     cupo = subir(n, n, engranaje, &icoEngranaje_) && cupo;
+    /* el globo del boton del idioma (v1.07): el contorno, el ecuador, dos paralelos y un meridiano */
+    std::vector<uint8_t> globo((size_t)n * n);
+    for (int j = 0; j < n; j++)
+      for (int i = 0; i < n; i++) {
+        const float x = (float)i + 0.5f - 32.0f, y = (float)j + 0.5f - 32.0f;
+        const float r = std::hypot(x, y);
+        float d = std::fabs(r - 26.0f) - 2.4f;
+        if (r < 26.0f) {
+          d = std::min(d, std::fabs(y) - 2.0f);
+          d = std::min(d, std::fabs(std::fabs(y) - 13.0f) - 1.8f);
+          d = std::min(d, std::fabs(x) - 2.0f);
+          const float e = std::hypot(x / 12.0f, y / 26.0f);   /* el meridiano de canto */
+          d = std::min(d, std::fabs(e - 1.0f) * 12.0f - 2.0f);
+        }
+        globo[(size_t)j * (size_t)n + (size_t)i] = cubre(d);
+      }
+    cupo = subir(n, n, globo, &icoGlobo_) && cupo;
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -212,9 +248,10 @@ bool Hud::buildAtlas(std::string *err) {
     asc_ = (float)face->size->metrics.ascender / 64.0f;
     bool okAll = true;
     /* 0 = glifo puesto, 1 = el tipo no lo tiene, -1 = el atlas se llenó */
-    auto cargar = [&](unsigned cp, Glyph &gl) -> int {
-      if (FT_Load_Char(face, cp, FT_LOAD_RENDER) != 0) return 1;
-      FT_GlyphSlot g = face->glyph;
+    auto cargarDe = [&](FT_Face cara, unsigned cp, Glyph &gl) -> int {
+      if (FT_Get_Char_Index(cara, cp) == 0) return 1;
+      if (FT_Load_Char(cara, cp, FT_LOAD_RENDER) != 0) return 1;
+      FT_GlyphSlot g = cara->glyph;
       int w = (int)g->bitmap.width, h = (int)g->bitmap.rows;
       /* el espacio no trae dibujo pero si su avance: sin apuntarlo, cada espacio media medio
          cuadratin (13 px de 26) y las frases salian con las palabras separadas de mas */
@@ -234,6 +271,11 @@ bool Hud::buildAtlas(std::string *err) {
       gl.ok = true;
       return 0;
     };
+    auto cargar = [&](unsigned cp, Glyph &gl) -> int { return cargarDe(face, cp, gl); };
+    auto ordenaExtra = [&]() {
+      std::sort(extra_.begin(), extra_.end(),
+                [](const std::pair<unsigned, Glyph> &a, const std::pair<unsigned, Glyph> &b) { return a.first < b.first; });
+    };
     for (unsigned cp = 32; cp < 256; cp++) {
       if (cargar(cp, glyphs_[cp]) < 0) { okAll = false; break; }   /* atlas lleno */
     }
@@ -243,8 +285,61 @@ bool Hud::buildAtlas(std::string *err) {
       if (cargar(cp, gl) != 0) continue;
       extra_.emplace_back(cp, gl);
     }
+    /* los del idioma puesto (v1.07): la ligadura francesa, las letras chinas y japonesas y los
+       nombres de los siete idiomas del selector. Lo que DejaVu no tenga sale del tipo CJK. */
+    {
+      FT_Face cjk = nullptr;
+      bool cjkBuscada = false;
+      const char *cjkRuta = nullptr;
+      const char *quiero = lengua == idioma::ZH ? " SC" : " JP";
+      auto abreCjk = [&]() {
+        cjkBuscada = true;
+        for (const char *p : kCjkPaths) {
+          if (access(p, R_OK) != 0) continue;
+          FT_Face f0 = nullptr;
+          if (FT_New_Face(lib, p, 0, &f0) != 0) continue;
+          long caras = f0->num_faces, elegida = 0;
+          for (long k = 0; k < caras; k++) {
+            FT_Face fk = nullptr;
+            if (FT_New_Face(lib, p, k, &fk) != 0) continue;
+            const std::string fam = fk->family_name ? fk->family_name : "";
+            FT_Done_Face(fk);
+            if (fam.size() >= 3 && fam.compare(fam.size() - 3, 3, quiero) == 0) { elegida = k; break; }
+          }
+          FT_Done_Face(f0);
+          if (FT_New_Face(lib, p, elegida, &cjk) == 0) { cjkRuta = p; break; }
+          cjk = nullptr;
+        }
+        if (cjk) FT_Set_Pixel_Sizes(cjk, 0, kFontPx);
+      };
+      int faltan = 0, puestos = 0;
+      ordenaExtra();
+      for (unsigned cp : idioma::signosDe(lengua)) {
+        if (glifo(cp)) continue;
+        Glyph gl;
+        int r = cargarDe(face, cp, gl);
+        if (r == 1) {
+          if (!cjkBuscada) abreCjk();
+          r = cjk ? cargarDe(cjk, cp, gl) : 1;
+        }
+        if (r < 0) { okAll = false; break; }
+        if (r != 0) { faltan++; continue; }
+        extra_.emplace_back(cp, gl);
+        puestos++;
+      }
+      ordenaExtra();
+      if (cjk) {
+        std::printf("[interfaz] idioma %s · %d signos más, los que faltaban de %s\n", idioma::codigo(lengua), puestos,
+                    cjkRuta);
+        FT_Done_Face(cjk);
+      }
+      if (faltan > 0 && idioma::esCjk(lengua))
+        std::fprintf(stderr, "[aviso] faltan %d letras de %s: instala el tipo Noto Sans CJK (noto-fonts-cjk)\n", faltan,
+                     idioma::nombre(lengua));
+    }
     hasText_ = true;
-    std::printf("[interfaz] fuente %s a %d px en atlas %dx%d\n", path, kFontPx, aw_, ah_);
+    std::printf("[interfaz] fuente %s a %d px en atlas %dx%d (lleno hasta %d)\n", path, kFontPx, aw_, ah_,
+                shelfY_ + shelfH_);
     FT_Done_Face(face);
     if (lib) FT_Done_FreeType(lib);
     if (!okAll) std::fprintf(stderr, "[aviso] el atlas de fuentes se llenó: algunas letras no se dibujan\n");
@@ -461,8 +556,10 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
 
 const Hud::Glyph *Hud::glifo(unsigned cp) const {
   if (cp < 256) return &glyphs_[cp];
-  for (const std::pair<unsigned, Glyph> &e : extra_)
-    if (e.first == cp) return &e.second;
+  /* `extra_` va ordenado (el atlas lo ordena al final): con ~300 letras chinas ya no vale mirar una a una */
+  auto it = std::lower_bound(extra_.begin(), extra_.end(), cp,
+                             [](const std::pair<unsigned, Glyph> &e, unsigned c) { return e.first < c; });
+  if (it != extra_.end() && it->first == cp) return &it->second;
   return nullptr;   /* fuera de la tabla: se dibuja como un espacio */
 }
 
@@ -491,10 +588,38 @@ float Hud::text(const std::string &s, float x, float y, float size, float cr, fl
     const Glyph &g = *gp;
     /* el glifo cuelga de la línea base: su borde superior está a asc_-bearingY */
     Rect r{pen + (float)g.bx * sc, top0 + (asc_ - (float)g.by) * sc, (float)g.w * sc, (float)g.h * sc};
+    /* el guion y el guion bajo miden 2 px en el atlas: en letra chica la caja quedaba de menos de un
+       punto y no tocaba ningun centro de pixel (salia «the cave dweller» sin guiones) */
+    if (r.h < 1.3f) {
+      r.y -= (1.3f - r.h) * 0.5f;
+      r.h = 1.3f;
+    }
     quad(r, {g.u0, g.v0, g.u1 - g.u0, g.v1 - g.v0}, cr, cg, cb, ca);
     pen += (float)g.adv * sc;
   }
   return pen;
+}
+
+float Hud::textoCabe(const std::string &s, float x, float y, float size, float maxAncho, float cr, float cg, float cb,
+                     float ca, bool center) {
+  const float w = textWidth(s, size);
+  if (maxAncho <= 0.0f || w <= maxAncho) return text(s, x, y, size, cr, cg, cb, ca, center);
+  const float chico = size * 0.80f;
+  if (w * 0.80f <= maxAncho) {
+    const float t = size * maxAncho / w;
+    /* bajada a la misma linea base: la letra mas chica se baja lo que encoge */
+    return text(s, x, y + (size - t) * 0.55f, t, cr, cg, cb, ca, center);
+  }
+  std::string corto;
+  const float reserva = textWidth("…", chico);
+  size_t i = 0;
+  while (i < s.size()) {
+    const size_t antes = i;
+    nextCp(s, i);
+    if (textWidth(corto + s.substr(antes, i - antes), chico) > maxAncho - reserva) break;
+    corto += s.substr(antes, i - antes);
+  }
+  return text(corto + "…", x, y + (size - chico) * 0.55f, chico, cr, cg, cb, ca, center);
 }
 
 void Hud::toggle3D() { st_.weaveOn = !st_.weaveOn; }
@@ -539,12 +664,13 @@ void Hud::begin(int w, int h, float altoLogico) {
   if (st_.overlayOn) {
     const bool leg = st_.legado;
     const float aire = 16.0f, anchoSw = 100.0f, anchoDes = 140.0f;
-    const char *rotRec = "No volver a preguntar";
+    const char *rotRec = idioma::tr("No volver a preguntar");
     const float anchoRec = 18.0f + 8.0f + textWidth(rotRec, 12.5f);
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
        Mide lo que la casilla con su letra; sin casilla, lo justo para los dos botones. */
     const bool hayModo = st_.modoVisible && !leg;
-    const float anchoBloque = st_.recordarVisible ? anchoRec : (hayModo ? 128.0f : 0.0f);
+    /* v1.07: en chino o japones la casilla es corta y los dos botones no cabian: el bloque mide al menos 128 */
+    const float anchoBloque = st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f);
     float pw = aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
@@ -593,9 +719,9 @@ void Hud::begin(int w, int h, float altoLogico) {
        ventana de ajustes llama `apoyo`); con el conversor es cuanta profundidad saca la red. */
     depTrack_ = {sw3D_.x + anchoSw + 26.0f, y0 + 41.0f, anchoDes, 4.0f};
     popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
-    slider(&depTrack_, &depKnob_, leg ? "Plano de apoyo" : "Profundidad", (float)st_.depth / 100.0f,
+    slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
            std::to_string(st_.depth));
-    slider(&popTrack_, &popKnob_, "Salida", (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
+    slider(&popTrack_, &popKnob_, idioma::tr("Salida"), (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
 
     const float bloqueX = popTrack_.x + anchoDes + 26.0f;
     const float sitioEngranaje = st_.engranaje ? 44.0f : 0.0f;
@@ -669,8 +795,8 @@ void Hud::begin(int w, int h, float altoLogico) {
     }
 
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
-    const std::string teclas = std::string("Ctrl+Shift+  1 el 3D · 3/4 ") + (leg ? "plano" : "profundidad") +
-                               " · 5/6 salida · F1 oculta · Esc sale";
+    const std::string teclas = idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
+                                           {idioma::tr(leg ? "plano" : "profundidad")});
     const float cabe = pw - 2.0f * aire - sitioEngranaje;
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
@@ -700,21 +826,25 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* el circulo amarillo con la flecha, como el boton del panel, y el titulo a su lado */
     mask9({ax + borde, ay + 20.0f, 28.0f, 28.0f}, 0, 14.0f, 0.98f, 0.76f, 0.18f, 1.0f);
     icono({ax + borde + 6.0f, ay + 26.0f, 16.0f, 16.0f}, icoFlecha_, 0.16f, 0.12f, 0.04f, 1.0f);
-    text("Hay una versión nueva de OdysseyVK", ax + borde + 38.0f, ay + 24.0f, 17.0f, ink[0], ink[1], ink[2], 1.0f);
-    text("OdysseyVK " + st_.askActualizacion + " en GitHub · tienes la " + st_.version.substr(st_.version.rfind(' ') + 1),
-         ax + borde, ay + 60.0f, 13.0f, ink[0], ink[1], ink[2], 0.92f);
-    text("Se instala sola (pide tu clave) y el vídeo o juego que haya en 3D se reabre.",
-         ax + borde, ay + 80.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
+    textoCabe(idioma::tr("Hay una versión nueva de OdysseyVK"), ax + borde + 38.0f, ay + 24.0f, 17.0f, aw - borde - 38.0f - 60.0f, ink[0],
+              ink[1], ink[2], 1.0f);
+    textoCabe(idioma::trf("OdysseyVK {} en GitHub · tienes la {}", {st_.askActualizacion, st_.version.substr(st_.version.rfind(' ') + 1)}),
+              ax + borde, ay + 60.0f, 13.0f, aw - 2.0f * borde, ink[0], ink[1], ink[2], 0.92f);
+    textoCabe(idioma::tr("Se instala sola (pide tu clave) y el vídeo o juego que haya en 3D se reabre."),
+              ax + borde, ay + 80.0f, 11.5f, aw - 2.0f * borde, dim[0], dim[1], dim[2], 0.85f);
     /* Actualizar y Luego, dos pildoras; y abajo, chico, «No avisar de actualizaciones» */
     const float by = ay + 108.0f;
-    askActualizar_ = {ax + borde, by, 150.0f, 34.0f};
-    askLuego_ = {ax + borde + 162.0f, by, 92.0f, 34.0f};
+    /* el ancho sigue a la palabra: «Mettre à jour» o «Aktualisieren» no caben donde «Actualizar» */
+    const float wA = std::max(150.0f, textWidth(idioma::tr("Actualizar"), 14.0f) + 44.0f);
+    const float wL = std::max(92.0f, textWidth(idioma::tr("Luego"), 14.0f) + 40.0f);
+    askActualizar_ = {ax + borde, by, wA, 34.0f};
+    askLuego_ = {ax + borde + wA + 12.0f, by, wL, 34.0f};
     const bool hA = askActualizar_.inside(mx_, my_), hL = askLuego_.inside(mx_, my_);
     mask9(askActualizar_, 0, 17.0f, accent[0], accent[1], accent[2], hA ? 1.0f : 0.92f);
-    text("Actualizar", askActualizar_.x + askActualizar_.w * 0.5f, by + 8.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
+    text(idioma::tr("Actualizar"), askActualizar_.x + askActualizar_.w * 0.5f, by + 8.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
     mask9(askLuego_, 0, 17.0f, 1.0f, 1.0f, 1.0f, hL ? 0.18f : 0.10f);
-    text("Luego", askLuego_.x + askLuego_.w * 0.5f, by + 8.0f, 14.0f, ink[0], ink[1], ink[2], hL ? 1.0f : 0.85f, true);
-    const char *noAvisar = "No avisar de actualizaciones";
+    text(idioma::tr("Luego"), askLuego_.x + askLuego_.w * 0.5f, by + 8.0f, 14.0f, ink[0], ink[1], ink[2], hL ? 1.0f : 0.85f, true);
+    const char *noAvisar = idioma::tr("No avisar de actualizaciones");
     askNoAvisar_ = {ax + borde - 4.0f, ay + ah - 36.0f, textWidth(noAvisar, 11.5f) + 8.0f, 22.0f};
     const bool hN = askNoAvisar_.inside(mx_, my_);
     if (hN) mask9(askNoAvisar_, 0, 11.0f, 1.0f, 1.0f, 1.0f, 0.10f);
@@ -735,16 +865,16 @@ void Hud::begin(int w, int h, float altoLogico) {
     icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
     icono({ax + borde, ay + 22.0f, 24.0f, 24.0f}, icoAnillo_, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
     text("i", ax + borde + 12.0f, ay + 26.0f, 14.0f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f, true);
-    text(st_.askAviso, ax + borde + 34.0f, ay + 24.0f, 16.0f, ink[0], ink[1], ink[2], 1.0f);
+    textoCabe(st_.askAviso, ax + borde + 34.0f, ay + 24.0f, 16.0f, aw - borde - 34.0f - 60.0f, ink[0], ink[1], ink[2], 1.0f);
     float ly = ay + 58.0f;
     for (const std::string &l : st_.askAvisoLineas) {
-      text(l, ax + borde, ly, 12.5f, ink[0], ink[1], ink[2], 0.90f);
+      textoCabe(l, ax + borde, ly, 12.5f, aw - 2.0f * borde, ink[0], ink[1], ink[2], 0.90f);
       ly += 20.0f;
     }
-    askLuego_ = {ax + borde, ay + ah - 48.0f, 120.0f, 32.0f};
+    askLuego_ = {ax + borde, ay + ah - 48.0f, std::max(120.0f, textWidth(idioma::tr("Entendido"), 14.0f) + 40.0f), 32.0f};
     const bool hL = askLuego_.inside(mx_, my_);
     mask9(askLuego_, 0, 16.0f, accent[0], accent[1], accent[2], hL ? 1.0f : 0.92f);
-    text("Entendido", askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
+    text(idioma::tr("Entendido"), askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
   } else if (st_.ask) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
@@ -785,15 +915,15 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* la pregunta. El titulo lo puede poner quien llama; de fabrica es la de la aplicacion oficial.
        Debajo, en letra chica, la ventana por la que se pregunta (la pone el servicio). */
     const float anchoTitulo = askAyuda_.x - 10.0f - (ax + borde);
-    text(encaja(askTitulo_.empty() ? "¿Qué tipo de vídeo estás viendo?" : askTitulo_, 18.0f, anchoTitulo),
+    text(encaja(askTitulo_.empty() ? std::string(idioma::tr("¿Qué tipo de vídeo estás viendo?")) : askTitulo_, 18.0f, anchoTitulo),
          ax + borde, ay + 22.0f, 18.0f, ink[0], ink[1], ink[2], 1.0f);
     if (ha) {
-      text("Vídeo normal: una sola imagen; se convierte a 3D.", ax + borde, ay + 50.0f, 12.5f, ink[0], ink[1],
+      text(idioma::tr("Vídeo normal: una sola imagen; se convierte a 3D."), ax + borde, ay + 50.0f, 12.5f, ink[0], ink[1],
            ink[2], 0.95f);
-      text("Vídeo dividido: trae dos imágenes, una al lado de la otra.", ax + borde, ay + 69.0f, 12.5f, ink[0],
+      text(idioma::tr("Vídeo dividido: trae dos imágenes, una al lado de la otra."), ax + borde, ay + 69.0f, 12.5f, ink[0],
            ink[1], ink[2], 0.95f);
     } else {
-      text("Elige la opción correcta para la conversión 3D.", ax + borde, ay + 49.0f, 13.5f, ink[0], ink[1],
+      text(idioma::tr("Elige la opción correcta para la conversión 3D."), ax + borde, ay + 49.0f, 13.5f, ink[0], ink[1],
            ink[2], 0.92f);
       if (!askCuerpo_.empty())
         text(encaja(askCuerpo_, 11.5f, aw - 2.0f * borde), ax + borde, ay + 71.0f, 11.5f, dim[0], dim[1], dim[2],
@@ -805,8 +935,8 @@ void Hud::begin(int w, int h, float altoLogico) {
     askConv_ = {ax + borde, ty, tw, th};
     askSbs_ = {ax + borde + tw + 14.0f, ty, tw, th};
     const Rect tiles[2] = {askConv_, askSbs_};
-    const char *names[2] = {"Vídeo normal", "Vídeo dividido"};
-    const char *subs[2] = {"una sola imagen", "dos imágenes lado a lado"};
+    const char *names[2] = {idioma::tr("Vídeo normal"), idioma::tr("Vídeo dividido")};
+    const char *subs[2] = {idioma::tr("una sola imagen"), idioma::tr("dos imágenes lado a lado")};
     for (int i = 0; i < 2; i++) {
       const Rect &t = tiles[i];
       const bool hov = t.inside(mx_, my_);
@@ -830,7 +960,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     }
 
     /* la casilla: se pica en la caja o en su letra */
-    const char *rotulo = "Guardar el tipo de vídeo y no volver a preguntar";
+    const char *rotulo = idioma::tr("Guardar el tipo de vídeo y no volver a preguntar");
     const Rect caja{ax + borde, ty + th + 18.0f, 20.0f, 20.0f};
     askDont_ = {caja.x - 4.0f, caja.y - 6.0f, std::min(aw - 2.0f * borde, 20.0f + 10.0f + textWidth(rotulo, 13.0f)) + 8.0f,
                 32.0f};
@@ -881,14 +1011,25 @@ void Hud::dibujaPanel(int vw, int vh) {
   const float tx0 = text("OdysseyVK", px + 28.0f, py + 24.0f, 20.0f, ink[0], ink[1], ink[2], 1.0f);
   panelPestanas_.clear();
   float tx = tx0 + 26.0f;
+  /* v1.07: en ruso («Производительность») las pestanas no cabian hasta el globo: la letra se achica */
+  float tamPest = 14.0f;
+  {
+    const float limite = px + pw - 20.0f - 32.0f - 40.0f - 8.0f - (40.0f + textWidth("XX", 13.0f)) - 12.0f;
+    float total = 0.0f;
+    for (const std::string &p : st_.pestanas) total += textWidth(p, 14.0f) + 32.0f + 8.0f;
+    if (tx + total > limite && total > 0.0f) {
+      const float fijo = 40.0f * (float)st_.pestanas.size();
+      tamPest = std::max(10.0f, 14.0f * std::max(0.0f, limite - tx - fijo) / std::max(1.0f, total - fijo));
+    }
+  }
   for (size_t i = 0; i < st_.pestanas.size(); i++) {
-    const float w = textWidth(st_.pestanas[i], 14.0f) + 32.0f;
+    const float w = textWidth(st_.pestanas[i], tamPest) + 32.0f;
     const Rect t{tx, py + 20.0f, w, 32.0f};
     panelPestanas_.push_back(t);
     const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_);
     if (puesta) mask9(t, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
     else if (hov) mask9(t, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.10f);
-    text(st_.pestanas[i], t.x + t.w * 0.5f, t.y + 7.0f, 14.0f, ink[0], ink[1], ink[2], puesta || hov ? 1.0f : 0.72f,
+    text(st_.pestanas[i], t.x + t.w * 0.5f, t.y + 7.0f + (14.0f - tamPest) * 0.5f, tamPest, ink[0], ink[1], ink[2], puesta || hov ? 1.0f : 0.72f,
          true);
     tx += w + 8.0f;
   }
@@ -906,17 +1047,31 @@ void Hud::dibujaPanel(int vw, int vh) {
   if (!st_.actualizacion.empty()) {
     mask9(panelActualizar_, 0, 16.0f, 0.98f, 0.76f, 0.18f, ha ? 1.0f : 0.92f);
     icono({panelActualizar_.x + 7.0f, panelActualizar_.y + 7.0f, 18.0f, 18.0f}, icoFlecha_, 0.16f, 0.12f, 0.04f, 1.0f);
-    rotuloActualizar = "Hay una actualización pendiente: OdysseyVK " + st_.actualizacion + ". Pica para instalarla.";
+    rotuloActualizar = idioma::trf("Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.", {st_.actualizacion});
   } else {
     if (ha) mask9(panelActualizar_, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.14f);
     if (st_.alDia) {
       icono({panelActualizar_.x + 7.0f, panelActualizar_.y + 7.0f, 18.0f, 18.0f}, icoFlecha_, 0.36f, 0.86f, 0.46f, ha ? 1.0f : 0.9f);
-      rotuloActualizar = "OdysseyVK está al día. Pica para volver a comprobarlo.";
+      rotuloActualizar = idioma::tr("OdysseyVK está al día. Pica para volver a comprobarlo.");
     } else {
       icono({panelActualizar_.x + 7.0f, panelActualizar_.y + 7.0f, 18.0f, 18.0f}, icoFlecha_, ink[0], ink[1], ink[2], ha ? 0.8f : 0.4f);
-      rotuloActualizar = "Aún no se ha buscado ninguna actualización. Pica para buscarla.";
+      rotuloActualizar = idioma::tr("Aún no se ha buscado ninguna actualización. Pica para buscarla.");
     }
   }
+  /* el boton del idioma (v1.07), a la izquierda del de actualizar: el globo y el codigo (EN, ES...).
+     Picado, cuelga la lista de los siete idiomas, cada uno con su nombre en su idioma. */
+  const int lengua = idioma::actual();
+  std::string codigoIdioma = idioma::codigo(lengua);
+  for (char &ch : codigoIdioma) ch = (char)std::toupper((unsigned char)ch);
+  const float wIdioma = 26.0f + textWidth(codigoIdioma, 13.0f) + 14.0f;
+  panelIdioma_ = {panelActualizar_.x - 8.0f - wIdioma, py + 20.0f, wIdioma, 32.0f};
+  const bool hi = panelIdioma_.inside(mx_, my_);
+  if (st_.menuIdioma) mask9(panelIdioma_, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
+  else mask9(panelIdioma_, 0, 16.0f, 1.0f, 1.0f, 1.0f, hi ? 0.16f : 0.07f);
+  icono({panelIdioma_.x + 9.0f, panelIdioma_.y + 7.0f, 18.0f, 18.0f}, icoGlobo_, ink[0], ink[1], ink[2],
+        hi || st_.menuIdioma ? 1.0f : 0.80f);
+  text(codigoIdioma, panelIdioma_.x + 32.0f, panelIdioma_.y + 7.5f, 13.0f, ink[0], ink[1], ink[2],
+       hi || st_.menuIdioma ? 1.0f : 0.85f);
   solid(px + 20.0f, py + 68.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
 
   /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */
@@ -984,20 +1139,20 @@ void Hud::dibujaPanel(int vw, int vh) {
         text(it.rotulo, izq, y + 17.0f, 11.5f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
         break;
       case ItemPanel::Nota:
-        text(it.rotulo, izq, y + 8.0f, 12.5f, dim[0], dim[1], dim[2], 0.85f);
+        textoCabe(it.rotulo, izq, y + 8.0f, 12.5f, der - izq, dim[0], dim[1], dim[2], 0.85f);
         break;
       case ItemPanel::Info: {
         const Rect an{izq, y + 9.0f, 16.0f, 16.0f};
         icono(an, icoAnillo_, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
         text("i", an.x + 8.0f, an.y + 2.0f, 11.0f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f, true);
-        text(it.rotulo, izq + 24.0f, y + 9.0f, 12.5f, ink[0], ink[1], ink[2], 0.92f);
-        if (!it.nota.empty()) text(it.nota, izq + 24.0f, y + 29.0f, 12.0f, dim[0], dim[1], dim[2], 0.85f);
+        textoCabe(it.rotulo, izq + 24.0f, y + 9.0f, 12.5f, der - izq - 24.0f, ink[0], ink[1], ink[2], 0.92f);
+        if (!it.nota.empty()) textoCabe(it.nota, izq + 24.0f, y + 29.0f, 12.0f, der - izq - 24.0f, dim[0], dim[1], dim[2], 0.85f);
         break;
       }
       case ItemPanel::Boton: {
-        text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
-        if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
         const float wb = textWidth(it.valorTexto, 13.5f) + 30.0f;
+        textoCabe(it.rotulo, izq, yr, 15.0f, der - wb - 16.0f - izq, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty()) textoCabe(it.nota, izq, y + 34.0f, 11.5f, der - wb - 16.0f - izq, dim[0], dim[1], dim[2], 0.85f);
         const Rect b{der - wb, y + (h - 30.0f) * 0.5f, wb, 30.0f};
         z.subs.push_back(b);
         const bool hb = dentro && b.inside(mx_, my_);
@@ -1009,8 +1164,8 @@ void Hud::dibujaPanel(int vw, int vh) {
         break;
       }
       case ItemPanel::Interruptor: {
-        text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
-        if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
+        textoCabe(it.rotulo, izq, yr, 15.0f, der - 46.0f - 16.0f - izq, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty()) textoCabe(it.nota, izq, y + 34.0f, 11.5f, der - 46.0f - 16.0f - izq, dim[0], dim[1], dim[2], 0.85f);
         const Rect sw{der - 46.0f, y + (h - 26.0f) * 0.5f, 46.0f, 26.0f};
         if (it.valor) mask9(sw, 0, 13.0f, accent[0], accent[1], accent[2], 0.98f);
         else mask9(sw, 0, 13.0f, 0.28f, 0.29f, 0.33f, 0.98f);
@@ -1018,10 +1173,10 @@ void Hud::dibujaPanel(int vw, int vh) {
         break;
       }
       case ItemPanel::Opciones: {
-        text(it.rotulo, izq, y + 17.0f, 15.0f, ink[0], ink[1], ink[2], 1.0f);
         float total = 6.0f;
         for (const std::string &o : it.opciones) total += textWidth(o, 13.5f) + 26.0f;
         const Rect caja{der - total, y + 10.0f, total, 34.0f};
+        textoCabe(it.rotulo, izq, y + 17.0f, 15.0f, caja.x - 14.0f - izq, ink[0], ink[1], ink[2], 1.0f);
         mask9(caja, 0, 17.0f, 0.17f, 0.175f, 0.21f, 0.98f);
         float ox = caja.x + 3.0f;
         for (size_t k = 0; k < it.opciones.size(); k++) {
@@ -1038,9 +1193,10 @@ void Hud::dibujaPanel(int vw, int vh) {
         break;
       }
       case ItemPanel::Deslizador: {
-        text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
-        if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
         const float anchoPista = 220.0f, cy = y + h * 0.5f;
+        textoCabe(it.rotulo, izq, yr, 15.0f, der - 70.0f - anchoPista - 18.0f - izq, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty())
+          textoCabe(it.nota, izq, y + 34.0f, 11.5f, der - 70.0f - anchoPista - 18.0f - izq, dim[0], dim[1], dim[2], 0.85f);
         z.pista = {der - 70.0f - anchoPista, cy - 2.0f, anchoPista, 4.0f};
         const float f = std::max(0.0f, std::min(1.0f, it.frac)), kx = z.pista.x + f * anchoPista;
         mask9(z.pista, 0, 2.0f, 0.30f, 0.31f, 0.36f, 0.98f);
@@ -1050,8 +1206,9 @@ void Hud::dibujaPanel(int vw, int vh) {
         break;
       }
       case ItemPanel::Fila: {
-        text(it.rotulo, izq, y + 11.0f, 14.5f, ink[0], ink[1], ink[2], 1.0f);
-        text(it.valorTexto, izq + 230.0f, y + 12.0f, 13.0f, dim[0], dim[1], dim[2], 0.90f);
+        textoCabe(it.rotulo, izq, y + 11.0f, 14.5f, 220.0f, ink[0], ink[1], ink[2], 1.0f);
+        textoCabe(it.valorTexto, izq + 230.0f, y + 12.0f, 13.0f, der - izq - 230.0f - (it.quitar ? 36.0f : 0.0f), dim[0], dim[1],
+                  dim[2], 0.90f);
         if (it.quitar) {
           const Rect q{der - 28.0f, y + 7.0f, 28.0f, 28.0f};
           z.subs.push_back(q);
@@ -1127,14 +1284,46 @@ void Hud::dibujaPanel(int vw, int vh) {
   }
   /* el pie */
   solid(px + 20.0f, py + ph - 42.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
-  if (!st_.pie.empty()) text(st_.pie, px + 28.0f, py + ph - 30.0f, 12.5f, ink[0], ink[1], ink[2], 0.88f);
+  if (!st_.pie.empty())
+    textoCabe(st_.pie, px + 28.0f, py + ph - 30.0f, 12.5f, pw - 56.0f - textWidth(st_.version, 12.0f) - 20.0f, ink[0], ink[1],
+              ink[2], 0.88f);
   if (!st_.version.empty())
     text(st_.version, px + pw - 28.0f - textWidth(st_.version, 12.0f), py + ph - 30.0f, 12.0f, dim[0], dim[1], dim[2],
          0.75f);
+  /* la lista de los idiomas, colgada del boton y por encima de las filas */
+  panelIdiomaOpc_.clear();
+  if (st_.menuIdioma) {
+    float wl = 0.0f;
+    for (int k = 0; k < idioma::kLenguas; k++) wl = std::max(wl, textWidth(idioma::nombre(k), 14.0f));
+    wl = std::max(wl + 92.0f, panelIdioma_.w);   /* codigo, nombre y la palomita sin pisarse */
+    const float fila = 34.0f, alto = 12.0f + fila * (float)idioma::kLenguas;
+    const Rect m{std::min(panelIdioma_.x, px + pw - 20.0f - wl), panelIdioma_.y + panelIdioma_.h + 8.0f, wl, alto};
+    mask9({m.x - 1.0f, m.y - 1.0f, m.w + 2.0f, m.h + 2.0f}, 1, 13.0f, 0.42f, 0.43f, 0.50f, 0.85f);
+    mask9(m, 1, 12.0f, 0.10f, 0.105f, 0.13f, 0.98f);
+    for (int k = 0; k < idioma::kLenguas; k++) {
+      const Rect o{m.x + 6.0f, m.y + 6.0f + fila * (float)k, m.w - 12.0f, fila};
+      panelIdiomaOpc_.push_back(o);
+      const bool puesta = k == lengua, ho = o.inside(mx_, my_);
+      if (puesta) mask9(o, 0, 12.0f, accent[0], accent[1], accent[2], 0.95f);
+      else if (ho) mask9(o, 0, 12.0f, 1.0f, 1.0f, 1.0f, 0.10f);
+      std::string cod = idioma::codigo(k);
+      for (char &ch : cod) ch = (char)std::toupper((unsigned char)ch);
+      text(cod, o.x + 12.0f, o.y + 9.5f, 11.0f, ink[0], ink[1], ink[2], puesta || ho ? 0.85f : 0.55f);
+      text(idioma::nombre(k), o.x + 40.0f, o.y + 7.5f, 14.0f, ink[0], ink[1], ink[2], puesta || ho ? 1.0f : 0.85f);
+      if (puesta) icono({o.x + o.w - 26.0f, o.y + 9.0f, 16.0f, 16.0f}, icoPalomita_, 1.0f, 1.0f, 1.0f, 1.0f);
+    }
+  } else if (hi) {
+    /* al pasar por encima del boton cerrado: «Idioma: Español», en el idioma puesto */
+    const std::string r = std::string(idioma::tr("Idioma")) + ": " + idioma::nombre(lengua);
+    const float w = textWidth(r, 12.5f) + 24.0f;
+    const Rect rr{std::min(panelIdioma_.x, px + pw - 20.0f - w), panelIdioma_.y + panelIdioma_.h + 8.0f, w, 30.0f};
+    mask9(rr, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
+    text(r, rr.x + 12.0f, rr.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
+  }
   /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
-  if (ha && !rotuloActualizar.empty()) {
+  if (ha && !rotuloActualizar.empty() && !st_.menuIdioma) {
     const float w = textWidth(rotuloActualizar, 12.5f) + 24.0f;
-    const Rect r{panelCerrar_.x + panelCerrar_.w - w, panelActualizar_.y + panelActualizar_.h + 8.0f, w, 30.0f};
+    const Rect r{std::max(px + 20.0f, panelCerrar_.x + panelCerrar_.w - w), panelActualizar_.y + panelActualizar_.h + 8.0f, w, 30.0f};
     mask9(r, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
     text(rotuloActualizar, r.x + 12.0f, r.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
   }
@@ -1155,8 +1344,16 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (frac) *frac = 0.0f;
   if (!st_.panel) return hit(mxa, mya);
   const float mx = mxa / sc_, my = mya / sc_;
+  /* la lista de idiomas cuelga por encima de todo (y puede salirse un poco por debajo de la cabecera) */
+  if (st_.menuIdioma)
+    for (size_t k = 0; k < panelIdiomaOpc_.size(); k++)
+      if (panelIdiomaOpc_[k].inside(mx, my)) {
+        if (sub) *sub = (int)k;
+        return HitPanelIdiomaOpcion;
+      }
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
+  if (panelIdioma_.inside(mx, my)) return HitPanelIdioma;
   if (panelActualizar_.inside(mx, my)) return HitPanelActualizar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)
     if (panelPestanas_[i].inside(mx, my)) {

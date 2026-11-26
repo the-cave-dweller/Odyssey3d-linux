@@ -12,10 +12,11 @@ Lo que tienes:
 - **Vídeos lado a lado y arriba-abajo** en 3D, desde cualquier reproductor o navegador a pantalla completa.
 - **Vídeo normal (2D) a 3D** con una red de profundidad que corre en tu tarjeta gráfica (modelo abierto, se baja una vez).
 - **Juegos** de tu biblioteca de Steam, cada uno con su interruptor 2D/3D.
-- Un **panel de ajustes** flotante sobre el escritorio o el vídeo, actualizaciones desde este
-  repositorio y desinstalación con un clic.
+- Un **panel de ajustes** flotante sobre el escritorio o el vídeo, en **7 idiomas** (English,
+  Español, Français, Deutsch, 中文, 日本語, Русский), actualizaciones desde este repositorio y
+  desinstalación con un clic.
 
-![La pastilla y la tarjeta](docs/img/pill.png)
+![La pastilla y la tarjeta](docs/img/es/pill.png)
 
 ## Instalar
 
@@ -30,12 +31,8 @@ sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulk
 git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh
 ```
 
-`install.sh` compila, pide tu clave una vez (binario, regla udev y datos de calibración) e instala
-el servicio de usuario y la entrada del menú. Luego:
-
-```bash
-systemctl --user start odysseyvk-serve
-```
+`install.sh` compila, pide tu clave una vez (binario, regla udev y datos de calibración), instala
+la entrada del menú y arranca el servicio de usuario. Luego comprueba que el monitor se ve:
 
 ```bash
 odysseyvk doctor
@@ -49,115 +46,144 @@ el monitor: reinicia su hub interno y la lente, el scaler y la cámara desaparec
 La primera vez que el servicio arranca sin red de profundidad, el panel de ajustes se abre solo y
 ofrece bajarla (95 MB, Depth Anything V2 pequeña, de
 [huggingface.co/XnetShadow/depth_anything_v2_small](https://huggingface.co/XnetShadow/depth_anything_v2_small)).
-Desde la terminal es:
+Al acabar la descarga el panel se cierra y la red se carga. Desde la terminal es:
 
 ```bash
 odysseyvk ctl red descargar
 ```
 
-![Primer arranque: el panel pide la red de profundidad](docs/img/first-run.png)
+![Primer arranque: el panel pide la red de profundidad](docs/img/es/first-run.png)
 
 ## Uso
 
-Pon un vídeo a pantalla completa. Sale una tarjeta en la esquina: **Vídeo normal** (una imagen,
-se convierte a 3D) o **Vídeo dividido** (lado a lado). Elige; la pastilla de arriba a la derecha se
-queda mientras el 3D está puesto, con el interruptor, la profundidad, la salida y el engranaje que
-abre el panel. Marca «guardar» y esa aplicación entra directa en 3D la próxima vez.
+Pon un vídeo a pantalla completa. Sale una tarjeta en la esquina: **Vídeo normal** (una imagen, se
+convierte a 3D) o **Vídeo dividido** (lado a lado). Elige; la pastilla de arriba a la derecha se
+queda mientras dura el 3D, con el interruptor ON/OFF, la profundidad, la salida, los dos botones
+del tipo de vídeo y el engranaje que abre el panel de ajustes. Marca «No volver a preguntar» y esa
+aplicación pasa directa al 3D la próxima vez.
 
-Teclas (valen aunque el vídeo o el juego tengan el teclado):
+Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 
 | Teclas | Qué |
 |---|---|
-| `Ctrl+Shift+1` | 3D puesto / apagado |
-| `Ctrl+Shift+3` / `4` | 3D Profundidad baja / sube |
-| `Ctrl+Shift+5` / `6` | 3D Salida baja / sube |
+| `Ctrl+Shift+1` | 3D sí / no |
+| `Ctrl+Shift+3` / `4` | menos / más profundidad |
+| `Ctrl+Shift+5` / `6` | menos / más salida |
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla |
 | `Esc` (en el visor) | salir del 3D |
 
-Los ajustes están en el panel (engranaje de la pastilla, o OdysseyVK en el menú de aplicaciones)
-y en `~/.config/odysseyvk/serve.conf`; el servicio recoge los cambios sin reiniciar.
+El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
+icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
+Sus pestañas son **Ajustes**, **Juegos**, **Rendimiento** (cuadros por segundo, tiempo del
+conversor, tarjetas gráficas) y **Programa** (versión, actualizaciones, barra de tareas y bandeja,
+desinstalar). Todo está también en `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
+sin reiniciarse.
 
-## Por qué el 3D se ve bien
+### Idioma
 
-**Profundidad de una sola imagen.** Para el vídeo normal, una red mira cada cuadro y dice a qué
-distancia está cada píxel; el visor corre la imagen para cada ojo según eso. Los topes de cerca y
-lejos son los del propio programa de Samsung, así que nada pasa de lo que la lente enseña limpio.
+El globo junto a la flecha de actualizar cambia el idioma al momento: el panel, la pastilla, las
+tarjetas y el rótulo de la bandeja. De fábrica va en inglés; la misma elección está en
+**Programa → Otros → Idioma**. El chino y el japonés usan el tipo Noto Sans CJK (`noto-fonts-cjk`
+en Arch).
 
-![Un cuadro y su mapa de profundidad](docs/img/depth-map.png)
+![La lista de idiomas](docs/img/es/language.png)
 
-**Los bordes en su sitio.** El mapa de la red es grueso (518 puntos a lo ancho de 4K) y sus bordes
-caen a unos milímetros del contorno real. OdysseyVK afina cada borde contra el color de la imagen,
-píxel a píxel, para que el contorno de cada objeto esté donde lo ves en los dos ojos. Medido en
-cuadros reales: el borde queda a menos de 2 píxeles en el 96 % de los cantos (antes, a 26).
+## Qué hace bueno el 3D
 
-![Los bordes antes y después del afinado](docs/img/depth-edges.png)
+**Profundidad desde una sola imagen.** En los vídeos normales una red de profundidad mira cada
+cuadro y dice a qué distancia está cada píxel; el visor desplaza la imagen para cada ojo según eso.
+Los límites de cerca y lejos son los del programa de Samsung, así que nada pasa de lo que la lente
+puede enseñar limpio.
 
-**El sujeto se queda en la pantalla.** El plano de la pantalla se pone en lo que estás mirando
-(la idea de saliencia del Hub): las caras quedan nítidas y el fondo se abre detrás.
+![Un cuadro y su mapa de profundidad](docs/img/es/depth-map.png)
 
-![El plano del sujeto antes y después](docs/img/subject-plane.png)
+**Los bordes en su sitio.** El mapa de la red es basto (518 puntos a lo ancho de un cuadro 4K) y
+sus bordes caen a unos milímetros del contorno real. OdysseyVK afina cada borde contra el color de
+la imagen, píxel a píxel, para que el borde de cada objeto esté donde lo ves con los dos ojos.
+Medido en cuadros reales: el borde queda a menos de 2 píxeles de la imagen en el 96 % de los bordes
+(antes se iba 26 píxeles), sin fantasma del fondo al lado.
 
-**Los vídeos divididos con demasiado relieve se doman.** Algunos separan lo cercano varios
-centímetros, más de lo que la lente puede enseñar. El «vídeo dividido suavizado» usa la imagen
-izquierda con el relieve del conversor, solo cuando hace falta si así lo pones.
+![Los bordes antes y después del afinado](docs/img/es/depth-edges.png)
+
+**Lo que miras se queda en la pantalla.** El plano de la pantalla se pone en lo que estás mirando,
+como hace el Hub de Samsung, así que caras y sujetos quedan nítidos y el fondo se abre detrás. En
+verde, lo que queda en el plano de la pantalla (medido con la 1.07 en cuadros reales): sin
+saliencia el plano caía en el espacio detrás de la nave (0,36); ahora es la nave (0,95). En el
+globo pasa del fondo del cuadro al borde del globo (0,27 → 0,39).
+
+![El plano de apoyo antes y ahora](docs/img/es/subject-plane.png)
+
+**Los vídeos divididos demasiado hondos se domestican.** Algunos vídeos lado a lado separan lo
+cercano varios centímetros, más de lo que la lente puede enseñar. El «vídeo dividido suavizado» usa
+la imagen izquierda y el relieve del conversor, solo cuando hace falta.
 
 **Los mandos del reproductor salen enteros.** En un vídeo dividido el reproductor pinta su barra
-a lo ancho de las dos mitades. OdysseyVK encuentra esas filas y enseña los mandos una vez, sobre el
-vídeo desenfocado y atenuado, para que la barra esté donde picas.
+sobre las dos mitades. OdysseyVK encuentra esas filas y enseña los mandos una vez, sobre el vídeo,
+que sigue suave y atenuado detrás; cuando la barra se esconde, el corte se va con ella.
 
-![La barra del reproductor sobre un vídeo dividido](docs/img/player-bar.png)
+![La barra del reproductor sobre un vídeo dividido](docs/img/es/player-bar.png)
 
-**Juegos.** La pestaña Juegos lista tu biblioteca de Steam con carátulas; cada juego tiene un
-interruptor 2D | 3D. Arráncalo desde ahí y entra en 3D solo.
+**Juegos.** La pestaña Juegos lista tu biblioteca de Steam con carátulas; cada juego tiene su
+interruptor 2D | 3D. Arráncalo desde ahí y el juego entra solo en 3D al ponerse a pantalla
+completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
+a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
+visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta.
 
-![La pestaña Juegos](docs/img/games.png)
+![La pestaña Juegos](docs/img/es/games.png)
+
+![La tarjeta cuando un juego se cierra en 3D](docs/img/es/card.png)
 
 ## Mantenerlo al día
 
 El servicio mira este repositorio cada seis horas. Con una versión nueva sale una tarjeta en la
-esquina con **Actualizar**, **Luego** y un «no avisar» chico; el botón junto al aspa del panel se
-pone amarillo (flecha verde = al día). Actualizar baja, compila, instala (polkit pide tu clave en
-una ventana), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. La pestaña
+esquina con **Actualizar**, **Luego** y un pequeño «No avisar de actualizaciones»; la flecha junto
+al aspa del panel se pone amarilla (verde = al día). Actualizar baja, compila, instala (una ventana
+pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. La pestaña
 **Programa** tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
 
-![La pestaña Programa y la tarjeta de actualización](docs/img/settings-program.png)
+![La pestaña Programa y la tarjeta de actualización](docs/img/es/settings-program.png)
 
 ## Configuración
 
-`~/.config/odysseyvk/serve.conf`, una `clave = valor` por línea. Las que puedes querer:
+`~/.config/odysseyvk/serve.conf`, una `clave = valor` por línea. Las que te pueden interesar:
 
 | Clave | Qué hace |
 |---|---|
-| `modo = ask \| conv \| sbs` | preguntar con la tarjeta / siempre vídeo normal / siempre dividido |
-| `auto = app:conv` | una aplicación que entra directa en 3D (lo escribe el «guardar» de la tarjeta) |
+| `idioma = en \| es \| fr \| de \| zh \| ja \| ru` | idioma de la interfaz (inglés de fábrica) |
+| `modo = ask \| conv \| sbs` | preguntar con la tarjeta / siempre vídeo normal / siempre vídeo dividido |
+| `auto = app:conv` | una aplicación que pasa directa al 3D («No volver a preguntar» escribe estas) |
 | `pantalla = DP-4` | qué salida es el Odyssey |
-| `rastreo = si` | seguir los ojos con la cámara infrarroja del monitor |
+| `rastreo = si` | seguir tus ojos con la cámara infrarroja del monitor |
 | `relieve = 1,00` | fuerza del relieve del conversor (0,5 … 2) |
-| `dividido_suavizado = si \| auto \| no` | suavizar los divididos: siempre / si hace falta / nunca |
-| `crosstalk_base = 0,013` | cuánto de la imagen del otro ojo se resta (fantasma) |
-| `hz = 165` | frecuencia del panel en 3D (120 de fábrica) |
+| `dividido_suavizado = si \| auto \| no` | suavizar los vídeos divididos: siempre / si hace falta / nunca |
+| `crosstalk_base = 0,013` | cuánta imagen del otro ojo se resta (fantasma) |
+| `hz = 165` | frecuencia del panel en 3D (120 de fábrica; el G90XF también va a 165) |
 | `hdr_en_3d = si` | mantener el HDR durante el 3D |
-| `actualizaciones = no` / `actualizar_auto = si` | sin tarjeta de actualización / instalar solas |
-| `actualizaciones_cada = 6` | horas entre miradas a este repositorio (6 de fábrica) |
+| `barra_tareas = no` / `bandeja = no` | quitar OdysseyVK de la barra de tareas / de la bandeja |
+| `actualizaciones = no` / `actualizar_auto = si` | sin tarjeta de actualización / instalar solo |
+| `actualizaciones_cada = 6` | horas entre miradas a este repositorio |
 
-Lo demás (calibrar el paso de la lente, el rastreo, los dos planos, las variables de taller) está
-en las guías.
+Lo demás (calibración del paso de la lente, seguimiento de cabeza, variables de taller) está en
+las guías.
 
 ## Documentación
 
-- [docs/GUIDE.md](docs/GUIDE.md) — la guía corta en inglés: todas las órdenes, las teclas y los problemas típicos.
-- [docs/GUIA.md](docs/GUIA.md) — el manual completo en español, con las mediciones detrás de cada decisión.
+- [docs/GUIA.md](docs/GUIA.md) — el manual completo en español, con las medidas detrás de cada decisión.
+- [docs/GUIDE.md](docs/GUIDE.md) — la guía corta en inglés: cada orden, cada tecla, problemas.
 - [CAMBIOS.md](CAMBIOS.md) — qué cambió en cada versión.
 
-## Con qué se hizo
+## El equipo con que se hizo
 
-Samsung Odyssey 3D G90XF, KDE Plasma 6 en Wayland, NVIDIA RTX 4090 (CachyOS). Las constantes de
-la lente vienen de un G90XF; el paso fino de tu unidad se ajusta con `rampa_x` / `rampa_y` (ver la
-guía). El cable USB-B del monitor tiene que estar conectado: por él van la lente, el scaler y la cámara.
+Samsung Odyssey 3D G90XF, KDE Plasma 6 en Wayland, NVIDIA RTX 4090 (CachyOS). Las constantes del
+modelo de la lente vienen de un G90XF; el paso fino de tu unidad se ajusta con `rampa_x` /
+`rampa_y` (mira la guía). El cable USB-B del monitor tiene que estar conectado: la lente, el scaler
+y la cámara van por él.
 
 ## Créditos
 
-Sobre el trabajo de [macdissey-3d](https://github.com/Fulviuus/macdissey-3d) (macOS) y
+Hecho sobre el trabajo de [macdissey-3d](https://github.com/Fulviuus/macdissey-3d) (macOS) y
 [Linux_3D_SBS_Player](https://github.com/m-j-tilley/Linux_3D_SBS_Player) (modelo de la lente), con
 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) para la profundidad y
-[YuNet](https://github.com/opencv/opencv_zoo) para la detección de cara. Licencia MIT.
+[YuNet](https://github.com/opencv/opencv_zoo) para detectar caras. Licencia MIT.
+
+Las capturas se hacen con `python3 tools/capturas-readme.py`.

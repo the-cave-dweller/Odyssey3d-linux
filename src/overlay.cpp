@@ -203,7 +203,12 @@ struct Overlay::Impl {
   static void topLimites(void *, xdg_toplevel *, int32_t, int32_t) {}
   static void topCapacidades(void *, xdg_toplevel *, wl_array *) {}
   void ponBarra(const std::string &titulo) {
-    if (barraTop || !wmBase || !comp || !shm) return;
+    if (barraTop) {   /* ya esta: solo el titulo nuevo (v1.07: al cambiar de idioma) */
+      xdg_toplevel_set_title(barraTop, titulo.c_str());
+      wl_display_flush(dpy);
+      return;
+    }
+    if (!wmBase || !comp || !shm) return;
     static const xdg_wm_base_listener wl = {wmPing};
     static const xdg_surface_listener sl = {barraConfigura};
     static const xdg_toplevel_listener tl = {topConfigura, topCierra, topLimites, topCapacidades};
