@@ -66,6 +66,10 @@ struct Valores {
   std::string expPrioridad = "normal";   /* `exp_prioridad`: normal | alta | tiempo_real */
   std::string expSinRed = "no";          /* `exp_sin_red`: no | si (suelo e imagen, de antes, valen como si) */
   bool vrrEn3d = false;                  /* `vrr_en_3d = si`: el VRR puesto durante el 3D */
+  /* (v1.13) los juegos con DLSS (con ODYSSEYVK=1 en sus opciones de lanzamiento) */
+  bool profDlss = true;                  /* `profundidad_dlss = no`: la red aunque llegue la de DLSS */
+  bool hudPlano = true;                  /* `hud_plano = no`: el HUD del juego con el relieve de lo de detras */
+  bool fpsJuego = true;                  /* `fps_juego = no`: sin el cuadrito de FPS junto a la pastilla */
 };
 Valores leer();
 

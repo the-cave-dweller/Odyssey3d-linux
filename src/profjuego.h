@@ -32,6 +32,9 @@ public:
   bool leerHud(std::vector<uint8_t> &alfa, int &w, int &h);
   /* el tamano de la imagen del HUD del juego, para el registro */
   void fuenteHud(int &w, int &h) const;
+  /* (protocolo v4) los FPS del juego (sus cuadros presentados) y los de la capa (las profundidades que manda),
+     medidos en ventanas de un segundo en leer(); 0 hasta la primera */
+  void tasas(float &juego, float &capa) const { juego = fpsJuego_, capa = fpsCapa_; }
 
 private:
   bool abrir();
@@ -45,6 +48,9 @@ private:
   uint64_t descartados_ = 0;   /* cuadros tirados por no ser una profundidad (ver leer) */
   uint64_t hudSeq_ = 0;
   double hudCambio_ = 0.0;
+  double tasaDesde_ = 0.0;
+  uint64_t tasaSeq0_ = 0, tasaPres0_ = 0;
+  float fpsJuego_ = 0.0f, fpsCapa_ = 0.0f;
   std::vector<uint8_t> crudo_;
   std::vector<float> fila_;
   std::string desc_;

@@ -3782,6 +3782,8 @@ struct ServeCfg {
   std::string expRed;             /* la entrada de la red: cuadrado (de fabrica) | 518 | 770 | 1022 (16:9, lado largo) */
   std::string expMapa;            /* puntos a lo ancho del mapa: 518 (de fabrica) | 770 | 1022 */
   std::string expTope;            /* si = tope de arrastre en el suavizado en el tiempo */
+  /* (v1.13) los juegos con DLSS: `no` apaga cada cosa (la ventana de ajustes, seccion JUEGOS CON DLSS) */
+  std::string profDlss, hudPlano, fpsJuego;
   double expAnticipacion = -1.0;  /* ms de anticipacion de la cabeza; < 0 = no puesto (0) */
   std::string expPrioridad;       /* normal | alta | tiempo_real: la cola del visor en la tarjeta */
   std::string expSinRed;          /* no | suelo | imagen: la profundidad sin red (modo rendimiento) */
@@ -3949,6 +3951,9 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "exp_red") cfg.expRed = strLower(v);
     else if (k == "exp_mapa") cfg.expMapa = v;
     else if (k == "exp_tope_arrastre") cfg.expTope = strLower(v);
+    else if (k == "profundidad_dlss") cfg.profDlss = strLower(v);
+    else if (k == "hud_plano") cfg.hudPlano = strLower(v);
+    else if (k == "fps_juego") cfg.fpsJuego = strLower(v);
     else if (k == "exp_prioridad") cfg.expPrioridad = strLower(v);
     else if (k == "exp_sin_red") cfg.expSinRed = strLower(v);
     else if (k == "exp_sin_red_mezcla") {
@@ -4329,6 +4334,14 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       else ::unsetenv("ODYSSEYVK_MAPA");
       if (pila->expTope == "si" || pila->expTope == "1") ::setenv("ODYSSEYVK_TOPE_ARRASTRE", "1", 1);
       else ::unsetenv("ODYSSEYVK_TOPE_ARRASTRE");
+      /* (v1.13) los juegos con DLSS: lo que se apago en los ajustes */
+      auto apagado = [](const std::string &v) { return v == "no" || v == "0"; };
+      if (apagado(pila->profDlss)) ::setenv("ODYSSEYVK_PROFUNDIDAD_JUEGO", "0", 1);
+      else ::unsetenv("ODYSSEYVK_PROFUNDIDAD_JUEGO");
+      if (apagado(pila->hudPlano)) ::setenv("ODYSSEYVK_HUD_PLANO", "0", 1);
+      else ::unsetenv("ODYSSEYVK_HUD_PLANO");
+      if (apagado(pila->fpsJuego)) ::setenv("ODYSSEYVK_FPS_JUEGO", "0", 1);
+      else ::unsetenv("ODYSSEYVK_FPS_JUEGO");
       if (pila->expSinRed == "si" || pila->expSinRed == "suelo" || pila->expSinRed == "imagen")
         ::setenv("ODYSSEYVK_SIN_RED", pila->expSinRed == "si" ? "imagen" : pila->expSinRed.c_str(), 1);
       else
@@ -6142,6 +6155,7 @@ static int cmdServe(int argc, char **argv) {
             cfg.red = nuevo.red;
           }
           cfg.expRed = nuevo.expRed, cfg.expMapa = nuevo.expMapa, cfg.expTope = nuevo.expTope;
+          cfg.profDlss = nuevo.profDlss, cfg.hudPlano = nuevo.hudPlano, cfg.fpsJuego = nuevo.fpsJuego;
           cfg.expAnticipacion = nuevo.expAnticipacion;
           cfg.expPrioridad = nuevo.expPrioridad;
           cfg.expSinRed = nuevo.expSinRed;

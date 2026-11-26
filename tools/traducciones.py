@@ -250,6 +250,23 @@ T = {
 "profundidad: blanco = cerca · naranja = saliencia · cian = plano de la pantalla": ("depth: white = near · orange = saliency · cyan = screen plane", "profondeur : blanc = proche · orange = saillance · cyan = plan de l'écran", "Tiefe: weiß = nah · orange = Salienz · cyan = Bildschirmebene", "深度：白 = 近 · 橙 = 显著性 · 青 = 屏幕平面", "深度：白 = 近い · オレンジ = 顕著性 · シアン = 画面の面"),
 "la vista de profundidad necesita el conversor (vídeo normal o dividido suavizado)": ("the depth view needs the converter (normal or smoothed split video)", "la vue de profondeur demande le convertisseur (vidéo normale ou divisée lissée)", "die Tiefenansicht braucht den Konverter (normales oder geglättetes geteiltes Video)", "深度视图需要转换器（普通视频或平滑的分屏视频）", "深度表示には変換が必要です（通常の動画か、なめらかにした分割動画）"),
 "«{}» ahora va con {}: mientras haya 3D, esa tecla ya no llega al vídeo ni al juego": ("“{}” now uses {}: while 3D is on, that key no longer reaches the video or the game", "« {} » utilise maintenant {} : tant que la 3D est active, cette touche n'arrive plus à la vidéo ni au jeu", "„{}“ nutzt jetzt {}: solange 3D läuft, kommt diese Taste nicht mehr beim Video oder Spiel an", "“{}”现在使用 {}：3D 开启期间，这个键不再传给视频或游戏", "「{}」は {} になりました。3D の間、このキーは動画やゲームに届きません"),
+"Juego": ("Game", "Jeu", "Spiel", "游戏", "ゲーム"),
+"Capa": ("Layer", "Couche", "Layer", "图层", "レイヤー"),
+"sin usar: la profundidad viene de DLSS": ("not in use: depth comes from DLSS", "inutilisé : la profondeur vient de DLSS", "nicht benutzt: die Tiefe kommt von DLSS", "未使用：深度来自 DLSS", "未使用：奥行きは DLSS から"),
+"Profundidad del juego": ("Game depth", "Profondeur du jeu", "Spieltiefe", "游戏深度", "ゲームの奥行き"),
+"DLSS · {} (la resolución interna)": ("DLSS · {} (internal resolution)", "DLSS · {} (résolution interne)", "DLSS · {} (interne Auflösung)", "DLSS · {}（内部分辨率）", "DLSS · {}（内部解像度）"),
+"FPS del juego": ("Game FPS", "FPS du jeu", "Spiel-FPS", "游戏帧率", "ゲームの FPS"),
+"FPS de la capa": ("Layer FPS", "FPS de la couche", "Layer-FPS", "图层帧率", "レイヤーの FPS"),
+"HUD del juego": ("Game HUD", "HUD du jeu", "Spiel-HUD", "游戏 HUD", "ゲームの HUD"),
+"en el plano de la pantalla · {} % de la imagen": ("on the screen plane · {} % of the image", "sur le plan de l'écran · {} % de l'image", "auf der Bildschirmebene · {} % des Bildes", "位于屏幕平面 · 占画面 {} %", "画面の面に · 画像の {} %"),
+"no se encontró su capa": ("its layer was not found", "sa couche n'a pas été trouvée", "seine Ebene wurde nicht gefunden", "未找到其图层", "そのレイヤーが見つかりません"),
+"JUEGOS CON DLSS": ("GAMES WITH DLSS", "JEUX AVEC DLSS", "SPIELE MIT DLSS", "DLSS 游戏", "DLSS 対応ゲーム"),
+"Usar la profundidad de DLSS": ("Use DLSS depth", "Utiliser la profondeur de DLSS", "DLSS-Tiefe verwenden", "使用 DLSS 深度", "DLSS の奥行きを使う"),
+"Con ODYSSEYVK=1 en las opciones de lanzamiento del juego, el 3D toma la profundidad exacta que el juego le da a DLSS en vez de la red.": ("With ODYSSEYVK=1 in the game's launch options, 3D uses the exact depth the game gives DLSS instead of the network.", "Avec ODYSSEYVK=1 dans les options de lancement du jeu, la 3D utilise la profondeur exacte que le jeu donne à DLSS au lieu du réseau.", "Mit ODYSSEYVK=1 in den Startoptionen des Spiels nutzt das 3D die exakte Tiefe, die das Spiel DLSS gibt, statt des Netzes.", "在游戏启动选项中加入 ODYSSEYVK=1 后，3D 会使用游戏提供给 DLSS 的精确深度，而不是神经网络。", "ゲームの起動オプションに ODYSSEYVK=1 を入れると、3D はネットワークの代わりにゲームが DLSS に渡す正確な奥行きを使います。"),
+"HUD del juego en el plano de la pantalla": ("Game HUD on the screen plane", "HUD du jeu sur le plan de l'écran", "Spiel-HUD auf der Bildschirmebene", "游戏 HUD 位于屏幕平面", "ゲームの HUD を画面の面に"),
+"El minimapa, la munición, los textos y los menús del juego se quedan quietos en la pantalla, sin relieve.": ("The game's minimap, ammo, text and menus stay still on the screen, with no depth.", "La mini-carte, les munitions, les textes et les menus du jeu restent fixes à l'écran, sans relief.", "Minikarte, Munition, Texte und Menüs des Spiels bleiben ruhig auf dem Bildschirm, ohne Tiefe.", "游戏的小地图、弹药、文字和菜单固定在屏幕上，没有立体感。", "ゲームのミニマップ、弾数、文字、メニューは奥行きなしで画面に止まったままになります。"),
+"Cuadro de FPS junto a la pastilla": ("FPS box next to the pill", "Cadre FPS à côté de la pastille", "FPS-Kasten neben der Leiste", "控制条旁的帧率框", "ピルの横に FPS 枠"),
+"Los FPS del juego y los de la capa de DLSS, mientras haya 3D sobre el juego.": ("The game's FPS and the DLSS layer's FPS, while 3D is on over the game.", "Les FPS du jeu et ceux de la couche DLSS, tant que la 3D est active sur le jeu.", "Die FPS des Spiels und die des DLSS-Layers, solange 3D über dem Spiel läuft.", "在游戏上开启 3D 时，显示游戏帧率和 DLSS 图层帧率。", "ゲームで 3D 表示中、ゲームの FPS と DLSS レイヤーの FPS を表示します。"),
 }
 
 from traducciones_ru import RU

@@ -3,6 +3,30 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## DLSS a la vista: en Ajustes, en un cuadro junto a la pastilla, y con sus interruptores (v1.13)
+
+- Rodolfo: «puedes hacer que aparezca aqui que se está procesando con DLSS? También junto al HUB quiero que en
+  un cuadro pequeño indiques los FPS del layer y los del juego. Que en los settings se puedan desactivar».
+- **Protocolo versión 4**: `presentes`, los cuadros que presenta el juego (la CPU de la capa lo escribe en cada
+  `vkQueuePresentKHR`, que ahora se engancha siempre que va el HUD). El visor (`ProfundidadJuego::tasas`) saca
+  por segundo los **FPS del juego** (de `presentes`) y los **de la capa** (las profundidades que manda, de
+  `ultimoSeq`): con la generación de cuadros de DLSS los del juego son el doble.
+- **Ajustes → Visor 3D**: con la profundidad del juego, «Red de profundidad: sin usar: la profundidad viene de
+  DLSS», y filas nuevas: «Profundidad del juego: DLSS · 1920 × 1080 (la resolución interna)», «FPS del
+  juego», «FPS de la capa» y «HUD del juego: en el plano de la pantalla · 9,3 % de la imagen» (o «no se
+  encontró su capa»). Las escribe el visor en su `estado` (`prof_juego`, `fps_juego`, `fps_capa`,
+  `hud_juego`).
+- **El cuadrito**: a la izquierda de la pastilla, de su alto y su negro, «DLSS · Juego 117 fps · Capa 58 fps».
+  Solo se mira (queda fuera de la región de entrada) y sale cuando llega la profundidad del juego.
+- **Ajustes → Juegos con DLSS**, tres interruptores: «Usar la profundidad de DLSS» (`profundidad_dlss`),
+  «HUD del juego en el plano de la pantalla» (`hud_plano`), desde el siguiente vídeo, y «Cuadro de FPS
+  junto a la pastilla» (`fps_juego`), al momento (la orden `fps_juego` al visor abierto). El servicio los
+  pasa como `ODYSSEYVK_PROFUNDIDAD_JUEGO=0`, `ODYSSEYVK_HUD_PLANO=0` y `ODYSSEYVK_FPS_JUEGO=0`. 17 textos
+  nuevos traducidos a los seis idiomas.
+- Probado con el visor aparte y el simulador (`--presentes 2`, como la generación de cuadros): el cuadrito
+  dice Juego 117 fps y Capa 58 fps; el `estado`, `fps_juego = 116.8` y `fps_capa = 58.4`; la ventana de
+  ajustes, pintada con `ctl hud`, enseña las filas nuevas y la sección.
+
 ## El juego ya no se congela al cambiar el modo de DLSS; el HUD con los menús encima (v1.13)
 
 - Rodolfo: «i think game froze after changing the dlss resolution». MEDIDO en el registro de la capa: al pasar

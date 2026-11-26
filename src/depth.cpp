@@ -961,6 +961,14 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     if (!juego_) juego_ = new ProfundidadJuego;
     delJuego = juego_->leer(dJuego, sz_);
   }
+  /* (v1.13) lo que ensenan la pastilla y la ventana de ajustes */
+  {
+    float fj = 0.0f, fc = 0.0f;
+    if (delJuego) juego_->tasas(fj, fc);
+    fpsJuego_.store(fj), fpsCapa_.store(fc);
+    std::lock_guard<std::mutex> g(infoMx_);
+    descJuego_ = delJuego ? juego_->descripcion() : std::string();
+  }
   if (delJuego != usandoJuego_.load()) {
     usandoJuego_.store(delJuego);
     if (delJuego)

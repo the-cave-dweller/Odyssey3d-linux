@@ -18,7 +18,7 @@ import struct
 import sys
 import time
 
-MAGIA, VERSION, HUECOS, CABECERA, DATOS = 0x4F564450, 3, 3, 4096, 64
+MAGIA, VERSION, HUECOS, CABECERA, DATOS = 0x4F564450, 4, 3, 4096, 64
 HUD_W, HUD_H, HUD_CAPAS = 960, 540, 2
 D32 = 126   # VK_FORMAT_D32_SFLOAT
 
@@ -46,6 +46,8 @@ def main():
     p.add_argument("--hud", help="la capa del HUD (RGBA8) volcada por la sonda: su alfa va como mascara")
     p.add_argument("--hud-medida", default="3840x2160")
     p.add_argument("--hud2", help="una segunda capa del mismo cuadro (como el menu sobre el HUD): va su union")
+    p.add_argument("--presentes", type=int, default=1,
+                   help="cuadros que presenta el juego por cada profundidad (2 = generacion de cuadros de DLSS)")
     a = p.parse_args()
     nombre = os.environ.get("ODYSSEYVK_PROFUNDIDAD_SHM", f"/odysseyvk-profundidad-{os.getuid()}")
     lista = [a.profundidad] + ([a.otra] if a.otra else [])
@@ -96,6 +98,7 @@ def main():
             m[h + DATOS:h + DATOS + len(datos)] = datos             # 2. los datos
             struct.pack_into("<Q", m, h + hueco - 8, seq)           # 3. seqDespues
             struct.pack_into("<Q", m, 40, seq)                      # 4. ultimoSeq
+            struct.pack_into("<Q", m, 112, seq * a.presentes)       # (version 4) los cuadros presentados
             if hud:                                                 # lo mismo con el HUD (hudUltimoSeq en 88)
                 h = hud_inicio + (seq % HUECOS) * hud_hueco
                 struct.pack_into("<Q", m, h, seq)

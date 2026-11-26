@@ -262,6 +262,13 @@ the same frame). Ctrl+Shift+9 shows it.
 
 ![The depth the network guesses and the game's own](docs/img/depth-dlss.png)
 
+The layer also finds the image the game draws its HUD into (in Cyberpunk, a 4K layer cleared to
+transparent every frame) and hands its alpha to the viewer: the minimap, ammo, mission text and menus
+stay flat on the screen instead of taking the depth of whatever is behind them. If a game draws its HUD
+some other way nothing changes. Next to the pill a small box shows the game's FPS (frames it presents)
+and the layer's (depths it sends; with DLSS frame generation the game's are double). Settings → Games
+with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box.
+
 ## Games and the cursor
 
 When a game enters 3D the pill shows for a few seconds, so the shortcuts

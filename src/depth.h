@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <mutex>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -224,6 +225,17 @@ public:
   /* (v1.13, fase 3c) la mascara del HUD del juego, de la capa (ver ProfundidadJuego::leerHud); en el hilo del
      mapa, despues de estimate. `fuenteW/H`: el tamano de la imagen del HUD del juego, para el registro */
   bool mascaraHud(std::vector<uint8_t> &alfa, int &w, int &h, int *fuenteW = nullptr, int *fuenteH = nullptr);
+  /* (v1.13) para el cuadrito de la pastilla y la ventana de ajustes, desde el hilo que dibuja: los FPS del juego
+     y de la capa (0 = sin profundidad del juego ahora), lo que se lee («1920x1080 D32_SFLOAT, Z invertida») y la
+     parte del mapa que el HUD del juego deja en el plano (< 0 = sin mascara) */
+  float fpsJuego() const { return fpsJuego_.load(); }
+  float fpsCapa() const { return fpsCapa_.load(); }
+  std::string descJuego() const {
+    std::lock_guard<std::mutex> g(infoMx_);
+    return descJuego_;
+  }
+  float hudFrac() const { return hudFrac_.load(); }
+  void setHudFrac(float f) { hudFrac_.store(f); }
 
 private:
   void cierra();          /* suelta la sesion de ONNX Runtime */
@@ -250,6 +262,9 @@ private:
   bool enBanda(int x, int y) const { return y < bArr_ || y >= sz_ - bAb_ || x < bIz_ || x >= sz_ - bDe_; }
   ProfundidadJuego *juego_ = nullptr;   /* se crea al primer uso y se borra en ~DepthNet (depth.cpp) */
   std::atomic<bool> permitirJuego_{false}, usandoJuego_{false};
+  std::atomic<float> fpsJuego_{0.0f}, fpsCapa_{0.0f}, hudFrac_{-1.0f};
+  mutable std::mutex infoMx_;
+  std::string descJuego_;
   std::atomic<bool> saliencia_{[] {
     const char *e = std::getenv("ODYSSEYVK_SALIENCIA");
     if (!e) e = std::getenv("ODYSSEY3D_SALIENCIA");

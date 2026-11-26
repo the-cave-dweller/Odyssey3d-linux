@@ -106,6 +106,17 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
     return false;
   const uint64_t seq = c->ultimoSeq;
   const double t = segundos();
+  /* (protocolo v4) los FPS del juego y de la capa, por segundo: lo que avanzaron sus dos contadores */
+  {
+    const uint64_t pres = c->presentes;
+    if (tasaDesde_ <= 0.0 || seq < tasaSeq0_ || pres < tasaPres0_ || t - tasaDesde_ > 5.0) {
+      tasaDesde_ = t, tasaSeq0_ = seq, tasaPres0_ = pres;
+    } else if (t - tasaDesde_ >= 1.0) {
+      fpsCapa_ = (float)((double)(seq - tasaSeq0_) / (t - tasaDesde_));
+      fpsJuego_ = (float)((double)(pres - tasaPres0_) / (t - tasaDesde_));
+      tasaDesde_ = t, tasaSeq0_ = seq, tasaPres0_ = pres;
+    }
+  }
   if (seq == 0) return false;
   if (seq != ultimoSeq_) {
     ultimoSeq_ = seq;

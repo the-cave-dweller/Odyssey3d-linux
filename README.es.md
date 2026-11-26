@@ -271,6 +271,14 @@ Forge del mismo cuadro). Ctrl+Mayús+9 la enseña.
 
 ![La profundidad que adivina la red y la del propio juego](docs/img/es/depth-dlss.png)
 
+La capa encuentra también la imagen donde el juego dibuja su HUD (en Cyberpunk, una capa 4K que se
+limpia a transparente en cada cuadro) y le pasa su alfa al visor: el minimapa, la munición, los textos
+de misión y los menús se quedan planos en la pantalla en vez de tomar la profundidad de lo que tienen
+detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Junto a la pastilla, un cuadro pequeño
+dice los FPS del juego (los cuadros que presenta) y los de la capa (las profundidades que manda; con la
+generación de cuadros de DLSS, los del juego son el doble). En Ajustes → Juegos con DLSS se apaga cada
+una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS.
+
 ## Los juegos y el cursor
 
 Cuando un juego entra al 3D, la pastilla se ve unos segundos, para que

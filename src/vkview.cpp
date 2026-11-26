@@ -209,6 +209,16 @@ static void abrirPanelDeAjustes() {
 static bool g_cantosFinos = true;   /* v0.89: el mapa va tal cual y el sombreador busca la vista de cada ojo */
 static double g_fpsVisto = 0.0, g_mapaMs = 0.0;   /* para el `estado`: lo ensena la pestana de rendimiento */
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
+/* (v1.13) la profundidad de DLSS, para el `estado` (la ventana de ajustes) y el cuadrito junto a la pastilla: los
+   FPS del juego y de la capa (0 = no llega), lo que se lee y la parte del mapa del HUD del juego (< 0 = sin el) */
+static float g_fpsJuego = 0.0f, g_fpsCapa = 0.0f, g_hudJuego = -1.0f;
+static std::string g_profJuego;
+/* el cuadrito de FPS: `fps_juego = no` en serve.conf (ODYSSEYVK_FPS_JUEGO=0) lo quita; la ventana de ajustes lo
+   cambia en marcha con la orden `fps_juego` */
+static bool g_fpsCuadro = [] {
+  const char *e = std::getenv("ODYSSEYVK_FPS_JUEGO");
+  return !(e && e[0] == '0');
+}();
 static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
 /* La casilla de Previsualizacion de la ventana de ajustes (`vista = 1`): mientras esta pedida, la copia
    del cuadro que guardamos en `camara.jpg` sale ocho veces por segundo en vez de una cada dos segundos.
@@ -380,6 +390,17 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
   s += std::string("modelo = ") + (g_modeloEnUso.empty() ? "(ninguno)" : g_modeloEnUso) + "\n";
   s += std::string("red = ") + std::to_string(ui.hud.state().red) + "\n";
   s += std::string("tarjeta = ") + (g_tarjetaEnUso.empty() ? "-" : g_tarjetaEnUso) + "\n";
+  /* (v1.13) la profundidad de DLSS: lo que se lee, los FPS del juego y de la capa, y el HUD del juego */
+  s += std::string("prof_juego = ") + (g_profJuego.empty() ? "-" : g_profJuego) + "\n";
+  {
+    char num[64];
+    std::snprintf(num, sizeof num, "%.1f", g_fpsJuego);
+    s += std::string("fps_juego = ") + (g_profJuego.empty() ? "-" : num) + "\n";
+    std::snprintf(num, sizeof num, "%.1f", g_fpsCapa);
+    s += std::string("fps_capa = ") + (g_profJuego.empty() ? "-" : num) + "\n";
+    std::snprintf(num, sizeof num, "%.1f", g_hudJuego * 100.0f);
+    s += std::string("hud_juego = ") + (g_profJuego.empty() || g_hudJuego < 0.0f ? "-" : num) + "\n";
+  }
 #else
   s += "conversor = no compilado\n";
 #endif
@@ -1904,11 +1925,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          }
          /* (v1.13, fase 3c) el HUD del juego, con su mascara exacta (la capa lee la imagen donde el juego lo dibuja):
             al plano de la pantalla, como un rotulo. Sin ella (otro juego, ODYSSEYVK_HUD=0) no cambia nada */
-         if (ok && t.juego && m.size() == (size_t)t.red->size() * t.red->size()) {
+         /* `hud_plano = no` en serve.conf (ODYSSEYVK_HUD_PLANO=0): el HUD se queda con el relieve de lo que tiene detras */
+         static const bool kHudPlano = [] {
+           const char *e = std::getenv("ODYSSEYVK_HUD_PLANO");
+           return !(e && e[0] == '0');
+         }();
+         if (ok && t.juego && kHudPlano && m.size() == (size_t)t.red->size() * t.red->size()) {
            std::vector<uint8_t> hud;
            int hw = 0, hh = 0, fw = 0, fh = 0;
            const bool hay = t.red->mascaraHud(hud, hw, hh, &fw, &fh);
            const float fracHud = hay ? aplicarHud(m, t.red->size(), t.red->focusPlane(), hud, hw, hh) : 0.0f;
+           t.red->setHudFrac(hay ? fracHud : -1.0f);
            const double ahoraS = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
            if (hay != hudPuesto || (hay && ahoraS - hudAviso > 10.0)) {
              if (hay)
@@ -2538,6 +2565,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              es otra orden, la de cambiar de red con el conversor ya en marcha.) */
           /* `idioma = fr` (v1.07): el panel de ajustes cambio el idioma. La pastilla y sus avisos
              salen ya en el nuevo: se rehace el atlas de letras (con las chinas o japonesas si toca). */
+          /* `fps_juego = si|no` (v1.13): el interruptor de la ventana de ajustes, el cuadrito de FPS de la pastilla */
+          if (const auto of = palabras.find("fps_juego"); of != palabras.end()) {
+            const std::string v = strLower(of->second);
+            g_fpsCuadro = !(v == "no" || v == "0" || v == "apagar");
+            ui.inputChanged = true;
+          }
           /* `preajuste = 0|1|2` (rama experimental): el panel eligio un preajuste del modo rendimiento */
           if (const auto op = palabras.find("preajuste"); op != palabras.end()) {
             const int k = std::atoi(op->second.c_str());
@@ -3936,6 +3969,18 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        (por eso esa bandera pide el apoyo escrito: no hay red que lo saque de la escena). */
     if (!opts.mapaFijo.empty() && wv.hasDepthMap())
       wv.setConverter(gananciaRelieve(st.popout), (float)(opts.apoyo >= 0.0 ? opts.apoyo : 0.5), true);
+    /* (v1.13) la profundidad de DLSS: el cuadrito de FPS junto a la pastilla y el `estado`. La pastilla solo se
+       vuelve a pintar cuando cambia un numero entero (una vez por segundo como mucho) */
+    {
+      Hud::State &hs = ui.hud.state();
+      const float fj = red.fpsJuego(), fc = red.fpsCapa();
+      if ((int)std::lround(fj) != (int)std::lround(hs.fpsJuego) || (int)std::lround(fc) != (int)std::lround(hs.fpsCapa) ||
+          hs.fpsCuadro != g_fpsCuadro)
+        ui.inputChanged = true;
+      hs.fpsJuego = fj, hs.fpsCapa = fc, hs.fpsCuadro = g_fpsCuadro;
+      g_fpsJuego = fj, g_fpsCapa = fc, g_hudJuego = red.hudFrac();
+      g_profJuego = red.descJuego();
+    }
 #endif
     /* la vista de depuracion de la profundidad (v1.12): el atajo la cambia en `ui` y aqui pasa a la
        trama; bajo la pastilla, que es cada color (o que hace falta el conversor para verla) */

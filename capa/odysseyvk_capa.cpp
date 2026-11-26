@@ -1294,6 +1294,8 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR
     std::lock_guard<std::mutex> g(g_mx);
     d = dispositivo(q);
     d->presentes++;
+    /* (protocolo v4) para los FPS del juego en el visor */
+    if (d->shm) ((volatile OdvkProfCabecera *)d->shm)->presentes = (uint64_t)d->presentes;
     /* ODYSSEYVK_CAPA_PRESENTE_TRAS=<n> (taller): captura el cuadro presentado numero n, sin DLSS (vkcube) */
     static const long kTras = [] {
       const char *e = std::getenv("ODYSSEYVK_CAPA_PRESENTE_TRAS");

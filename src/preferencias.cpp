@@ -280,6 +280,9 @@ Valores leer() {
     v.expSinRed = (antes == "si" || antes == "suelo" || antes == "imagen") ? "si" : "no";
   }
   v.vrrEn3d = si(de("vrr_en_3d"), false);
+  v.profDlss = si(de("profundidad_dlss"), true);
+  v.hudPlano = si(de("hud_plano"), true);
+  v.fpsJuego = si(de("fps_juego"), true);
   v.expPrioridad = de("exp_prioridad");
   if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
   if (!v.modelo.empty() && v.modelo[0] == '~') {
@@ -629,7 +632,28 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
     fila(idioma::tr("Cuadros por segundo"), fps);
     const bool conv = de("conversor") == "puesto";
     fila(idioma::tr("Conversor de relieve"), conv ? idioma::trf("puesto · {} ms por mapa", {ms}) : std::string(idioma::tr("apagado")));
-    if (conv) fila(idioma::tr("Red de profundidad"), modelo + " · " + de("tarjeta"));
+    /* (v1.13) la profundidad de DLSS: si llega, la red no se usa («que aparezca aqui que se esta procesando
+       con DLSS», Rodolfo). `prof_juego` es «1920x1080 D32_SFLOAT, Z invertida»: aqui solo la medida */
+    std::string pj = de("prof_juego");
+    const bool dlss = conv && pj != "-" && !pj.empty();
+    if (conv) fila(idioma::tr("Red de profundidad"), dlss ? std::string(idioma::tr("sin usar: la profundidad viene de DLSS"))
+                                                          : modelo + " · " + de("tarjeta"));
+    if (dlss) {
+      const size_t esp = pj.find(' ');
+      if (esp != std::string::npos) pj = pj.substr(0, esp);
+      const size_t x = pj.find('x');
+      if (x != std::string::npos) pj = pj.substr(0, x) + " × " + pj.substr(x + 1);
+      auto coma = [](std::string t) {
+        for (char &c : t) if (c == '.') c = idioma::decimal();
+        return t;
+      };
+      fila(idioma::tr("Profundidad del juego"), idioma::trf("DLSS · {} (la resolución interna)", {pj}));
+      fila(idioma::tr("FPS del juego"), coma(de("fps_juego")));
+      fila(idioma::tr("FPS de la capa"), coma(de("fps_capa")));
+      const std::string hud = de("hud_juego");
+      fila(idioma::tr("HUD del juego"), hud != "-" ? idioma::trf("en el plano de la pantalla · {} % de la imagen", {coma(hud)})
+                                                   : std::string(idioma::tr("no se encontró su capa")));
+    }
     fila(idioma::tr("Cámara"), de("facetracking") == "abierto" ? de("camara_nota") : std::string(idioma::tr("sin abrir")));
   }
   filasDeLaRed(st, v, ids);
@@ -691,6 +715,28 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     /* Ajustes (antes Programa, v0.95): arriba el rendimiento (el visor 3D, la red y las tarjetas), luego
        la version, la actualizacion, otros y el desinstalador */
     filasRendimiento(st, v, ids);
+    /* (v1.13) JUEGOS CON DLSS: la profundidad del juego, su HUD en el plano y el cuadrito de FPS («que en los
+       settings se puedan desactivar», Rodolfo) */
+    {
+      Hud::ItemPanel sd;
+      sd.tipo = Hud::ItemPanel::Seccion, sd.rotulo = idioma::tr("JUEGOS CON DLSS");
+      pon(sd, "");
+      Hud::ItemPanel pd;
+      pd.tipo = Hud::ItemPanel::Interruptor, pd.rotulo = idioma::tr("Usar la profundidad de DLSS");
+      pd.valor = v.profDlss;
+      pd.ayuda = idioma::tr("Con ODYSSEYVK=1 en las opciones de lanzamiento del juego, el 3D toma la profundidad exacta que el juego le da a DLSS en vez de la red.");
+      pon(pd, "profundidad_dlss");
+      Hud::ItemPanel hp;
+      hp.tipo = Hud::ItemPanel::Interruptor, hp.rotulo = idioma::tr("HUD del juego en el plano de la pantalla");
+      hp.valor = v.hudPlano;
+      hp.ayuda = idioma::tr("El minimapa, la munición, los textos y los menús del juego se quedan quietos en la pantalla, sin relieve.");
+      pon(hp, "hud_plano");
+      Hud::ItemPanel fj;
+      fj.tipo = Hud::ItemPanel::Interruptor, fj.rotulo = idioma::tr("Cuadro de FPS junto a la pastilla");
+      fj.valor = v.fpsJuego;
+      fj.ayuda = idioma::tr("Los FPS del juego y los de la capa de DLSS, mientras haya 3D sobre el juego.");
+      pon(fj, "fps_juego");
+    }
     /* FLUIDEZ (rama experimental): lo que salio de Experimental. El VRR solo se elige con la red: en
        Rendimiento el 3D deja el del escritorio */
     {
@@ -1042,6 +1088,18 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     static const char *kVal[] = {"no", "si"};
     if (sub < 0 || sub > 1 || !fija("exp_sin_red", kVal[sub])) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  /* (v1.13) los juegos con DLSS */
+  if (id == "profundidad_dlss" || id == "hud_plano") {
+    const bool ahora = id == "profundidad_dlss" ? v.profDlss : v.hudPlano;
+    if (!fija(id, ahora ? "no" : "si")) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "fps_juego") {
+    if (!fija("fps_juego", v.fpsJuego ? "no" : "si")) return false;
+    avisarVisor({}, {{"fps_juego", v.fpsJuego ? "no" : "si"}});   /* se ve al momento */
     return true;
   }
   if (id == "vrr_en_3d") {
