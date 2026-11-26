@@ -46,7 +46,13 @@ sed "s|@BINDIR@|$prefix/bin|g" "$here/systemd/odysseyvk-serve.service" > "$unit_
 [ -f "$conf_dir/serve.conf" ] || cp "$here/config/serve.conf" "$conf_dir/serve.conf"
 systemctl --user daemon-reload
 systemctl --user enable odysseyvk-serve.service
-echo "servicio instalado y activado para la próxima sesión: $unit_dir/odysseyvk-serve.service"
+# y en marcha ya, con la version recien instalada (v0.97: antes quedaba parado hasta el siguiente
+# inicio de sesion, o hasta que alguien lo arrancara a mano; si ya corria, se reinicia con la nueva)
+if systemctl --user restart odysseyvk-serve.service 2>/dev/null; then
+  echo "servicio instalado, activado y en marcha: $unit_dir/odysseyvk-serve.service"
+else
+  echo "servicio instalado y activado para la próxima sesión (no se pudo arrancar ahora: systemctl --user start odysseyvk-serve)"
+fi
 
 # --- el icono y el lanzador del menú (por usuario, sin sudo) ------------------
 datos=${XDG_DATA_HOME:-$HOME/.local/share}

@@ -2197,6 +2197,18 @@ static int cmdActualizar(int argc, char **argv) {
   std::printf("[actualizar] version bajada: %s\n", nueva.c_str());
   /* la instalacion: compila con todos los nucleos; la parte de root (binario, regla udev, datos) la
      pide pkexec en una ventana del escritorio */
+  /* la sesion 3D que haya ahora mismo, para que el servicio nuevo la reabra (install.sh lo reinicia, v0.97) */
+  {
+    const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
+    const auto ses = hub.find("sesion"), ven = hub.find("ventana"), md = hub.find("sesion_modo");
+    if (ses != hub.end() && ses->second == "video" && ven != hub.end() && md != hub.end() && md->second != "-") {
+      if (FILE *f = std::fopen(rutaEstadoOdyssey("reabrir").c_str(), "we")) {
+        std::fprintf(f, "%s\n%s\n%ld\n", ven->second.c_str(), md->second.c_str(), (long)std::time(nullptr));
+        std::fclose(f);
+        std::printf("[actualizar] se reabrira %s en %s\n", ven->second.c_str(), md->second.c_str());
+      }
+    }
+  }
   orden = "cd " + comilla(fuente) + " && ODYSSEYVK_SUDO=pkexec bash ./install.sh";
   if (soloBajar) {
     orden = "cmake -S " + comilla(fuente) + " -B " + comilla(fuente + "/build") + " -DCMAKE_BUILD_TYPE=Release > /dev/null && cmake --build " +
@@ -2211,21 +2223,9 @@ static int cmdActualizar(int argc, char **argv) {
     avisoEscritorio("OdysseyVK: la actualización falló", "No se pudo compilar o instalar. Detalle en " + registro);
     return 1;
   }
-  /* la sesion 3D que haya ahora mismo, para que el servicio nuevo la reabra */
-  {
-    const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
-    const auto ses = hub.find("sesion"), ven = hub.find("ventana"), md = hub.find("sesion_modo");
-    if (ses != hub.end() && ses->second == "video" && ven != hub.end() && md != hub.end() && md->second != "-") {
-      if (FILE *f = std::fopen(rutaEstadoOdyssey("reabrir").c_str(), "we")) {
-        std::fprintf(f, "%s\n%s\n%ld\n", ven->second.c_str(), md->second.c_str(), (long)std::time(nullptr));
-        std::fclose(f);
-        std::printf("[actualizar] se reabrira %s en %s\n", ven->second.c_str(), md->second.c_str());
-      }
-    }
-  }
-  std::printf("[actualizar] reiniciando el servicio\n");
-  const int rc = std::system("systemctl --user daemon-reload; systemctl --user restart odysseyvk-serve.service");
-  avisoEscritorio("OdysseyVK " + nueva + " instalado", rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no se pudo reiniciar: systemctl --user restart odysseyvk-serve");
+  /* install.sh ya reinicio el servicio (v0.97); aqui solo se comprueba que corre */
+  const int rc = std::system("systemctl --user is-active --quiet odysseyvk-serve.service");
+  avisoEscritorio("OdysseyVK " + nueva + " instalado", rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no corre: systemctl --user restart odysseyvk-serve");
   std::printf("[actualizar] hecho (%d)\n", rc);
   return rc == 0 ? 0 : 1;
 }

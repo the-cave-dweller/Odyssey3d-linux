@@ -3,6 +3,17 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## install.sh arranca el servicio (v0.97)
+
+- MEDIDO en el registro de Rodolfo: tras desinstalar (23:54, el servicio queda desactivado) y
+  reinstalar la 0.96 (00:03), el servicio siguió parado: `install.sh` lo activaba para el siguiente
+  inicio de sesión pero no lo arrancaba. Ahora lo reinicia al terminar (arranca si estaba parado,
+  reinicia con la versión nueva si corría). `odysseyvk actualizar` apunta la sesión a reabrir ANTES
+  de llamar a install.sh y ya no reinicia por su cuenta.
+- De paso, el cierre con Cyberpunk de las 23:43: el visor estuvo 43 s recibiendo sus cuadros con
+  normalidad y la sesión se cerró limpia cuando la ventana salió de pantalla completa; sin volcado.
+  Se cayó el juego, no se sabe por qué desde aquí.
+
 ## README nuevo para GitHub, en inglés y español; el manual pasa a docs/ (v0.96)
 
 - Rodolfo: «reescribe el README para GitHub, no menciones lo que ya no aplica, y da comandos ya
