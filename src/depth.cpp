@@ -2,6 +2,7 @@
    resto del programa no dependa de ONNX Runtime: si el proyecto se compila sin la biblioteca,
    init() avisa y el conversor simplemente no esta disponible. */
 #include "depth.h"
+#include "profjuego.h"
 
 #include <algorithm>
 #include <cctype>
@@ -636,7 +637,10 @@ void DepthNet::cierra() {
   ready_ = false;
 }
 
-DepthNet::~DepthNet() { cierra(); }
+DepthNet::~DepthNet() {
+  cierra();
+  delete juego_;
+}
 
 bool DepthNet::cambiar(const std::string &model, std::string *err, bool forzar) {
   const std::string nueva = model.empty() ? defaultModelPath() : model;
@@ -931,12 +935,35 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   }
   detectarBandas();
   std::vector<Ort::Value> outs;
-  std::vector<float> dRe, dSinRed;
+  std::vector<float> dRe, dSinRed, dJuego;
   const float *d = nullptr;
   size_t n = 0;
   const auto tRed0 = std::chrono::steady_clock::now();
   auto tRed1 = tRed0;
-  if (sinRed_) {
+  /* (v1.13, fase 2) la profundidad del juego, la que recibe DLSS, si el visor esta sobre un juego y la
+     capa la esta escribiendo (ver profjuego.h): exacta, sin parpadeo y sin gastar la red */
+  static const bool kJuego = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_PROFUNDIDAD_JUEGO");
+    return !(e && e[0] == '0');
+  }();
+  bool delJuego = false;
+  if (kJuego && permitirJuego_.load()) {
+    if (!juego_) juego_ = new ProfundidadJuego;
+    delJuego = juego_->leer(dJuego, sz_);
+  }
+  if (delJuego != usandoJuego_.load()) {
+    usandoJuego_.store(delJuego);
+    if (delJuego)
+      std::printf("[red] la profundidad del juego (la de DLSS, %s) en lugar de la red\n", juego_->descripcion().c_str());
+    else
+      std::printf("[red] sin profundidad del juego: vuelve %s\n", sinRed_ ? "la profundidad sin red" : "la red");
+    std::fflush(stdout);
+  }
+  if (delJuego) {
+    d = dJuego.data();
+    n = plane;
+    tRed1 = std::chrono::steady_clock::now();
+  } else if (sinRed_) {
     /* modo rendimiento: la profundidad de la propia imagen, sin red */
     profundidadSinRed(dSinRed);
     d = dSinRed.data();
@@ -1070,7 +1097,9 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
 
   /* en el tiempo: el mapa nuevo entra con el peso que pide el usuario, salvo en un cambio de plano,
      que se toma tal cual para no arrastrar el cuadro anterior sobre el plano nuevo. */
-  const bool suavizar = prev_.size() == plane && smooth_ > 0.0f && !corte_;
+  /* la del juego no se suaviza en el tiempo ni se limpia: es exacta en cada cuadro, y el suavizado
+     (pensado para el temblor de la red) solo la haria llegar tarde detras de lo que se mueve */
+  const bool suavizar = prev_.size() == plane && smooth_ > 0.0f && !corte_ && !delJuego;
   /* OJO: este peso se queda POR ESTIMACION a proposito (v0.69). El mapa anterior que se mezcla aqui es
      la SALIDA ya procesada (filtro guiado, dilatado, relieve local, dos planos), y todo eso se vuelve a
      aplicar encima en cada vuelta: lo que se ve es el punto de equilibrio de ese bucle, y depende de
@@ -1121,7 +1150,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   /* limpiar el mapa siguiendo los bordes de la foto y dilatar lo cercano unos puntos: con esto los
      cantos de los objetos quedan en su sitio y el relieve deja de temblar cuadro a cuadro. Con
      ODYSSEYVK_LIMPIEZA=0 se apaga, para comparar en el panel la misma red con el mapa en crudo. */
-  if (limpieza_) {
+  if (limpieza_ && !delJuego) {
     filtroGuiado(guia_.data(), limpio.data(), salida.data(), sz_, 8, 0.04f, trabajo.data());
     if (dilata_ > 0) dilatar(salida.data(), mapa.data(), sz_, dilata_);
   } else {
@@ -1158,7 +1187,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     const float v = e ? (float)std::atof(e) : 0.002f;
     return (v > 0.0f && v < 1.0f) ? v : 0.002f;
   }();
-  if (kRelieveLocal > 0.0f) {
+  if (kRelieveLocal > 0.0f && !delJuego) {   /* el relieve del juego es el de verdad: nada que realzar */
     filtroGuiado(salida.data(), salida.data(), limpio.data(), sz_, kRlRadio, kRlEps, trabajo.data());
     for (size_t i = 0; i < plane; i++) {
       const float v = salida[i] + kRelieveLocal * (salida[i] - limpio[i]);

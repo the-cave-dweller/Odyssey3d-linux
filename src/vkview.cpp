@@ -3574,6 +3574,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              esta libre y no hay dos sitios tocando el mismo numero. */
           red.setPlanos(ui.tune.planos);
           red.setMuestras(ui.tune.muestras);
+          red.setPermitirJuego(sobreJuego(ui));   /* la profundidad de DLSS, si la capa la escribe (v1.13) */
           hiloRed.arrancar(&red, chico.data(), wv.converterSize(), textoAncla, wv.converterGain(),
                            apoyoAuto ? -1.0f : wv.converterRef(), sobreJuego(ui));
         } else if (++convFallos == 1 || convFallos % 100 == 0) {

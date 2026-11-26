@@ -54,6 +54,13 @@ else
   echo "servicio instalado y activado para la próxima sesión (no se pudo arrancar ahora: systemctl --user start odysseyvk-serve)"
 fi
 
+# --- la capa de Vulkan de la profundidad de DLSS (v1.13): su manifiesto, por usuario -------------
+# Se carga solo en los juegos que lleven `ODYSSEYVK=1` en sus opciones de lanzamiento (Steam).
+capas=${XDG_DATA_HOME:-$HOME/.local/share}/vulkan/implicit_layer.d
+mkdir -p "$capas"
+cp -f "$here/build/capa/instalada/VkLayer_odysseyvk_capa.json" "$capas/VkLayer_odysseyvk_capa.json"
+echo "capa de la profundidad de DLSS puesta: añade ODYSSEYVK=1 a las opciones de lanzamiento del juego en Steam"
+
 # --- el icono y el lanzador del menú (por usuario, sin sudo) ------------------
 datos=${XDG_DATA_HOME:-$HOME/.local/share}
 for carpeta in "$here"/assets/hicolor/*x*/apps; do

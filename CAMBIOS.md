@@ -3,6 +3,52 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La profundidad de DLSS en vivo en el 3D: fase 2, y la capa con `ODYSSEYVK=1` (v1.13)
+
+- Rodolfo: «Change the parameter to ODYSSEYVK=1, and then start phase 2».
+- **El interruptor**: la capa se enciende con `ODYSSEYVK=1` en las opciones de lanzamiento del juego (antes
+  `ODYSSEYVK_CAPA=1`); `ODYSSEYVK_DISABLE=1` la quita. Nada de OdysseyVK leía una variable con ese nombre.
+- **La capa** (`capa/odysseyvk_capa.cpp`, `capa/protocolo.h`): al crear el dispositivo del juego enciende
+  VK_EXT_external_memory_host (si la tarjeta la tiene y el juego no la pidió) y, en el primer lanzamiento
+  de DLSS, crea `/dev/shm/odysseyvk-profundidad-<uid>`: una cabecera y tres huecos, importados enteros como
+  memoria de Vulkan. En cada lanzamiento de DLSS (como mucho uno cada 4 ms) graba en el MISMO buffer de
+  comandos: el número del hueco, la copia de la profundidad, el número otra vez y el último número en la
+  cabecera, con barreras entre cada paso. La tarjeta del juego escribe directamente en esa memoria; la CPU
+  del juego no la toca. Solo copia mientras el visor escriba su latido (menos de 2 s): sin el 3D puesto, el
+  juego no paga nada. Al cerrar el juego la borra.
+- **El visor** (`src/profjuego.*`, `src/depth.cpp`): cuando la ventana del 3D es un juego (`sobreJuego`)
+  y la profundidad llega fresca (de menos de medio segundo, con el número de antes y el de después iguales),
+  `DepthNet::estimate` la toma en lugar de la red: Z invertida o normal decidida en cada cuadro, el cielo
+  al fondo, los percentiles 1 y 99 a 0..1 y la media por áreas hasta el mapa de 518. A partir de ahí, todo
+  como siempre (plano, saliencia, rótulos, bandas, cantos finos), salvo el suavizado en el tiempo, el
+  filtro guiado y el relieve local, que estaban para el temblor y lo plano de la red. Si deja de llegar,
+  vuelve la red sola. El registro: `[red] la profundidad del juego (la de DLSS, 1920x1080 D32_SFLOAT, Z
+  invertida) en lugar de la red`. `ODYSSEYVK_PROFUNDIDAD_JUEGO=0` la apaga.
+- **Instalación**: `install.sh` deja la biblioteca en `/usr/local/lib/odysseyvk/` y el manifiesto en
+  `~/.local/share/vulkan/implicit_layer.d/` (ahí la ve también el contenedor de Steam); `odysseyvk
+  desinstalar` quita los dos.
+- **Probado sin juego**: `tools/simula-capa.py` (nuevo) escribe la profundidad volcada de Cyberpunk con el
+  mismo protocolo, y el visor aparte, sobre el cuadro de ese mismo momento, la tomó en vez de la red: piloto,
+  moto y coche con su silueta exacta y el plano de la pantalla en una línea limpia sobre el asfalto
+  (`docs/img/depth-dlss.png`, también en el README). Y el camino de la tarjeta con vkcube y la capa
+  (`ODYSSEYVK_CAPA_PRUEBA=1`, solo de taller: comparte la última profundidad creada al acabar cada pasada):
+  808 cuadros enteros por la memoria compartida y ninguno a medio escribir; el contenido de vkcube sale
+  vacío porque su pasada tira la profundidad al acabar (`storeOp` DONT_CARE), y el de un juego ya se midió
+  en la fase 1 (idéntico bit a bit). Falta: Cyberpunk en 3D con la capa.
+
+## /dev/shm se llenaba: 7,8 GB de lienzos de la capa del servicio (v1.13)
+
+- Al probar la fase 2: 1183 archivos `odysseyvk-XXXXXX` en `/dev/shm` (en RAM), 7,8 GB de un día. Los creaba
+  `src/overlay.cpp` con `mkstemp` para cada lienzo de la pastilla, el panel o las tarjetas y no borraba el
+  nombre. Ahora se borra en cuanto se crea (el compositor solo necesita el descriptor). Los que había se
+  borraron (borrar el nombre no molesta a quien aún lo tiene abierto): la memoria usada bajó de 36 a 28 GB.
+
+## El actualizador, probado de punta a punta (v1.13)
+
+- `~/.local/state/odysseyvk/actualizar.log` del 26-nov a las 13:56: con la 1.12 instalada, el botón
+  Actualizar bajó la 1.13 de GitHub, la compiló, la instaló pidiendo la clave por pkexec (la ventana de
+  polkit, lo que nunca se había probado), reinició el servicio y acabó en «hecho (0)».
+
 ## La profundidad de DLSS sin Neural Forge: la capa de Vulkan de OdysseyVK, fase 1 (prueba) (v1.13)
 
 - Rodolfo: «I actually want my users to be able to use this without neural forge, just with the game

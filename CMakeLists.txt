@@ -147,6 +147,7 @@ find_package(OpenMP)
 
 add_executable(odysseyvk
   src/main.cpp
+  src/profjuego.cpp
   src/util.cpp
   src/ajuste.cpp
   src/sha3.c
@@ -288,6 +289,11 @@ target_compile_options(VkLayer_odysseyvk_capa PRIVATE -Wno-missing-field-initial
 target_link_options(VkLayer_odysseyvk_capa PRIVATE -static-libstdc++ -static-libgcc -Wl,--no-undefined)
 set(CAPA_RUTA ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_capa.so)
 configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_capa.json @ONLY)
+# y el manifiesto de la instalada (lo pone install.sh en ~/.local/share/vulkan/implicit_layer.d, donde lo
+# encuentra tambien el contenedor de Steam, como el de Neural Forge)
+set(CAPA_RUTA ${CMAKE_INSTALL_PREFIX}/lib/odysseyvk/VkLayer_odysseyvk_capa.so)
+configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/instalada/VkLayer_odysseyvk_capa.json @ONLY)
+install(TARGETS VkLayer_odysseyvk_capa LIBRARY DESTINATION lib/odysseyvk)
 
 install(TARGETS odysseyvk RUNTIME DESTINATION bin)
 install(FILES udev/70-odysseyvk.rules DESTINATION /etc/udev/rules.d)

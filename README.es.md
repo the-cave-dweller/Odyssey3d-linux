@@ -250,6 +250,27 @@ Intenso**) y cuatro deslizadores finos (mezcla, fuerza, alcance y paralaje de la
 aplican al momento; al pasar el ratón por cada uno se ve qué cambia. En este modo la frecuencia
 variable queda como la tenga el escritorio.
 
+## Profundidad exacta en los juegos con DLSS
+
+En los juegos que usan DLSS, OdysseyVK puede usar la profundidad del propio juego en vez de adivinarla
+con la red: la que el juego le da a DLSS en cada cuadro, exacta y quieta, a la resolución de render
+del juego (en Cyberpunk 2077, 1920×1080). Hace falta una tarjeta NVIDIA, DLSS puesto en el juego
+(cualquier modo) y, en Steam, esto en las opciones de lanzamiento del juego:
+
+```
+ODYSSEYVK=1 %command%
+```
+
+Con eso se carga la pequeña capa de Vulkan de OdysseyVK solo en ese juego (la deja puesta
+`install.sh`). La capa encuentra la profundidad que recibe DLSS y, mientras el 3D está puesto, la
+tarjeta del juego la escribe directamente en una memoria compartida para el visor; sin el 3D no copia
+nada. Cuando el visor está sobre ese juego la usa en vez de la red (su registro dice `[red] la
+profundidad del juego`); si la capa no está o la profundidad deja de llegar, vuelve a la red solo.
+Medido en Cyberpunk: la de la capa es bit a bit la que recibe DLSS (comparada con el volcado de Neural
+Forge del mismo cuadro). Ctrl+Mayús+9 la enseña.
+
+![La profundidad que adivina la red y la del propio juego](docs/img/es/depth-dlss.png)
+
 ## Los juegos y el cursor
 
 Cuando un juego entra al 3D, la pastilla se ve unos segundos, para que

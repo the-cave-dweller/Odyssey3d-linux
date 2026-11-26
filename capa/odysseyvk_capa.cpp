@@ -1,5 +1,5 @@
 /* odysseyvk_capa.cpp — la capa de Vulkan de OdysseyVK que encuentra la profundidad que el juego le da
-   a DLSS (v1.13, PRUEBA: fase 1).
+   a DLSS (v1.13: fase 1, encontrarla; fase 2, compartirla en vivo con el visor).
 
    Rodolfo: «I actually want my users to be able to use this without neural forge, just with the game
    dlss itself». La red de profundidad adivina; el juego la tiene exacta, y DLSS la recibe en cada
@@ -9,12 +9,22 @@
    imagenes cuyo numero aparece en los parametros de un lanzamiento, la que tiene formato de
    profundidad (D16/D24/D32) es la del juego. Para DLSS es su unica entrada de ese formato.
 
-   Fase 1 (esta): apuntarlo todo en un registro y, a peticion, guardar UN cuadro de esa profundidad
-   en un archivo, para compararlo con el volcado de Neural Forge del mismo juego. Nada mas: no
-   comparte nada en vivo con el visor todavia (fase 2).
+   MEDIDO en Cyberpunk (fase 1): DLSS pide numero para una imagen 1920x1080 D32_SFLOAT, el tamano de
+   render; los parametros de sus lanzamientos no la nombran como se esperaba (vienen en la lista de
+   «extras» de CUDA, con `extraCount` = 1), asi que se toma la ULTIMA imagen de profundidad a la que
+   DLSS pidio numero. Copiada asi, sale identica bit a bit a la del volcado de Neural Forge del mismo
+   cuadro.
 
-   Se enciende por juego, como MangoHud o Neural Forge: con `ODYSSEYVK_CAPA=1` en las opciones de
-   lanzamiento (el manifiesto la declara capa implicita con esa variable). Sin ella no se carga.
+   Fase 1: un registro y, a peticion, UN cuadro en un archivo (para comparar).
+   Fase 2: cada cuadro, la profundidad a la memoria compartida que lee el visor (capa/protocolo.h). La
+   tarjeta del juego la escribe directamente en esa memoria (VK_EXT_external_memory_host, que la capa
+   enciende al crear el dispositivo), en el mismo buffer de comandos de DLSS; la CPU del juego no la
+   toca. Solo mientras el visor diga que la lee (su latido, de menos de 2 s): sin el 3D puesto, el
+   juego no paga nada. ODYSSEYVK_COMPARTIR=0 lo apaga.
+
+   Se enciende por juego, como MangoHud o Neural Forge: con `ODYSSEYVK=1` en las opciones de
+   lanzamiento (el manifiesto la declara capa implicita con esa variable; ODYSSEYVK_DISABLE=1 la quita).
+   Sin ella no se carga.
      - registro:  /tmp/odysseyvk-capa-<uid>/capa-<pid>.log
      - volcar:    touch /tmp/odysseyvk-capa-<uid>/volcar   (se mira una vez por segundo)
                   o ODYSSEYVK_CAPA_VOLCAR_TRAS=<segundos> desde el primer lanzamiento de DLSS
@@ -29,9 +39,16 @@
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
 
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
+#include <cstddef>
+
+#include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -42,6 +59,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include "protocolo.h"
 
 #define EXPORTA extern "C" __attribute__((visibility("default")))
 
@@ -83,6 +102,8 @@ struct Instancia {
   PFN_vkDestroyInstance destroy = nullptr;
   PFN_vkGetPhysicalDeviceMemoryProperties memProps = nullptr;
   PFN_vkGetPhysicalDeviceProperties props = nullptr;
+  PFN_vkGetPhysicalDeviceProperties2 props2 = nullptr;
+  PFN_vkEnumerateDeviceExtensionProperties enumExt = nullptr;
 };
 std::unordered_map<void *, Instancia> g_inst;
 
@@ -130,6 +151,25 @@ struct Dispositivo {
   PFN_vkUnmapMemory unmap = nullptr;
   PFN_vkCmdPipelineBarrier barrier = nullptr;
   PFN_vkCmdCopyImageToBuffer copyImgBuf = nullptr;
+  PFN_vkCmdUpdateBuffer updateBuf = nullptr;
+  PFN_vkCmdEndRenderPass endRenderPass = nullptr;
+  VkImage ultimaCreada = VK_NULL_HANDLE;   /* solo para ODYSSEYVK_CAPA_PRUEBA */
+  PFN_vkDeviceWaitIdle devWaitIdle = nullptr;
+  PFN_vkGetMemoryHostPointerPropertiesEXT hostPtrProps = nullptr;
+  VkDeviceSize alineacionHost = 4096;
+
+  /* fase 2: la memoria compartida con el visor */
+  int shmFd = -1;
+  uint8_t *shm = nullptr;
+  size_t shmTam = 0;
+  VkBuffer shmBuf = VK_NULL_HANDLE;
+  VkDeviceMemory shmMem = VK_NULL_HANDLE;
+  uint32_t shmW = 0, shmH = 0;
+  VkFormat shmFmt = VK_FORMAT_UNDEFINED;
+  uint64_t seq = 0;
+  double ultimaCopia = 0.0;
+  long copias = 0;
+  bool shmFallo = false, latidoVisto = false;
 
   std::unordered_map<VkImage, Imagen> imagenes;
   std::unordered_map<VkImageView, Vista> vistas;
@@ -307,6 +347,206 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
   d->pendientes.swap(quedan);
 }
 
+/* ---------- fase 2: la memoria compartida con el visor (capa/protocolo.h) ---------- */
+std::string nombreShm() {
+  if (const char *e = std::getenv("ODYSSEYVK_PROFUNDIDAD_SHM")) return e;
+  return "/odysseyvk-profundidad-" + std::to_string((long)getuid());
+}
+uint64_t monotonoNs() {
+  timespec t{};
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
+}
+
+void liberarCompartida(Dispositivo *d, bool borrar) {
+  if (d->shmBuf || d->shmMem) d->devWaitIdle(d->dev);   /* la tarjeta puede estar escribiendo ahi */
+  if (d->shmBuf) d->destroyBuffer(d->dev, d->shmBuf, nullptr);
+  if (d->shmMem) d->free(d->dev, d->shmMem, nullptr);
+  d->shmBuf = VK_NULL_HANDLE;
+  d->shmMem = VK_NULL_HANDLE;
+  if (d->shm) munmap(d->shm, d->shmTam);
+  if (d->shmFd >= 0) close(d->shmFd);
+  d->shm = nullptr;
+  d->shmFd = -1;
+  d->shmTam = 0;
+  if (borrar) shm_unlink(nombreShm().c_str());
+}
+
+/* la region entera (cabecera + 3 huecos), mapeada aqui e importada en Vulkan */
+bool crearCompartida(Dispositivo *d, const Imagen &im) {
+  liberarCompartida(d, false);
+  const bool dos = im.formato == VK_FORMAT_D16_UNORM || im.formato == VK_FORMAT_D16_UNORM_S8_UINT;
+  const uint64_t bpp = dos ? 2 : 4;
+  const uint64_t a = d->alineacionHost < 4096 ? 4096 : d->alineacionHost;
+  auto redondea = [a](uint64_t v) { return (v + a - 1) / a * a; };
+  const uint64_t hueco = redondea(ODVK_PROF_DATOS + (uint64_t)im.w * im.h * bpp + 8);
+  const uint64_t total = redondea(ODVK_PROF_CABECERA + ODVK_PROF_HUECOS * hueco);
+  const std::string nombre = nombreShm();
+  d->shmFd = shm_open(nombre.c_str(), O_CREAT | O_RDWR, 0600);
+  if (d->shmFd < 0 || ftruncate(d->shmFd, (off_t)total) != 0) {
+    anota("[compartir] no se pudo crear %s: %s", nombre.c_str(), std::strerror(errno));
+    liberarCompartida(d, false);
+    return false;
+  }
+  /* la direccion tiene que ir alineada a lo que pida el controlador (4096 en NVIDIA): si pide mas, se
+     reserva de sobra y se pone la memoria compartida encima, en el punto alineado */
+  void *base = MAP_FAILED;
+  if (a <= (uint64_t)sysconf(_SC_PAGESIZE)) {
+    base = mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, d->shmFd, 0);
+  } else {
+    void *reserva = mmap(nullptr, total + a, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (reserva != MAP_FAILED) {
+      uint8_t *al = (uint8_t *)(((uintptr_t)reserva + a - 1) / a * a);
+      base = mmap(al, total, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, d->shmFd, 0);
+    }
+  }
+  if (base == MAP_FAILED) {
+    anota("[compartir] mmap fallo: %s", std::strerror(errno));
+    liberarCompartida(d, false);
+    return false;
+  }
+  d->shm = (uint8_t *)base;
+  d->shmTam = total;
+  std::memset(d->shm, 0, ODVK_PROF_CABECERA);
+  OdvkProfCabecera *c = (OdvkProfCabecera *)d->shm;
+  c->version = ODVK_PROF_VERSION;
+  c->pid = (int32_t)getpid();
+  c->ancho = im.w, c->alto = im.h;
+  c->formato = (uint32_t)im.formato;
+  c->bytesPunto = (uint32_t)bpp;
+  c->huecos = ODVK_PROF_HUECOS;
+  c->tamHueco = hueco;
+
+  VkMemoryHostPointerPropertiesEXT hp{VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT};
+  if (d->hostPtrProps(d->dev, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, d->shm, &hp) != VK_SUCCESS) {
+    anota("[compartir] vkGetMemoryHostPointerPropertiesEXT fallo");
+    liberarCompartida(d, true);
+    return false;
+  }
+  VkExternalMemoryBufferCreateInfo eb{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO};
+  eb.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bi.pNext = &eb;
+  bi.size = total;
+  bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  if (d->createBuffer(d->dev, &bi, nullptr, &d->shmBuf) != VK_SUCCESS) {
+    anota("[compartir] vkCreateBuffer de la memoria compartida fallo");
+    liberarCompartida(d, true);
+    return false;
+  }
+  VkMemoryRequirements mr{};
+  d->bufReqs(d->dev, d->shmBuf, &mr);
+  uint32_t tipo = UINT32_MAX;
+  const uint32_t bits = mr.memoryTypeBits & hp.memoryTypeBits;
+  for (uint32_t i = 0; i < 32; i++)
+    if (bits & (1u << i)) { tipo = i; break; }
+  VkImportMemoryHostPointerInfoEXT imp{VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT};
+  imp.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  imp.pHostPointer = d->shm;
+  VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  ai.pNext = &imp;
+  ai.allocationSize = total;
+  ai.memoryTypeIndex = tipo;
+  if (tipo == UINT32_MAX || d->alloc(d->dev, &ai, nullptr, &d->shmMem) != VK_SUCCESS ||
+      d->bind(d->dev, d->shmBuf, d->shmMem, 0) != VK_SUCCESS) {
+    anota("[compartir] no se pudo importar la memoria compartida en Vulkan (tipo %u)", tipo);
+    liberarCompartida(d, true);
+    return false;
+  }
+  d->shmW = im.w, d->shmH = im.h, d->shmFmt = im.formato;
+  std::atomic_thread_fence(std::memory_order_release);
+  c->magia = ODVK_PROF_MAGIA;   /* la ultima: con ella el visor ya puede leer */
+  anota("[compartir] %s lista: %ux%u %s, %u huecos de %llu bytes (%.1f MB)", nombre.c_str(), im.w, im.h,
+        formato(im.formato).c_str(), ODVK_PROF_HUECOS, (unsigned long long)hueco, total / 1048576.0);
+  return true;
+}
+
+/* el visor ha dicho que lee en los ultimos 2 s */
+bool hayLector(Dispositivo *d) {
+  if (!d->shm) return false;
+  const uint64_t latido = ((volatile OdvkProfCabecera *)d->shm)->lectorLatido;
+  const uint64_t t = monotonoNs();
+  return latido > 0 && t >= latido && t - latido < 2000000000ull;
+}
+
+/* las cuatro escrituras de la tarjeta (ver protocolo.h), en el buffer de comandos de DLSS */
+/* `desde`: el diseno en que esta la imagen si se sabe (modo de prueba, al acabar una pasada de render: comprimida
+   en DEPTH_STENCIL_ATTACHMENT_OPTIMAL); UNDEFINED = no se sabe y se copia como GENERAL, que es lo que vale en el
+   lanzamiento de DLSS (ahi el juego ya la dejo en un diseno de lectura) */
+void grabarCompartida(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, VkImageLayout desde) {
+  const OdvkProfCabecera *c = (const OdvkProfCabecera *)d->shm;
+  const uint64_t seq = ++d->seq;
+  const uint64_t hueco = odvkHueco(c, seq % ODVK_PROF_HUECOS);
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  auto paso = [&](VkPipelineStageFlags de, VkAccessFlags acDe) {
+    mb.srcAccessMask = acDe;
+    mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    d->barrier(cb, de, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  };
+  paso(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT);
+  d->updateBuf(cb, d->shmBuf, hueco, 8, &seq);
+  paso(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+  VkBufferImageCopy reg{};
+  reg.bufferOffset = hueco + ODVK_PROF_DATOS;
+  reg.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
+  reg.imageExtent = {im.w, im.h, 1};
+  const bool conStencil = im.formato == VK_FORMAT_D16_UNORM_S8_UINT || im.formato == VK_FORMAT_D24_UNORM_S8_UINT ||
+                          im.formato == VK_FORMAT_D32_SFLOAT_S8_UINT;
+  VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  ib.image = img;
+  ib.subresourceRange = {(VkImageAspectFlags)(VK_IMAGE_ASPECT_DEPTH_BIT | (conStencil ? VK_IMAGE_ASPECT_STENCIL_BIT : 0)), 0, 1, 0, 1};
+  if (desde != VK_IMAGE_LAYOUT_UNDEFINED) {
+    ib.oldLayout = desde, ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    ib.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, ib.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    d->barrier(cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+  }
+  d->copyImgBuf(cb, img, desde != VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
+                d->shmBuf, 1, &reg);
+  if (desde != VK_IMAGE_LAYOUT_UNDEFINED) {
+    ib.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, ib.newLayout = desde;
+    ib.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT, ib.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+  }
+  paso(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+  d->updateBuf(cb, d->shmBuf, hueco + odvkSeqDespues(c), 8, &seq);
+  paso(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+  d->updateBuf(cb, d->shmBuf, offsetof(OdvkProfCabecera, ultimoSeq), 8, &seq);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
+  d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb,
+             0, nullptr, 0, nullptr);
+  d->copias++;
+}
+
+/* en cada lanzamiento de DLSS: como mucho una copia cada 4 ms (una por cuadro hasta 250 por segundo) */
+void compartir(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im,
+               VkImageLayout desde = VK_IMAGE_LAYOUT_UNDEFINED) {
+  static const bool kApagado = [] {
+    const char *e = std::getenv("ODYSSEYVK_COMPARTIR");
+    return e && e[0] == '0';
+  }();
+  if (kApagado || d->shmFallo || !d->hostPtrProps || !d->updateBuf) return;
+  if (im.muestras != VK_SAMPLE_COUNT_1_BIT) return;
+  if (!d->shm || d->shmW != im.w || d->shmH != im.h || d->shmFmt != im.formato) {
+    if (!crearCompartida(d, im)) {
+      d->shmFallo = true;
+      return;
+    }
+  }
+  if (!hayLector(d)) {
+    if (d->latidoVisto) anota("[compartir] el visor dejo de leer: sin copias hasta que vuelva");
+    d->latidoVisto = false;
+    return;
+  }
+  if (!d->latidoVisto) anota("[compartir] el visor lee: copiando la profundidad cada cuadro");
+  d->latidoVisto = true;
+  const double t = ahora();
+  if (t - d->ultimaCopia < 0.004) return;
+  d->ultimaCopia = t;
+  grabarCompartida(d, cb, img, im, desde);
+}
+
 /* ---------- ganchos de dispositivo ---------- */
 VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateInfo *ci, const VkAllocationCallbacks *a, VkImage *img) {
   Dispositivo *d;
@@ -320,6 +560,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateI
   if (r == VK_SUCCESS) {
     std::lock_guard<std::mutex> g(g_mx);
     d->imagenes[*img] = {c.format, c.extent.width, c.extent.height, c.samples};
+    if (esProfundidad(c.format)) d->ultimaCreada = *img;
   }
   return r;
 }
@@ -331,6 +572,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAl
     d->imagenes.erase(img);
     d->vistasDeProfundidad.erase(img);
     if (d->ultimaPedida == img) d->ultimaPedida = VK_NULL_HANDLE;
+    if (d->ultimaCreada == img) d->ultimaCreada = VK_NULL_HANDLE;
   }
   d->destroyImage(device, img, a);
 }
@@ -491,6 +733,16 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
         grabarCopia(d, cb, d->ultimaPedida, im->second);
       }
     }
+    /* fase 2: la de este lanzamiento si los parametros la nombran; si no, la ultima pedida */
+    {
+      VkImage img = prof;
+      Imagen im = improf;
+      if (img == VK_NULL_HANDLE && d->ultimaPedida != VK_NULL_HANDLE) {
+        auto it = d->imagenes.find(d->ultimaPedida);
+        if (it != d->imagenes.end()) img = d->ultimaPedida, im = it->second;
+      }
+      if (img != VK_NULL_HANDLE) compartir(d, cb, img, im);
+    }
     if (prof != VK_NULL_HANDLE) {
       d->conProfundidad++;
       if (!d->vistasDeProfundidad.count(prof)) {
@@ -503,11 +755,34 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
     const double t = ahora();
     if (t - d->ultimoResumen >= 10.0) {
       d->ultimoResumen = t;
-      anota("[resumen] numeros pedidos %ld · lanzamientos %ld · con profundidad %ld · imagenes de profundidad leidas %zu",
-            d->pedidos, d->lanzamientos, d->conProfundidad, d->vistasDeProfundidad.size());
+      anota("[resumen] numeros pedidos %ld · lanzamientos %ld · con profundidad %ld · imagenes de profundidad leidas %zu · "
+            "copias al visor %ld", d->pedidos, d->lanzamientos, d->conProfundidad, d->vistasDeProfundidad.size(), d->copias);
     }
   }
   d->cuLaunch(cb, li);
+}
+
+/* ODYSSEYVK_CAPA_PRUEBA=1 (taller): sin DLSS, al acabar cada pasada de render se comparte la ultima imagen de
+   profundidad creada. Sirve para probar el camino de la tarjeta a la memoria compartida con vkcube. */
+bool modoPrueba() {
+  static const bool p = [] {
+    const char *e = std::getenv("ODYSSEYVK_CAPA_PRUEBA");
+    return e && e[0] == '1';
+  }();
+  return p;
+}
+VKAPI_ATTR void VKAPI_CALL CmdEndRenderPass(VkCommandBuffer cb) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  d->endRenderPass(cb);
+  std::lock_guard<std::mutex> g(g_mx);
+  if (d->ultimaCreada != VK_NULL_HANDLE) {
+    auto it = d->imagenes.find(d->ultimaCreada);
+    if (it != d->imagenes.end()) compartir(d, cb, d->ultimaCreada, it->second, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+  }
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue q, uint32_t n, const VkSubmitInfo *s, VkFence f) {
@@ -563,6 +838,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     anota("[dispositivo] cerrado · numeros pedidos %ld · lanzamientos %ld · con profundidad %ld", d->pedidos,
           d->lanzamientos, d->conProfundidad);
   }
+  liberarCompartida(d, d->shm != nullptr);   /* y se borra: el visor vuelve a la red */
   PFN_vkDestroyDevice destruir = d->destroy;
   delete d;
   destruir(device, a);
@@ -587,7 +863,33 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
     inst = &it->second;
   }
   auto crear = (PFN_vkCreateDevice)gipa(inst->inst, "vkCreateDevice");
-  const VkResult r = crear(fisico, ci, a, device);
+  /* fase 2: la tarjeta escribe la profundidad en la memoria compartida (VK_EXT_external_memory_host);
+     se enciende aqui si el dispositivo la tiene y el juego no la pidio ya */
+  VkDeviceCreateInfo c2 = *ci;
+  std::vector<const char *> exts(ci->ppEnabledExtensionNames, ci->ppEnabledExtensionNames + ci->enabledExtensionCount);
+  bool conHost = false;
+  {
+    uint32_t n = 0;
+    std::vector<VkExtensionProperties> todas;
+    if (inst->enumExt && inst->enumExt(fisico, nullptr, &n, nullptr) == VK_SUCCESS) {
+      todas.resize(n);
+      inst->enumExt(fisico, nullptr, &n, todas.data());
+    }
+    bool hay = false, pedida = false;
+    for (const VkExtensionProperties &e : todas)
+      if (!std::strcmp(e.extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)) hay = true;
+    for (const char *e : exts)
+      if (!std::strcmp(e, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)) pedida = true;
+    if (hay && !pedida) exts.push_back(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+    conHost = hay;
+  }
+  c2.enabledExtensionCount = (uint32_t)exts.size();
+  c2.ppEnabledExtensionNames = exts.data();
+  VkResult r = crear(fisico, &c2, a, device);
+  if (r != VK_SUCCESS && conHost) {
+    conHost = false;   /* por si acaso: sin la extension, como lo pidio el juego */
+    r = crear(fisico, ci, a, device);
+  }
   if (r != VK_SUCCESS) return r;
   Dispositivo *d = new Dispositivo;
   d->dev = *device;
@@ -617,7 +919,18 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   CARGA(unmap, "vkUnmapMemory");
   CARGA(barrier, "vkCmdPipelineBarrier");
   CARGA(copyImgBuf, "vkCmdCopyImageToBuffer");
+  CARGA(updateBuf, "vkCmdUpdateBuffer");
+  CARGA(endRenderPass, "vkCmdEndRenderPass");
+  CARGA(devWaitIdle, "vkDeviceWaitIdle");
+  if (conHost) CARGA(hostPtrProps, "vkGetMemoryHostPointerPropertiesEXT");
 #undef CARGA
+  if (conHost && inst->props2) {
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT hp{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT};
+    VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    p2.pNext = &hp;
+    inst->props2(fisico, &p2);
+    if (hp.minImportedHostPointerAlignment) d->alineacionHost = hp.minImportedHostPointerAlignment;
+  }
   VkPhysicalDeviceProperties pp{};
   inst->props(fisico, &pp);
   std::string ext;
@@ -626,8 +939,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   {
     std::lock_guard<std::mutex> g(g_mx);
     g_dev[llave(*device)] = d;
-    anota("[dispositivo] %s · extensiones NVX:%s · numeros %s · lanzar %s", pp.deviceName, ext.empty() ? " ninguna" : ext.c_str(),
-          (d->handle32 || d->handle64) ? "si" : "no", d->cuLaunch ? "si" : "no");
+    anota("[dispositivo] %s · extensiones NVX:%s · numeros %s · lanzar %s · memoria del anfitrion %s (alineacion %llu)",
+          pp.deviceName, ext.empty() ? " ninguna" : ext.c_str(), (d->handle32 || d->handle64) ? "si" : "no",
+          d->cuLaunch ? "si" : "no", d->hostPtrProps ? "si" : "no", (unsigned long long)d->alineacionHost);
   }
   return VK_SUCCESS;
 }
@@ -649,6 +963,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *ci, co
   in.destroy = (PFN_vkDestroyInstance)gipa(*inst, "vkDestroyInstance");
   in.memProps = (PFN_vkGetPhysicalDeviceMemoryProperties)gipa(*inst, "vkGetPhysicalDeviceMemoryProperties");
   in.props = (PFN_vkGetPhysicalDeviceProperties)gipa(*inst, "vkGetPhysicalDeviceProperties");
+  in.props2 = (PFN_vkGetPhysicalDeviceProperties2)gipa(*inst, "vkGetPhysicalDeviceProperties2");
+  in.enumExt = (PFN_vkEnumerateDeviceExtensionProperties)gipa(*inst, "vkEnumerateDeviceExtensionProperties");
   std::lock_guard<std::mutex> g(g_mx);
   g_inst[llave(*inst)] = in;
   anota("[instancia] creada (%s)", ci->pApplicationInfo && ci->pApplicationInfo->pApplicationName ? ci->pApplicationInfo->pApplicationName : "sin nombre");
@@ -676,6 +992,7 @@ PFN_vkVoidFunction gancho(const char *n) {
   G("vkQueueSubmit2", QueueSubmit2);
   G("vkQueueSubmit2KHR", QueueSubmit2KHR);
   G("vkDestroyDevice", DestroyDevice);
+  if (modoPrueba()) G("vkCmdEndRenderPass", CmdEndRenderPass);
 #undef G
   return nullptr;
 }

@@ -241,6 +241,27 @@ lightning-bolt button: its drop-down menu has three measured presets (**Gentle Â
 and four fine sliders (mix, strength, reach, head parallax), all applied at once; hover over each to
 see what it changes. In this mode variable refresh is left as the desktop has it.
 
+## Exact depth in DLSS games
+
+In games that use DLSS, OdysseyVK can use the game's own depth instead of guessing it with the
+depth network: the depth buffer the game hands to DLSS every frame, exact and steady, at the game's
+render resolution (in Cyberpunk 2077, 1920Ã—1080). It needs an NVIDIA card, DLSS on in the game (any
+mode) and, in Steam, this in the game's launch options:
+
+```
+ODYSSEYVK=1 %command%
+```
+
+That loads OdysseyVK's small Vulkan layer into that game only (`install.sh` puts it in place). The
+layer finds the depth DLSS receives and, while the 3D is on, the game's GPU writes it straight into
+shared memory for the viewer; with the 3D off it copies nothing. When the viewer is over that game
+it uses it instead of the network (the viewer's log says `[red] la profundidad del juego`); if the
+layer isn't there or the depth stops arriving, it goes back to the network by itself. Measured in
+Cyberpunk: the layer's depth is bit-for-bit the one DLSS gets (checked against Neural Forge's dump of
+the same frame). Ctrl+Shift+9 shows it.
+
+![The depth the network guesses and the game's own](docs/img/depth-dlss.png)
+
 ## Games and the cursor
 
 When a game enters 3D the pill shows for a few seconds, so the shortcuts

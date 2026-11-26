@@ -2256,8 +2256,11 @@ static int cmdDesinstalar(int argc, char **argv) {
                comilla(datos + "/applications/odysseyvk.desktop") + " " + comilla(datos + "/applications/odysseyvk-play.desktop") +
                "; rm -f " + comilla(datos) + "/icons/hicolor/*/apps/odysseyvk.png; systemctl --user daemon-reload").c_str());
   std::system(("rm -rf " + comilla(datos + "/odysseyvk/modelos") + " " + comilla(datos + "/odysseyvk/fuente")).c_str());
+  /* la capa de Vulkan de la profundidad de DLSS (v1.13): su manifiesto; la biblioteca va con lo de root */
+  std::system(("rm -f " + comilla(datos + "/vulkan/implicit_layer.d/VkLayer_odysseyvk_capa.json")).c_str());
   const std::string raiz = "pkexec sh -c " + comilla("rm -f " + comilla(bindir + "/odysseyvk") + " " + comilla(bindir + "/odysseyvk-ajustes") +
-                                                      " /etc/udev/rules.d/70-odysseyvk.rules; rm -rf " + comilla(prefijo + "/share/odysseyvk"));
+                                                      " /etc/udev/rules.d/70-odysseyvk.rules; rm -rf " + comilla(prefijo + "/share/odysseyvk") +
+                                                      " " + comilla(prefijo + "/lib/odysseyvk"));
   const int rc = std::system(raiz.c_str());
   std::system(("rm -rf " + comilla(std::string(std::getenv("XDG_STATE_HOME") ? std::getenv("XDG_STATE_HOME") : (casa + "/.local/state")) + "/odysseyvk")).c_str());
   avisoEscritorio(idioma::tr(rc == 0 ? "OdysseyVK desinstalado" : "OdysseyVK: quedó el programa del sistema"),

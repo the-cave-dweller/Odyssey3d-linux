@@ -88,6 +88,8 @@ struct Planos {
 Planos buscarPlanos(const float *mapa, int n);
 float aplicarPlanos(float *mapa, int n, const Planos &p, float dureza, int muestras = 0);
 
+class ProfundidadJuego;   /* profjuego.h: la profundidad que recibe DLSS, de la capa (v1.13) */
+
 class DepthNet {
 public:
   ~DepthNet();
@@ -206,6 +208,13 @@ public:
   float planoDelante() const { return pFrente_; }
   float planoFraccion() const { return fracFrente_; }   /* parte del cuadro en la lamina delantera */
 
+  /* (v1.13, fase 2) La profundidad del juego, la que recibe DLSS, en lugar de la red: la escribe la
+     capa de OdysseyVK dentro del juego (`ODYSSEYVK=1`, capa/) en una memoria compartida. El visor la
+     permite cuando la ventana del 3D es un juego; si no llega fresca, se usa la red como siempre.
+     ODYSSEYVK_PROFUNDIDAD_JUEGO=0 la apaga. */
+  void setPermitirJuego(bool p) { permitirJuego_.store(p); }
+  bool usandoJuego() const { return usandoJuego_.load(); }
+
 private:
   void cierra();          /* suelta la sesion de ONNX Runtime */
 
@@ -229,6 +238,8 @@ private:
   bool bVistas_ = false;   /* ya hubo un cuadro valido (el primero las toma sin esperar) */
   void detectarBandas();
   bool enBanda(int x, int y) const { return y < bArr_ || y >= sz_ - bAb_ || x < bIz_ || x >= sz_ - bDe_; }
+  ProfundidadJuego *juego_ = nullptr;   /* se crea al primer uso y se borra en ~DepthNet (depth.cpp) */
+  std::atomic<bool> permitirJuego_{false}, usandoJuego_{false};
   std::atomic<bool> saliencia_{[] {
     const char *e = std::getenv("ODYSSEYVK_SALIENCIA");
     if (!e) e = std::getenv("ODYSSEY3D_SALIENCIA");
