@@ -73,6 +73,8 @@ std::string carpeta() {
   static const std::string c = "/tmp/odysseyvk-capa-" + std::to_string((long)getuid());
   return c;
 }
+/* los volcados de la sonda (fase 3) pesan cientos de MB: van al disco, no a /tmp (que es RAM) */
+std::string carpetaVolcados();
 FILE *g_log = nullptr;
 void anota(const char *fmt, ...) {
   if (!g_log) {
@@ -190,7 +192,32 @@ struct Dispositivo {
   /* fase 3 (sonda): las imagenes de color a las que DLSS pidio numero, con los tipos de descriptor (bit 1 =
      para leer con muestreador, bit 3 = de almacenamiento, la que escribe) */
   std::unordered_map<VkImage, uint32_t> colorDlss;
-  int volcadosColor = 0;
+  int volcadosColor = 0, volcadosPresente = 0, autos = 0;
+  double ultimoAuto = 0.0;
+  /* fase 3 (sonda): el cuadro que se presenta (con el HUD), copiado en vkQueuePresentKHR */
+  PFN_vkCreateSwapchainKHR createSwapchain = nullptr;
+  PFN_vkGetSwapchainImagesKHR getSwapImages = nullptr;
+  PFN_vkQueuePresentKHR present = nullptr;
+  PFN_vkGetDeviceQueue getQueue = nullptr;
+  PFN_vkGetDeviceQueue2 getQueue2 = nullptr;
+  PFN_vkCreateCommandPool createPool = nullptr;
+  PFN_vkDestroyCommandPool destroyPool = nullptr;
+  PFN_vkAllocateCommandBuffers allocCb = nullptr;
+  PFN_vkBeginCommandBuffer beginCb = nullptr;
+  PFN_vkEndCommandBuffer endCb = nullptr;
+  PFN_vkCreateSemaphore createSem = nullptr;
+  PFN_vkDestroySemaphore destroySem = nullptr;
+  struct Swap {
+    VkFormat fmt = VK_FORMAT_UNDEFINED;
+    VkExtent2D ext{};
+    bool copiable = false;
+    std::vector<VkImage> imgs;
+  };
+  std::unordered_map<VkSwapchainKHR, Swap> swaps;
+  std::unordered_map<VkQueue, uint32_t> familias;
+  bool capturarPresente = false;
+  long presentes = 0;
+  PFN_vkSetDeviceLoaderData setLoaderData = nullptr;
   long extrasVistos = 0;
 };
 std::unordered_map<void *, Dispositivo *> g_dev;
@@ -251,6 +278,21 @@ bool sonda() {
   return s;
 }
 
+std::string carpetaVolcados() {
+  if (!sonda()) return carpeta();
+  static const std::string c = [] {
+    const char *h = std::getenv("HOME");
+    std::string base = std::string(h ? h : "/tmp") + "/.cache";
+    mkdir(base.c_str(), 0755);
+    base += "/odysseyvk";
+    mkdir(base.c_str(), 0755);
+    base += "/sonda";
+    mkdir(base.c_str(), 0700);
+    return base;
+  }();
+  return c;
+}
+
 uint32_t tipoMemoria(Dispositivo *d, uint32_t bits, VkMemoryPropertyFlags quiero) {
   VkPhysicalDeviceMemoryProperties mp{};
   d->inst->memProps(d->fisico, &mp);
@@ -270,6 +312,18 @@ void mirarPeticion(Dispositivo *d) {
     unlink(f.c_str());
     d->armado = true;
     anota("[volcar] pedido por archivo");
+  }
+  /* ODYSSEYVK_CAPA_VOLCAR_CADA=<s>: uno cada tantos segundos, como mucho ODYSSEYVK_CAPA_VOLCAR_MAX (4) */
+  if (const char *e = std::getenv("ODYSSEYVK_CAPA_VOLCAR_CADA")) {
+    const char *m = std::getenv("ODYSSEYVK_CAPA_VOLCAR_MAX");
+    const int maximo = m ? std::atoi(m) : 4;
+    const double cada = std::atof(e);
+    if (cada > 0.0 && d->primerLanzamiento > 0.0 && d->autos < maximo && t - std::max(d->ultimoAuto, d->primerLanzamiento) >= cada) {
+      d->ultimoAuto = t;
+      d->autos++;
+      d->armado = true;
+      anota("[volcar] automatico %d de %d (cada %.0f s)", d->autos, maximo, cada);
+    }
   }
   if (!d->autoHecho) {
     if (const char *e = std::getenv("ODYSSEYVK_CAPA_VOLCAR_TRAS")) {
@@ -339,6 +393,7 @@ void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &
       if (grabarCopiaImagen(d, cb, par.first, it->second, true, par.second)) n++;
     }
     anota("[volcar] sonda: %d imagenes de color de DLSS de %zu conocidas", n, d->colorDlss.size());
+    d->capturarPresente = true;   /* y el cuadro que se presente ahora, con el HUD */
   }
   d->armado = false;
 }
@@ -359,7 +414,7 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
     void *ptr = nullptr;
     if (p.color && d->map(d->dev, p.mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
       const int k = ++d->volcadosColor;
-      const std::string base = carpeta() + "/color-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
+      const std::string base = carpetaVolcados() + "/color-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
       if (FILE *o = std::fopen((base + ".raw").c_str(), "wb")) {
         std::fwrite(ptr, 1, (size_t)p.w * p.h * p.bpp, o);
         std::fclose(o);
@@ -387,7 +442,7 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
       }
       d->unmap(d->dev, p.mem);
       const int k = ++d->volcados;
-      const std::string base = carpeta() + "/profundidad-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
+      const std::string base = carpetaVolcados() + "/profundidad-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
       if (FILE *o = std::fopen((base + ".r32f").c_str(), "wb")) {
         std::fwrite(f.data(), 4, n, o);
         std::fclose(o);
@@ -845,6 +900,200 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
   d->cuLaunch(cb, li);
 }
 
+/* ---------- fase 3 (sonda): el cuadro presentado, con el HUD ---------- */
+VKAPI_ATTR void VKAPI_CALL GetDeviceQueue(VkDevice device, uint32_t familia, uint32_t indice, VkQueue *q) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+  }
+  d->getQueue(device, familia, indice, q);
+  std::lock_guard<std::mutex> g(g_mx);
+  if (q && *q) d->familias[*q] = familia;
+}
+VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2 *info, VkQueue *q) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+  }
+  d->getQueue2(device, info, q);
+  std::lock_guard<std::mutex> g(g_mx);
+  if (q && *q) d->familias[*q] = info->queueFamilyIndex;
+}
+VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *ci, const VkAllocationCallbacks *a,
+                                                  VkSwapchainKHR *sw) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+  }
+  VkSwapchainCreateInfoKHR c = *ci;
+  c.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   /* para copiar el cuadro con el HUD */
+  bool copiable = true;
+  VkResult r = d->createSwapchain(device, &c, a, sw);
+  if (r != VK_SUCCESS) {
+    copiable = false;
+    r = d->createSwapchain(device, ci, a, sw);
+  }
+  if (r == VK_SUCCESS) {
+    std::lock_guard<std::mutex> g(g_mx);
+    Dispositivo::Swap &w = d->swaps[*sw];
+    w.fmt = ci->imageFormat, w.ext = ci->imageExtent, w.copiable = copiable;
+    anota("[sonda] cadena de presentacion %ux%u %s%s", ci->imageExtent.width, ci->imageExtent.height,
+          formato(ci->imageFormat).c_str(), copiable ? "" : " (no se puede copiar)");
+  }
+  return r;
+}
+VKAPI_ATTR VkResult VKAPI_CALL GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR sw, uint32_t *n, VkImage *imgs) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+  }
+  const VkResult r = d->getSwapImages(device, sw, n, imgs);
+  if (imgs && (r == VK_SUCCESS || r == VK_INCOMPLETE)) {
+    std::lock_guard<std::mutex> g(g_mx);
+    d->swaps[sw].imgs.assign(imgs, imgs + *n);
+  }
+  return r;
+}
+
+/* La copia va en un buffer de comandos propio, en la misma cola: espera a lo que esperaba la presentacion,
+   copia la imagen y avisa con un semaforo nuestro, que es lo que espera la presentacion de verdad. Despues
+   se espera a la cola una vez (un tiron de un cuadro por volcado) y se escribe el archivo. */
+VkResult presentarCapturando(Dispositivo *d, VkQueue q, const VkPresentInfoKHR *pi) {
+  d->capturarPresente = false;
+  auto it = d->swaps.find(pi->pSwapchains[0]);
+  const uint32_t idx = pi->pImageIndices[0];
+  if (it == d->swaps.end() || !it->second.copiable || idx >= it->second.imgs.size() || !bytesColor(it->second.fmt)) {
+    anota("[sonda] el cuadro presentado no se puede copiar (cadena desconocida, sin TRANSFER_SRC o formato %s)",
+          it == d->swaps.end() ? "?" : formato(it->second.fmt).c_str());
+    return d->present(q, pi);
+  }
+  const Dispositivo::Swap &w = it->second;
+  const VkImage img = w.imgs[idx];
+  const uint32_t bpp = bytesColor(w.fmt);
+  const VkDeviceSize tam = (VkDeviceSize)w.ext.width * w.ext.height * bpp;
+  const uint32_t fam = d->familias.count(q) ? d->familias[q] : 0;
+  VkCommandPool pool = VK_NULL_HANDLE;
+  VkCommandBuffer cb = VK_NULL_HANDLE;
+  VkSemaphore sem = VK_NULL_HANDLE;
+  VkBuffer buf = VK_NULL_HANDLE;
+  VkDeviceMemory mem = VK_NULL_HANDLE;
+  auto limpiar = [&]() {
+    if (sem) d->destroySem(d->dev, sem, nullptr);
+    if (pool) d->destroyPool(d->dev, pool, nullptr);
+    if (buf) d->destroyBuffer(d->dev, buf, nullptr);
+    if (mem) d->free(d->dev, mem, nullptr);
+  };
+  VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+  pci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+  pci.queueFamilyIndex = fam;
+  VkCommandBufferAllocateInfo cai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+  cai.commandBufferCount = 1;
+  cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  VkSemaphoreCreateInfo sci{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+  VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bi.size = tam;
+  bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  bool ok = d->createPool(d->dev, &pci, nullptr, &pool) == VK_SUCCESS;
+  if (ok) {
+    cai.commandPool = pool;
+    ok = d->allocCb(d->dev, &cai, &cb) == VK_SUCCESS;
+  }
+  if (ok) {
+    /* el buffer de comandos es nuestro: hay que darle el despacho del cargador (lo pide la especificacion de capas) */
+    if (d->setLoaderData) d->setLoaderData(d->dev, cb);
+    else *(void **)cb = *(void **)d->dev;
+    ok = d->createSem(d->dev, &sci, nullptr, &sem) == VK_SUCCESS && d->createBuffer(d->dev, &bi, nullptr, &buf) == VK_SUCCESS;
+  }
+  if (ok) {
+    VkMemoryRequirements mr{};
+    d->bufReqs(d->dev, buf, &mr);
+    VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    ai.allocationSize = mr.size;
+    ai.memoryTypeIndex = tipoMemoria(d, mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    ok = ai.memoryTypeIndex != UINT32_MAX && d->alloc(d->dev, &ai, nullptr, &mem) == VK_SUCCESS && d->bind(d->dev, buf, mem, 0) == VK_SUCCESS;
+  }
+  if (!ok) {
+    anota("[sonda] no se pudo preparar la copia del cuadro presentado");
+    limpiar();
+    return d->present(q, pi);
+  }
+  VkCommandBufferBeginInfo cbi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+  cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  d->beginCb(cb, &cbi);
+  VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  ib.image = img;
+  ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  ib.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  ib.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT, ib.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  d->barrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+  VkBufferImageCopy reg{};
+  reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  reg.imageExtent = {w.ext.width, w.ext.height, 1};
+  d->copyImgBuf(cb, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buf, 1, &reg);
+  ib.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, ib.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  ib.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT, ib.dstAccessMask = 0;
+  d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib);
+  d->endCb(cb);
+  std::vector<VkPipelineStageFlags> etapas(pi->waitSemaphoreCount, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+  VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+  si.waitSemaphoreCount = pi->waitSemaphoreCount;
+  si.pWaitSemaphores = pi->pWaitSemaphores;
+  si.pWaitDstStageMask = etapas.data();
+  si.commandBufferCount = 1;
+  si.pCommandBuffers = &cb;
+  si.signalSemaphoreCount = 1;
+  si.pSignalSemaphores = &sem;
+  if (d->submit(q, 1, &si, VK_NULL_HANDLE) != VK_SUCCESS) {
+    anota("[sonda] no se pudo enviar la copia del cuadro presentado");
+    limpiar();
+    return d->present(q, pi);
+  }
+  VkPresentInfoKHR p2 = *pi;
+  p2.waitSemaphoreCount = 1;
+  p2.pWaitSemaphores = &sem;
+  const VkResult r = d->present(q, &p2);
+  d->waitIdle(q);
+  void *ptr = nullptr;
+  if (d->map(d->dev, mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
+    const int k = ++d->volcadosPresente;
+    const std::string base = carpetaVolcados() + "/presente-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
+    if (FILE *o = std::fopen((base + ".raw").c_str(), "wb")) {
+      std::fwrite(ptr, 1, (size_t)tam, o);
+      std::fclose(o);
+    }
+    if (FILE *o = std::fopen((base + ".json").c_str(), "w")) {
+      std::fprintf(o, "{\"width\": %u, \"height\": %u, \"format\": \"%s\", \"vkformat\": %d, \"bpp\": %u, \"pid\": %ld}\n",
+                   w.ext.width, w.ext.height, formato(w.fmt).c_str(), (int)w.fmt, bpp, (long)getpid());
+      std::fclose(o);
+    }
+    d->unmap(d->dev, mem);
+    anota("[sonda] cuadro presentado escrito: %s.raw (%ux%u %s)", base.c_str(), w.ext.width, w.ext.height, formato(w.fmt).c_str());
+  }
+  limpiar();
+  return r;
+}
+VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR *pi) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(q);
+    d->presentes++;
+    /* ODYSSEYVK_CAPA_PRESENTE_TRAS=<n> (taller): captura el cuadro presentado numero n, sin DLSS (vkcube) */
+    static const long kTras = [] {
+      const char *e = std::getenv("ODYSSEYVK_CAPA_PRESENTE_TRAS");
+      return e ? std::atol(e) : -1L;
+    }();
+    if (kTras > 0 && d->presentes == kTras) d->capturarPresente = true;
+    if (d->capturarPresente && pi && pi->swapchainCount >= 1) return presentarCapturando(d, q, pi);
+  }
+  return d->present(q, pi);
+}
+
 /* ODYSSEYVK_CAPA_PRUEBA=1 (taller): sin DLSS, al acabar cada pasada de render se comparte la ultima imagen de
    profundidad creada. Sirve para probar el camino de la tarjeta a la memoria compartida con vkcube. */
 bool modoPrueba() {
@@ -937,6 +1186,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   if (!li) return VK_ERROR_INITIALIZATION_FAILED;
   PFN_vkGetInstanceProcAddr gipa = li->u.pLayerInfo->pfnNextGetInstanceProcAddr;
   PFN_vkGetDeviceProcAddr gdpa = li->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+  PFN_vkSetDeviceLoaderData setLoader = nullptr;
+  for (VkLayerDeviceCreateInfo *x = (VkLayerDeviceCreateInfo *)ci->pNext; x; x = (VkLayerDeviceCreateInfo *)x->pNext)
+    if (x->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO && x->function == VK_LOADER_DATA_CALLBACK)
+      setLoader = x->u.pfnSetDeviceLoaderData;
   li->u.pLayerInfo = li->u.pLayerInfo->pNext;
   Instancia *inst;
   {
@@ -979,6 +1232,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   d->fisico = fisico;
   d->inst = inst;
   d->gdpa = gdpa;
+  d->setLoaderData = setLoader;
 #define CARGA(campo, nombre) d->campo = (decltype(d->campo))gdpa(*device, nombre)
   CARGA(destroy, "vkDestroyDevice");
   CARGA(createImage, "vkCreateImage");
@@ -1004,6 +1258,18 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   CARGA(copyImgBuf, "vkCmdCopyImageToBuffer");
   CARGA(updateBuf, "vkCmdUpdateBuffer");
   CARGA(endRenderPass, "vkCmdEndRenderPass");
+  CARGA(createSwapchain, "vkCreateSwapchainKHR");
+  CARGA(getSwapImages, "vkGetSwapchainImagesKHR");
+  CARGA(present, "vkQueuePresentKHR");
+  CARGA(getQueue, "vkGetDeviceQueue");
+  CARGA(getQueue2, "vkGetDeviceQueue2");
+  CARGA(createPool, "vkCreateCommandPool");
+  CARGA(destroyPool, "vkDestroyCommandPool");
+  CARGA(allocCb, "vkAllocateCommandBuffers");
+  CARGA(beginCb, "vkBeginCommandBuffer");
+  CARGA(endCb, "vkEndCommandBuffer");
+  CARGA(createSem, "vkCreateSemaphore");
+  CARGA(destroySem, "vkDestroySemaphore");
   CARGA(devWaitIdle, "vkDeviceWaitIdle");
   if (conHost) CARGA(hostPtrProps, "vkGetMemoryHostPointerPropertiesEXT");
 #undef CARGA
@@ -1076,6 +1342,13 @@ PFN_vkVoidFunction gancho(const char *n) {
   G("vkQueueSubmit2KHR", QueueSubmit2KHR);
   G("vkDestroyDevice", DestroyDevice);
   if (modoPrueba()) G("vkCmdEndRenderPass", CmdEndRenderPass);
+  if (sonda()) {   /* fase 3: el cuadro presentado, solo con la sonda */
+    G("vkGetDeviceQueue", GetDeviceQueue);
+    G("vkGetDeviceQueue2", GetDeviceQueue2);
+    G("vkCreateSwapchainKHR", CreateSwapchainKHR);
+    G("vkGetSwapchainImagesKHR", GetSwapchainImagesKHR);
+    G("vkQueuePresentKHR", QueuePresentKHR);
+  }
 #undef G
   return nullptr;
 }

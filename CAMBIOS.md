@@ -18,6 +18,16 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   máscara del HUD con datos de verdad.
 - Probado sin juego: el visor con la capa y la sonda puestas sale igual que sin capa (0,002 de diferencia
   media de 255).
+- **Sin captura de pantalla ni orden a mano** (la primera vuelta de Rodolfo no dejó volcados: el `touch` no
+  llegó a hacerse, y las capturas F12 no estaban en disco): con la sonda la capa copia también **el cuadro
+  que se presenta** (con el HUD), en `vkQueuePresentKHR`, del MISMO cuadro que la profundidad y las imágenes
+  de DLSS. La copia va en un buffer de comandos propio en la misma cola, que espera lo que esperaba la
+  presentación y avisa con un semáforo propio que es el que espera la presentación de verdad (lo que hacen
+  las capas de superposición como MangoHud); la cadena de presentación se crea con TRANSFER_SRC. Y se vuelca
+  sola: `ODYSSEYVK_CAPA_VOLCAR_CADA=20` (cada 20 s, como mucho 4 veces, `ODYSSEYVK_CAPA_VOLCAR_MAX`). Con la
+  sonda los volcados van a `~/.cache/odysseyvk/sonda` (en disco: cientos de MB cada uno), no a `/tmp`.
+  Probado con vkcube (`ODYSSEYVK_CAPA_PRESENTE_TRAS=120`, de taller): el cuadro 120 sale tal cual y vkcube
+  sigue.
 
 ## Profundidad de DLSS: su propio plano de la pantalla, más rápida, y los modos de DLSS (v1.13)
 
