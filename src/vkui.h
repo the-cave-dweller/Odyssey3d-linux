@@ -45,6 +45,7 @@ public:
     std::vector<std::string> opciones;
     float frac = 0.0f;               /* deslizador, 0..1 */
     bool quitar = false;             /* fila con aspa para quitarla */
+    bool peligro = false;            /* boton en rojo suave: desinstalar (v1.06) */
     /* la caratula de un juego (RGBA, imgW x imgH). El atlas de la interfaz es de un solo canal, asi
        que las imagenes van aparte y solo las pinta el pintado de CPU (el del panel). */
     std::shared_ptr<const std::vector<uint8_t>> img;

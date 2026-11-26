@@ -601,6 +601,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     d.nota = "Quita el programa, el servicio y la red de profundidad (pide tu clave); tu configuración se queda.";
     d.valorTexto = g_confirmarDesinstalar > ::time(nullptr) ? "¿Seguro? Pica otra vez" : "Desinstalar";
     d.valor = true;
+    d.peligro = true;
     pon(d, "desinstalar");
     return;
   }

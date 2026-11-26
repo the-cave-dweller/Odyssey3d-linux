@@ -1003,6 +1003,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         const bool hb = dentro && b.inside(mx_, my_);
         /* `valor` apagado = boton que no se puede picar ahora (una descarga en marcha): sale gris */
         if (!it.valor) mask9(b, 0, 15.0f, 0.28f, 0.29f, 0.33f, 0.98f);
+        else if (it.peligro) mask9(b, 0, 15.0f, 0.82f, 0.33f, 0.36f, hb ? 1.0f : 0.90f);
         else mask9(b, 0, 15.0f, accent[0], accent[1], accent[2], hb ? 1.0f : 0.92f);
         text(it.valorTexto, b.x + b.w * 0.5f, b.y + 6.5f, 13.5f, 1.0f, 1.0f, 1.0f, it.valor ? 1.0f : 0.70f, true);
         break;

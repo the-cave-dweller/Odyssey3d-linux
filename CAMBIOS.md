@@ -3,6 +3,11 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El botón de desinstalar, en rojo suave (v1.06)
+
+- Rodolfo: «cambia el color del botón de desinstalar por un rojo suave». Los botones del panel
+  admiten `peligro`: rojo suave (0,82 · 0,33 · 0,36) en vez del morado.
+
 ## El icono fijado en la barra de tareas abre los ajustes (v1.05)
 
 - Rodolfo: «una vez fijado al administrador de tareas el icono no abre el overlay». MEDIDO en su
