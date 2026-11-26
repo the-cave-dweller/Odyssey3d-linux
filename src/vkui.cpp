@@ -842,6 +842,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       case ItemPanel::Fila: return 42.0f;
       case ItemPanel::Juego: return 56.0f;
       case ItemPanel::Nota: return 32.0f;
+      case ItemPanel::Info: return it.nota.empty() ? 36.0f : 54.0f;
       default: return it.nota.empty() ? 46.0f : 60.0f;
     }
   };
@@ -898,6 +899,27 @@ void Hud::dibujaPanel(int vw, int vh) {
       case ItemPanel::Nota:
         text(it.rotulo, izq, y + 8.0f, 12.5f, dim[0], dim[1], dim[2], 0.85f);
         break;
+      case ItemPanel::Info: {
+        const Rect an{izq, y + 9.0f, 16.0f, 16.0f};
+        icono(an, icoAnillo_, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
+        text("i", an.x + 8.0f, an.y + 2.0f, 11.0f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f, true);
+        text(it.rotulo, izq + 24.0f, y + 9.0f, 12.5f, ink[0], ink[1], ink[2], 0.92f);
+        if (!it.nota.empty()) text(it.nota, izq + 24.0f, y + 29.0f, 12.0f, dim[0], dim[1], dim[2], 0.85f);
+        break;
+      }
+      case ItemPanel::Boton: {
+        text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
+        const float wb = textWidth(it.valorTexto, 13.5f) + 30.0f;
+        const Rect b{der - wb, y + (h - 30.0f) * 0.5f, wb, 30.0f};
+        z.subs.push_back(b);
+        const bool hb = dentro && b.inside(mx_, my_);
+        /* `valor` apagado = boton que no se puede picar ahora (una descarga en marcha): sale gris */
+        if (!it.valor) mask9(b, 0, 15.0f, 0.28f, 0.29f, 0.33f, 0.98f);
+        else mask9(b, 0, 15.0f, accent[0], accent[1], accent[2], hb ? 1.0f : 0.92f);
+        text(it.valorTexto, b.x + b.w * 0.5f, b.y + 6.5f, 13.5f, 1.0f, 1.0f, 1.0f, it.valor ? 1.0f : 0.70f, true);
+        break;
+      }
       case ItemPanel::Interruptor: {
         text(it.rotulo, izq, yr, 15.0f, ink[0], ink[1], ink[2], 1.0f);
         if (!it.nota.empty()) text(it.nota, izq, y + 34.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
@@ -979,7 +1001,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         }
         /* el nombre, cortado a lo que quepa, y a su derecha el interruptor 2D | 3D (v0.91): la bola
            a la izquierda es 2D (apagado), a la derecha 3D (encendido), con las dos letras dentro */
-        const Rect chip{cara.x + cara.w - 58.0f, cara.y + cara.h + 9.0f, 58.0f, 24.0f};
+        const Rect chip{cara.x + cara.w - 58.0f, cara.y + cara.h + 8.0f, 58.0f, 24.0f};
         z.subs.push_back(chip);
         std::string nombre = it.rotulo;
         const float cabeN = cara.w - 66.0f;
@@ -998,11 +1020,12 @@ void Hud::dibujaPanel(int vw, int vh) {
         const bool hc2 = dentro && chip.inside(mx_, my_);
         if (it.valor) mask9(chip, 0, 12.0f, accent[0], accent[1], accent[2], hc2 ? 1.0f : 0.92f);
         else mask9(chip, 0, 12.0f, 0.30f, 0.31f, 0.36f, hc2 ? 1.0f : 0.92f);
-        const Rect bola{it.valor ? chip.x + chip.w - 23.0f : chip.x + 3.0f, chip.y + 3.0f, 20.0f, 20.0f};
+        const Rect bola{it.valor ? chip.x + chip.w - 22.0f : chip.x + 2.0f, chip.y + 2.0f, 20.0f, 20.0f};
         mask9(bola, 0, 10.0f, 0.97f, 0.97f, 0.99f, 1.0f);
-        /* la letra de lo que esta puesto va en la bola; la otra, tenue, en el hueco que deja */
-        text(it.valor ? "3D" : "2D", bola.x + bola.w * 0.5f, bola.y + 4.0f, 10.5f, 0.12f, 0.12f, 0.16f, 1.0f, true);
-        text(it.valor ? "2D" : "3D", it.valor ? chip.x + 17.0f : chip.x + chip.w - 17.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f, true);
+        /* la letra de lo que esta puesto va en la bola; la otra, tenue, en el hueco que deja (v0.92:
+           las dos a la misma altura y la bola a 2 px de cada borde; antes quedaba 3 arriba y 1 abajo) */
+        text(it.valor ? "3D" : "2D", bola.x + bola.w * 0.5f, chip.y + 6.0f, 10.5f, 0.12f, 0.12f, 0.16f, 1.0f, true);
+        text(it.valor ? "2D" : "3D", it.valor ? chip.x + 19.0f : chip.x + chip.w - 19.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f, true);
         break;
       }
     }
@@ -1073,6 +1096,12 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
       case ItemPanel::Fila:
         if (!z.subs.empty() && z.subs[0].inside(mx, my)) {
           if (sub) *sub = 1;
+          return HitPanelItem;
+        }
+        return HitPanel;
+      case ItemPanel::Boton:
+        if (it.valor && !z.subs.empty() && z.subs[0].inside(mx, my)) {
+          if (sub) *sub = 0;
           return HitPanelItem;
         }
         return HitPanel;

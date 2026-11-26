@@ -2974,6 +2974,15 @@ static int cmdAjustes(int argc, char **argv) {
       rellenar();
       repintar = true;
     }
+    /* la descarga de la red abierta (v0.92): su avance se ensena segun llega */
+    if (prefs::descargaEnMarcha() && prefs::vigilarDescarga()) {
+      rellenar();
+      repintar = true;
+      if (!prefs::descargaEnMarcha()) {
+        std::printf("[ajustes] red abierta: %s\n", prefs::textoDescarga().c_str());
+        std::fflush(stdout);
+      }
+    }
     if (repintar) ov.repaint();
     if (cerrarEn > 0.0 && reloj() >= cerrarEn) break;
     /* abierto sobre un video en 3D: cuando ese video se acaba, el panel se va con el (si no, se
@@ -4542,27 +4551,54 @@ static int cmdServe(int argc, char **argv) {
      Si en modelo= se puso la nativa se reconoce y se mueve sola al boton 2. La eleccion que hizo
      el usuario la guarda el visor en ~/.config/odysseyvk/red-elegida y aca se lee para arrancar con esa. */
   auto disponible = [](const std::string &r) { return !r.empty() && fileExists(r); };
-  std::string rSamsung = cfg.modelo, rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
-  if (!rSamsung.empty() && slotRed(rSamsung) == 2) {
-    if (rSamsung == rNuestra || !disponible(rNuestra)) {
-      rNuestra = rSamsung;
-      rSamsung.clear();
-    } else
-      std::swap(rSamsung, rNuestra);
+  std::string redActiva, redOtra;
+  int redElegida = 2;
+  /* Se vuelve a hacer cuando cambia `modelo =` en serve.conf (el panel de ajustes lo cambia, v0.92):
+     vale para el siguiente visor. Sin `modelo =`, o con la abierta en el, se arranca con la abierta
+     (Depth Anything V2): es la de fabrica. Con la de Samsung puesta ahi, con esa. */
+  auto elegirRedes = [&] {
+    std::string rSamsung = cfg.modelo, rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
+    if (!rSamsung.empty() && slotRed(rSamsung) == 2) {
+      if (rSamsung == rNuestra || !disponible(rNuestra)) {
+        rNuestra = rSamsung;
+        rSamsung.clear();
+      } else
+        std::swap(rSamsung, rNuestra);
+    }
+    const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
+    const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
+    redElegida = ruta1.empty() ? 2 : 1;
+    if (redElegida == 2 && ruta2.empty()) redElegida = 1;
+    redActiva = redElegida == 1 ? ruta1 : ruta2;
+    redOtra = redElegida == 1 ? ruta2 : ruta1;
+    std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
+                ruta1.empty() ? "no hay" : ruta1.c_str(), ruta2.empty() ? "no hay" : ruta2.c_str());
+    if (redActiva.empty())
+      std::printf("[serve]   sin ninguna red no hay video normal a 3D (el dividido si)\n");
+    else
+      std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
+                  redElegida, redElegida == 1 ? "Samsung" : "abierta");
+  };
+  elegirRedes();
+  /* Sin ninguna red no hay video normal a 3D. La primera vez que pasa se abre el panel de ajustes,
+     que arriba del todo dice de donde se baja la abierta y trae el boton que lo hace (v0.92). Una
+     sola vez: el aviso se apunta en la carpeta de estado. */
+  if (redActiva.empty()) {
+    const std::string marca = rutaEstadoOdyssey("red-avisada");
+    if (!fileExists(marca)) {
+      if (FILE *f = std::fopen(marca.c_str(), "we")) std::fclose(f);
+      std::printf("[serve] no hay ninguna red de profundidad: %s el panel de ajustes para descargar la abierta "
+                  "(o `odysseyvk ctl red descargar`)\n", dry ? "(dry) se abriria" : "se abre");
+      std::fflush(stdout);
+      if (!dry) {
+        const pid_t p = ::fork();
+        if (p == 0) {
+          ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
+          ::_exit(127);
+        }
+      }
+    }
   }
-  const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
-  const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
-  /* Al arrancar, siempre la red de Samsung (boton 1): es la que calzo su programa. Lo que se elige
-     con 1 / 2 en el visor se sigue guardando en red-elegida, pero al arrancar no manda. */
-  int redElegida = ruta1.empty() ? 2 : 1;
-  if (redElegida == 1 && ruta1.empty()) redElegida = 2;
-  if (redElegida == 2 && ruta2.empty()) redElegida = 1;
-  const std::string redActiva = redElegida == 1 ? ruta1 : ruta2;
-  const std::string redOtra = redElegida == 1 ? ruta2 : ruta1;
-  std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
-              ruta1.empty() ? "no hay" : ruta1.c_str(), ruta2.empty() ? "no hay" : ruta2.c_str());
-  std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
-              redElegida, redElegida == 1 ? "Samsung" : "nativa");
   {
     std::string aviso;
     if (cfg.rastreo && IrCam::findDevices().empty()) {
@@ -5299,7 +5335,11 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
                               nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
                               nuevo.divididoAuto != cfg.divididoAuto ||
-                              nuevo.porApp != cfg.porApp;
+                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo;
+          if (nuevo.modelo != cfg.modelo) {
+            cfg.modelo = nuevo.modelo;
+            elegirRedes();
+          }
           cfg.modo = nuevo.modo;
           cfg.rastreo = nuevo.rastreo;
           cfg.hdrEn3d = nuevo.hdrEn3d;
@@ -5660,6 +5700,36 @@ int main(int argc, char **argv) {
       std::printf("pedido: el visor guardara copias chicas del cuadro en %s mientras este en video dividido\n",
                   ajuste::rutaBarra().c_str());
       return 0;
+    }
+    if (sub == "red") {
+      /* `ctl red`: que red de profundidad hay; `ctl red descargar`: baja la abierta a su carpeta, con
+         el mismo camino que el boton del panel de ajustes (v0.92), y espera a que acabe. */
+      const std::string que = argc > 3 ? strLower(argv[3]) : std::string();
+      const bool hay = prefs::redAbiertaPresente();
+      if (que != "descargar") {
+        std::printf("red abierta (Depth Anything V2 pequena): %s\n  %s\n", hay ? "en su sitio" : "FALTA", rutaRedNuestra().c_str());
+        std::printf("se baja de %s\n", prefs::kUrlRedAbierta);
+        if (!hay) std::printf("  odysseyvk ctl red descargar   la deja ahi (95 MB)\n");
+        return hay ? 0 : 1;
+      }
+      if (hay) {
+        std::printf("ya esta: %s\n", rutaRedNuestra().c_str());
+        return 0;
+      }
+      std::string err;
+      if (!prefs::descargar(&err)) {
+        std::fprintf(stderr, "%s\n", err.c_str());
+        return 1;
+      }
+      std::printf("descargando %s\n", prefs::kUrlRedAbierta);
+      while (prefs::descargaEnMarcha()) {
+        if (prefs::vigilarDescarga()) {
+          std::printf("  %s\n", prefs::textoDescarga().c_str());
+          std::fflush(stdout);
+        }
+        ::usleep(500000);
+      }
+      return prefs::redAbiertaPresente() ? 0 : 1;
     }
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "legado") return cmdLegado(argc - 3, argv + 3);

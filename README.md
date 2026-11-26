@@ -168,14 +168,22 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
 
 * `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
   tecla `C` o con la tesela «Vídeo normal» de la tarjeta.
-* `--modelo RUTA` cambia la red. La por defecto es *Depth Anything V2 Small* en ONNX,
-  `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx` (99 MB). Si falta, el visor lo dice
-  y el resto del 3D sigue funcionando sin conversión; el registro trae el `curl` para bajarla:
+* `--modelo RUTA` cambia la red. La de fábrica es la abierta, *Depth Anything V2 Small* en ONNX
+  (95 MB), en `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx`. Hace falta
+  descargarla una vez: la primera vez que el servicio arranca sin ella abre el panel de ajustes,
+  que dice de dónde se baja y trae el botón **Descargar**, que la deja en esa carpeta. Desde la
+  terminal es lo mismo:
 
   ```sh
-  mkdir -p ~/.local/share/odysseyvk/modelos && curl -fLo ~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx \
-      https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/model.onnx
+  odysseyvk ctl red descargar
   ```
+
+  Se baja de <https://huggingface.co/XnetShadow/depth_anything_v2_small>. Sin ninguna red el
+  resto del 3D sigue funcionando; solo falta el vídeo normal a 3D. La red del Odyssey 3D Hub de
+  Windows (`C:\Program Files\Odyssey 3D Hub\Conversion\model\mde_large.fp16.onnx.bin`, que allí va
+  ofuscada) se puede elegir en la pestaña Rendimiento del panel con «La de Samsung…», que abre el
+  navegador de archivos y espera un `.onnx` legible; da el mismo canto que la abierta (medido) y
+  tarda 9–11 ms por mapa en vez de 13–16.
 * `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
   conviene 2; si la GPU va justa, 4 o 5.
 * `--texto-panel si|no` pega o suelta los rótulos del plano de la pantalla (por defecto pegados;

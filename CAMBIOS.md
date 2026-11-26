@@ -3,6 +3,45 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La red abierta de fábrica, con descarga desde el panel; selector de red (v0.92)
+
+- Rodolfo: «la solapa de 2D/3D está dispareja»; «verifica que sirva el modelo abierto igual que el
+  de Samsung, y hazlo el predeterminado; en la primera apertura debe solicitar al usuario la
+  descarga del modelo y colocarlo solito en la carpeta que usa el programa»; en Rendimiento, elegir
+  la red abierta o la de Samsung con un navegador de archivos, y una «i» que diga dónde está la de
+  Samsung en Windows. Y pregunta si la de Samsung la creó Qwen: no, está en su Windows
+  (`C:\Program Files\Odyssey 3D Hub\Conversion\model\mde_large.fp16.onnx.bin`, 52.623.651 bytes,
+  ofuscada); Qwen la dejó legible (`mde_large.onnx`, SHA-256 `550beef2…`, la misma que hay aquí).
+- **El interruptor**: la bola quedaba a 3 px del borde de arriba y a 1 del de abajo, y las dos
+  letras a distinta altura. Ahora a 2 px de cada borde y las letras a la misma.
+- **La red abierta contra la de Samsung** (MEDIDO sin panel, 10 cuadros, red de verdad): las dos
+  corren con los cantos finos y el canto queda igual de puesto (mediana +1,2 px en la nave y +0,6
+  en los papeles con cualquiera de las dos; el 89–100 % a menos de 2 px). La abierta tarda 13–16 ms
+  por mapa contra 9–11 (a 6 mapas por segundo no se nota) y ve menos cantos duros (p99 del
+  gradiente 0,025 contra 0,031). Los mapas se parecen mucho en las escenas con sujeto claro
+  (Pearson 0,95–0,97 en la nave, 0,87–0,89 en la Tierra) y poco en una escena ambigua de papeles
+  sobre un portátil (0,24–0,48): ahí cada red reparte la profundidad a su manera y ninguna es
+  claramente la buena.
+- **De fábrica, la abierta**: sin `modelo =` en `serve.conf`, o con la abierta en él, el servicio
+  arranca con ella; con la de Samsung puesta, con esa. El archivo del enlace de Rodolfo
+  (huggingface.co/XnetShadow/depth_anything_v2_small) es byte a byte el que ya había aquí
+  (99.060.839 bytes, SHA-256 `afb6a5c2…`).
+- **Descarga**: el panel (arriba de Ajustes cuando no hay ninguna red, y siempre en Rendimiento)
+  dice qué red hace falta y de dónde se baja, y el botón «Descargar» la baja con un `curl` aparte,
+  enseña el avance y la deja en `~/.local/share/odysseyvk/modelos/`. Lo mismo desde la terminal:
+  `odysseyvk ctl red descargar`. La primera vez que el servicio arranca sin ninguna red abre el
+  panel de ajustes solo (una vez: se apunta en la carpeta de estado).
+- **Rendimiento**: «Red del conversor» con «Abierta» y «La de Samsung…» (abre el navegador de
+  archivos del escritorio, kdialog o zenity, y guarda el `.onnx` elegido en `modelo =`); el
+  archivo en uso; y la «i» con la ruta de Windows. El servicio relee `modelo =` al cambiar: vale
+  desde el siguiente vídeo.
+- MEDIDO en una carpeta de inicio aparte: `ctl red descargar` baja los 95 MB (29 → 51 → 79 →
+  «lista»), el archivo queda entero y con su nombre; el servicio en seco sin red escribe el aviso y
+  la marca, y con `modelo =` la abierta arranca con ella (botón 2). Las cuatro pestañas pintadas.
+- **No probado**: el botón «Descargar» y el navegador de archivos desde el panel de verdad (el
+  mismo código que `ctl red descargar`, pero picado con el ratón), y que el panel se abra solo en
+  un arranque sin red.
+
 ## Interruptor 2D | 3D por juego y desenfoque detrás de la interfaz (v0.91)
 
 - Rodolfo: «en la sección de juegos, que el pill de 3D tenga a la izquierda un 2D, tipo encendido y

@@ -34,7 +34,9 @@ public:
   /* Una fila del panel de ajustes (v0.84). El panel no sabe de ajustes: pinta las filas que le den y
      dice cual se pico; que hace cada una lo decide quien lo ensena (src/preferencias.cpp). */
   struct ItemPanel {
-    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota };
+    /* Boton (v0.92): rotulo y nota a la izquierda, un boton a la derecha con `valorTexto`.
+       Info (v0.92): una «i» en un anillo, el rotulo y, debajo, la nota. */
+    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info };
     Tipo tipo = Nota;
     std::string rotulo, nota;
     std::string valorTexto;          /* a la derecha: el numero del deslizador, el modo de una fila... */
