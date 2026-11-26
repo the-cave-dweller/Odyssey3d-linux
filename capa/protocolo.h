@@ -29,12 +29,16 @@
 
    Version 4: `presentes`, cuantos cuadros ha presentado el juego (lo escribe la CPU de la capa en cada
    vkQueuePresentKHR). Con el y con `ultimoSeq` el visor saca los FPS del juego y los de la capa (las
-   profundidades que manda): con la generacion de cuadros de DLSS, los del juego son el doble. */
+   profundidades que manda): con la generacion de cuadros de DLSS, los del juego son el doble.
+
+   Version 5: `lectorQuiereHud`, lo escribe el visor con su latido: 1 = quiere la mascara del HUD, 0 = no (el
+   ajuste «HUD del juego en el plano de la pantalla» apagado). Con 0 la capa ni toca la imagen del HUD en el
+   juego: el interruptor apaga tambien el trabajo de la tarjeta del juego. */
 #pragma once
 #include <stdint.h>
 
 #define ODVK_PROF_MAGIA 0x4f564450u   /* "PDVO" */
-#define ODVK_PROF_VERSION 4u
+#define ODVK_PROF_VERSION 5u
 #define ODVK_PROF_HUECOS 3u
 #define ODVK_PROF_CABECERA 4096u
 #define ODVK_PROF_DATOS 64u           /* los datos de cada hueco empiezan aqui; seqAntes va en el 0 */
@@ -65,6 +69,8 @@ typedef struct OdvkProfCabecera {
   uint32_t hudCapasMax;                  /* version 3: ODVK_HUD_CAPAS */
   uint32_t relleno;
   uint64_t presentes;                    /* version 4: los cuadros presentados por el juego (offset 112) */
+  uint32_t lectorQuiereHud;              /* version 5: lo escribe el visor; 1 = quiere la mascara (offset 120) */
+  uint32_t relleno2;
 } OdvkProfCabecera;
 
 /* donde va cada cosa dentro de la region */

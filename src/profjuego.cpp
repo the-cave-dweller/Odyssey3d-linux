@@ -99,6 +99,13 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
     return false;
   }
   c->lectorLatido = monotonoNs();   /* «leo»: la capa copia mientras esto tenga menos de 2 s */
+  /* (protocolo v5) y si quiero la mascara del HUD: `hud_plano = no` en los ajustes (ODYSSEYVK_HUD_PLANO=0) la
+     apaga tambien en el juego (la capa ni toca su imagen del HUD) */
+  static const bool kQuiereHud = [] {
+    const char *e = std::getenv("ODYSSEYVK_HUD_PLANO");
+    return !(e && e[0] == '0');
+  }();
+  c->lectorQuiereHud = kQuiereHud ? 1u : 0u;
   const uint32_t w = c->ancho, h = c->alto, bpp = c->bytesPunto, huecos = c->huecos;
   const uint64_t tamHueco = c->tamHueco;
   if (w < 2 || h < 2 || (bpp != 2 && bpp != 4) || huecos == 0 ||

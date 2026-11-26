@@ -3,6 +3,34 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Lo que la tarjeta lee por nosotros ya no se suelta antes de leerlo; el ajuste del HUD apaga también la copia en el juego (v1.13)
+
+- Rodolfo: «sirvió sin ODYSSEYVK=1, pero creo que es lo de HUD». Con DLSS en Ultra Performance y sin la capa,
+  entrando y saliendo del menú, no se cae: la capa está metida. Los tres `gpucrash` de `TXAA_Blurs` señalan la
+  lista donde corre DLSS y donde grabamos la copia de la profundidad; el trabajo del HUD va al final del cuadro,
+  en la lista del HUD, que estaba «Not started». Y el fallo es siempre el motor de copia leyendo memoria que ya no
+  existe.
+- La explicación que encaja: la capa graba sus lecturas (la copia de la profundidad, la reducción del HUD, las
+  copias de la sonda) en las listas del juego, y la tarjeta las hace después. Si entre medias el juego suelta esa
+  imagen porque para él ya no la usa (al entrar o salir del menú en Ultra Performance rehace sus imágenes de
+  profundidad y DLSS pide número a varias seguidas: no sabemos cuál lee en cada cuadro), la tarjeta lee memoria
+  soltada. Elegir mejor la imagen no basta (17:25).
+- **Ahora no puede pasar**: la capa anota cada imagen que hace leer (y la memoria donde está, con ganchos en
+  `vkBindImageMemory*`), y si el juego la destruye o suelta esa memoria antes de `kAplazar` = 10 presentaciones,
+  no se hace en ese momento: se aparta y se suelta de verdad 10 presentaciones después (o al cerrar el
+  dispositivo, esperando a la tarjeta). Cada vez sale en el registro: `[aplazar] el juego destruye … que la
+  tarjeta leyó por nosotros hace N presentaciones`, y el resumen cuenta las apartadas. Ese registro dirá si este
+  era el mecanismo.
+- **Protocolo versión 5**: `lectorQuiereHud`, el visor dice con su latido si quiere la máscara del HUD. Con el
+  ajuste «HUD del juego en el plano de la pantalla» apagado, la capa ni toca la imagen del HUD en el juego: el
+  interruptor apaga también el trabajo de la tarjeta del juego (antes solo el visor dejaba de usarla).
+- Probado sin juego con el visor de anfitrión (`ODYSSEYVK_CAPA_HUD_PRUEBA=1` y un lector en Python que hace de
+  visor): queriendo el HUD, 1004 máscaras enteras, y al cerrar el visor destruyó justo la imagen que la tarjeta
+  había leído una presentación antes, y su memoria: las dos se apartaron y se soltaron al cerrar el dispositivo,
+  sin caída. Sin quererlo, 0 máscaras y «el visor no quiere la máscara del HUD». Con
+  `ODYSSEYVK_CAPA_APLAZAR_TODO=1` (de taller: todo pasa por el aplazado) 46 apartadas en 20 s, 15 soltadas en
+  marcha y 31 al cerrar, a 60 fps.
+
 ## Corrección: las caídas de Cyberpunk desde las 16:50 son todas el mismo fallo de la tarjeta, y la causa no está clara (v1.13)
 
 - Rodolfo: «otra vez se trabó» (17:25, ya con la elección de la profundidad de abajo puesta). MEDIDO en el núcleo:

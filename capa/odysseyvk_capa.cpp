@@ -128,6 +128,7 @@ struct Imagen {
   uint32_t w, h;
   VkSampleCountFlagBits muestras;
   VkImageUsageFlags uso = 0;
+  VkImageCreateFlags flags = 0;   /* (v1.13) para el registro: SPARSE, ALIAS... */
 };
 struct Vista {
   VkImage img;
@@ -291,6 +292,20 @@ struct Dispositivo {
   };
   std::vector<Retirada> retiradas;
   double shmCreada = 0.0;
+  /* (v1.13) lo que la tarjeta del juego lee por nosotros (la profundidad, la capa del HUD, la sonda) no se suelta
+     hasta kAplazar presentaciones despues de grabar la lectura: ver aplazarSiLeida */
+  PFN_vkBindImageMemory2 bindImg2 = nullptr, bindImg2KHR = nullptr;
+  std::unordered_map<VkImage, VkDeviceMemory> memoriaDe;   /* la memoria de cada imagen (vkBindImageMemory*) */
+  std::unordered_map<VkImage, long> leidaEn;               /* presentacion en que grabamos la ultima lectura */
+  std::unordered_map<VkDeviceMemory, long> memLeidaEn;
+  struct Aplazado {
+    VkImage img;
+    VkDeviceMemory mem;
+    const VkAllocationCallbacks *a;
+    long desde;
+  };
+  std::vector<Aplazado> aplazados;
+  long aplazadosTotal = 0;
   PFN_vkGetImageMemoryRequirements imgReqs = nullptr;
   PFN_vkBindImageMemory bindImg = nullptr;
   PFN_vkCmdBlitImage blit = nullptr;
@@ -305,6 +320,7 @@ struct Dispositivo {
   double hudUltima = 0.0;
   VkImage hudImagen = VK_NULL_HANDLE;   /* la ultima reconocida como HUD (para el registro) */
   long hudCopias = 0;
+  int hudQuerido = -1;   /* (protocolo v5) lo ultimo que dijo el visor (-1 = aun nada) */
   uint32_t salidaW = 0, salidaH = 0;    /* la cadena de presentacion: el HUD va a ese tamano */
 };
 /* sube al destruir un dispositivo: la cache por hilo de los ganchos de dibujo deja de valer */
@@ -462,6 +478,32 @@ void mirarPeticion(Dispositivo *d) {
   }
 }
 
+/* ---------- (v1.13) que el juego no suelte lo que leemos ----------
+   MEDIDO en Cyberpunk (26-nov, cuatro veces de 16:50 a 17:25, siempre con DLSS en Ultra Performance y al entrar o
+   salir del menu): `NVRM: Xid 31 ... MMU Fault: ENGINE CE0 ... ACCESS_TYPE_VIRT_READ` (el motor de copia leyendo
+   memoria que ya no existia) con el juego en `TXAA_Blurs`, la lista donde corre DLSS y donde grabamos la copia de
+   la profundidad. Sin la capa, con el mismo modo y el mismo menu, no se cae. La copia se graba al grabar la lista
+   y la tarjeta la hace despues: si entre medias el juego suelta esa imagen (porque para el ya no la usa: al rehacer
+   sus imagenes, DLSS pide numero a varias seguidas y no sabemos cual lee en ese cuadro), la tarjeta lee memoria
+   que ya no existe. Por eso, una imagen que leimos hace menos de kAplazar presentaciones no se destruye cuando el
+   juego lo pide, ni la memoria donde esta: se apartan y se sueltan de verdad kAplazar presentaciones despues
+   (en vkQueuePresentKHR), cuando la lectura ya acabo hace rato. Cada vez sale en el registro ([aplazar]). */
+constexpr long kAplazar = 10;
+/* con g_mx tomado: la tarjeta va a leer `img` (grabado ahora mismo en un buffer de comandos del juego) */
+void marcarLectura(Dispositivo *d, VkImage img) {
+  d->leidaEn[img] = d->presentes;
+  auto m = d->memoriaDe.find(img);
+  if (m != d->memoriaDe.end()) d->memLeidaEn[m->second] = d->presentes;
+}
+/* ODYSSEYVK_CAPA_APLAZAR_TODO=1 (taller, sin juego): todo lo que se destruye o se suelta pasa por el aplazado */
+bool aplazarTodo() {
+  static const bool t = [] {
+    const char *e = std::getenv("ODYSSEYVK_CAPA_APLAZAR_TODO");
+    return e && e[0] == '1';
+  }();
+  return t;
+}
+
 bool grabarCopiaImagen(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, bool color, uint32_t descriptores,
                        const char *tipo = nullptr, const std::string &extra = std::string()) {
   if (im.muestras != VK_SAMPLE_COUNT_1_BIT) {
@@ -501,6 +543,7 @@ bool grabarCopiaImagen(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Im
   mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
   d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0,
              nullptr, 0, nullptr);
+  marcarLectura(d, img);
   Pendiente p{cb, buf, mem, im.w, im.h, im.formato};
   p.color = color, p.bpp = bpp, p.uso = (uint32_t)im.uso, p.descriptores = descriptores;
   p.tipo = tipo, p.extra = extra;
@@ -809,6 +852,7 @@ bool hayLector(Dispositivo *d) {
    en DEPTH_STENCIL_ATTACHMENT_OPTIMAL); UNDEFINED = no se sabe y se copia como GENERAL, que es lo que vale en el
    lanzamiento de DLSS (ahi el juego ya la dejo en un diseno de lectura) */
 void grabarCompartida(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, VkImageLayout desde) {
+  marcarLectura(d, img);
   const OdvkProfCabecera *c = (const OdvkProfCabecera *)d->shm;
   const uint64_t seq = ++d->seq;
   const uint64_t hueco = odvkHueco(c, seq % ODVK_PROF_HUECOS);
@@ -903,7 +947,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateI
   const VkResult r = d->createImage(device, &c, a, img);
   if (r == VK_SUCCESS) {
     std::lock_guard<std::mutex> g(g_mx);
-    d->imagenes[*img] = {c.format, c.extent.width, c.extent.height, c.samples, c.usage};
+    d->imagenes[*img] = {c.format, c.extent.width, c.extent.height, c.samples, c.usage, c.flags};
     if (esProfundidad(c.format)) d->ultimaCreada = *img;
   }
   return r;
@@ -921,8 +965,91 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAl
     d->profundidadesDlss.erase(img);
     d->usoComoProfundidad.erase(img);
     if (d->profElegida == img) d->profElegida = VK_NULL_HANDLE;
+    /* (v1.13) la leimos hace nada: se aparta (ver kAplazar) */
+    auto l = d->leidaEn.find(img);
+    const bool aplazar = aplazarTodo() || (l != d->leidaEn.end() && d->presentes - l->second < kAplazar);
+    if (l != d->leidaEn.end()) {
+      if (aplazar && ++d->aplazadosTotal <= 40)
+        anota("[aplazar] el juego destruye %p, que la tarjeta leyo por nosotros hace %ld presentaciones: se destruye "
+              "dentro de %ld", (void *)img, d->presentes - l->second, kAplazar);
+      d->leidaEn.erase(l);
+    } else if (aplazar) {
+      d->aplazadosTotal++;
+    }
+    d->memoriaDe.erase(img);
+    if (aplazar) {
+      d->aplazados.push_back({img, VK_NULL_HANDLE, a, d->presentes});
+      return;
+    }
   }
   d->destroyImage(device, img, a);
+}
+
+/* (v1.13) la memoria de cada imagen, para no soltarla con una lectura nuestra pendiente (ver kAplazar) */
+VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory(VkDevice device, VkImage img, VkDeviceMemory mem, VkDeviceSize off) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+  }
+  const VkResult r = d->bindImg(device, img, mem, off);
+  if (r == VK_SUCCESS && mem != VK_NULL_HANDLE) {
+    std::lock_guard<std::mutex> g(g_mx);
+    d->memoriaDe[img] = mem;
+  }
+  return r;
+}
+VkResult bindImagenes2(VkDevice device, uint32_t n, const VkBindImageMemoryInfo *bi, bool khr) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+  }
+  const VkResult r = khr ? d->bindImg2KHR(device, n, bi) : d->bindImg2(device, n, bi);
+  if (r == VK_SUCCESS) {
+    std::lock_guard<std::mutex> g(g_mx);
+    for (uint32_t i = 0; i < n; i++)
+      if (bi[i].memory != VK_NULL_HANDLE) d->memoriaDe[bi[i].image] = bi[i].memory;
+  }
+  return r;
+}
+VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory2(VkDevice device, uint32_t n, const VkBindImageMemoryInfo *bi) {
+  return bindImagenes2(device, n, bi, false);
+}
+VKAPI_ATTR VkResult VKAPI_CALL BindImageMemory2KHR(VkDevice device, uint32_t n, const VkBindImageMemoryInfo *bi) {
+  return bindImagenes2(device, n, bi, true);
+}
+VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory mem, const VkAllocationCallbacks *a) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(device);
+    auto l = d->memLeidaEn.find(mem);
+    const bool aplazar = mem != VK_NULL_HANDLE &&
+                         (aplazarTodo() || (l != d->memLeidaEn.end() && d->presentes - l->second < kAplazar));
+    if (l != d->memLeidaEn.end()) {
+      if (aplazar && ++d->aplazadosTotal <= 40)
+        anota("[aplazar] el juego suelta la memoria %p de una imagen que la tarjeta leyo por nosotros hace %ld "
+              "presentaciones: se suelta dentro de %ld", (void *)mem, d->presentes - l->second, kAplazar);
+      d->memLeidaEn.erase(l);
+    } else if (aplazar) {
+      d->aplazadosTotal++;
+    }
+    if (aplazar) {
+      d->aplazados.push_back({VK_NULL_HANDLE, mem, a, d->presentes});
+      return;
+    }
+  }
+  d->free(device, mem, a);
+}
+/* suelta lo apartado: lo que ya cumplio kAplazar (o todo, al cerrar el dispositivo). Fuera de g_mx; primero las
+   imagenes y despues las memorias */
+void soltarAplazados(Dispositivo *d, std::vector<Dispositivo::Aplazado> &lista) {
+  for (const Dispositivo::Aplazado &x : lista)
+    if (x.img != VK_NULL_HANDLE) d->destroyImage(d->dev, x.img, x.a);
+  for (const Dispositivo::Aplazado &x : lista)
+    if (x.mem != VK_NULL_HANDLE) d->free(d->dev, x.mem, x.a);
+  lista.clear();
 }
 VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkImageViewCreateInfo *ci, const VkAllocationCallbacks *a, VkImageView *v) {
   Dispositivo *d;
@@ -1035,8 +1162,8 @@ VkImage elegirProfundidad(Dispositivo *d, Imagen *im) {
   auto it = mejor != VK_NULL_HANDLE ? d->imagenes.find(mejor) : d->imagenes.end();
   const bool vale = it != d->imagenes.end() && uso >= d->presentes - 3;
   if (vale && mejor != d->profElegida)
-    anota("[compartir] la profundidad de DLSS: %p %ux%u %s (el juego la usa como profundidad en este cuadro)", (void *)mejor,
-          it->second.w, it->second.h, formato(it->second.formato).c_str());
+    anota("[compartir] la profundidad de DLSS: %p %ux%u %s, banderas 0x%x (el juego la usa como profundidad en este "
+          "cuadro)", (void *)mejor, it->second.w, it->second.h, formato(it->second.formato).c_str(), (unsigned)it->second.flags);
   else if (!vale && (d->profElegida != VK_NULL_HANDLE || !d->profAvisada))
     anota("[compartir] ninguna profundidad de DLSS en uso en este cuadro (%zu pedidas): no se copia hasta que vuelva una",
           d->profundidadesDlss.size());
@@ -1133,8 +1260,9 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
     if (t - d->ultimoResumen >= 10.0) {
       d->ultimoResumen = t;
       anota("[resumen] numeros pedidos %ld · lanzamientos %ld · con profundidad %ld · imagenes de profundidad leidas %zu · "
-            "copias al visor %ld · mascaras del HUD %ld (capas en el ultimo cuadro %d)", d->pedidos, d->lanzamientos,
-            d->conProfundidad, d->vistasDeProfundidad.size(), d->copias, d->hudCopias, d->hudCapasCuadro);
+            "copias al visor %ld · mascaras del HUD %ld (capas en el ultimo cuadro %d) · apartadas %ld (%zu ahora)",
+            d->pedidos, d->lanzamientos, d->conProfundidad, d->vistasDeProfundidad.size(), d->copias, d->hudCopias,
+            d->hudCapasCuadro, d->aplazadosTotal, d->aplazados.size());
     }
   }
   d->cuLaunch(cb, li);
@@ -1334,10 +1462,18 @@ VkResult presentarCapturando(Dispositivo *d, VkQueue q, const VkPresentInfoKHR *
 VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR *pi) {
   Dispositivo *d;
   bool capturar;
+  std::vector<Dispositivo::Aplazado> soltar;
   {
     std::lock_guard<std::mutex> g(g_mx);
     d = dispositivo(q);
     d->presentes++;
+    /* (v1.13) lo apartado que ya cumplio sus kAplazar presentaciones */
+    if (!d->aplazados.empty()) {
+      std::vector<Dispositivo::Aplazado> quedan;
+      for (const Dispositivo::Aplazado &x : d->aplazados)
+        (d->presentes - x.desde >= kAplazar ? soltar : quedan).push_back(x);
+      d->aplazados.swap(quedan);
+    }
     /* (protocolo v4) para los FPS del juego en el visor */
     if (d->shm) ((volatile OdvkProfCabecera *)d->shm)->presentes = (uint64_t)d->presentes;
     /* ODYSSEYVK_CAPA_PRESENTE_TRAS=<n> (taller): captura el cuadro presentado numero n, sin DLSS (vkcube) */
@@ -1359,6 +1495,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR
     if (kDestinos > 0 && d->presentes == kDestinos) abrirVentana(d, true);
     capturar = d->capturarPresente && pi && pi->swapchainCount >= 1;
   }
+  if (!soltar.empty()) soltarAplazados(d, soltar);
   if (capturar) return presentarCapturando(d, q, pi);   /* fuera de g_mx: espera a la cola */
   return d->present(q, pi);
 }
@@ -1532,6 +1669,7 @@ void liberarHud(Dispositivo *d) {
 /* `k`: la capa de este cuadro (0 la primera). Se reduce a su imagen y se publican las k + 1 capas del cuadro
    juntas en un hueco: cada publicacion lleva todo lo de ese cuadro hasta ahi */
 void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, uint32_t k) {
+  marcarLectura(d, img);
   const OdvkProfCabecera *c = (const OdvkProfCabecera *)d->shm;
   const uint64_t seq = ++d->hudSeq;
   const uint64_t hueco = odvkHudHueco(c, seq % ODVK_PROF_HUECOS);
@@ -1625,6 +1763,15 @@ void mirarHud(Dispositivo *d, VkCommandBuffer cb, const Ambito &a) {
           hudPrueba() ? " (ODYSSEYVK_CAPA_HUD_PRUEBA: cualquier destino grande)" : ", limpiada a transparente",
           d->hudVistas.size());
   if (!hayLector(d)) return;
+  /* (protocolo v5) el visor dice si la quiere: con el ajuste del HUD apagado, ni se toca la imagen del HUD */
+  {
+    const bool quiere = ((volatile OdvkProfCabecera *)d->shm)->lectorQuiereHud != 0;
+    if ((int)quiere != d->hudQuerido) {
+      anota(quiere ? "[hud] el visor quiere la mascara del HUD" : "[hud] el visor no quiere la mascara del HUD (ajuste apagado): no se copia");
+      d->hudQuerido = quiere ? 1 : 0;
+    }
+    if (!quiere) return;
+  }
   /* la capa de este cuadro: un cuadro nuevo (otra presentacion, o mas de 10 ms sin ninguna, como en la prueba
      sin juego) empieza en la 0; una tercera del mismo cuadro no cabe y se deja */
   const double t = ahora();
@@ -1859,8 +2006,16 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     anota("[dispositivo] cerrado · numeros pedidos %ld · lanzamientos %ld · con profundidad %ld", d->pedidos,
           d->lanzamientos, d->conProfundidad);
   }
+  if (!d->aplazados.empty()) d->devWaitIdle(d->dev);
   cerrarCompartidas(d);   /* espera a la tarjeta (aqui, fuera de g_mx, si se puede) y lo suelta todo */
   liberarHud(d);
+  if (!d->aplazados.empty()) {
+    anota("[aplazar] al cerrar el dispositivo: %zu apartadas se sueltan ahora (%ld en total)", d->aplazados.size(),
+          d->aplazadosTotal);
+    std::vector<Dispositivo::Aplazado> todo;
+    todo.swap(d->aplazados);
+    soltarAplazados(d, todo);
+  }
   PFN_vkDestroyDevice destruir = d->destroy;
   delete d;
   destruir(device, a);
@@ -1978,6 +2133,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   CARGA(drawIndexedIndirectCountKHR, "vkCmdDrawIndexedIndirectCountKHR");
   CARGA(imgReqs, "vkGetImageMemoryRequirements");
   CARGA(bindImg, "vkBindImageMemory");
+  CARGA(bindImg2, "vkBindImageMemory2");
+  CARGA(bindImg2KHR, "vkBindImageMemory2KHR");
   CARGA(blit, "vkCmdBlitImage");
   if (conHost) CARGA(hostPtrProps, "vkGetMemoryHostPointerPropertiesEXT");
 #undef CARGA
@@ -2053,6 +2210,11 @@ PFN_vkVoidFunction gancho(const char *n) {
   /* fase 3c: la cadena (su tamano) y los destinos de dibujo, para el HUD; y desde el 26-nov, para elegir la
      profundidad que se copia (elegirProfundidad): siempre que se comparte */
   if (sonda() || hudActivo() || compartirActivo()) {
+    /* (v1.13) para no soltar lo que leemos (ver kAplazar) */
+    G("vkBindImageMemory", BindImageMemory);
+    G("vkBindImageMemory2", BindImageMemory2);
+    G("vkBindImageMemory2KHR", BindImageMemory2KHR);
+    G("vkFreeMemory", FreeMemory);
     G("vkCreateSwapchainKHR", CreateSwapchainKHR);
     G("vkGetSwapchainImagesKHR", GetSwapchainImagesKHR);
     G("vkCmdBeginRendering", CmdBeginRendering);
