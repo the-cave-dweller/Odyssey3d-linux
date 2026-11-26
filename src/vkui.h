@@ -36,7 +36,9 @@ public:
   struct ItemPanel {
     /* Boton (v0.92): rotulo y nota a la izquierda, un boton a la derecha con `valorTexto`.
        Info (v0.92): una «i» en un anillo, el rotulo y, debajo, la nota. */
-    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info };
+    /* Atajo (v1.09): el rotulo y, a la derecha, la combinacion en una tecla; `valor` = esperando la
+       combinacion nueva; `quitar` = no es la de fabrica (sale la flecha de volver a ella). */
+    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info, Atajo };
     Tipo tipo = Nota;
     std::string rotulo, nota;
     std::string valorTexto;          /* a la derecha: el numero del deslizador, el modo de una fila... */
@@ -99,6 +101,8 @@ public:
     /* el boton del idioma (v1.07), a la izquierda del de la actualizacion: abierto, cuelga debajo la
        lista de los siete idiomas */
     bool menuIdioma = false;
+    /* el renglon de las teclas de la pastilla cuando hay atajos cambiados (v1.09); vacio = el de fabrica */
+    std::string teclas;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */

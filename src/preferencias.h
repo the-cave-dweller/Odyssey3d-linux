@@ -107,6 +107,12 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
    momento) y serve.conf se escribe una vez, al soltar.
    Devuelve cierto si cambio algo; `aviso` trae la frase para el pie del panel y `cerrar` pide
    cerrar el panel (al lanzar un juego). */
+/* Los atajos (v1.09): la accion que espera su combinacion nueva (vacio = ninguna). El panel le pasa
+   cada combinacion pulsada a `teclaCapturada`, que la comprueba y la guarda en serve.conf; cierto si
+   cambio algo que haya que repintar. `cancelarCaptura` deja de esperar. */
+const std::string &capturando();
+bool teclaCapturada(const std::string &combo, std::string *aviso);
+void cancelarCaptura();
 bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std::vector<Juego> &juegos,
              std::string *aviso, bool *cerrar);
 

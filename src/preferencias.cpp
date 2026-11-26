@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "ajuste.h"
+#include "atajos.h"
 #include "util.h"
 
 #ifdef HAVE_OPENCV
@@ -398,6 +399,7 @@ bool versionMasNueva(const std::string &a, const std::string &b) {
 }
 
 namespace {
+std::string g_capturando;   /* la accion que espera su atajo nuevo (v1.09) */
 long g_confirmarDesinstalar = 0;   /* el desinstalador pide dos clics seguidos: hasta cuando vale el primero */
 struct Comprobacion {
   pid_t pid = 0;
@@ -657,10 +659,24 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     h.tipo = Hud::ItemPanel::Interruptor, h.rotulo = idioma::tr("Mantener el HDR durante el 3D");
     h.nota = idioma::tr("Desde el siguiente vídeo"), h.valor = v.hdr;
     pon(h, "hdr_en_3d");
+
+    /* ATAJOS DE TECLADO (v1.09): el interruptor de los globales y cada atajo, que se cambia picando
+       su tecla y pulsando la combinacion nueva */
+    s.rotulo = idioma::tr("ATAJOS DE TECLADO");
+    pon(s, "");
     Hud::ItemPanel a;
     a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = idioma::tr("Atajos de teclado en todo el escritorio");
-    a.nota = idioma::tr("Ctrl+Shift+1…8 y F1 valen aunque el teclado lo tenga el vídeo o el juego"), a.valor = v.atajos;
+    a.nota = idioma::tr("Los atajos valen aunque el teclado lo tenga el vídeo o el juego"), a.valor = v.atajos;
     pon(a, "atajos_globales");
+    const std::map<std::string, std::string> puestos = atajos::combos();
+    for (const atajos::Def &d : atajos::lista()) {
+      Hud::ItemPanel at;
+      at.tipo = Hud::ItemPanel::Atajo, at.rotulo = idioma::tr(d.texto);
+      at.valor = g_capturando == d.nombre;
+      at.valorTexto = at.valor ? std::string(idioma::tr("Pulsa las teclas…")) : puestos.at(d.nombre);
+      at.quitar = puestos.at(d.nombre) != d.defecto;
+      pon(at, std::string("atajo:") + d.nombre);
+    }
 
     s.rotulo = idioma::tr("APLICACIONES QUE NO PREGUNTAN");
     pon(s, "");
@@ -773,6 +789,50 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
   }
 }
 
+const std::string &capturando() { return g_capturando; }
+void cancelarCaptura() { g_capturando.clear(); }
+
+namespace {
+const atajos::Def *defDe(const std::string &nombre) {
+  for (const atajos::Def &d : atajos::lista())
+    if (nombre == d.nombre) return &d;
+  return nullptr;
+}
+}  // namespace
+
+bool teclaCapturada(const std::string &combo0, std::string *aviso) {
+  const atajos::Def *d = defDe(g_capturando);
+  if (!d) return false;
+  if (combo0 == "Escape") {
+    g_capturando.clear();
+    if (aviso) *aviso = idioma::tr("sin cambios");
+    return true;
+  }
+  const std::string combo = atajos::normaliza(combo0);
+  if (combo.empty()) return false;
+  if (!atajos::tieneModificador(combo)) {
+    /* se sigue esperando: una tecla suelta se comeria esa tecla en todo el escritorio */
+    if (aviso) *aviso = idioma::trf("{}: el atajo necesita Ctrl, Alt o Meta", {combo});
+    return true;
+  }
+  for (const auto &par : atajos::combos())
+    if (par.second == combo && par.first != d->nombre) {
+      if (aviso) *aviso = idioma::trf("{} ya lo usa «{}»", {combo, idioma::tr(defDe(par.first)->texto)});
+      return true;
+    }
+  std::string e;
+  /* la de fabrica se guarda vacia: si un dia cambia la de fabrica, se sigue a la nueva */
+  if (!ajuste::fijarEnServeConf(std::string("atajo_") + d->clave, combo == d->defecto ? "" : combo, &e)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+    g_capturando.clear();
+    return true;
+  }
+  g_capturando.clear();
+  avisarVisor({}, {{"atajos", "recargar"}});
+  if (aviso) *aviso = idioma::trf("«{}» ahora va con {}", {idioma::tr(d->texto), combo});
+  return true;
+}
+
 bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std::vector<Juego> &juegos,
              std::string *aviso, bool *cerrar) {
   std::string e;
@@ -817,6 +877,25 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     const double val = std::round((0.5 + std::max(0.0f, std::min(1.0f, frac)) * 1.5) / 0.05) * 0.05;
     if (!fija(id, conComa(val, 2))) return false;
     if (aviso) *aviso = idioma::trf("fuerza del relieve {} · desde el siguiente vídeo", {conDecimal(val, 2)});
+    return true;
+  }
+  if (id.rfind("atajo:", 0) == 0) {
+    const atajos::Def *d = defDe(id.substr(6));
+    if (!d) return false;
+    if (sub == 1) {   /* la flecha: volver a la de fabrica */
+      g_capturando.clear();
+      if (!fija(std::string("atajo_") + d->clave, "")) return false;
+      avisarVisor({}, {{"atajos", "recargar"}});
+      if (aviso) *aviso = idioma::trf("«{}» vuelve a {}", {idioma::tr(d->texto), d->defecto});
+      return true;
+    }
+    if (g_capturando == d->nombre) {   /* picar otra vez la misma tecla: dejar de esperar */
+      g_capturando.clear();
+      if (aviso) *aviso = idioma::tr("sin cambios");
+      return true;
+    }
+    g_capturando = d->nombre;
+    if (aviso) *aviso = idioma::trf("Pulsa la combinación nueva para «{}» · Esc cancela", {idioma::tr(d->texto)});
     return true;
   }
   if (id == "idioma") {

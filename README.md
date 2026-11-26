@@ -71,6 +71,13 @@ Keys (they also work while the video or game has the keyboard):
 | `Ctrl+Shift+F1` | hide / show the pill |
 | `Esc` (in the viewer) | leave 3D |
 
+Every shortcut can be changed in **Settings → Keyboard shortcuts**: click it and press the new
+combination (it needs Ctrl, Alt or Meta; Esc cancels, the circular arrow puts the factory one
+back). While the settings panel is open it keeps the whole keyboard, so the game underneath gets
+no keys; Esc closes it.
+
+![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)
+
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
 taskbar icon or the system-tray icon (click: settings, middle click: games). Its tabs are
 **Settings**, **Games**, **Performance** (frame rate, converter time, GPUs) and **Program**
@@ -156,6 +163,7 @@ in 3D. The **Program** tab also has "Update automatically" (off by default) and 
 | `crosstalk_base = 0,013` | how much of the other eye's image to subtract (ghosting) |
 | `hz = 165` | panel refresh rate in 3D (default 120; the G90XF also runs at 165) |
 | `hdr_en_3d = si` | keep HDR during 3D |
+| `atajo_3d = Ctrl+Shift+1` | a shortcut (the panel writes these): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |
 | `barra_tareas = no` / `bandeja = no` | hide OdysseyVK from the taskbar / the system tray |
 | `actualizaciones = no` / `actualizar_auto = si` | no update card / install updates automatically |
 | `actualizaciones_cada = 6` | hours between checks of this repository |

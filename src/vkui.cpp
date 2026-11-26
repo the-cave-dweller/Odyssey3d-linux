@@ -280,7 +280,7 @@ bool Hud::buildAtlas(std::string *err) {
       if (cargar(cp, glyphs_[cp]) < 0) { okAll = false; break; }   /* atlas lleno */
     }
     /* fuera del rango latino-1: los signos que mas salen en titulos de videos */
-    for (unsigned cp : {0x2014u, 0x2013u, 0x2026u, 0x2018u, 0x2019u, 0x201Cu, 0x201Du, 0x20ACu, 0x00A9u, 0x2122u}) {
+    for (unsigned cp : {0x2014u, 0x2013u, 0x2026u, 0x2018u, 0x2019u, 0x201Cu, 0x201Du, 0x20ACu, 0x00A9u, 0x2122u, 0x21BAu}) {
       Glyph gl;
       if (cargar(cp, gl) != 0) continue;
       extra_.emplace_back(cp, gl);
@@ -795,9 +795,13 @@ void Hud::begin(int w, int h, float altoLogico) {
     }
 
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
-    const std::string teclas = idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
-                                           {idioma::tr(leg ? "plano" : "profundidad")});
-    const float cabe = pw - 2.0f * aire - sitioEngranaje;
+    const std::string teclas = !st_.teclas.empty() ? st_.teclas
+                               : idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
+                                             {idioma::tr(leg ? "plano" : "profundidad")});
+    float cabe = pw - 2.0f * aire - sitioEngranaje;
+    /* con la casilla de «no volver a preguntar» debajo de los botones, el renglon no pasa de ella
+       (v1.09: con atajos cambiados el renglon es largo y se metia debajo de su letra) */
+    if (cabeBloque && st_.recordarVisible) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
   }
@@ -1085,6 +1089,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       case ItemPanel::Juego: return 56.0f;
       case ItemPanel::Nota: return 32.0f;
       case ItemPanel::Info: return it.nota.empty() ? 36.0f : 54.0f;
+      case ItemPanel::Atajo: return 44.0f;
       default: return it.nota.empty() ? 46.0f : 60.0f;
     }
   };
@@ -1130,7 +1135,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       continue;
     }
     const bool hov = dentro && z.caja.inside(mx_, my_);
-    const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego;
+    const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego || it.tipo == ItemPanel::Atajo;
     if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
       mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
     const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
@@ -1170,6 +1175,31 @@ void Hud::dibujaPanel(int vw, int vh) {
         if (it.valor) mask9(sw, 0, 13.0f, accent[0], accent[1], accent[2], 0.98f);
         else mask9(sw, 0, 13.0f, 0.28f, 0.29f, 0.33f, 0.98f);
         mask9({it.valor ? sw.x + sw.w - 23.0f : sw.x + 3.0f, sw.y + 3.0f, 20.0f, 20.0f}, 0, 10.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+        break;
+      }
+      case ItemPanel::Atajo: {
+        /* la combinacion en una tecla; esperando la nueva, la tecla se enciende */
+        const float wc = std::max(130.0f, textWidth(it.valorTexto, 13.5f) + 32.0f);
+        const Rect c{der - wc, y + (h - 30.0f) * 0.5f, wc, 30.0f};
+        z.subs.push_back(c);
+        const bool hc2 = dentro && c.inside(mx_, my_);
+        if (it.valor) {
+          mask9(c, 0, 9.0f, accent[0], accent[1], accent[2], 1.0f);
+        } else {
+          mask9(c, 0, 9.0f, 0.42f, 0.43f, 0.50f, hc2 ? 0.95f : 0.70f);
+          mask9({c.x + 1.0f, c.y + 1.0f, c.w - 2.0f, c.h - 3.0f}, 0, 8.0f, 0.15f, 0.155f, 0.19f, 1.0f);
+        }
+        text(it.valorTexto, c.x + c.w * 0.5f, c.y + 6.5f, 13.5f, ink[0], ink[1], ink[2], it.valor || hc2 ? 1.0f : 0.90f, true);
+        float izqControl = c.x;
+        if (it.quitar) {
+          const Rect r{c.x - 8.0f - 30.0f, c.y, 30.0f, 30.0f};
+          z.subs.push_back(r);
+          const bool hr = dentro && r.inside(mx_, my_);
+          if (hr) mask9(r, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+          text("\u21BA", r.x + 15.0f, r.y + 5.0f, 16.0f, ink[0], ink[1], ink[2], hr ? 1.0f : 0.65f, true);
+          izqControl = r.x;
+        }
+        textoCabe(it.rotulo, izq, y + (h - 20.0f) * 0.5f, 15.0f, izqControl - 14.0f - izq, ink[0], ink[1], ink[2], 1.0f);
         break;
       }
       case ItemPanel::Opciones: {
@@ -1392,6 +1422,10 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
           return HitPanelItem;
         }
         return HitPanel;
+      case ItemPanel::Atajo:
+        /* la flecha de volver a la de fabrica es la 1; el resto de la fila, la tecla (0) */
+        if (sub) *sub = (z.subs.size() > 1 && z.subs[1].inside(mx, my)) ? 1 : 0;
+        return HitPanelItem;
       case ItemPanel::Boton:
         if (it.valor && !z.subs.empty() && z.subs[0].inside(mx, my)) {
           if (sub) *sub = 0;

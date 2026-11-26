@@ -65,6 +65,11 @@ public:
   void showPanel(bool grande);
   void repaint();
   bool takeGolpe(Golpe &g);
+  /* El teclado (v1.09): con `tomarTeclado(true)` la capa se queda con todo el teclado mientras este
+     puesta (el juego o el video de debajo no reciben teclas). `takeTecla` da cada combinacion
+     pulsada, escrita como los atajos ("Ctrl+Shift+K", "Alt+F5") o "Escape". */
+  void tomarTeclado(bool si);
+  bool takeTecla(std::string &combo);
 
   /* Vuelca la tarjeta a un archivo PNG (para comprobar el dibujo sin el compositor). */
   bool dumpPng(const std::string &ruta, std::string *err = nullptr);

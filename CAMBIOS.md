@@ -3,6 +3,36 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Atajos de teclado personalizables, y el panel se queda con el teclado (v1.09)
+
+- Rodolfo: «Poner una sección de atajos de teclado debajo de PANTALLA, que también deje personalizar
+  cada atajo»; y, mientras: «cuando la configuración esté abierta no permitas que el juego tome
+  teclas».
+- Ajustes → **ATAJOS DE TECLADO**, debajo de PANTALLA: el interruptor de los atajos globales (pasa
+  aquí) y las ocho acciones (3D, menos/más profundidad, menos/más salida, pastilla más chica/grande,
+  ocultar o mostrar la pastilla), cada una con su combinación en una tecla. Se pica la fila, la
+  tecla se enciende («Pulsa las teclas…») y la combinación que se pulse queda puesta. Hace falta
+  Ctrl, Alt o Meta (una tecla suelta se comería esa tecla en todo el escritorio); si otra acción ya
+  la usa, se dice cuál y se sigue esperando; Esc o un clic en otra cosa cancela; la flecha circular
+  ↺ vuelve a la de fábrica.
+- Se guardan en serve.conf como `atajo_3d = Ctrl+Alt+3` (`atajo_profundidad_menos`, `_mas`,
+  `atajo_salida_menos`, `_mas`, `atajo_pastilla_menos`, `_mas`, `atajo_pastilla`); la de fábrica se
+  guarda vacía. Al cambiar uno, el visor abierto recibe la orden `atajos = recargar`: vuelve a
+  registrar los globales en KDE con las combinaciones nuevas y su tecla local también las sigue.
+  KDE las recibe con NoAutoloading: mandan las del panel, no las que KDE recordara de antes.
+  Ctrl+Shift+2 (la vieja de ocultar la pastilla) sigue valiendo salvo que otra acción la tome.
+- Con algún atajo cambiado, el renglón de teclas de la pastilla los enseña (los pares con los
+  mismos modificadores juntos: «Ctrl+Shift+3/4») y no pasa de la casilla de «no volver a preguntar».
+- El panel pide el teclado en exclusiva a la capa (layer-shell, `keyboard_interactivity`) mientras
+  está abierto: el juego o el vídeo de debajo no reciben ninguna tecla. Esc cierra el panel (o
+  la lista de idiomas, si está abierta). Las teclas se leen con xkbcommon en su nivel de base, así
+  Mayús+1 se apunta como Shift+1 y no como «!».
+- Comprobado sin panel: el panel pintado en cuatro idiomas con dos atajos cambiados y uno esperando;
+  la pastilla con y sin atajos cambiados; la lectura de combinaciones con un programa aparte
+  («ctrl + shift + k» → Ctrl+Shift+K, «Strg+Umschalt+F1» → Ctrl+Shift+F1, «K» y «Shift+K» sin
+  modificador válido). Sin probar en el escritorio: la captura de teclas en el panel abierto y el
+  registro en KDE de una combinación cambiada.
+
 ## La tarjeta de aviso cambia de idioma con las demás (v1.08)
 
 - Rodolfo, con la 1.07 en japonés: la tarjeta «El juego se cerró a los 28 s de entrar en 3D» seguía

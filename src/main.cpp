@@ -3048,6 +3048,9 @@ static int cmdAjustes(int argc, char **argv) {
     ::unlink(rutaPid.c_str());
     return 1;
   }
+  /* el teclado entero para el panel mientras esta abierto (v1.09): el juego o el video de debajo no
+     reciben teclas, Esc lo cierra y los atajos se capturan aqui */
+  ov.tomarTeclado(true);
   /* la entrada en la barra de tareas mientras el panel esta abierto (v1.04), si no se apago */
   if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
@@ -3069,6 +3072,17 @@ static int cmdAjustes(int argc, char **argv) {
     Overlay::Golpe g;
     bool repintar = false;
     while (ov.takeGolpe(g)) {
+      /* esperando un atajo: un clic en otra cosa que no sea la tecla de un atajo deja de esperar */
+      if (!prefs::capturando().empty() && g.tipo != (int)Hud::HitPanel && g.tipo != (int)Hud::HitPanelTitulo) {
+        const bool enAtajo = g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() &&
+                             ids[(size_t)g.item].rfind("atajo:", 0) == 0;
+        if (!enAtajo) {
+          prefs::cancelarCaptura();
+          st.pie = idioma::tr("sin cambios");
+          rellenar();
+          repintar = true;
+        }
+      }
       /* la lista de idiomas se cierra con cualquier clic que no sea en ella o en su boton */
       const bool clicIdioma = g.tipo == (int)Hud::HitPanelIdioma || g.tipo == (int)Hud::HitPanelIdiomaOpcion;
       if (st.menuIdioma && !clicIdioma) {
@@ -3115,6 +3129,30 @@ static int cmdAjustes(int argc, char **argv) {
         }
         if (cambio || !aviso.empty()) repintar = true;
         if (cerrar) cerrarEn = reloj() + 1.2;   /* que de tiempo a leer «arrancando ...» */
+      }
+    }
+    /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
+       demas teclas se quedan aqui: el juego de debajo no las recibe) */
+    {
+      std::string combo;
+      while (ov.takeTecla(combo)) {
+        if (!prefs::capturando().empty()) {
+          std::string aviso;
+          if (prefs::teclaCapturada(combo, &aviso)) {
+            if (!aviso.empty()) st.pie = aviso;
+            std::printf("[ajustes] atajo: %s · %s\n", combo.c_str(), aviso.c_str());
+            std::fflush(stdout);
+            rellenar();
+            repintar = true;
+          }
+        } else if (combo == "Escape") {
+          if (st.menuIdioma) {
+            st.menuIdioma = false;
+            repintar = true;
+          } else {
+            g_cierraPanel = 1;
+          }
+        }
       }
     }
     /* el idioma cambio (por el globo o por la fila de Programa): el atlas de letras se rehace con
@@ -3246,12 +3284,22 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.state().panel = true;
     hud.state().pestana = std::max(0, std::min(3, std::atoi(pn)));
     std::vector<std::string> ids;
+    /* ODYSSEYVK_HUD_CAPTURA=3d (v1.09): ese atajo esperando su combinacion nueva */
+    std::string pieCaptura;
+    if (const char *cap = std::getenv("ODYSSEYVK_HUD_CAPTURA")) {
+      bool cerrar = false;
+      prefs::aplicar(std::string("atajo:") + cap, 0, 0.0f, true, {}, &pieCaptura, &cerrar);
+    }
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
-    hud.state().pie = idioma::tr("se aplica desde el siguiente vídeo");
+    hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
     /* ODYSSEYVK_HUD_MENU_IDIOMA=1 (v1.07): con la lista de idiomas abierta */
     if (std::getenv("ODYSSEYVK_HUD_MENU_IDIOMA")) hud.state().menuIdioma = true;
+  }
+  /* la pastilla con los atajos de serve.conf (v1.09), como la pone el visor */
+  hud.state().teclas = atajos::renglonPastilla(o.legado);
+  {
   }
   /* ODYSSEYVK_HUD_ACTUALIZACION=0.99 (taller, v0.95): la tarjeta de la orilla avisando de esa version */
   if (const char *av = std::getenv("ODYSSEYVK_HUD_ACTUALIZACION")) {

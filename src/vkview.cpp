@@ -85,6 +85,8 @@ struct RegionEntrada {
 };
 
 struct VkUi {
+  /* los atajos puestos (v1.09): combinacion -> accion ("Ctrl+Shift+1" -> "3d"), de serve.conf */
+  std::map<std::string, std::string> atajosPuestos;
   WeaveTuning tune{};
   Hud hud;
   RegionEntrada region;
@@ -579,37 +581,67 @@ void borrarEntregada() {
   std::filesystem::remove(rutaEstadoOdyssey("entregada"), ec);
 }
 
-/* Los atajos del hub: Ctrl+Mayus+1 3D · 3/4 plano de apoyo · 5/6 relieve · 7/8 tamano de la pastilla
-   · F1 (y 2, por costumbre) ocultar o mostrar la pastilla. Llegan por dos caminos: la tecla, cuando
-   el visor tiene el teclado, y el atajo global del escritorio (v0.75, atajos.h), cuando lo tiene el
-   video o el juego. `key` es el codigo de GLFW de la tecla sin modificadores. */
-static void atajoHub(VkUi &ui, int key, const char *origen) {
+/* Los atajos del hub (de fabrica Ctrl+Mayus+1 3D · 3/4 plano de apoyo · 5/6 relieve · 7/8 tamano de
+   la pastilla · F1, y 2 por costumbre, ocultar o mostrar la pastilla; desde v1.09 se cambian en el
+   panel). Llegan por dos caminos: la tecla, cuando el visor tiene el teclado, y el atajo global del
+   escritorio (v0.75, atajos.h), cuando lo tiene el video o el juego. `accion` es su nombre en
+   kglobalaccel ("3d", "prof+", ...). */
+static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
   const char *tag = nullptr;
-  switch (key) {
-    case GLFW_KEY_1: ui.hud.toggle3D(); tag = "3D/2D"; break;
-    case GLFW_KEY_F1:
-    case GLFW_KEY_2:
-      cambioCapa(ui, !ui.hud.overlayVisible(), key == GLFW_KEY_F1 ? "Ctrl+Shift+F1" : "Ctrl+Shift+2");
-      break;
-    case GLFW_KEY_3: ui.hud.nudgeDepth(-5); tag = "profundidad -"; break;
-    case GLFW_KEY_4: ui.hud.nudgeDepth(+5); tag = "profundidad +"; break;
-    case GLFW_KEY_5: ui.hud.nudgePopout(-5); tag = "relieve -"; break;
-    case GLFW_KEY_6: ui.hud.nudgePopout(+5); tag = "relieve +"; break;
-    /* 7 / 8: tamano de la pastilla. El panel cambia de escala al pasar al modo 3D (se queda en
-       1) y a cada quien le viene bien un tamano distinto, asi que se puede mover en marcha. */
-    case GLFW_KEY_7:
-    case GLFW_KEY_8: {
-      const float s = ui.hud.scale() + (key == GLFW_KEY_8 ? 0.25f : -0.25f);
-      const float fija = s < 0.5f ? 0.5f : (s > 3.0f ? 3.0f : s);
-      ui.hud.setScale(fija);
-      std::printf("[pastilla] tamano x%.2f (%s)\n", (double)fija, origen);
-      break;
-    }
-    default: return;
+  if (accion == "3d") { ui.hud.toggle3D(); tag = "3D/2D"; }
+  else if (accion == "capa" || accion == "capa2") cambioCapa(ui, !ui.hud.overlayVisible(), origen);
+  else if (accion == "prof-") { ui.hud.nudgeDepth(-5); tag = "profundidad -"; }
+  else if (accion == "prof+") { ui.hud.nudgeDepth(+5); tag = "profundidad +"; }
+  else if (accion == "relieve-") { ui.hud.nudgePopout(-5); tag = "relieve -"; }
+  else if (accion == "relieve+") { ui.hud.nudgePopout(+5); tag = "relieve +"; }
+  /* tamano de la pastilla. El panel cambia de escala al pasar al modo 3D (se queda en 1) y a cada
+     quien le viene bien un tamano distinto, asi que se puede mover en marcha. */
+  else if (accion == "pastilla-" || accion == "pastilla+") {
+    const float sc = ui.hud.scale() + (accion == "pastilla+" ? 0.25f : -0.25f);
+    const float fija = sc < 0.5f ? 0.5f : (sc > 3.0f ? 3.0f : sc);
+    ui.hud.setScale(fija);
+    std::printf("[pastilla] tamano x%.2f (%s)\n", (double)fija, origen);
+  } else {
+    return;
   }
   ui.inputChanged = true;
   if (tag) printTuning(ui, tag);
   std::fflush(stdout);
+}
+
+/* lee los atajos de serve.conf (v1.09): el mapa de la tecla local y el renglon de la pastilla */
+static void cargaAtajos(VkUi &ui) {
+  ui.atajosPuestos.clear();
+  for (const auto &par : atajos::combos()) ui.atajosPuestos[par.second] = par.first;
+  if (!ui.atajosPuestos.count("Ctrl+Shift+2")) ui.atajosPuestos["Ctrl+Shift+2"] = "capa2";
+  ui.hud.state().teclas = atajos::renglonPastilla(ui.hud.state().legado);
+}
+
+/* la tecla de GLFW escrita como los atajos ("Ctrl+Shift+K"); vacia si no es de las que valen */
+static std::string comboDeGlfw(int key, int mods) {
+  std::string t;
+  if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z) t = std::string(1, (char)('A' + key - GLFW_KEY_A));
+  else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) t = std::string(1, (char)('0' + key - GLFW_KEY_0));
+  else if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F12) t = "F" + std::to_string(key - GLFW_KEY_F1 + 1);
+  else if (key == GLFW_KEY_LEFT) t = "Left";
+  else if (key == GLFW_KEY_RIGHT) t = "Right";
+  else if (key == GLFW_KEY_UP) t = "Up";
+  else if (key == GLFW_KEY_DOWN) t = "Down";
+  else if (key == GLFW_KEY_PAGE_UP) t = "PgUp";
+  else if (key == GLFW_KEY_PAGE_DOWN) t = "PgDown";
+  else if (key == GLFW_KEY_HOME) t = "Home";
+  else if (key == GLFW_KEY_END) t = "End";
+  else if (key == GLFW_KEY_INSERT) t = "Insert";
+  else if (key == GLFW_KEY_DELETE) t = "Delete";
+  else if (key == GLFW_KEY_SPACE) t = "Space";
+  else if (key >= 0x21 && key <= 0x7e) t = std::string(1, (char)key);   /* los signos: su posicion de EE. UU. */
+  else return "";
+  std::string c;
+  if (mods & GLFW_MOD_CONTROL) c += "Ctrl+";
+  if (mods & GLFW_MOD_ALT) c += "Alt+";
+  if (mods & GLFW_MOD_SHIFT) c += "Shift+";
+  if (mods & GLFW_MOD_SUPER) c += "Meta+";
+  return c + t;
 }
 
 /* Cierra el panel de ajustes (`odysseyvk ajustes`) si esta abierto: su proceso deja su numero en un
@@ -690,10 +722,14 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      Ctrl+Shift+2 era la tecla del boton que ya no esta y sigue valiendo por costumbre.
      Ninguna de las dos choca con el escritorio: lo que tiene KWin asignado es Ctrl+F1 (cambiar de
      escritorio) y Meta+F1, no Ctrl+Shift+F1. F1 con Ctrl+Shift tampoco la pide el navegador. */
-  if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT)) {
-    atajoHub(*ui, key, "tecla");
-    return;
+  if (mods & (GLFW_MOD_CONTROL | GLFW_MOD_ALT | GLFW_MOD_SUPER)) {
+    const auto it = ui->atajosPuestos.find(comboDeGlfw(key, mods));
+    if (it != ui->atajosPuestos.end()) {
+      atajoHub(*ui, it->second, "tecla");
+      return;
+    }
   }
+  if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT)) return;   /* Ctrl+Shift sin atajo: nada */
   /* P o la tecla de reproduccion: pausar y reanudar el video del navegador sin quitar la
      capa. Hace falta porque el visor se queda el teclado y el raton de la pantalla. */
   if (key == GLFW_KEY_P || key == GLFW_KEY_SPACE) {
@@ -1870,6 +1906,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      teclado lo tenga el video o el juego. Solo en sesiones de verdad (no en el taller sin panel),
      y se sueltan al salir. ODYSSEYVK_ATAJOS=0 (`atajos_globales = no`) no los registra. */
   AtajosGlobales atajos;
+  cargaAtajos(ui);
   {
     const char *e = entornoOdyssey("ODYSSEYVK_ATAJOS");
     const bool quiere = !(e && (e[0] == '0' || e[0] == 'n'));
@@ -1963,15 +2000,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     glfwPollEvents();
     /* los atajos globales que haya pulsado el usuario desde el cuadro anterior */
-    if (atajos.abierto()) {
-      static const int kTeclaDe[] = {GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_5,
-                                     GLFW_KEY_6, GLFW_KEY_7, GLFW_KEY_8, GLFW_KEY_F1};
-      for (const std::string &cual : atajos.pulsados()) {
-        const std::vector<std::string> &todos = AtajosGlobales::nombres();
-        for (size_t i = 0; i < todos.size() && i < sizeof kTeclaDe / sizeof kTeclaDe[0]; i++)
-          if (todos[i] == cual) atajoHub(ui, kTeclaDe[i], "atajo global");
-      }
-    }
+    if (atajos.abierto())
+      for (const std::string &cual : atajos.pulsados()) atajoHub(ui, cual, "atajo global");
     /* ---- el canal de ajuste vivo: la ventana de ajustes (proceso aparte) y `ctl ajuste` ----
        Una vez cada decima de segundo se mira el fichero ~/.local/state/odysseyvk/ajuste y, solo si
        CAMBIO, se aplican los numeros pedidos. Es importante el "solo si cambio": los numeros escritos
@@ -2100,6 +2130,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               std::printf("[interfaz] idioma: %s\n", idioma::codigo(l));
               std::fflush(stdout);
             }
+          }
+          /* `atajos = recargar` (v1.09): se cambio un atajo en el panel. Se leen otra vez y los
+             globales se registran de nuevo con las combinaciones nuevas. */
+          if (palabras.count("atajos")) {
+            cargaAtajos(ui);
+            if (atajos.abierto()) {
+              atajos.cerrar();
+              std::string eA;
+              if (atajos.abrir(&eA)) std::printf("[atajos] de nuevo: %s\n", atajos.resumen().c_str());
+              else std::printf("[atajos] no se pudieron registrar otra vez: %s\n", eA.c_str());
+            } else {
+              std::printf("[atajos] recargados (solo con el visor enfocado)\n");
+            }
+            std::fflush(stdout);
           }
           const auto ordenRed = palabras.find("cargar_red");
           if (ordenRed != palabras.end()) {

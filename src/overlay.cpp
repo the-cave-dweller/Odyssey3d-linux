@@ -32,6 +32,9 @@
 #endif
 
 #include <wayland-client.h>
+#ifdef HAVE_XKBCOMMON
+#include <xkbcommon/xkbcommon.h>
+#endif
 
 #include <linux/input-event-codes.h>
 
@@ -65,6 +68,16 @@ struct Overlay::Impl {
   zxdg_output_manager_v1 *xdgMgr = nullptr;
   wl_seat *seat = nullptr;
   wl_pointer *pointer = nullptr;
+  /* el teclado (v1.09): el panel de ajustes se lo queda entero mientras esta abierto (el juego de
+     debajo no recibe teclas) y asi puede capturar los atajos nuevos */
+  wl_keyboard *keyboard = nullptr;
+  bool tecladoPedido = false;
+  std::vector<std::string> teclas;   /* combinaciones pulsadas: "Ctrl+Shift+K", "Escape" */
+#ifdef HAVE_XKBCOMMON
+  xkb_context *xkbCtx = nullptr;
+  xkb_keymap *xkbMapa = nullptr;
+  xkb_state *xkbEstado = nullptr;
+#endif
 #ifdef HAVE_FRACTIONAL_SCALE
   wp_fractional_scale_manager_v1 *escalaMgr = nullptr;
 #ifdef HAVE_KWIN_BLUR
@@ -175,6 +188,12 @@ struct Overlay::Impl {
 #endif
     if (surf) wl_surface_destroy(surf);
     if (pointer) wl_pointer_destroy(pointer);
+    if (keyboard) wl_keyboard_destroy(keyboard);
+#ifdef HAVE_XKBCOMMON
+    if (xkbEstado) xkb_state_unref(xkbEstado);
+    if (xkbMapa) xkb_keymap_unref(xkbMapa);
+    if (xkbCtx) xkb_context_unref(xkbCtx);
+#endif
     if (seat) wl_seat_destroy(seat);
     for (Monitor *m : monitores)
       if (m->obj) wl_output_destroy(m->obj);   /* los zxdg_output los destruye el compositor */
@@ -631,6 +650,8 @@ struct Overlay::Impl {
       if (s->seat) {
         s->pointer = wl_seat_get_pointer(s->seat);
         if (s->pointer) wl_pointer_add_listener(s->pointer, &s->pointerListener, s);
+        s->keyboard = wl_seat_get_keyboard(s->seat);
+        if (s->keyboard) wl_keyboard_add_listener(s->keyboard, &s->keyboardListener, s);
       }
     } else if (!std::strcmp(iface, zxdg_output_manager_v1_interface.name)) {
       s->xdgMgr = static_cast<zxdg_output_manager_v1 *>(
@@ -924,6 +945,96 @@ struct Overlay::Impl {
   static void ptrAxisDiscrete(void *, wl_pointer *, uint32_t, int32_t) {}
 
   static const struct wl_pointer_listener pointerListener;
+
+  /* ---- teclado ---- */
+  static void kbKeymap(void *data, wl_keyboard *, uint32_t formato, int32_t fd, uint32_t tam) {
+#ifdef HAVE_XKBCOMMON
+    Impl *s = static_cast<Impl *>(data);
+    if (formato == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+      void *m = mmap(nullptr, tam, PROT_READ, MAP_PRIVATE, fd, 0);
+      if (m != MAP_FAILED) {
+        if (!s->xkbCtx) s->xkbCtx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        xkb_keymap *km = s->xkbCtx ? xkb_keymap_new_from_string(s->xkbCtx, (const char *)m, XKB_KEYMAP_FORMAT_TEXT_V1,
+                                                                XKB_KEYMAP_COMPILE_NO_FLAGS)
+                                   : nullptr;
+        munmap(m, tam);
+        if (km) {
+          if (s->xkbEstado) xkb_state_unref(s->xkbEstado);
+          if (s->xkbMapa) xkb_keymap_unref(s->xkbMapa);
+          s->xkbMapa = km;
+          s->xkbEstado = xkb_state_new(km);
+        }
+      }
+    }
+#else
+    (void)data, (void)formato, (void)tam;
+#endif
+    close(fd);
+  }
+  static void kbEnter(void *, wl_keyboard *, uint32_t, wl_surface *, wl_array *) {}
+  static void kbLeave(void *, wl_keyboard *, uint32_t, wl_surface *) {}
+  static void kbKey(void *data, wl_keyboard *, uint32_t, uint32_t, uint32_t tecla, uint32_t estado) {
+    Impl *s = static_cast<Impl *>(data);
+    if (estado != WL_KEYBOARD_KEY_STATE_PRESSED || !s->tecladoPedido) return;
+    if (tecla == KEY_ESC) {   /* sin xkb tambien: Esc cierra o cancela */
+      s->teclas.push_back("Escape");
+      return;
+    }
+#ifdef HAVE_XKBCOMMON
+    if (!s->xkbMapa || !s->xkbEstado) return;
+    const xkb_keycode_t kc = tecla + 8;
+    const xkb_keysym_t *syms = nullptr;
+    /* la tecla en su nivel de base: Mayus+1 se apunta como Shift+1, no como «!» */
+    const int n = xkb_keymap_key_get_syms_by_level(s->xkbMapa, kc, xkb_state_key_get_layout(s->xkbEstado, kc), 0, &syms);
+    if (n < 1) return;
+    const xkb_keysym_t k = syms[0];
+    std::string nombre;
+    if (k >= XKB_KEY_a && k <= XKB_KEY_z) nombre = std::string(1, (char)('A' + (k - XKB_KEY_a)));
+    else if (k >= XKB_KEY_A && k <= XKB_KEY_Z) nombre = std::string(1, (char)k);
+    else if (k >= XKB_KEY_0 && k <= XKB_KEY_9) nombre = std::string(1, (char)k);
+    else if (k >= XKB_KEY_F1 && k <= XKB_KEY_F12) nombre = "F" + std::to_string(k - XKB_KEY_F1 + 1);
+    else if (k == XKB_KEY_Left) nombre = "Left";
+    else if (k == XKB_KEY_Right) nombre = "Right";
+    else if (k == XKB_KEY_Up) nombre = "Up";
+    else if (k == XKB_KEY_Down) nombre = "Down";
+    else if (k == XKB_KEY_Prior) nombre = "PgUp";
+    else if (k == XKB_KEY_Next) nombre = "PgDown";
+    else if (k == XKB_KEY_Home) nombre = "Home";
+    else if (k == XKB_KEY_End) nombre = "End";
+    else if (k == XKB_KEY_Insert) nombre = "Insert";
+    else if (k == XKB_KEY_Delete) nombre = "Delete";
+    else if (k == XKB_KEY_space) nombre = "Space";
+    else if (k == XKB_KEY_plus) nombre = "Plus";
+    else if (k >= 0x21 && k <= 0x7e) nombre = std::string(1, (char)k);
+    else return;   /* los modificadores solos, Bloq Mayus, las teclas raras: se espera a la de verdad */
+    auto activo = [&](const char *m) {
+      return xkb_state_mod_name_is_active(s->xkbEstado, m, XKB_STATE_MODS_EFFECTIVE) > 0;
+    };
+    std::string combo;
+    if (activo(XKB_MOD_NAME_CTRL)) combo += "Ctrl+";
+    if (activo(XKB_MOD_NAME_ALT)) combo += "Alt+";
+    if (activo(XKB_MOD_NAME_SHIFT)) combo += "Shift+";
+    if (activo(XKB_MOD_NAME_LOGO)) combo += "Meta+";
+    s->teclas.push_back(combo + nombre);
+#endif
+  }
+  static void kbModifiers(void *data, wl_keyboard *, uint32_t, uint32_t dep, uint32_t lat, uint32_t blo, uint32_t grupo) {
+#ifdef HAVE_XKBCOMMON
+    Impl *s = static_cast<Impl *>(data);
+    if (s->xkbEstado) xkb_state_update_mask(s->xkbEstado, dep, lat, blo, 0, 0, grupo);
+#else
+    (void)data, (void)dep, (void)lat, (void)blo, (void)grupo;
+#endif
+  }
+  static void kbRepeat(void *, wl_keyboard *, int32_t, int32_t) {}
+  static const struct wl_keyboard_listener keyboardListener;
+  /* pedir o soltar el teclado: la capa lo toma en exclusiva (layer-shell v1: 1 = si) */
+  void aplicaTeclado() {
+    if (!layer) return;
+    zwlr_layer_surface_v1_set_keyboard_interactivity(layer, tecladoPedido ? 1 : 0);
+    wl_surface_commit(surf);
+    wl_display_flush(dpy);
+  }
 };
 
 const struct wl_registry_listener Overlay::Impl::registryListener = {
@@ -937,6 +1048,10 @@ const struct wl_output_listener Overlay::Impl::outputListener = {
 
 const struct zwlr_layer_surface_v1_listener Overlay::Impl::layerListener = {Impl::layerConfigure,
                                                                             Impl::layerClosed};
+
+const struct wl_keyboard_listener Overlay::Impl::keyboardListener = {
+    Overlay::Impl::kbKeymap, Overlay::Impl::kbEnter,     Overlay::Impl::kbLeave,
+    Overlay::Impl::kbKey,    Overlay::Impl::kbModifiers, Overlay::Impl::kbRepeat};
 
 const struct wl_pointer_listener Overlay::Impl::pointerListener = {
     Impl::ptrEnter, Impl::ptrLeave, Impl::ptrMotion, Impl::ptrButton, Impl::ptrAxis,
@@ -1173,6 +1288,7 @@ void Overlay::showPanel(bool grande) {
   zwlr_layer_surface_v1_set_margin(s.layer, s.margenArr, 0, 0, s.margenIzq);
   zwlr_layer_surface_v1_set_exclusive_zone(s.layer, -1);
   zwlr_layer_surface_v1_set_size(s.layer, (uint32_t)s.supAncho, (uint32_t)s.supAlto);
+  zwlr_layer_surface_v1_set_keyboard_interactivity(s.layer, s.tecladoPedido ? 1 : 0);
 #ifdef HAVE_FRACTIONAL_SCALE
   if (s.viewport) wp_viewport_set_destination(s.viewport, s.supAncho, s.supAlto);
 #endif
@@ -1187,6 +1303,20 @@ void Overlay::showPanel(bool grande) {
   s.pintar();
 }
 
+
+void Overlay::tomarTeclado(bool si) {
+  if (!d || d->tecladoPedido == si) return;
+  d->tecladoPedido = si;
+  if (!si) d->teclas.clear();
+  d->aplicaTeclado();
+}
+
+bool Overlay::takeTecla(std::string &combo) {
+  if (!d || d->teclas.empty()) return false;
+  combo = d->teclas.front();
+  d->teclas.erase(d->teclas.begin());
+  return true;
+}
 
 void Overlay::hideAsk() {
   if (!d) return;

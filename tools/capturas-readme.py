@@ -98,6 +98,9 @@ def interfaz(lengua, destino):
         im = pinta(casa, estado, lengua, "idiomas", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_MENU_IDIOMA=1)
         caja = caja_alfa(im, centro)
         guarda(sobre(im, (caja[0], caja[1], caja[2], caja[1] + 820), 0), os.path.join(destino, "language.png"), 1400)
+        im = pinta(casa, estado, lengua, "atajos", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_CORRIDA=470,
+                   ODYSSEYVK_HUD_CAPTURA="prof+")
+        guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "shortcuts.png"), 1400)
         im = pinta(casa, estado, lengua, "aviso", ODYSSEYVK_HUD_AVISO=1)
         guarda(sobre(im, caja_alfa(im, (W // 2, H // 2, W, H))), os.path.join(destino, "card.png"), 1100)
     finally:

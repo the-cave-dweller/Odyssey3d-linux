@@ -72,6 +72,13 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla |
 | `Esc` (en el visor) | salir del 3D |
 
+Cada atajo se cambia en **Ajustes → Atajos de teclado**: pícalo y pulsa la combinación nueva
+(necesita Ctrl, Alt o Meta; Esc cancela y la flecha circular vuelve a la de fábrica). Mientras el
+panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
+teclas; Esc lo cierra.
+
+![Los atajos de teclado en el panel de ajustes](docs/img/es/shortcuts.png)
+
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
 Sus pestañas son **Ajustes**, **Juegos**, **Rendimiento** (cuadros por segundo, tiempo del
@@ -159,6 +166,7 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 | `crosstalk_base = 0,013` | cuánta imagen del otro ojo se resta (fantasma) |
 | `hz = 165` | frecuencia del panel en 3D (120 de fábrica; el G90XF también va a 165) |
 | `hdr_en_3d = si` | mantener el HDR durante el 3D |
+| `atajo_3d = Ctrl+Shift+1` | un atajo (los escribe el panel): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |
 | `barra_tareas = no` / `bandeja = no` | quitar OdysseyVK de la barra de tareas / de la bandeja |
 | `actualizaciones = no` / `actualizar_auto = si` | sin tarjeta de actualización / instalar solo |
 | `actualizaciones_cada = 6` | horas entre miradas a este repositorio |

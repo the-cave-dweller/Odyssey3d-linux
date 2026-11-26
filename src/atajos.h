@@ -15,8 +15,35 @@
    xkbcommon que simbolo sale con Mayus en cada tecla de numero. */
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
+
+/* Los atajos personalizables (v1.09). Cada accion tiene su combinacion de fabrica y la que se
+   elija en el panel de ajustes (seccion ATAJOS DE TECLADO), guardada en serve.conf como
+   `atajo_<clave> = Ctrl+Shift+1`. Las combinaciones se escriben siempre igual: los modificadores en
+   el orden Ctrl, Alt, Shift, Meta y la tecla (A..Z, 0..9, F1..F12, Left, Right, Up, Down, PgUp,
+   PgDown, Home, End, Insert, Delete, Space, Plus o el signo). */
+namespace atajos {
+
+struct Def {
+  const char *nombre;    /* el de la accion en kglobalaccel: "3d", "prof+", ... */
+  const char *clave;     /* la de serve.conf, sin el `atajo_` */
+  const char *texto;     /* lo que se ve en el panel, en español (pasa por idioma::tr) */
+  const char *defecto;   /* la combinacion de fabrica */
+};
+/* las ocho acciones que se pueden cambiar, en el orden del panel */
+const std::vector<Def> &lista();
+/* la combinacion puesta para cada accion (serve.conf o la de fabrica): nombre -> combinacion */
+std::map<std::string, std::string> combos();
+/* "ctrl + shift + k" -> "Ctrl+Shift+K"; vacio si no se entiende */
+std::string normaliza(const std::string &combo);
+/* que no se coma una tecla suelta en todo el escritorio: hace falta Ctrl, Alt o Meta */
+bool tieneModificador(const std::string &combo);
+/* el renglon de las teclas de la pastilla cuando alguna no es la de fabrica (vacio si todas lo son) */
+std::string renglonPastilla(bool legado);
+
+}  // namespace atajos
 
 class AtajosGlobales {
 public:
