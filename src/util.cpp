@@ -244,3 +244,16 @@ std::string ensureWaylandEnv() {
   setenv("XDG_RUNTIME_DIR", dir.c_str(), 1);
   return found[0];
 }
+
+/* el panel fijado encima (rama experimental): lo apunta el pin del panel y lo mira el visor, que con
+   el panel fijado no lo cierra cuando se pica el juego */
+bool panelFijado() {
+  std::string t;
+  return readSmallFile(rutaEstadoOdyssey("panel-fijado"), t) && strTrim(t) == "si";
+}
+void fijarPanel(bool si) {
+  if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-fijado").c_str(), "we")) {
+    std::fputs(si ? "si\n" : "no\n", f);
+    std::fclose(f);
+  }
+}

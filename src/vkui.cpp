@@ -231,6 +231,9 @@ bool Hud::buildAtlas(std::string *err) {
     cupo = poligono(kRayo, 7, &icoRayo_) && cupo;
     cupo = poligono(kBajar, 6, &icoBajar_) && cupo;
     cupo = poligono(kDerecha, 6, &icoDerecha_) && cupo;
+    /* el pin del panel: cabeza, collar y aguja */
+    static const float kPin[][2] = {{22, 6}, {42, 6}, {42, 30}, {50, 30}, {50, 37}, {35, 37}, {32, 60}, {29, 37}, {14, 37}, {14, 30}, {22, 30}};
+    cupo = poligono(kPin, 11, &icoPin_) && cupo;
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -1233,8 +1236,14 @@ void Hud::dibujaPanel(int vw, int vh) {
   mask9(panelCaja_, 1, 22.0f, 0.42f, 0.43f, 0.50f, 0.80f);                                   /* el filo */
   mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.085f, 0.09f, 0.11f, 0.86f);   /* translucido */
 
-  /* cabecera: nombre, pestanas en pildora y el aspa */
-  const float tx0 = text("OdysseyVK", px + 28.0f, py + 24.0f, 20.0f, ink[0], ink[1], ink[2], 1.0f);
+  /* cabecera: el pin, el nombre, pestanas en pildora y el aspa */
+  panelFijar_ = {px + 18.0f, py + 22.0f, 28.0f, 28.0f};
+  const bool hfij = panelFijar_.inside(mx_, my_) && !st_.menuIdioma;
+  if (st_.fijado) mask9(panelFijar_, 0, 14.0f, accent[0], accent[1], accent[2], 0.95f);
+  else if (hfij) mask9(panelFijar_, 0, 14.0f, 1.0f, 1.0f, 1.0f, 0.12f);
+  icono({panelFijar_.x + 5.0f, panelFijar_.y + 5.0f, 18.0f, 18.0f}, icoPin_, ink[0], ink[1], ink[2],
+        st_.fijado ? 1.0f : (hfij ? 0.95f : 0.55f));
+  const float tx0 = text("OdysseyVK", px + 52.0f, py + 24.0f, 20.0f, ink[0], ink[1], ink[2], 1.0f);
   panelPestanas_.clear();
   float tx = tx0 + 26.0f;
   /* v1.07: en ruso («Производительность») las pestanas no cabian hasta el globo: la letra se achica */
@@ -1612,6 +1621,15 @@ void Hud::dibujaPanel(int vw, int vh) {
     bx = std::max(px + 12.0f, bx);
     cajaAyuda(lineas, bx, by, tam);
   }
+  /* el rotulo del pin, al pasar por encima */
+  if (hfij) {
+    const std::string r = idioma::tr(st_.fijado ? "Fijado encima: un clic en el juego no cierra el panel. Pica para soltarlo."
+                                                 : "Fijar encima: que un clic en el juego no cierre el panel.");
+    const float w = textWidth(r, 12.5f) + 24.0f;
+    const Rect rr{panelFijar_.x, panelFijar_.y + panelFijar_.h + 8.0f, w, 30.0f};
+    mask9(rr, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
+    text(r, rr.x + 12.0f, rr.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
+  }
   /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
   if (ha && !rotuloActualizar.empty() && !st_.menuIdioma) {
     const float w = textWidth(rotuloActualizar, 12.5f) + 24.0f;
@@ -1645,6 +1663,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
       }
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
+  if (panelFijar_.inside(mx, my)) return HitPanelFijar;
   if (panelIdioma_.inside(mx, my)) return HitPanelIdioma;
   if (panelActualizar_.inside(mx, my)) return HitPanelActualizar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)

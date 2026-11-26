@@ -48,6 +48,9 @@ std::string rutaRedNuestra();
 /* las dos versiones de la abierta: la ligera (fp16, la de fabrica) y la de siempre (fp32) */
 std::string rutaRedLigera();
 std::string rutaRedVieja();
+/* el pin del panel de ajustes (rama experimental): fijado encima o no, en ~/.local/state/odysseyvk/panel-fijado */
+bool panelFijado();
+void fijarPanel(bool si);
 
 /* True si el archivo existe y se puede leer. */
 bool fileExists(const std::string &path);

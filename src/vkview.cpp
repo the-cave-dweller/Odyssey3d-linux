@@ -514,7 +514,7 @@ static bool clicFuera(VkUi &ui, Hud::Hit hit, double x, double y) {
   if (!ui.robando || hit != Hud::HitNone) return false;
   float px = 0, py = 0, pw = 0, ph = 0;
   if (ui.hud.pillBounds(&px, &py, &pw, &ph) && x >= px && x <= px + pw && y >= py && y <= py + ph) return false;
-  cerrarPanelDeAjustes();
+  if (!panelFijado()) cerrarPanelDeAjustes();   /* fijado encima (el pin del panel), se queda */
   cambioCapa(ui, false, "clic en el juego");
   return true;
 }

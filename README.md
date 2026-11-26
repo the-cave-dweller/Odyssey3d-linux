@@ -204,7 +204,9 @@ see what it changes. In this mode variable refresh is left as the desktop has it
 can be read, and then hides by itself. While you bring it back with `Ctrl+Shift+F1` it takes the
 cursor from the game (the game stops being the active window, so it lets go of a locked cursor);
 hiding it again, or clicking anywhere on the game, gives the cursor back. The settings panel does
-the same while it is open over a game: a click outside it closes it and returns control.
+the same while it is open over a game: a click outside it closes it and returns control, unless you
+pin it with the pin left of its name: pinned, it stays on top and a click on the game just gives the
+game the mouse and keyboard back.
 
 ## Documentation
 

@@ -108,6 +108,9 @@ public:
     /* el boton del idioma (v1.07), a la izquierda del de la actualizacion: abierto, cuelga debajo la
        lista de los siete idiomas */
     bool menuIdioma = false;
+    /* el pin a la izquierda del nombre (rama experimental): fijado, el panel se queda encima aunque se
+       pique el juego (sin velo y con el teclado a pedido) */
+    bool fijado = false;
     /* el renglon de las teclas de la pastilla cuando hay atajos cambiados (v1.09); vacio = el de fabrica */
     std::string teclas;
     /* la pastilla del modo rendimiento (rama experimental): el conversor va sin red. Lleva el acento
@@ -175,6 +178,7 @@ public:
     HitPanelActualizar,   /* el boton de la actualizacion, junto al aspa (v0.95) */
     HitPanelIdioma,       /* el boton del idioma (v1.07): abre y cierra la lista */
     HitPanelIdiomaOpcion, /* un idioma de la lista: `sub` = cual (idioma::Lengua) */
+    HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
@@ -323,7 +327,7 @@ private:
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
-      icoRayo_, icoBajar_, icoDerecha_;
+      icoRayo_, icoBajar_, icoDerecha_, icoPin_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -366,7 +370,7 @@ private:
     std::vector<Rect> subs;   /* las opciones de un segmentado, o el aspa de una fila */
     Rect pista;               /* la pista de un deslizador */
   };
-  Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_;
+  Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelPestanas_;
   std::vector<ZonaItem> zonas_;

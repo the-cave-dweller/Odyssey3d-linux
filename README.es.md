@@ -210,7 +210,9 @@ frecuencia variable queda como la tenga el escritorio.
 se lean los atajos, y se oculta sola. Si la traes con `Ctrl+Shift+F1`, le quita el cursor al juego
 (el juego deja de ser la ventana activa y suelta el cursor encerrado); al ocultarla otra vez, o con
 un clic en cualquier parte del juego, se lo devuelve. El panel de ajustes hace lo mismo mientras está
-abierto sobre un juego: un clic fuera de él lo cierra y devuelve el control.
+abierto sobre un juego: un clic fuera de él lo cierra y devuelve el control, salvo que lo fijes con el
+pin a la izquierda de su nombre: fijado, se queda encima y un clic en el juego solo le devuelve el
+ratón y el teclado.
 
 ## Documentación
 

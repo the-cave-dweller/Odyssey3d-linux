@@ -3067,8 +3067,11 @@ static int cmdAjustes(int argc, char **argv) {
       break;
     }
   }
+  /* el pin (rama experimental): fijado encima, sin velo y con el teclado a pedido */
+  st.fijado = panelFijado();
+  const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
   /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
-  ov.showPanel(grande, !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr);
+  ov.showPanel(grande, quiereVelo && !st.fijado);
   if (!ov.askVisible()) {
     std::fprintf(stderr, "[ajustes] el compositor no puso el panel: %s\n", ov.lastError().c_str());
     ::unlink(rutaPid.c_str());
@@ -3076,8 +3079,8 @@ static int cmdAjustes(int argc, char **argv) {
   }
   /* el teclado entero para el panel mientras esta abierto (v1.09): el juego o el video de debajo no
      reciben teclas, Esc lo cierra y los atajos se capturan aqui */
-  ov.tomarTeclado(true);
-  if (!juegoUuid.empty()) {
+  ov.modoTeclado(st.fijado ? 2 : 1);
+  if (!juegoUuid.empty() && !st.fijado) {
     /* medido, no supuesto: el registro dice si el juego dejo de ser la ventana activa */
     for (int i = 0; i < 6; i++) {
       ov.waitAndDispatch(30);
@@ -3110,7 +3113,20 @@ static int cmdAjustes(int argc, char **argv) {
     ov.waitAndDispatch(100);
     Overlay::Golpe g;
     bool repintar = false;
-    while (ov.takeGolpe(g)) {
+    /* ODYSSEYVK_PIN_TRAS=S (para probar en un KWin aparte, donde no hay raton): a los S segundos se pica el pin */
+    {
+      static const char *pinTras = entornoOdyssey("ODYSSEYVK_PIN_TRAS");
+      static const double t0 = reloj();
+      static bool hecho = false;
+      if (pinTras && !hecho && reloj() - t0 >= std::atof(pinTras)) {
+        hecho = true;
+        Overlay::Golpe gp;
+        gp.tipo = (int)Hud::HitPanelFijar;
+        g = gp;
+        std::printf("[ajustes] prueba: se pica el pin\n");
+      }
+    }
+    for (bool primero = true; (primero && g.tipo == (int)Hud::HitPanelFijar) || ov.takeGolpe(g); primero = false) {
       /* un clic en el velo, fuera del panel: el panel se cierra y el juego recupera el control */
       if (g.tipo == Overlay::kClicFuera) {
         std::printf("[ajustes] clic fuera del panel: se cierra y el juego recupera el control\n");
@@ -3137,6 +3153,17 @@ static int cmdAjustes(int argc, char **argv) {
       }
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelFijar) {
+        /* el pin: fijado, el velo se va y el teclado pasa a pedido (un clic en el juego se lo lleva y
+           el panel se queda); suelto, vuelve el velo (encima del juego) y el teclado exclusivo */
+        st.fijado = !st.fijado;
+        fijarPanel(st.fijado);
+        if (st.fijado) ov.quitarVelo();
+        else if (quiereVelo) ov.showPanel(grande, true);
+        std::printf("[ajustes] panel %s\n", st.fijado ? "fijado encima: un clic en el juego ya no lo cierra"
+                                                      : "suelto: un clic fuera lo cierra");
+        std::fflush(stdout);
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelIdioma) {
         st.menuIdioma = !st.menuIdioma;
         repintar = true;
@@ -3177,6 +3204,8 @@ static int cmdAjustes(int argc, char **argv) {
         if (cerrar) cerrarEn = reloj() + 1.2;   /* que de tiempo a leer «arrancando ...» */
       }
     }
+    /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
+    ov.modoTeclado(!st.fijado ? 1 : ((!prefs::capturando().empty() && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
     {
@@ -3349,6 +3378,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
       prefs::aplicar(std::string("atajo:") + cap, 0, 0.0f, true, {}, &pieCaptura, &cerrar);
     }
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
+    hud.state().fijado = panelFijado();   /* el pin, como lo dejo el panel (rama experimental) */
     /* ODYSSEYVK_HUD_SESION=1: como con un video o un juego en 3D debajo (sin la pestana de Juegos) */
     if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 1) hud.state().pestanas[1].clear();
     hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;

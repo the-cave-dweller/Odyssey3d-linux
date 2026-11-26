@@ -3,6 +3,28 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El pin del panel: fijarlo encima del juego (rama `experimental`)
+
+- Rodolfo: «pon un pequeño pin a la izquierda del nombre, para always on top, que cuando lo pique el
+  juego no quite el overlay».
+- **El pin**, a la izquierda de «OdysseyVK» en la cabecera del panel: gris suelto, morado fijado, con
+  su rótulo al pasar el ratón. Se recuerda en `~/.local/state/odysseyvk/panel-fijado`.
+- **Fijado**: sin velo (los clics fuera llegan al juego) y con el teclado «a pedido» (layer-shell v4:
+  la capa lo toma solo cuando se la pica, y un clic en el juego se lo lleva); el panel se queda encima.
+  El visor, con el panel fijado, tampoco lo cierra al picar el juego con la pastilla puesta. **Suelto**:
+  como antes (velo y teclado exclusivo; un clic fuera lo cierra). Al soltarlo con un juego debajo, el
+  velo vuelve y la capa del panel se rehace encima, en el mismo sitio.
+- Se enlaza la v4 de layer-shell si el compositor la ofrece: el «a pedido» es el mismo pedido de la
+  v1 con otro número. Sin ella, fijado se queda sin teclado (y exclusivo mientras se espera un atajo).
+- **Arreglos de paso**: (1) el globo del idioma, su lista y la flecha de actualizar de la cabecera no
+  le llegaban nunca al bucle del panel (la capa solo pasaba el aspa, las pestañas y las filas; venía de
+  main); (2) con la conexión rota, la capa se quedaba dando vueltas en `prepare_read` y el panel no se
+  cerraba ni con SIGTERM; (3) rehacer la capa con el lienzo aún puesto es un error de protocolo («a
+  buffer has been attached to a layer surface prior to the first configure»): se suelta antes.
+- MEDIDO en un KWin aparte con Konsole de juego y `ODYSSEYVK_PIN_TRAS` (pica el pin solo a los N s):
+  suelto→fijado, el velo se va y el panel sigue; fijado→suelto, el velo vuelve debajo del panel; al
+  cerrar, el «juego» vuelve a ser la activa en los dos casos.
+
 ## Más profundidad con la red: el alcance del relieve (rama `experimental`)
 
 - Rodolfo: «¿podemos intentar meter aún más profundidad sobre el modelo?». Tenía `relieve = 2,00`,

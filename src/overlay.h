@@ -75,6 +75,13 @@ public:
      puesta (el juego o el video de debajo no reciben teclas). `takeTecla` da cada combinacion
      pulsada, escrita como los atajos ("Ctrl+Shift+K", "Alt+F5") o "Escape". */
   void tomarTeclado(bool si);
+  /* 0 = sin teclado · 1 = exclusivo · 2 = a pedido (rama experimental: el panel fijado encima toma el
+     teclado solo cuando se le pica; un clic en el juego se lo devuelve). `tecladoAPedido` dice si el
+     compositor ofrece el 2 (layer-shell v4); si no, el 2 se queda sin teclado. */
+  void modoTeclado(int modo);
+  bool tecladoAPedido() const;
+  /* quita el velo de debajo del panel (al fijarlo encima: los clics fuera llegan al juego) */
+  void quitarVelo();
   bool takeTecla(std::string &combo);
 
   /* Vuelca la tarjeta a un archivo PNG (para comprobar el dibujo sin el compositor). */

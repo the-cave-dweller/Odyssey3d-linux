@@ -74,7 +74,10 @@ struct Overlay::Impl {
   /* el teclado (v1.09): el panel de ajustes se lo queda entero mientras esta abierto (el juego de
      debajo no recibe teclas) y asi puede capturar los atajos nuevos */
   wl_keyboard *keyboard = nullptr;
-  bool tecladoPedido = false;
+  /* 0 = sin teclado · 1 = exclusivo (el panel abierto) · 2 = a pedido, solo cuando se pica la capa (el
+     panel fijado encima, rama experimental; layer-shell v4, si no se queda en 0) */
+  int tecladoPedido = 0;
+  uint32_t capaVersion = 1;
   std::vector<std::string> teclas;   /* combinaciones pulsadas: "Ctrl+Shift+K", "Escape" */
 #ifdef HAVE_XKBCOMMON
   xkb_context *xkbCtx = nullptr;
@@ -761,7 +764,11 @@ struct Overlay::Impl {
       marcaConexionCaida();
       return -1;
     }
-    while (wl_display_prepare_read(dpy) != 0) wl_display_dispatch_pending(dpy);
+    while (wl_display_prepare_read(dpy) != 0)
+      if (wl_display_dispatch_pending(dpy) < 0) {
+        marcaConexionCaida();
+        return -1;
+      }
     wl_display_flush(dpy);
     struct pollfd p{wl_display_get_fd(dpy), POLLIN, 0};
     const int n = ::poll(&p, 1, ms);
@@ -785,9 +792,11 @@ struct Overlay::Impl {
       s->shm = static_cast<wl_shm *>(wl_registry_bind(reg, name, &wl_shm_interface, std::min<uint32_t>(version, 1)));
     else if (!std::strcmp(iface, xdg_wm_base_interface.name))
       s->wmBase = static_cast<xdg_wm_base *>(wl_registry_bind(reg, name, &xdg_wm_base_interface, std::min<uint32_t>(version, 2)));
-    else if (!std::strcmp(iface, zwlr_layer_shell_v1_interface.name))
+    else if (!std::strcmp(iface, zwlr_layer_shell_v1_interface.name)) {
       s->shell = static_cast<zwlr_layer_shell_v1 *>(
-          wl_registry_bind(reg, name, &zwlr_layer_shell_v1_interface, std::min<uint32_t>(version, 1)));
+          wl_registry_bind(reg, name, &zwlr_layer_shell_v1_interface, std::min<uint32_t>(version, 4)));
+      s->capaVersion = std::min<uint32_t>(version, 4);   /* la v4 trae el teclado «a pedido» (panel fijado) */
+    }
     else if (!std::strcmp(iface, wl_seat_interface.name)) {
       s->seat = static_cast<wl_seat *>(wl_registry_bind(reg, name, &wl_seat_interface, std::min<uint32_t>(version, 6)));
       if (s->seat) {
@@ -1039,7 +1048,12 @@ struct Overlay::Impl {
       agarreX = supX, agarreY = supY;
       return;
     }
-    if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem)
+    /* los botones de la cabecera tambien (el globo, su lista y la flecha de actualizar no llegaban nunca
+       al bucle del panel; el pin es de la rama experimental), y cualquier otro clic con la lista de
+       idiomas abierta, que la cierra */
+    if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem || h == Hud::HitPanelIdioma ||
+        h == Hud::HitPanelIdiomaOpcion || h == Hud::HitPanelActualizar || h == Hud::HitPanelFijar ||
+        (hud.state().menuIdioma && (h == Hud::HitPanel || h == Hud::HitPanelTitulo)))
       golpes.push_back({(int)h, item, sub, fr, true});
   }
   static void ptrMotion(void *data, wl_pointer *, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
@@ -1132,7 +1146,7 @@ struct Overlay::Impl {
   static void kbLeave(void *, wl_keyboard *, uint32_t, wl_surface *) {}
   static void kbKey(void *data, wl_keyboard *, uint32_t, uint32_t, uint32_t tecla, uint32_t estado) {
     Impl *s = static_cast<Impl *>(data);
-    if (estado != WL_KEYBOARD_KEY_STATE_PRESSED || !s->tecladoPedido) return;
+    if (estado != WL_KEYBOARD_KEY_STATE_PRESSED || s->tecladoPedido == 0) return;
     if (tecla == KEY_ESC) {   /* sin xkb tambien: Esc cierra o cancela */
       s->teclas.push_back("Escape");
       return;
@@ -1186,9 +1200,15 @@ struct Overlay::Impl {
   static void kbRepeat(void *, wl_keyboard *, int32_t, int32_t) {}
   static const struct wl_keyboard_listener keyboardListener;
   /* pedir o soltar el teclado: la capa lo toma en exclusiva (layer-shell v1: 1 = si) */
+  /* el valor que entiende el compositor: «a pedido» (2) solo existe desde la version 4 del protocolo;
+     el pedido es el mismo de la v1 con otro numero, asi que basta con haber enlazado la v4 */
+  uint32_t modoTecladoCapa() const {
+    if (tecladoPedido == 2) return capaVersion >= 4 ? 2u : 0u;
+    return tecladoPedido == 1 ? 1u : 0u;
+  }
   void aplicaTeclado() {
     if (!layer) return;
-    zwlr_layer_surface_v1_set_keyboard_interactivity(layer, tecladoPedido ? 1 : 0);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(layer, modoTecladoCapa());
     wl_surface_commit(surf);
     wl_display_flush(dpy);
   }
@@ -1300,7 +1320,18 @@ int Overlay::dispatchPending() {
 
 int Overlay::waitAndDispatch(int ms) {
   if (!d->dpy) return -1;
-  while (wl_display_prepare_read(d->dpy) != 0) wl_display_dispatch_pending(d->dpy);
+  /* con la conexion rota, `prepare_read` no deja de fallar y `dispatch_pending` tampoco: el bucle de
+     antes se quedaba dando vueltas para siempre (el panel no se cerraba ni con SIGTERM; visto en un
+     KWin aparte al rehacer la capa con el lienzo aun puesto) */
+  if (wl_display_get_error(d->dpy) != 0) {
+    d->marcaConexionCaida();
+    return -1;
+  }
+  while (wl_display_prepare_read(d->dpy) != 0)
+    if (wl_display_dispatch_pending(d->dpy) < 0) {
+      d->marcaConexionCaida();
+      return -1;
+    }
   wl_display_flush(d->dpy);
   struct pollfd p{wl_display_get_fd(d->dpy), POLLIN, 0};
   int n = ::poll(&p, 1, ms);
@@ -1427,7 +1458,9 @@ void Overlay::showPanel(bool grande, bool velo) {
 
   /* el velo va antes que la capa del panel: en la misma capa del compositor, la ultima puesta va encima */
   if (velo) {
-    if (s.layer && !s.veloSurf) s.quitaEscuchaLayer();   /* la del panel se rehace encima del velo */
+    /* la del panel se rehace encima del velo; antes se suelta su lienzo, que una capa nueva no puede
+       traer uno puesto antes de su primera configuracion (error de protocolo, medido en un KWin aparte) */
+    if (s.layer && !s.veloSurf) s.limpiaTarjeta();
     s.ponVelo();
   }
   if (!s.layer) {
@@ -1445,13 +1478,16 @@ void Overlay::showPanel(bool grande, bool velo) {
   zwlr_layer_surface_v1_set_anchor(s.layer, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
   s.logAncho = (s.elegido && s.elegido->anchoLog > 0) ? s.elegido->anchoLog : (int)(s.anchoE / std::max(0.25, s.escala));
   s.logAlto = (s.elegido && s.elegido->altoLog > 0) ? s.elegido->altoLog : (int)(s.altoE / std::max(0.25, s.escala));
-  s.margenIzq = std::max(0, (s.logAncho - s.supAncho) / 2);
-  s.margenArr = std::max(0, (s.logAlto - s.supAlto) / 2);
+  /* ya montado (se rehace su capa encima del velo al quitarle el pin): se queda donde estaba */
+  if (!s.panelMontado) {
+    s.margenIzq = std::max(0, (s.logAncho - s.supAncho) / 2);
+    s.margenArr = std::max(0, (s.logAlto - s.supAlto) / 2);
+  }
   s.panelMontado = true;
   zwlr_layer_surface_v1_set_margin(s.layer, s.margenArr, 0, 0, s.margenIzq);
   zwlr_layer_surface_v1_set_exclusive_zone(s.layer, -1);
   zwlr_layer_surface_v1_set_size(s.layer, (uint32_t)s.supAncho, (uint32_t)s.supAlto);
-  zwlr_layer_surface_v1_set_keyboard_interactivity(s.layer, s.tecladoPedido ? 1 : 0);
+  zwlr_layer_surface_v1_set_keyboard_interactivity(s.layer, s.modoTecladoCapa());
 #ifdef HAVE_FRACTIONAL_SCALE
   if (s.viewport) wp_viewport_set_destination(s.viewport, s.supAncho, s.supAlto);
 #endif
@@ -1467,11 +1503,19 @@ void Overlay::showPanel(bool grande, bool velo) {
 }
 
 
-void Overlay::tomarTeclado(bool si) {
-  if (!d || d->tecladoPedido == si) return;
-  d->tecladoPedido = si;
-  if (!si) d->teclas.clear();
+void Overlay::tomarTeclado(bool si) { modoTeclado(si ? 1 : 0); }
+
+void Overlay::modoTeclado(int modo) {
+  if (!d || d->tecladoPedido == modo) return;
+  d->tecladoPedido = modo;
+  if (modo == 0) d->teclas.clear();
   d->aplicaTeclado();
+}
+
+bool Overlay::tecladoAPedido() const { return d && d->capaVersion >= 4; }
+
+void Overlay::quitarVelo() {
+  if (d) d->quitaVelo();
 }
 
 bool Overlay::takeTecla(std::string &combo) {
