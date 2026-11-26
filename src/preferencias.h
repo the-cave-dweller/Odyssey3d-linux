@@ -61,6 +61,7 @@ struct Valores {
   int expMapa = 518;                 /* `exp_mapa`: 518 | 770 | 1022 */
   bool expTope = false;              /* `exp_tope_arrastre = si` */
   int expAnticipacion = 0;           /* `exp_anticipacion`: ms, 0 = apagada */
+  double expTopesRed = 1.0;          /* `exp_topes_red`: los topes por ojo con la red, x1..x4 */
   std::string expPrioridad = "normal";   /* `exp_prioridad`: normal | alta | tiempo_real */
   std::string expSinRed = "no";          /* `exp_sin_red`: no | si (suelo e imagen, de antes, valen como si) */
   bool vrrEn3d = false;                  /* `vrr_en_3d = si`: el VRR puesto durante el 3D */

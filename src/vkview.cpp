@@ -1574,6 +1574,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   const rendimiento::Preajuste &pf = rendimiento::kPreajustes[rendimiento::kDeFabrica];
   float exGanancia = numEntorno("ODYSSEYVK_SIN_RED_RELIEVE", pf.ganancia, 0.5f, 2.0f);
   float exTopes = numEntorno("ODYSSEYVK_SIN_RED_TOPES", pf.topes, 1.0f, 4.0f);
+  /* con la red (rama experimental): los topes por ojo multiplicados (`exp_topes_red`). MEDIDO 26-nov
+     con los mapas de la red: con Profundidad 100 y `relieve = 2,00`, a x1 el 85 % del cuadro se pega
+     al tope de dentro y entre los ojos solo hay ~11 px de relieve; a x2,75 el 58 % y ~47 px; a x4 el
+     32 % y ~71 px. Con el plano automatico, x2,75 deja un 2 % pegado y ~81 px. */
+  float exTopesRed = numEntorno("ODYSSEYVK_TOPES_RED", 1.0f, 1.0f, 4.0f);
   double exParalaje = numEntorno("ODYSSEYVK_SIN_RED_PARALAJE", pf.paralaje, 1.0f, 4.0f);
   std::vector<uint8_t> chico, mapa;
   bool convActivo = opts.conver;
@@ -2306,6 +2311,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (const auto op = palabras.find("preajuste"); op != palabras.end()) {
             const int k = std::atoi(op->second.c_str());
             if (k >= 0 && k <= 2) ui.preajustePedido = k;
+          }
+          /* `topes_red = 2,75` (rama experimental): el alcance del relieve con la red, en marcha */
+          if (const auto op = palabras.find("topes_red"); op != palabras.end()) {
+            std::string t = op->second;
+            for (char &c : t)
+              if (c == ',') c = '.';
+            const float x = (float)std::atof(t.c_str());
+            if (x >= 1.0f && x <= 4.0f) exTopesRed = x;
           }
           const auto ordenIdioma = palabras.find("idioma");
           if (ordenIdioma != palabras.end()) {
@@ -3510,7 +3523,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
       }
       const float exRel = red.sinRed() ? exGanancia : 1.0f;
-      wv.setTopeEscala(red.sinRed() ? exTopes : 1.0f);
+      wv.setTopeEscala(red.sinRed() ? exTopes : exTopesRed);
+      {
+        static float dicho = -1.0f;
+        if (!red.sinRed() && exTopesRed != dicho) {
+          dicho = exTopesRed;
+          std::printf("[conversor] alcance del relieve con la red x%.2f (topes por ojo +%.1f / -%.1f px)\n", (double)exTopesRed,
+                      12.67 * exTopesRed, 9.98 * exTopesRed);
+          std::fflush(stdout);
+        }
+      }
       {
         static bool dicho = false;
         if (red.sinRed() && !dicho) {

@@ -189,7 +189,9 @@ The `experimental` branch adds an **Experimental** tab to the panel with trials 
 16:9 proportion (`exp_red = cuadrado | 518 | 770`), a bigger depth map (`exp_mapa = 518 | 770 |
 1022`), a lag cap on the smoothing over time (`exp_tope_arrastre = si`) and head anticipation in
 milliseconds (`exp_anticipacion = 25`). Each applies from the next video; what works moves to the
-normal version.
+normal version. **Depth reach** (`exp_topes_red = 2,75`, x1–x4) widens the per-eye limits with the
+network, live: with them at factory width, more strength or Depth only flattens the image against
+them (measured: 85 % of the frame at Depth 100 and relief x2).
 
 It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`),
 worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's ~1.1 GB on the GPU). It is rougher

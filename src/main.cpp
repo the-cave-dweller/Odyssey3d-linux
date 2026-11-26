@@ -3711,6 +3711,7 @@ struct ServeCfg {
      inicio»): relieve y paralaje al doble, y 35 % de pistas de la imagen sobre el suelo */
   double expSinRedRelieve = 1.0;  /* x0,5..x2: la ganancia del relieve sin red (preajuste medio: x1) */
   double expSinRedTopes = 2.75;   /* x1..x4: los topes por ojo sin red (medio: x2,75) */
+  double expTopesRed = 1.0;       /* x1..x4: los topes por ojo CON la red (`exp_topes_red`; x1 = los de Samsung) */
   double expSinRedMezcla = 0.35;  /* 0..1: suelo <-> pistas de la imagen */
   double expSinRedParalaje = 2.0; /* x1..x4: el paralaje de la cabeza, exagerado sin red */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
@@ -3884,6 +3885,11 @@ static void loadServeCfg(ServeCfg &cfg) {
       if (k == "exp_sin_red_relieve") cfg.expSinRedRelieve = std::max(0.5, std::min(2.0, x));
       else if (k == "exp_sin_red_topes") cfg.expSinRedTopes = std::max(1.0, std::min(4.0, x));
       else cfg.expSinRedParalaje = std::max(1.0, std::min(4.0, x));
+    }
+    else if (k == "exp_topes_red") {
+      std::string t = v;
+      for (char &c : t) if (c == ',') c = '.';
+      cfg.expTopesRed = std::max(1.0, std::min(4.0, std::atof(t.c_str())));
     }
     else if (k == "exp_anticipacion") {
       std::string t = v;
@@ -4257,6 +4263,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_SIN_RED_TOPES", valor, 1);
       std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedParalaje);
       ::setenv("ODYSSEYVK_SIN_RED_PARALAJE", valor, 1);
+      std::snprintf(valor, sizeof valor, "%.2f", pila->expTopesRed);
+      ::setenv("ODYSSEYVK_TOPES_RED", valor, 1);
       if (pila->expPrioridad == "alta" || pila->expPrioridad == "tiempo_real")
         ::setenv("ODYSSEYVK_PRIORIDAD", pila->expPrioridad.c_str(), 1);
       else
@@ -6013,6 +6021,7 @@ static int cmdServe(int argc, char **argv) {
           cfg.expSinRed = nuevo.expSinRed;
           cfg.expSinRedRelieve = nuevo.expSinRedRelieve, cfg.expSinRedParalaje = nuevo.expSinRedParalaje;
           cfg.expSinRedTopes = nuevo.expSinRedTopes;
+          cfg.expTopesRed = nuevo.expTopesRed;
           cfg.expSinRedMezcla = nuevo.expSinRedMezcla;
           cfg.vrrEn3d = nuevo.vrrEn3d;   /* el VRR del modo rendimiento vale desde el siguiente video */
           cfg.crosstalkBase = nuevo.crosstalkBase;

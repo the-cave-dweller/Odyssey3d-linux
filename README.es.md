@@ -193,7 +193,10 @@ La rama `experimental` añade al panel una pestaña **Experimental** con pruebas
 proporción 16:9 (`exp_red = cuadrado | 518 | 770`), un mapa de profundidad más grande
 (`exp_mapa = 518 | 770 | 1022`), un tope de arrastre en el suavizado en el tiempo
 (`exp_tope_arrastre = si`) y la anticipación de la cabeza en milisegundos (`exp_anticipacion = 25`).
-Cada una vale desde el siguiente vídeo; lo que funcione pasa a la versión normal.
+Cada una vale desde el siguiente vídeo; lo que funcione pasa a la versión normal. El **alcance del
+relieve** (`exp_topes_red = 2,75`, x1–x4) ensancha los topes por ojo con la red, en marcha: con los de
+fábrica, más fuerza o Profundidad solo aplasta la imagen contra ellos (medido: el 85 % del cuadro con
+Profundidad 100 y relieve x2).
 
 Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`),
 sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).

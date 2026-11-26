@@ -3,6 +3,31 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Más profundidad con la red: el alcance del relieve (rama `experimental`)
+
+- Rodolfo: «¿podemos intentar meter aún más profundidad sobre el modelo?». Tenía `relieve = 2,00`,
+  Salida 50 y `profundidad_conv = 100` (el plano de la pantalla al frente: todo se hunde).
+- **Lo que frenaba**: los topes por ojo (+12,67 / −9,98 px, los de Samsung). MEDIDO con los mapas
+  de la red (persona, nave, globo), lo que queda pegado al tope y el relieve entre los ojos (p5–p95):
+
+  | Plano | Relieve | Topes | Pegado al tope | Relieve entre los ojos |
+  |---|---|---|---|---|
+  | 1,0 (Profundidad 100) | x2 | x1 | 85 % | 11,5 px |
+  | 1,0 | x2 | x2,75 | 58 % | 46,5 px |
+  | 1,0 | x2 | x4 | 32 % | 71,4 px |
+  | 1,0 | x3 | x4 | 60 % | 67,2 px |
+  | 0,75 | x2 | x2,75 | 35 % | 69,1 px |
+  | automático | x2 | x1 | 53 % | 45,3 px |
+  | automático | x2 | x2,75 | 2 % | 81,0 px |
+
+  Con el tope en su sitio, más fuerza aplasta más (x3 da menos relieve que x2); lo que da profundidad
+  es ensanchar el tope, como el «Alcance» del modo rendimiento.
+- **Experimental → RED DE PROFUNDIDAD → «Alcance del relieve»** (`exp_topes_red`, x1..x4, de fábrica
+  x1 → `ODYSSEYVK_TOPES_RED`): multiplica los topes por ojo con la red. Se aplica en marcha (orden
+  `topes_red`) y la ayuda al pasar el ratón cuenta lo medido. En el visor aparte: «alcance del relieve
+  con la red x1.50 (topes por ojo +19.0 / -15.0 px)» al arrancar y «x2.75 (+34.8 / -27.4 px)» tras
+  `ctl ajuste topes_red 2,75`.
+
 ## La red de fábrica es la fp16 (rama `experimental`)
 
 - Rodolfo, tras la medida de las redes ligeras: «Sí, ponla».

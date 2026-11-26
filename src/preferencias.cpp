@@ -267,6 +267,12 @@ Valores leer() {
   if (v.expMapa != 770 && v.expMapa != 1022) v.expMapa = 518;
   v.expTope = si(de("exp_tope_arrastre"), false);
   v.expAnticipacion = std::max(0, std::min(60, std::atoi(de("exp_anticipacion").c_str())));
+  {
+    std::string t = de("exp_topes_red");
+    for (char &c : t)
+      if (c == ',') c = '.';
+    v.expTopesRed = t.empty() ? 1.0 : std::max(1.0, std::min(4.0, std::atof(t.c_str())));
+  }
   v.expSinRed = de("exp_sin_red");
   {
     const std::string antes = v.expSinRed;
@@ -696,6 +702,14 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     }
     s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
     pon(s, "");
+    /* el alcance del relieve con la red: lo que deja meter mas profundidad (se aplica en marcha) */
+    Hud::ItemPanel tr;
+    tr.tipo = Hud::ItemPanel::Deslizador, tr.rotulo = idioma::tr("Alcance del relieve");
+    tr.nota = idioma::tr("Hasta dónde salen y se hunden las cosas con la red · x1 = los topes de Samsung");
+    tr.frac = (float)((v.expTopesRed - 1.0) / 3.0);
+    tr.valorTexto = "x" + conDecimal(v.expTopesRed, 2);
+    tr.ayuda = idioma::tr("Subir la fuerza o la Profundidad no da más 3D si la imagen ya choca con el tope: se aplasta. Medido con Profundidad 100 y relieve x2: a x1 el 85 % del cuadro está pegado al tope (unos 11 px de relieve entre los ojos); a x2,75, el 58 % (47 px); a x4, el 32 % (71 px). Más de ~98 px cansa la vista.");
+    pon(tr, "exp_topes_red");
     Hud::ItemPanel r;
     r.tipo = Hud::ItemPanel::Opciones, r.rotulo = idioma::tr("La red ve el cuadro a su proporción");
     r.opciones = {idioma::tr("Cuadrado"), "16:9 · 518", "16:9 · 770"};
@@ -1066,6 +1080,14 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   if (id == "exp_tope_arrastre") {
     if (!fija("exp_tope_arrastre", v.expTope ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_topes_red") {
+    if (!soltado) return false;
+    const double x = std::round((1.0 + std::max(0.0f, std::min(1.0f, frac)) * 3.0) * 20.0) / 20.0;   /* de 0,05 en 0,05 */
+    if (!fija("exp_topes_red", conComa(x, 2))) return false;
+    avisarVisor({}, {{"topes_red", conComa(x, 2)}});   /* el visor abierto lo pone al momento */
+    if (aviso) *aviso = idioma::trf("alcance x{}: el vídeo abierto lo toma al momento", {conDecimal(x, 2)});
     return true;
   }
   if (id == "exp_anticipacion") {
