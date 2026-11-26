@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <vector>
 
 /* Lente + scaler + modo del panel. bringUp() guarda el estado previo y shutDown() lo devuelve. */
@@ -30,8 +31,19 @@ struct Rig {
   int hud() const { return (lensOk ? 1 : 0) + (scalerOn ? 2 : 0); }
   std::string output;
 
+  /* bringUp() pone el panel y deja la lente y el scaler en un hilo aparte (v1.12: 215 + 180 ms que
+     corren mientras se crean la ventana, Vulkan y la red); esperar() lo junta. shutDown() y el
+     destructor esperan solos. */
   void bringUp(const ViewerOpts &o);
+  void esperar();
   void shutDown();
+  Rig() = default;
+  Rig(const Rig &) = delete;
+  Rig &operator=(const Rig &) = delete;
+  ~Rig() { esperar(); }
+
+private:
+  std::thread hilo_;
 };
 
 /* Elige la salida del panel por nombre (DP-4) o buscando el modo 4K. */

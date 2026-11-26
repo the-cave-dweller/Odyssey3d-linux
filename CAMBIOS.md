@@ -103,6 +103,30 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
+## El arranque del 3D, en paralelo (v1.12)
+
+- Rodolfo: «acelera el arranque». MEDIDO en su panel con la línea `[arranque]` (cinco arranques, ms de
+  cada paso, uno detrás de otro): hasta el visor 52–57 · panel 80–98 · lente 215 · scaler 167–186 ·
+  ventana 3–4 · Vulkan 157–210 · red 530–809 · cámara 71–95 · pedir la captura 5–6 · **esperar el primer
+  cuadro de la captura 769–806** · primer mapa ~34 · total **2163–2416**. Casi nada depende de lo
+  anterior. (Cargar la red en RAM no ayuda: el archivo ya vive en la caché del sistema, leerlo son 5 ms;
+  lo que cuesta es arrancarla en la tarjeta.)
+- **La captura se pide al principio** (`src/vkview.cpp`), recién puesto el panel, y un hilo la bombea
+  (`WindowCapture::pump`, con su propia conexión con KWin; PipeWire ya tiene su hilo) mientras se crean
+  la ventana, Vulkan, la red y la cámara; el hilo se para y se junta antes del bucle, que la bombea desde
+  ahí, y se para solo si el visor sale antes por un error.
+- **La lente y el scaler en un hilo del rig** (`src/session.*`): `bringUp` pone el panel y deja los dos en
+  su hilo; el visor los espera (`Rig::esperar`) antes del primer cuadro en 3D, y `shutDown` y el
+  destructor también.
+- La línea `[arranque]` pasa a dar el MOMENTO de cada paso (ms desde que arranca el proceso), porque con
+  pasos en paralelo las restas ya no dicen nada; las marcas, con cerrojo (la lente y el scaler marcan
+  desde su hilo).
+- MEDIDO en el visor aparte (sin lente, scaler ni captura, así que ahí solo se ve el resto): el 3D sale a
+  los 1018 ms (antes 1210), y los hilos se cierran bien también saliendo enseguida tras un volcado. En su
+  panel, la captura (~0,8 s) y la lente con el scaler (~0,4 s) deberían quedar debajo de Vulkan y la red
+  (~0,7–1 s): de ~2,2 s a algo más de 1 s. **No probado en el panel** (la captura de KWin no existe en el
+  compositor de prueba).
+
 ## La pastilla: botón de encendido y Neural | Rendimiento en marcha (v1.12)
 
 - Rodolfo: «en el hub, en vez de on y off, mueve el botón pill de Neural y performance que está en las

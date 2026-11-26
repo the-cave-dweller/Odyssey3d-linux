@@ -153,41 +153,53 @@ void Rig::bringUp(const ViewerOpts &o) {
   }
 
   marcaArranque("panel");
-  /* 2) lente lenticular: autenticación HMAC-SHA3 y conmutación a 3D. */
-  if (!o.noLens) {
-    std::string port = Lens::findPort();
-    if (port.empty()) {
-      std::fprintf(stderr, "[aviso] no se encontro la lente (USB 354b:0116): ¿falta el cable USB-B del monitor?\n");
-    } else if (!lens.open(port)) {
-      std::fprintf(stderr, "[aviso] lente: %s\n", lens.lastError().c_str());
-    } else {
-      std::printf("[lente] %s\n", port.c_str());
-      if (!lens.authenticate()) std::fprintf(stderr, "[aviso] autenticación de lente falló: %s\n", lens.lastError().c_str());
-      if (!lens.on()) std::fprintf(stderr, "[aviso] no se pudo encender la lente: %s\n", lens.lastError().c_str());
-      lensOk = lens.state();
-      std::printf("[lente] estado: %s\n", lensOk ? "3D" : "2D");
+  /* 2) y 3) en un hilo aparte (v1.12): la lente (215 ms en el panel de Rodolfo) y el scaler (180 ms) no
+     dependen de nada de lo que viene despues, asi que corren mientras el visor crea la ventana, Vulkan y
+     la red. El visor los espera (esperar) antes de pintar el primer cuadro en 3D. */
+  const ViewerOpts op = o;
+  hilo_ = std::thread([this, op]() {
+    const ViewerOpts &o = op;
+    /* 2) lente lenticular: autenticación HMAC-SHA3 y conmutación a 3D. */
+    if (!o.noLens) {
+      std::string port = Lens::findPort();
+      if (port.empty()) {
+        std::fprintf(stderr, "[aviso] no se encontro la lente (USB 354b:0116): ¿falta el cable USB-B del monitor?\n");
+      } else if (!lens.open(port)) {
+        std::fprintf(stderr, "[aviso] lente: %s\n", lens.lastError().c_str());
+      } else {
+        std::printf("[lente] %s\n", port.c_str());
+        if (!lens.authenticate()) std::fprintf(stderr, "[aviso] autenticación de lente falló: %s\n", lens.lastError().c_str());
+        if (!lens.on()) std::fprintf(stderr, "[aviso] no se pudo encender la lente: %s\n", lens.lastError().c_str());
+        lensOk = lens.state();
+        std::printf("[lente] estado: %s\n", lensOk ? "3D" : "2D");
+      }
     }
-  }
 
-  marcaArranque("lente");
-  /* 3) scaler MediaTek: modo 3D de la tarjeta del monitor. */
-  if (!o.noScaler) {
-    std::string dev = Scaler::findDevice();
-    if (dev.empty()) {
-      std::fprintf(stderr, "[aviso] no se encontro el scaler (dispositivo SCSI con vendor GCREADER)\n");
-    } else if (!scaler.open(dev)) {
-      std::fprintf(stderr, "[aviso] scaler: %s\n", scaler.lastError().c_str());
-    } else if (scaler.set3d(true)) {
-      scalerOn = true;
-      std::printf("[scaler] %s: modo 3D activado\n", dev.c_str());
-    } else {
-      std::fprintf(stderr, "[aviso] no se pudo activar el modo 3D: %s\n", scaler.lastError().c_str());
+    marcaArranque("lente");
+    /* 3) scaler MediaTek: modo 3D de la tarjeta del monitor. */
+    if (!o.noScaler) {
+      std::string dev = Scaler::findDevice();
+      if (dev.empty()) {
+        std::fprintf(stderr, "[aviso] no se encontro el scaler (dispositivo SCSI con vendor GCREADER)\n");
+      } else if (!scaler.open(dev)) {
+        std::fprintf(stderr, "[aviso] scaler: %s\n", scaler.lastError().c_str());
+      } else if (scaler.set3d(true)) {
+        scalerOn = true;
+        std::printf("[scaler] %s: modo 3D activado\n", dev.c_str());
+      } else {
+        std::fprintf(stderr, "[aviso] no se pudo activar el modo 3D: %s\n", scaler.lastError().c_str());
+      }
     }
-  }
-  marcaArranque("scaler");
+    marcaArranque("scaler");
+  });
+}
+
+void Rig::esperar() {
+  if (hilo_.joinable()) hilo_.join();
 }
 
 void Rig::shutDown() {
+  esperar();   /* (v1.12) si la lente o el scaler aun se estan poniendo, primero que acaben */
   if (scalerOn) {
     scaler.set3d(false);
     std::printf("[scaler] modo 3D apagado\n");

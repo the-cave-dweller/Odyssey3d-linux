@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <ctime>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -188,24 +189,32 @@ std::vector<std::pair<std::string, double>> &marcas() {
 }
 }  // namespace
 
+std::mutex &cerrojoMarcas() {
+  static std::mutex m;
+  return m;
+}
+
 void marcaArranque(const char *paso) {
   timespec ts{};
   clock_gettime(CLOCK_BOOTTIME, &ts);
   const double ahora = (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec, ini = inicioProceso();
+  std::lock_guard<std::mutex> g(cerrojoMarcas());   /* la lente y el scaler marcan desde su hilo (v1.12) */
   marcas().push_back({paso, ini >= 0.0 ? (ahora - ini) * 1000.0 : -1.0});
 }
 
+/* (v1.12) con pasos en paralelo, las restas entre marcas seguidas ya no dicen cuanto tardo cada uno: el
+   resumen da el MOMENTO en que acabo cada paso, en ms desde que arranco el proceso */
 std::string resumenArranque() {
+  std::lock_guard<std::mutex> g(cerrojoMarcas());
   std::string s;
-  double antes = 0.0;
+  double ultimo = 0.0;
   char buf[96];
   for (const auto &m : marcas()) {
-    std::snprintf(buf, sizeof buf, "%s%s %.0f", s.empty() ? "" : " · ", m.first.c_str(), m.second - antes);
+    std::snprintf(buf, sizeof buf, "%s%s %.0f", s.empty() ? "" : " · ", m.first.c_str(), m.second);
     s += buf;
-    antes = m.second;
+    ultimo = std::max(ultimo, m.second);
   }
-  std::snprintf(buf, sizeof buf, " · total %.0f ms", antes);
-  return s + buf;
+  return s + " (ms desde que arranca el proceso)";
 }
 std::string rutaRedNuestra() {
   if (fileExists(rutaRedLigera())) return rutaRedLigera();

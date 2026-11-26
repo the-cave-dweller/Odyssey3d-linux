@@ -55,6 +55,9 @@ struct wl_region;
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <atomic>
+#include <chrono>
+#include <poll.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -1468,6 +1471,42 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   Rig rig;
   rig.bringUp(opts);
   glfwPollEvents(); /* que GLFW vea el cambio de modo del panel */
+#ifdef HAVE_CAPTURE
+  /* (v1.12) La captura de la ventana se pide ya, recien puesto el panel, y un hilo la bombea mientras se
+     hace lo demas (la ventana, Vulkan, la red, la camara). Antes se pedia casi al final y el visor se
+     quedaba ~0,8 s esperando el primer cuadro del compositor (MEDIDO en su panel: 770-806 ms, el paso
+     mas largo de los ~2,2 s del arranque). El hilo se para y se junta antes del bucle, que la bombea
+     desde ahi; si el visor sale antes por un error, se para solo. */
+  WindowCapture cap;
+  bool capPedida = false;
+  std::string capErr;
+  struct BombaCaptura {
+    std::atomic<bool> parar{false};
+    std::thread hilo;
+    void arranca(WindowCapture &c) {
+      hilo = std::thread([this, &c] {
+        while (!parar.load()) {
+          c.pump();
+          pollfd p{c.fd(), POLLIN, 0};
+          if (p.fd >= 0) ::poll(&p, 1, 5);
+          else std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+      });
+    }
+    void para() {
+      parar = true;
+      if (hilo.joinable()) hilo.join();
+    }
+    ~BombaCaptura() { para(); }
+  } bomba;
+  if (kind == SourceKind::Capture) {
+    capPedida = cap.start(opts.captureUuid, &capErr);
+    if (capPedida) {
+      marcaArranque("pedir la captura");
+      bomba.arranca(cap);
+    }
+  }
+#endif
 
   GLFWmonitor *mon = pickMonitor(opts.output.empty() ? rig.output : opts.output);
   if (!mon) {
@@ -2127,7 +2166,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   }
 
 #ifdef HAVE_CAPTURE
-  WindowCapture cap;
   uint64_t lastFrameCount = 0;
   double ultimoNuevo = 0.0;   /* momento del último fotograma nuevo del compositor */
   int avisosCorte = 0;
@@ -2142,7 +2180,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double reanudaHasta = -1.0;        /* hasta cuando se reanuda solo un video parado (al volver de Tab) */
   int reanudados = 0;
   if (kind == SourceKind::Capture) {
-    if (!cap.start(opts.captureUuid, &err)) {
+    bomba.para();   /* (v1.12) desde aqui la bombea el bucle */
+    if (!capPedida) {
+      err = capErr;
       std::fprintf(stderr, "[error] captura: %s\n", err.c_str());
       wv.destroy();
       vkDestroySurfaceKHR(dev.instance(), surface, nullptr);
@@ -2154,7 +2194,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     haveCap = true;
     std::printf("[captura] pidiendo el flujo de la ventana %s\n", opts.captureUuid.c_str());
-    marcaArranque("pedir la captura");
     /* el formato lo eligio el usuario en la tarjeta; si se equivoco, la imagen se ve doble
        y desplazada, que es la queja tipica: decir como se deshace sin cerrar la sesion */
     /* El aviso del formato solo tiene sentido cuando la imagen trae dos vistas. Con el conversor
@@ -2252,6 +2291,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double desdeApartado = 0.0, intentoSitio = 0.0, ultimoChequeoVentana = 0.0;
   std::signal(SIGTERM, onTermSignal);
   std::signal(SIGINT, onTermSignal);
+  rig.esperar();   /* (v1.12) la lente y el scaler, puestos en su hilo, tienen que estar antes del primer cuadro */
+  marcaArranque("lente y scaler listos");
   while (!glfwWindowShouldClose(win) && !ui.quit) {
     if (gTerm && !ui.quit) {
       std::printf("[sesion] llego una senal de cierre: se sale devolviendo el panel, la lente y el scaler\n");
