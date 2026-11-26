@@ -92,8 +92,8 @@ no keys; Esc closes it.
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
 taskbar icon or the system-tray icon (click: settings, middle click: games). On the
 `experimental` branch the header has two rows. On the first, the OdysseyVK logo and name open the
-main page (video, screen, keyboard shortcuts, apps that don't ask), and next to them an **AI |
-Performance** switch picks normal video with the depth network (blue, with the chip) or without it
+main page (video, screen, keyboard shortcuts, apps that don't ask), and next to them a **Neural |
+Performance** switch (the same width in both positions) picks normal video with the depth network (blue, with the chip) or without it
 (amber, with the lightning bolt). On the second, centred: **Games**, **Settings** (the performance
 figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D and the
 drag cap; version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow) and
@@ -213,7 +213,7 @@ for the most relief that fits without flattening the image against the limits (m
 frame on the limits instead of 61 % with a fixed pop-out). **Manual**: Depth and Pop-out by hand.
 
 It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`, the
-AI | Performance switch in the panel header),
+Neural | Performance switch in the panel header),
 worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's ~1.1 GB on the GPU). It is rougher
 than the network but steadier. The pill turns amber and, instead of Depth and Pop-out, carries a
 lightning-bolt button: its drop-down menu has three measured presets (**Gentle · Medium · Intense**)

@@ -93,7 +93,7 @@ El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyV
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
 En la rama `experimental` la cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
 abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan), y a su
-lado un interruptor **AI | Rendimiento** elige el vídeo normal con la red de profundidad (azul, con el
+lado un interruptor **Neural | Rendimiento** (del mismo ancho en los dos extremos) elige el vídeo normal con la red de profundidad (azul, con el
 chip) o sin ella (ámbar, con el rayo). En la segunda, centradas: **Juegos**, **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
 variable durante el 3D y el tope de arrastre; versión, actualizaciones, idioma, barra de tareas y
@@ -216,7 +216,7 @@ se calcula para el mayor relieve que cabe sin aplastar la imagen contra los tope
 cuadro en los topes en vez del 61 % con una salida fija). **Manual**: Profundidad y Salida a mano.
 
 Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`, el
-interruptor AI | Rendimiento de la cabecera del panel),
+interruptor Neural | Rendimiento de la cabecera del panel),
 sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).
 Es más basta que la de la red, pero más estable. La pastilla se vuelve ámbar y, en vez de
 Profundidad y Salida, lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos

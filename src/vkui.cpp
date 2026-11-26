@@ -794,7 +794,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     panelH_ = ph;
     const float x0 = (float)vw - 24.0f - pw, y0 = 24.0f;
     pillPanel_ = {x0, y0, pw, ph};
-    solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.115f, 0.12f, 0.135f, 0.90f);
+    solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov) */
 
     /* ---- el interruptor del 3D ----
        ON con la bola a la izquierda y la letra a su derecha; OFF con la bola a la derecha y la letra
@@ -943,7 +943,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (st_.recordar)
         icono({caja.x + 2.0f, caja.y + 2.0f, caja.w - 4.0f, caja.h - 4.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
       else
-        solid(caja.x + 2.0f, caja.y + 2.0f, caja.w - 4.0f, caja.h - 4.0f, 0.115f, 0.12f, 0.135f, 1.0f);
+        solid(caja.x + 2.0f, caja.y + 2.0f, caja.w - 4.0f, caja.h - 4.0f, 0.03f, 0.03f, 0.035f, 1.0f);
       text(rotRec, caja.x + 26.0f, caja.y + (caja.h - 16.0f) * 0.5f, 12.5f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.88f);
     };
     if (cabeBloque && st_.recordarVisible && !st_.rendimiento && !hubNormal)
@@ -967,7 +967,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const char *nota = idioma::tr("Volver a la red: Ajustes → Experimental");
       const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
       menuRend_ = {mx0, my0, mw, mh};
-      solid(mx0, my0, mw, mh, 0.115f, 0.12f, 0.135f, 0.94f);
+      solid(mx0, my0, mw, mh, 0.0f, 0.0f, 0.0f, 0.88f);
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
       text(idioma::tr("MODO RENDIMIENTO"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
       std::string ayuda;
@@ -1055,7 +1055,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (st_.recordarVisible) alto += 32.0f;
       alto += 8.0f;
       menuRend_ = {mx0, my0, mw, alto};
-      solid(mx0, my0, mw, alto, 0.115f, 0.12f, 0.135f, 0.94f);
+      solid(mx0, my0, mw, alto, 0.0f, 0.0f, 0.0f, 0.88f);
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
       text(idioma::tr("RELIEVE"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
       std::string ayuda;
@@ -1140,7 +1140,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
-    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.115f, 0.12f, 0.135f, 0.98f);
+    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
     const float borde = 26.0f;
     askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
     const bool hc = askClose_.inside(mx_, my_);
@@ -1180,7 +1180,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
-    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.115f, 0.12f, 0.135f, 0.98f);
+    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
     const float borde = 26.0f;
     askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
     const bool hc = askClose_.inside(mx_, my_);
@@ -1203,7 +1203,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);   /* el filo claro */
-    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.115f, 0.12f, 0.135f, 0.98f);
+    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
     auto encaja = [&](const std::string &s, float tam, float maxAncho) {
       if (textWidth(s, tam) <= maxAncho) return s;
       std::string out, col;
@@ -1293,7 +1293,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     if (st_.remember)
       icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
     else
-      mask9({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, 1, 3.5f, 0.115f, 0.12f, 0.135f, 1.0f);
+      mask9({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, 1, 3.5f, 0.03f, 0.03f, 0.035f, 1.0f);
     text(encaja(rotulo, 13.0f, aw - 2.0f * borde - 30.0f), caja.x + 30.0f, caja.y + 2.0f, 13.0f, ink[0], ink[1],
          ink[2], hd ? 1.0f : 0.90f);
   }
@@ -1310,7 +1310,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float tam = 12.0f, tw = textWidth(info_, tam);
     const float der = pillPanel_.x + pillPanel_.w;
     const float arriba = menuRend_.w > 0.0f ? menuRend_.y + menuRend_.h + 6.0f : pillPanel_.y + pillPanel_.h + 6.0f;
-    solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.115f, 0.12f, 0.135f, 0.90f);
+    solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.82f);
     text(info_, der - tw - 10.0f, arriba + 5.0f, tam, ink[0], ink[1], ink[2], 0.92f);
   }
 }
@@ -1381,7 +1381,7 @@ void Hud::cajaAyuda(const std::vector<std::string> &lineas, float x, float y, fl
   w += 24.0f;
   const float h = 14.0f + 19.0f * (float)lineas.size();
   mask9({x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f}, 0, 10.0f, 0.42f, 0.43f, 0.50f, 0.85f);
-  mask9({x, y, w, h}, 0, 9.0f, 0.10f, 0.105f, 0.13f, 0.98f);
+  mask9({x, y, w, h}, 0, 9.0f, 0.0f, 0.0f, 0.0f, 0.90f);
   for (size_t k = 0; k < lineas.size(); k++)
   text(lineas[k], x + 12.0f, y + 8.0f + 19.0f * (float)k, tam, ink[0], ink[1], ink[2], 0.95f);
 }
@@ -1408,7 +1408,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   const float px = std::floor(((float)vw - pw) * 0.5f), py = std::floor(((float)vh - ph) * 0.5f);
   panelCaja_ = {px, py, pw, ph};
   mask9(panelCaja_, 1, 22.0f, 0.42f, 0.43f, 0.50f, 0.80f);                                   /* el filo */
-  mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.165f, 0.17f, 0.185f, 0.97f);   /* gris */
+  mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov; antes gris) */
 
   /* cabecera: el pin, el nombre, pestanas en pildora y el aspa */
   panelFijar_ = {px + 18.0f, py + 22.0f, 28.0f, 28.0f};
@@ -1432,15 +1432,16 @@ void Hud::dibujaPanel(int vw, int vh) {
     text("OdysseyVK", baldosa.x + baldosa.w + 9.0f, panelLogo_.y + 6.0f, 17.0f, puesta ? tinta[0] : ink[0], puesta ? tinta[1] : ink[1],
          puesta ? tinta[2] : ink[2], puesta || hov ? 1.0f : 0.90f);
   }
-  /* el interruptor AI | Rendimiento (rama experimental), junto al logo: toma el color y el logo del
-     extremo puesto (azul con el chip para AI, ambar con el rayo para Rendimiento); la bola blanca va en ese
+  /* el interruptor Neural | Rendimiento (rama experimental), junto al logo: toma el color y el logo del
+     extremo puesto (azul con el chip para Neural, ambar con el rayo para Rendimiento); la bola blanca va en ese
      extremo y el nombre al otro lado. Como el ON/OFF de la pastilla, un clic en cualquier parte lo pasa al
      otro extremo. */
   {
-    const char *nAI = "AI", *nRend = idioma::tr("Rendimiento");
+    const char *nAI = idioma::tr("Neural"), *nRend = idioma::tr("Rendimiento");
     const bool rend = st_.sinRedPanel;
-    /* mide lo que el nombre puesto (con el mas largo sobraba hueco, y en ruso mucho) */
-    const float wTexto = std::max(28.0f, textWidth(rend ? nRend : nAI, 13.0f));
+    /* el mismo ancho en los dos extremos (26-nov: «cambia AI por Neural para que se mantenga del mismo
+       tamano»): el del nombre mas largo, y el puesto va centrado en lo que deja la bola */
+    const float wTexto = std::max(28.0f, std::max(textWidth(nAI, 13.0f), textWidth(nRend, 13.0f)));
     panelModo_ = {panelLogo_.x + panelLogo_.w + 14.0f, py + 20.0f, 4.0f + 26.0f + 10.0f + wTexto + 14.0f, 32.0f};
     const bool hov = panelModo_.inside(mx_, my_) && !st_.menuIdioma;
     const float c[3] = {rend ? 0.93f : 0.40f, rend ? 0.62f : 0.72f, rend ? 0.12f : 1.0f};
@@ -1450,7 +1451,8 @@ void Hud::dibujaPanel(int vw, int vh) {
     mask9(bola, 0, 13.0f, 0.97f, 0.97f, 0.99f, 1.0f);
     icono({bola.x + 4.0f, bola.y + 4.0f, 18.0f, 18.0f}, rend ? icoRayo_ : icoChip_, c[0] * 0.85f, c[1] * 0.85f, c[2] * 0.85f, 1.0f);
     const char *nombre = rend ? nRend : nAI;
-    const float xt = rend ? panelModo_.x + 14.0f : bola.x + bola.w + 10.0f;
+    const float hueco = wTexto - textWidth(nombre, 13.0f);
+    const float xt = (rend ? panelModo_.x + 14.0f : bola.x + bola.w + 10.0f) + 0.5f * hueco;
     text(nombre, xt, panelModo_.y + 8.0f, 13.0f, 0.08f, 0.09f, 0.11f, 1.0f);
   }
   /* las pestanas, en una segunda fila y centradas (rama experimental) */
@@ -1787,7 +1789,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     const float fila = 34.0f, alto = 12.0f + fila * (float)idioma::kLenguas;
     const Rect m{std::min(panelIdioma_.x, px + pw - 20.0f - wl), panelIdioma_.y + panelIdioma_.h + 8.0f, wl, alto};
     mask9({m.x - 1.0f, m.y - 1.0f, m.w + 2.0f, m.h + 2.0f}, 1, 13.0f, 0.42f, 0.43f, 0.50f, 0.85f);
-    mask9(m, 1, 12.0f, 0.10f, 0.105f, 0.13f, 0.98f);
+    mask9(m, 1, 12.0f, 0.0f, 0.0f, 0.0f, 0.90f);
     for (int k = 0; k < idioma::kLenguas; k++) {
       const Rect o{m.x + 6.0f, m.y + 6.0f + fila * (float)k, m.w - 12.0f, fila};
       panelIdiomaOpc_.push_back(o);
@@ -1805,7 +1807,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     const std::string r = std::string(idioma::tr("Idioma")) + ": " + idioma::nombre(lengua);
     const float w = textWidth(r, 12.5f) + 24.0f;
     const Rect rr{std::min(panelIdioma_.x, px + pw - 20.0f - w), panelIdioma_.y + panelIdioma_.h + 8.0f, w, 30.0f};
-    mask9(rr, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
+    mask9(rr, 0, 10.0f, 0.0f, 0.0f, 0.0f, 0.90f);
     text(r, rr.x + 12.0f, rr.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
   }
   /* la ayuda del valor bajo el raton: una caja de hasta 460 puntos, partida en renglones */
@@ -1847,14 +1849,14 @@ void Hud::dibujaPanel(int vw, int vh) {
                                                  : "Fijar encima: que un clic en el juego no cierre el panel.");
     const float w = textWidth(r, 12.5f) + 24.0f;
     const Rect rr{panelFijar_.x, panelFijar_.y + panelFijar_.h + 8.0f, w, 30.0f};
-    mask9(rr, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
+    mask9(rr, 0, 10.0f, 0.0f, 0.0f, 0.0f, 0.90f);
     text(r, rr.x + 12.0f, rr.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
   }
   /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
   if (ha && !rotuloActualizar.empty() && !st_.menuIdioma) {
     const float w = textWidth(rotuloActualizar, 12.5f) + 24.0f;
     const Rect r{std::max(px + 20.0f, panelCerrar_.x + panelCerrar_.w - w), panelActualizar_.y + panelActualizar_.h + 8.0f, w, 30.0f};
-    mask9(r, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
+    mask9(r, 0, 10.0f, 0.0f, 0.0f, 0.0f, 0.90f);
     text(rotuloActualizar, r.x + 12.0f, r.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
   }
 }

@@ -3,6 +3,20 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Fondo negro translúcido y el interruptor «Neural» (rama `experimental`)
+
+- Rodolfo: «cambia el fondo gris de todos los hud por un negro ligeramente transparente» y «cambia en
+  el pill la palabra AI por Neural para que se mantenga del mismo tamaño».
+- **Fondo**: la pastilla, el panel, la tarjeta del borde y la etiqueta bajo la pastilla, negro al 82 %
+  (antes gris 0,115–0,185 casi opaco); los menús (el del rayo y el de Auto/Manual) al 88 %, y las
+  ayudas y el menú del idioma al 90 %, para que el texto se lea sobre el vídeo. Se quedan los filos
+  claros y las cajas de opciones del panel; las casillas vacías, casi negras.
+- **Interruptor Neural | Rendimiento** (antes AI | Rendimiento): mide lo mismo en los dos extremos (el
+  ancho del nombre más largo) y el nombre puesto va centrado. «Neural» se traduce (Neuronal, 神经网络,
+  ニューラル, Нейро).
+- Visto con `odysseyvk ctl hud` sobre un cuadro de vídeo: el panel, la pastilla y el menú de Auto dejan
+  ver la imagen detrás; el interruptor no cambia de ancho al pasar de un extremo al otro.
+
 ## Los cantos con el «alcance del relieve» grande (rama `experimental`)
 
 - Rodolfo, con el alcance automático (x2,88 a 65 cm): «volvió los bordes un desastre lleno de
