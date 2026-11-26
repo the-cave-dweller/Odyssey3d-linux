@@ -255,6 +255,7 @@ Valores leer() {
   v.rastreo = si(de("rastreo"), false);
   v.atajos = si(de("atajos_globales"), true);
   v.fantasma = std::max(0.0, std::min(0.10, numero(de("crosstalk_base"), 0.0128535)));
+  v.mezclaVistas = std::max(0.10, std::min(1.0, 1.0 / std::max(1.0, numero(de("filtro"), 4.0))));
   v.relieve = std::max(0.5, std::min(2.0, numero(de("relieve"), 1.0)));
   v.modelo = de("modelo");
   v.avisarActualizaciones = si(de("actualizaciones"), true);
@@ -871,6 +872,14 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     f.nota = idioma::tr("Cuánta imagen del otro ojo se resta · se nota al momento");
     f.frac = (float)(v.fantasma / 0.10), f.valorTexto = conDecimal(v.fantasma * 100.0, 1) + " %";
     pon(f, "crosstalk_base");
+    /* la pendiente del filtro de la trama (rama experimental, 26-nov), como parte del ciclo mezclada */
+    Hud::ItemPanel mz;
+    mz.tipo = Hud::ItemPanel::Deslizador, mz.rotulo = idioma::tr("Suavizar entre las vistas");
+    mz.nota = idioma::tr("Al mover la cabeza, el otro ojo entra poco a poco · se nota al momento");
+    mz.frac = (float)((v.mezclaVistas - 0.10) / 0.90);
+    mz.valorTexto = std::to_string((int)std::lround(v.mezclaVistas * 100.0)) + " %";
+    mz.ayuda = idioma::tr("La lente reparte los subpíxeles entre tu ojo izquierdo y el derecho. Con el 10 % (lo de Samsung) el paso de una vista a la otra es casi un escalón: si el rastreo va un poco atrasado, una franja de la pantalla salta de golpe a la imagen del otro ojo. Más mezcla hace ese paso gradual; con demasiada, algo del otro ojo se ve aun con la cabeza quieta.");
+    pon(mz, "filtro");
     Hud::ItemPanel c;
     c.tipo = Hud::ItemPanel::Interruptor, c.rotulo = idioma::tr("Seguir la cabeza con la cámara");
     c.nota = idioma::tr("Desde el siguiente vídeo"), c.valor = v.rastreo;
@@ -1029,6 +1038,15 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     const bool ahora = id == "rastreo" ? v.rastreo : v.atajos;
     if (!fija(id, ahora ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "filtro") {
+    const double m = std::round((0.10 + std::max(0.0f, std::min(1.0f, frac)) * 0.90) / 0.05) * 0.05;
+    const double pendiente = 1.0 / m;
+    avisarVisor({{"filtro", pendiente}}, {});   /* se ve al momento, tambien mientras se arrastra */
+    if (!soltado) return false;
+    if (!fija(id, conComa(pendiente, 2))) return false;
+    if (aviso) *aviso = idioma::trf("el {} % del paso entre las vistas se mezcla", {std::to_string((int)std::lround(m * 100.0))});
     return true;
   }
   if (id == "crosstalk_base") {

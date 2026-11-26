@@ -3741,7 +3741,7 @@ struct ServeCfg {
      marcha con las teclas, pero aqui quedan guardados y se pasan a todas las sesiones. */
   double fase = 0.0;        /* desfase de la trama, en ciclos (flechas izquierda y derecha) */
   double paso = 1.0;        /* escala del paso de la lente (RePag y SavPg) */
-  double filtro = -1.0;     /* pendiente del filtro (coma y punto); -1 = la de fabrica, que es 10 */
+  double filtro = -1.0;     /* pendiente del filtro (coma y punto); -1 = la de fabrica, que es 4 (la de Samsung, 10) */
   std::string calib;        /* carpeta con los mapas de correccion de ESTE panel */
   std::string volcado;      /* si se pone, el visor guarda -trama / -profundidad / -origen ahi */
   /* Tres numeros para medir sin recompilar (el visor los lee de variables de entorno). Sirven para

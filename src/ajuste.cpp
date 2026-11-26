@@ -330,11 +330,11 @@ std::string rutaServeConf() {
 }
 
 std::map<std::string, double> valoresFabrica() {
-  /* Los numeros con los que arranca el visor, leidos del codigo: weave.h (10 de filtro, 1 de paso y de
+  /* Los numeros con los que arranca el visor, leidos del codigo: weave.h (4 de filtro, 1 de paso y de
      ganancias, 0 del resto), vkui.h y vkview.cpp (3D Salida 50 y plano de apoyo 55 en cuanto la trama se
      pone), y el temblor y el canto que trae VkWeave. No son topes: son los valores reales de arranque. */
   static const struct { const char *clave; double valor; } kFabrica[] = {
-      {"fase", 0.0},          {"paso", 1.0},          {"filtro", 10.0},
+      {"fase", 0.0},          {"paso", 1.0},          {"filtro", 4.0}, 
       {"crosstalk", 0.0},     {"crosstalk_base", 0.0128535}, {"conv", 0.0}, {"rampa_x", 0.0},
       {"rampa_y", 0.0},       {"rampa_x_teclas", 0.0}, {"rampa_y_teclas", 0.0},
       {"fondo", 1.0},         {"frente", 1.0},        {"empuje_fondo", 0.0},

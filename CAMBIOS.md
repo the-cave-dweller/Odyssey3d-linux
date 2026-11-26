@@ -52,6 +52,18 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   x1,44 a 65 cm (+18,2 / −14,3 px por ojo), x1,1 a 50 cm, x1,77 a 80 cm. MEDIDO en el visor aparte en
   Auto: x1,44 y una Salida equivalente de 66–76 (con el grado llegaba a 225). Los textos de Auto dicen
   «medio grado de paralaje».
+- **Suavizado entre las vistas** (Rodolfo: «recuerda que debe haber suavizado entre los fantasmas»;
+  eligió «la mezcla de la lente»). La trama reparte cada subpíxel entre los dos ojos con un filtro de
+  pendiente 10 (el de Samsung): el paso de una vista a la otra ocupa 1/10 del ciclo, casi un escalón.
+  Con el rastreo un poco atrasado al mover la cabeza, la zona donde un ojo ya ve la vista del otro
+  tiene un borde nítido que recorre la pantalla en curva, y ahí la imagen «se pasa de golpe al otro
+  extremo». Ahora la pendiente de fábrica es **4** (un 25 % del ciclo mezclado). MEDIDO con la sonda
+  del filtro: subpíxeles que mezclan las dos vistas 9,7 % → 24,3 %. CALCULADO con un modelo de la
+  lente (franja vista ±0,02..0,10 ciclos, subpíxeles rojo y azul a ±0,04): el paso de un 5 a un 50 %
+  de fuga se ensancha un 12–38 % y con la cabeza quieta sigue sin fuga; con 2 se ensancharía un
+  46–115 % pero ya entra algo del otro ojo con la cabeza quieta si la lente reparte ancho. Deslizador
+  **«Suavizar entre las vistas»** en la pestaña principal (PANTALLA), junto a «Reducir el fantasma»: de
+  10 % (Samsung) a 100 %, se ve al momento mientras se arrastra; escribe `filtro` en serve.conf.
 - Visto en una captura suya y **pendiente**: unos subtítulos amarillos con contorno salen dobles (no
   los ve como texto, así que no se quedan en el plano de la pantalla).
 - Sin probar en el panel.

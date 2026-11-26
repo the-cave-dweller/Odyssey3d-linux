@@ -185,6 +185,7 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 | `relieve = 1,00` | fuerza del relieve del conversor (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | suavizar los vídeos divididos: siempre / si hace falta / nunca |
 | `crosstalk_base = 0,013` | cuánta imagen del otro ojo se resta (fantasma) |
+| `filtro = 4` | pendiente del filtro de la trama entre las dos vistas: el paso de una a otra ocupa 1/pendiente del ciclo (el 10 de Samsung es casi un escalón; lo escribe «Suavizar entre las vistas» del panel) |
 | `profundidad_conv = 75` / `salida_conv = 50` | Profundidad y Salida con que arranca el vídeo normal (`_suave` el dividido suavizado, `_sbs` el dividido); se escriben al mover los deslizadores; `profundidad_conv = auto` = plano automático |
 | `hz = 165` | frecuencia del panel en 3D (120 de fábrica; el G90XF también va a 165) |
 | `vrr_en_3d = si` | dejar la frecuencia variable (VRR) durante el 3D; de fábrica se apaga mientras dura el 3D (con ella puesta, los juegos por debajo del refresco daban tirones) |

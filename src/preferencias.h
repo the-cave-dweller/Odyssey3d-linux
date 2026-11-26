@@ -49,6 +49,7 @@ struct Valores {
   bool rastreo = false;
   bool atajos = true;
   double fantasma = 0.0128535;    /* crosstalk_base: 0 .. 0,10 en el panel */
+  double mezclaVistas = 0.25;     /* `filtro`: la parte del ciclo que mezcla las dos vistas (1 / pendiente), 0,10 .. 1 */
   double relieve = 1.0;           /* fuerza del relieve del conversor: 0,5 .. 2 */
   std::string modelo;             /* `modelo =` de serve.conf, ya expandido; vacio = la red abierta de siempre */
   bool avisarActualizaciones = true;   /* `actualizaciones = no` apaga la tarjeta de version nueva (v0.95) */
