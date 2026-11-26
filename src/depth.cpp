@@ -1085,11 +1085,32 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
        de 1/16 de la escala por detras del mapa nuevo. Un cambio chico se sigue calmando con el
        peso de arriba; uno grande (algo que se mueve) se toma de una, salvo ese dieciseisavo, y asi
        lo que se mueve no deja detras una estela con la profundidad vieja. */
+    /* Y solo donde la IMAGEN cambio (26-nov). Donde la imagen esta quieta, un salto grande del mapa no
+       es algo que se mueve: es la red dudando (la rejilla de un microfono, un atril, la orilla de una
+       cabeza), y el tope lo dejaba pasar entero. Con el «alcance del relieve» x2,88 ese salto mueve
+       la linea 2,88 veces mas, y las rectas «bailan» y «se pasan al otro extremo» (Rodolfo, 26-nov).
+       MEDIDO con 2 x 90 cuadros seguidos de un video suyo: puntos de imagen quieta (cambio < 0,02 en
+       5 x 5) cuya profundidad salta mas de 0,12 de un mapa al siguiente, 0,181 % / 0,045 % sin tope y
+       0,326 % / 0,127 % con el tope. El cambio de la imagen se mide contra la de la estimacion
+       anterior, en una caja de 5 x 5 puntos; entre 0,02 y 0,05 se pasa poco a poco de no topar a topar. */
     if (topeArrastre_) {
       const float tope = 1.0f / 16.0f;
+      const bool conAntes = guiaAntes_.size() == plane;
+      float *mov = trabajo.data() + 2 * plane;
+      if (conAntes) {
+        for (size_t i = 0; i < plane; i++)
+          trabajo[i] = std::fabs(guia_[i] - guiaAntes_[i]);
+        caja(trabajo.data(), trabajo.data() + plane, mov, sz_, 2);
+      }
       for (size_t i = 0; i < plane; i++) {
         const float lo2 = mapa[i] - tope, hi2 = mapa[i] + tope;
-        limpio[i] = limpio[i] < lo2 ? lo2 : (limpio[i] > hi2 ? hi2 : limpio[i]);
+        const float topado = limpio[i] < lo2 ? lo2 : (limpio[i] > hi2 ? hi2 : limpio[i]);
+        float cuanto = 1.0f;
+        if (conAntes) {
+          const float t = std::min(1.0f, std::max(0.0f, (mov[i] - 0.02f) / 0.03f));
+          cuanto = t * t * (3.0f - 2.0f * t);
+        }
+        limpio[i] += (topado - limpio[i]) * cuanto;
       }
     }
   } else {
@@ -1341,6 +1362,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     out[i] = (uint8_t)(v * 255.0f + 0.5f);
   }
   prev_ = out;
+  guiaAntes_ = guia_;          /* la imagen de esta estimacion: con ella la siguiente ve que se movio */
   const auto tfin = std::chrono::steady_clock::now();
   ms_ = std::chrono::duration<double, std::milli>(tfin - t0).count();
   msRed_ = std::chrono::duration<double, std::milli>(tRed1 - tRed0).count();

@@ -707,7 +707,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       }
       Hud::ItemPanel t;
       t.tipo = Hud::ItemPanel::Interruptor, t.rotulo = idioma::tr("Tope de arrastre");
-      t.nota = idioma::tr("Ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
+      t.nota = idioma::tr("Donde la imagen se mueve, ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
       t.valor = v.expTope;
       pon(t, "exp_tope_arrastre");
     }

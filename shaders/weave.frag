@@ -260,6 +260,47 @@ vec2 afinar(vec2 uv, float gF, float gN) {
     float zona = smoothstep(2.0, 3.0, salto);
     if (zona <= 0.0)
         return vec2(bil, 0.0);
+    /* Solo se corta una rampa ESTRECHA (rama experimental, con el «alcance del relieve»). El umbral de
+       arriba va en pixeles de desplazamiento, y con el alcance x2,88 tambien lo pasan rampas anchas:
+       el canto desenfocado de un portatil que en el mapa baja en 8 a 12 puntos. Ahi la ventana de
+       4 x 4 no llega a ver el llano de ningun lado, el valor «de cada lado» es un punto de la rampa
+       que cambia al mover la ventana, y el corte salia a dientes (MEDIDO en una fila: 62 62 106 111 73
+       132 132 89 160, sube y baja) y el canto recto se veia torcido en cada ojo («las lineas rectas
+       del fantasma se curvearon», Rodolfo, 26-nov). Se mira la fila y la columna del pixel en 8
+       puntos (2 mas a cada lado) y el ancho de la rampa = todo lo que cambia / el salto mas grande
+       entre vecinos: un canto de 2 o 3 puntos da 2..3,5; una rampa pareja de 8, 7. Se corta entero hasta
+       3 y nada desde 4 (con 4..5,5 quedaban la mitad de los dientes: el canto del portatil, de 5
+       puntos en su parte baja). MEDIDO a x2,88: escalones de 8 niveles 6022 -> 2531 y exceso de
+       sube-y-baja 62,3 -> 13,9; a x1, 1117 -> 1105 escalones (los cortes de verdad siguen). */
+    {
+        vec4 hL = textureGather(uDepth, (base + vec2(-2.0, 1.0)) / tam, 0);
+        vec4 hR = textureGather(uDepth, (base + vec2(4.0, 1.0)) / tam, 0);
+        vec4 vT = textureGather(uDepth, (base + vec2(1.0, -2.0)) / tam, 0);
+        vec4 vB = textureGather(uDepth, (base + vec2(1.0, 4.0)) / tam, 0);
+        float fila[8] = float[8](mix(hL.w, hL.x, f.y), mix(hL.z, hL.y, f.y), mix(D[4], D[8], f.y), mix(D[5], D[9], f.y),
+                                 mix(D[6], D[10], f.y), mix(D[7], D[11], f.y), mix(hR.w, hR.x, f.y), mix(hR.z, hR.y, f.y));
+        float col[8] = float[8](mix(vT.w, vT.z, f.x), mix(vT.x, vT.y, f.x), mix(D[1], D[2], f.x), mix(D[5], D[6], f.x),
+                                mix(D[9], D[10], f.x), mix(D[13], D[14], f.x), mix(vB.w, vB.z, f.x), mix(vB.x, vB.y, f.x));
+        float fLo = 1e9, fHi = -1e9, fSalto = 0.0, cLo = 1e9, cHi = -1e9, cSalto = 0.0;
+        float fAntes = 0.0, cAntes = 0.0;
+        for (int i = 0; i < 8; i++) {
+            float hf = desplazTotal(fila[i], gF, gN) * P.res.x;
+            float hc = desplazTotal(col[i], gF, gN) * P.res.x;
+            fLo = min(fLo, hf); fHi = max(fHi, hf);
+            cLo = min(cLo, hc); cHi = max(cHi, hc);
+            if (i > 0) {
+                fSalto = max(fSalto, abs(hf - fAntes));
+                cSalto = max(cSalto, abs(hc - cAntes));
+            }
+            fAntes = hf;
+            cAntes = hc;
+        }
+        /* el ancho en la direccion donde el mapa salta mas */
+        float ancho = fSalto >= cSalto ? (fHi - fLo) / max(fSalto, 1e-4) : (cHi - cLo) / max(cSalto, 1e-4);
+        zona *= 1.0 - smoothstep(3.0, 4.0, ancho);
+        if (zona <= 0.0)
+            return vec2(bil, 0.0);
+    }
     vec2 pxMapa = P.res.xy / tam;                      /* pixeles de pantalla por punto del mapa */
     vec3 c0 = colorMedio(uv, vec2(1.2));
     float rango = max(hi - lo, 1e-4);
@@ -322,7 +363,13 @@ vec2 afinar(vec2 uv, float gF, float gN) {
        anterior (por votos de parecido) caia a media orilla y a saltos de una fila a otra, y eso se
        veia como una raya dentada junto al canto. */
     float mezcla = mix(tm, alfa, manda);
-    float duro = mezcla > 0.3 ? sF / max(nF, 1e-6) : sB / max(nB, 1e-6);
+    /* Con el «alcance del relieve» T > 1 (rama experimental, 26-nov) el umbral baja a 0,3 / T: el objeto
+       se lleva casi toda su orilla. Con 0,3 los pixeles de orilla con menos de 3 partes de 10 de objeto
+       se quedaban en el fondo y, al otro lado del hueco (ahora relleno con fondo limpio, ver
+       rellenoHueco), se veian como una raya fina oscura que repetia el contorno a 15-20 pixeles. Lo que
+       el objeto se lleva de mas es casi todo color de fondo, y queda pegado al relleno, que es fondo. */
+    float umbralCorte = 0.3 / (P.tun5.y > 0.0 ? max(1.0, P.tun5.y / 12.67) : 1.0);
+    float duro = mezcla > umbralCorte ? sF / max(nF, 1e-6) : sB / max(nB, 1e-6);
     /* Cuando NO se corta, aunque el mapa de un salto:
        - Si los dos lados son del mismo color no hay canto que seguir, y un corte puesto a ojo en
          mitad de un dibujo se veria como un desgarro: se deja la rampa suave del mapa.
@@ -412,7 +459,9 @@ vec3 buscaVista(vec2 uv, float cam, float gF, float gN) {
        hueco se lleva recorrida (casi 0 junto al fondo, 1 junto al objeto); el color lo pone
        rellenoHueco. */
     if (hB - hA > 2.5 / P.res.x) {
-        return vec3(cam * sA, hA, clamp((sB - hA) / (hB - hA), 1e-4, 1.0));
+        /* y, en el mismo numero, el ancho del hueco en pixeles (de 4 en 4: parte + 4 x ancho) */
+        float anchoPx = abs(cam) * (hB - hA) * P.res.x;
+        return vec3(cam * sA, hA, clamp((sB - hA) / (hB - hA), 1e-4, 1.0) + 4.0 * floor(anchoPx + 0.5));
     }
     /* una superficie: el desplazamiento es justo su altura (en lo llano sale exacto, sin el pequeno
        sesgo del ultimo tramo de la busqueda) */
@@ -507,9 +556,37 @@ vec2 mapaGuiado(vec2 uv, vec2 d0, float gF, float gN) {
      171 | 30 30 37 47 | 94 en vez de pasar de 171 a 104).
    Cual de las dos es lo dice la mezcla de color que el pase de afinado dejo en uFino.b: si a un
    lado y otro del corte se parece (menos de 0,2 de diferencia), el canto es borroso. */
-vec3 rellenoHueco(vec2 uv, float lado, float parte, float hFondo, float gF, float gN) {
+vec3 rellenoHueco(vec2 uv, float lado, float parteYAncho, float hFondo, float gF, float gN) {
     vec2 pxl = 1.0 / P.res.xy;
     vec2 c = (floor(uv * P.res.xy) + 0.5) * pxl;                /* el centro del pixel de fondo pegado al corte */
+    /* buscaVista manda en el mismo numero que parte del hueco se lleva y su ancho en pixeles */
+    float anchoK = floor((parteYAncho - 1e-5) / 4.0);
+    float parte = parteYAncho - 4.0 * anchoK;
+    /* Con el «alcance del relieve» (rama experimental, 26-nov) el hueco es hasta 2,88 veces mas ancho
+       y lo de abajo lo estiraba entero: en un canto desenfocado (la clavija de un violin contra una
+       ventana) el pixel de fondo pegado al corte aun lleva hasta 3 partes de 10 del objeto, y una
+       franja gris rayada de ~20 pixeles, a dientes de una fila a otra, rodeaba cada objeto cercano
+       (con x1, ~8). Ahora, con alcance T > 1, el hueco se parte en dos: lo que tendria con x1 (su
+       ultima parte, junto al objeto) se rellena como siempre, y el resto, junto al fondo, con fondo
+       LIMPIO: el primero de los 6 pixeles siguientes hacia el fondo que ya no tiene nada del objeto. */
+    float alcance = P.tun5.y > 0.0 ? max(1.0, P.tun5.y / 12.67) : 1.0;
+    float tramo = anchoK / alcance;                              /* lo que mediria el hueco con x1 */
+    float recorrido = parte * anchoK;                            /* pixeles desde el lado del fondo */
+    bool partido = alcance > 1.01 && anchoK > tramo + 0.5;
+    if (partido) {
+        parte = clamp((recorrido - (anchoK - tramo)) / max(tramo, 1.0), 0.0, 1.0);
+        if (P.tun10.z == 1.0) {
+            ivec2 tam = textureSize(uFino, 0);
+            vec2 cl = c;
+            for (int k = 0; k < 6; k++) {
+                ivec2 p = clamp(ivec2(floor(cl * vec2(tam))), ivec2(0), tam - 1);
+                if (texelFetch(uFino, p, 0).b < 0.06)
+                    break;
+                cl += vec2(lado * pxl.x, 0.0);
+            }
+            c = cl;
+        }
+    }
     vec3 cFondo = colorFuente(c);
     float borroso = 0.0;
     if (P.tun10.z == 1.0) {
@@ -533,8 +610,10 @@ vec3 rellenoHueco(vec2 uv, float lado, float parte, float hFondo, float gF, floa
     vec3 nitido = suma / peso;
     if (borroso <= 0.0)
         return nitido;
-    /* canto borroso: del color de este lado del corte al del otro */
-    vec3 tendido = mix(cFondo, colorFuente(c - vec2(lado * pxl.x, 0.0)), parte);
+    /* canto borroso: del color de este lado del corte al del otro (el otro lado es siempre el pixel
+       pegado al corte, aunque el fondo se haya leido mas alla) */
+    vec2 cCorte = (floor(uv * P.res.xy) + 0.5) * pxl;
+    vec3 tendido = mix(cFondo, colorFuente(cCorte - vec2(lado * pxl.x, 0.0)), parte);
     return mix(nitido, tendido, borroso);
 }
 
@@ -788,6 +867,10 @@ void main()
                        : realceSujeto(fuente(qI), qI, bI.y);
         R = bD.z > 0.0 ? rellenoHueco(fuv + vec2(bD.x, 0.0), sign(vistaDer()), bD.z, bD.y, gFn, gNn)
                        : realceSujeto(fuente(qD), qD, bD.y);
+        /* sondas 16 y 17 (taller, rama experimental): la vista entera del ojo izquierdo o del derecho,
+           antes de tejerla; para mirar los cantos a ojo */
+        if (P.tun6.w == 16.0) { o = vec4(L, 1.0); return; }
+        if (P.tun6.w == 17.0) { o = vec4(R, 1.0); return; }
         if (P.tun2.w == 1.0) { vec3 t = L; L = R; R = t; }
     } else if (P.tun4.x == 1.0) {
         /* Video normal (una sola imagen): el mapa de profundidad dice cuanto hay que desplazar

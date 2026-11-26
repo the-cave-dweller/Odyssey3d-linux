@@ -245,6 +245,7 @@ private:
   long cortes_ = 0;
   int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */
+  std::vector<float> guiaAntes_;        /* la de la estimacion anterior (el tope de arrastre mira que se movio) */
   std::vector<float> opRG_, opBY_;      /* color oponente (R-G, B-Y) para la saliencia (v0.65) */
   bool limpieza_ = true;                /* filtro guiado + dilatar activados */
   int dilata_ = 3;                      /* radio del dilatado de lo cercano, en puntos del mapa */

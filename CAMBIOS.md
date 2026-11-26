@@ -3,6 +3,43 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los cantos con el «alcance del relieve» grande (rama `experimental`)
+
+- Rodolfo, con el alcance automático (x2,88 a 65 cm): «volvió los bordes un desastre lleno de
+  curvas», «las líneas rectas de ese fantasma se curvearon», «hay líneas rectas que veo como si
+  bailaran», «hay separaciones que si bien son grandes se notan porque de forma agresiva se pasan al
+  otro extremo»; fotos del panel con las clavijas de un violín, una cabeza, un atril y una cara, de
+  un vídeo suyo de YouTube (Sierra Hull en Paste, 60 s bajados para medir). Tres causas, MEDIDAS con
+  la vista de cada ojo antes de tejer (sondas nuevas **16** y **17**) y con mapas de cuadros seguidos:
+  1. **El afinado cortaba rampas anchas.** El canto se cambia por un escalón cuando el mapa salta más
+     de 2–3 px de desplazamiento entre dos puntos; con x2,88 eso lo pasan también rampas de 8–12
+     puntos (el canto desenfocado de un portátil), donde la ventana de 4 × 4 no ve el llano de ningún
+     lado y el corte salía a dientes (una fila: 62 62 106 111 73 132 132 89 160). Ahora se mide el
+     ancho de la rampa en 8 puntos (todo lo que cambia / el salto mayor) y solo se corta hasta 3
+     puntos de ancho (nada desde 4). En el cuadro del portátil, a x2,88: escalones de 8 niveles o
+     más 6022 → 2531, exceso de sube-y-baja 62,3 → 13,9 (x1: 6,0 → 6,6, con 1117 → 1105 escalones: los
+     cortes de verdad siguen). Paisaje y subtítulos, igual o mejor.
+  2. **El relleno de lo destapado se estiraba.** El hueco que un objeto deja al correrse es 2,88
+     veces más ancho, y se rellenaba repitiendo por filas el píxel de fondo pegado al corte, que en un
+     canto desenfocado aún lleva hasta 3 partes de 10 del objeto: una franja gris rayada de ~20 px y a
+     dientes alrededor de cada clavija (con x1, ~8). Ahora, con alcance T > 1, el hueco se parte: su
+     última parte (lo que mediría con x1) se rellena como siempre y el resto con fondo limpio, leído
+     en el primero de los 6 píxeles siguientes que ya no tiene nada del objeto. `buscaVista` manda el
+     ancho del hueco junto con la parte recorrida (parte + 4 × ancho). Y el corte del afinado baja de
+     0,3 a 0,3 / T de objeto: el objeto se lleva casi toda su orilla, que si no quedaba al otro lado
+     del relleno como una raya fina que repetía el contorno. Con x1 nada de esto cambia.
+  3. **El tope de arrastre dejaba pasar los titubeos de la red.** Su fin es que lo que se mueve no
+     deje estela; pero también tomaba de golpe los saltos de la red donde la imagen está quieta (la
+     rejilla de un micrófono, la orilla de una cabeza). Puntos de imagen quieta (cambio < 0,02 en 5 × 5)
+     cuya profundidad salta más de 0,12 de un mapa al siguiente, en 2 × 90 cuadros seguidos: sin tope
+     0,181 % / 0,045 %, con el tope 0,326 % / 0,127 %, ahora 0,253 % / 0,081 %. El tope solo actúa donde
+     la imagen cambió respecto a la estimación anterior (entre 0,02 y 0,05, poco a poco).
+- Coste en la tarjeta (4090, 3840 × 2160, afinando en cada cuadro): 3,1–5,4 ms por cuadro con x1 y con
+  x2,88, sin diferencia medible entre los dos.
+- Visto en una captura suya y **pendiente**: unos subtítulos amarillos con contorno salen dobles (no
+  los ve como texto, así que no se quedan en el plano de la pantalla).
+- Sin probar en el panel.
+
 ## La cabecera del panel en dos filas, con el interruptor AI | Rendimiento (rama `experimental`)
 
 - Rodolfo: «pasa el tope de arrastre y la frecuencia variable ya a ajustes; junto al logo de Odyssey pon
