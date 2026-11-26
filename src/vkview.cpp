@@ -596,6 +596,23 @@ static void atajoHub(VkUi &ui, int key, const char *origen) {
   std::fflush(stdout);
 }
 
+/* Cierra el panel de ajustes (`odysseyvk ajustes`) si esta abierto: su proceso deja su numero en un
+   fichero. Lo llama Esc y la salida del visor, para que el panel no se quede solo en pantalla. */
+static void cerrarPanelDeAjustes() {
+  FILE *f = std::fopen(ajuste::rutaPanel().c_str(), "re");
+  if (!f) return;
+  long pid = 0;
+  if (std::fscanf(f, "%ld", &pid) != 1) pid = 0;
+  std::fclose(f);
+  if (pid <= 1) return;
+  char comm[64] = {0};
+  if (FILE *c = std::fopen(("/proc/" + std::to_string(pid) + "/comm").c_str(), "re")) {
+    if (!std::fgets(comm, sizeof comm, c)) comm[0] = 0;
+    std::fclose(c);
+  }
+  if (std::strncmp(comm, "odysseyvk", 9) == 0) ::kill((pid_t)pid, SIGTERM);
+}
+
 static void sacarDePantallaCompleta(const std::string &uuid) {
 #ifdef HAVE_WAYLAND_WM
   WindowMonitor wm;
@@ -621,6 +638,7 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   if (!ui) return;
   ui->inputChanged = true;
   if (key == GLFW_KEY_ESCAPE) {
+    cerrarPanelDeAjustes();   /* Esc sale de todo: tambien del panel de ajustes si esta abierto */
     /* ESC saca tambien al video de pantalla completa (v0.77, lo pidio Rodolfo): antes, con el
        teclado en el visor, solo cerraba el 3D y el video seguia a pantalla completa. */
     if (ui->opts && !ui->opts->captureUuid.empty()) sacarDePantallaCompleta(ui->opts->captureUuid);

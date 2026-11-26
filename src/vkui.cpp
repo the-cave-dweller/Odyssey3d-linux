@@ -394,13 +394,19 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
        alrededor de cada letra. */
     const int px0 = std::max(0, (int)std::ceil(ax0 - 0.5f)), py0 = std::max(0, (int)std::ceil(ay0 - 0.5f));
     const int px1 = std::min(ancho, (int)std::ceil(ax1 - 0.5f)), py1 = std::min(alto, (int)std::ceil(ay1 - 0.5f));
+    /* cuadro liso (el pixel blanco, o el centro de una mascara: sus cuatro esquinas del todo
+       opacas): una sola muestra para todo el cuadro. El fondo del panel de ajustes son dos millones
+       de pixeles y muestrearlos uno a uno costaba la mitad del pintado. */
+    const float c00 = muestra(u0, v0), c10 = muestra(u1, v0), c01 = muestra(u0, v1), c11 = muestra(u1, v1);
+    const bool liso = (du * (float)aw_ <= 1.01f && dv * (float)ah_ <= 1.01f) ||
+                      (c00 >= 0.999f && c10 >= 0.999f && c01 >= 0.999f && c11 >= 0.999f);
     for (int py = py0; py < py1; py++) {
       const float fy = ((float)py + 0.5f - (y0 - oy)) / h;
       const float v = v0 + fy * dv;
       float *fila = acum.data() + ((size_t)py * (size_t)ancho + (size_t)px0) * 4u;
       for (int px = px0; px < px1; px++) {
         const float fx = ((float)px + 0.5f - (x0 - ox)) / w;
-        const float a = al * muestra(u0 + fx * du, v);
+        const float a = al * (liso ? c00 : muestra(u0 + fx * du, v));
         if (a > 0.002f) {
           const float unoMenos = 1.0f - a;
           fila[0] = r * a + fila[0] * unoMenos;

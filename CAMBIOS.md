@@ -3,6 +3,28 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El aspa del panel cierra y Esc se lo lleva (v0.85)
+
+- Rodolfo, con la 0.84 y el panel abierto con el engranaje sobre un vídeo: «no sirvió Esc para salir
+  de todo el programa, y el botón de cierre no sirve». MEDIDO en su registro: pulsó el engranaje
+  siete veces en tres segundos; el interruptor del suavizado sí respondió y el servicio releyó
+  serve.conf solo; la «fuerza del relieve» saltó a 2,00 (el tope); el proceso del panel llevaba 14 s
+  de procesador en 48 s y 756 MB.
+- HIPÓTESIS del aspa (derivada del código, no vista aún corregida en pantalla): el panel al doble
+  lleva su tamaño fijo, así que cuando el compositor anuncia su escala de verdad (1,50 → 1,80) el
+  recorte no se rehacía; la ventana se medía con una escala y el ratón con otra, y los golpes caían
+  un 20 % corridos: el aspa, a la derecha, quedaba fuera de su sitio y el deslizador saltaba al
+  tope. `src/overlay.cpp` rehace el recorte también cuando cambia la escala del monitor y lo dice en
+  el registro (`[capa] panel: lienzo …`).
+- Esc en el visor cierra también el panel de ajustes; y el panel abierto sobre un vídeo se va cuando
+  ese vídeo se acaba. (Esc solo le llega al visor si el teclado lo tiene él: el panel no coge teclado.)
+- Pintado: una sola muestra para los cuadros lisos (MEDIDO: 50 → 18,7 ms a 3840x2160, imagen igual);
+  el panel se pinta una vez por tanda de eventos y no en cada movimiento del ratón; se guarda un
+  lienzo libre en vez de pedir uno nuevo cada vez (de ahí los 756 MB).
+- `odysseyvk ajustes --grande` para probar el tamaño del 3D sin vídeo.
+- **No probado**: nada de esto con el panel real (había un vídeo abierto).
+- Su configuración quedó con lo que tocó probando: `dividido_suavizado = no` y `relieve = 2,00`.
+
 ## Panel de ajustes flotante, lanzador de juegos y pastilla de dos botones (v0.84)
 
 - Rodolfo, con la 0.83: «Muchísimo mejor». Pidió (1) dejar en la pastilla solo el botón del conversor

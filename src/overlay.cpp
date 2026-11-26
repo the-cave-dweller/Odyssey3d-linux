@@ -96,6 +96,12 @@ struct Overlay::Impl {
   int margenDer = 0, margenAb = 0;
   double ox = 0.0, oy = 0.0;      /* esquina de la tarjeta en píxeles del monitor */
   double escalaGeom = 0.0;        /* escala con la que se calculo el recorte actual */
+  /* y la escala del MONITOR de entonces. El panel al doble lleva su tamano fijo, asi que `hud.scale()`
+     no cambia cuando el compositor anuncia su escala de verdad (aqui pasa de 1,50 a 1,80), el recorte
+     no se rehacia y el raton se media con una escala y la ventana con otra: los golpes caian un 20 %
+     corridos (el aspa no cerraba y el deslizador saltaba al tope; lo vio Rodolfo con la 0.84). */
+  double escalaMonGeom = 0.0;
+  bool sucio = false;             /* el panel pide pintarse: se pinta UNA vez por tanda de eventos */
   bool conexionCaida = false;     /* el compositor cerró la conexión de la capa */
 
   /* mapas de memoria para los cuadros (doble buffer: uno en pantalla, otro dibujando) */
@@ -213,9 +219,11 @@ struct Overlay::Impl {
   static const struct wl_buffer_listener bufferListener;
 
   void liberaBloques(bool todos) {
+    bool guardado = false;
     for (size_t i = 0; i < bloques.size();) {
       Bloque *bl = bloques[i];
-      if (!todos && !bl->libre) {
+      if (!todos && (!bl->libre || (bl->ancho == bufAncho && bl->alto == bufAlto && !guardado))) {
+        if (bl->libre) guardado = true;   /* uno libre del tamano bueno se queda para el cuadro que viene */
         ++i;
         continue;
       }
@@ -275,7 +283,7 @@ struct Overlay::Impl {
     liberaBloques(false);
     /* la disposición es determinista: misma ventana, misma tarjeta, mismos píxeles */
     hud.begin(anchoE, altoE, altoLogico());
-    if (tarjetaPuesta && std::fabs(hud.scale() - escalaGeom) > 0.01) {
+    if (tarjetaPuesta && (std::fabs(hud.scale() - escalaGeom) > 0.01 || std::fabs(escala - escalaMonGeom) > 0.001)) {
       /* el compositor anuncio su escala despues de montar la ventana: la tarjeta se dibuja
          de otro tamano y hay que volver a recortar, si no la letra se sale de las cajas */
       std::printf("[capa] la escala del compositor paso de %.2f a %.2f: la tarjeta se reajusta\n",
@@ -379,6 +387,10 @@ struct Overlay::Impl {
     bufAncho = nAncho;
     bufAlto = nAlto;
     escalaGeom = hud.scale();
+    escalaMonGeom = escala;
+    if (esPanel)
+      std::printf("[capa] panel: lienzo %dx%d px · escala del monitor %.2f · dibujo a %.2f\n", nAncho, nAlto, escala,
+                  hud.scale());
     margenDer = margenAb = 0;
     supAncho = aQuiere((double)bufAncho);
     supAlto = aQuiere((double)bufAlto);
@@ -688,7 +700,7 @@ struct Overlay::Impl {
       const float f = hud.fracDeslizador(arrastrando, (float)ratonX);
       if ((size_t)arrastrando < hud.state().items.size()) hud.state().items[(size_t)arrastrando].frac = f;
       golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, f, false});
-      pintar();
+      sucio = true;
       return;
     }
     int item = -1, sub = 0;
@@ -697,7 +709,7 @@ struct Overlay::Impl {
     const long firma = (long)h * 1000000L + (long)(item + 1) * 1000L + sub;
     if (firma != firmaVista) {   /* solo se repinta si cambia lo que hay bajo el raton */
       firmaVista = firma;
-      pintar();
+      sucio = true;
     }
   }
   void panelBoton(bool apretado) {
@@ -716,7 +728,7 @@ struct Overlay::Impl {
       arrastrando = item;
       hud.state().items[(size_t)item].frac = fr;
       golpes.push_back({(int)h, item, 0, fr, false});
-      pintar();
+      sucio = true;
       return;
     }
     if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem)
@@ -766,7 +778,7 @@ struct Overlay::Impl {
     if (!s->tarjetaPuesta || !s->hud.state().panel || eje != 0) return;
     s->hud.correr((float)wl_fixed_to_double(v) * 2.5f);
     s->firmaVista = -1;
-    s->pintar();
+    s->sucio = true;
   }
   static void ptrFrame(void *, wl_pointer *) {}
   static void ptrAxisSource(void *, wl_pointer *, uint32_t) {}
@@ -884,6 +896,10 @@ int Overlay::waitAndDispatch(int ms) {
     wl_display_read_events(d->dpy);
     const int r = wl_display_dispatch_pending(d->dpy);
     if (wl_display_get_error(d->dpy) != 0) d->marcaConexionCaida();
+    if (d->sucio && d->tarjetaPuesta) {
+      d->sucio = false;
+      d->pintar();
+    }
     return r;
   }
   wl_display_cancel_read(d->dpy);

@@ -2882,11 +2882,12 @@ static int cmdAjustes(int argc, char **argv) {
       }
     }
   }
-  bool enJuegos = false;
+  bool enJuegos = false, forzarGrande = false;
   std::string volcado, pista;
   for (int i = 0; i < argc; i++) {
     const std::string a = argv[i];
     if (a == "--juegos") enJuegos = true;
+    else if (a == "--grande") forzarGrande = true;   /* para probar el tamano del 3D sin video */
     else if (a == "--dump" && i + 1 < argc) volcado = argv[++i];
     else if (a == "--pantalla" && i + 1 < argc) pista = argv[++i];
   }
@@ -2910,7 +2911,8 @@ static int cmdAjustes(int argc, char **argv) {
   /* con un video en 3D debajo el panel se ve a traves de la lente: al doble, como la pastilla */
   const auto hub = ajuste::leerEstadoHub();
   const auto ses = hub.find("sesion");
-  const bool grande = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
+  const bool haySesion = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
+  const bool grande = haySesion || forzarGrande;
   const std::vector<prefs::Juego> juegos = prefs::juegosSteam();
   std::vector<std::string> ids;
   Hud::State &st = ov.hud().state();
@@ -2936,7 +2938,7 @@ static int cmdAjustes(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
   };
-  double cerrarEn = -1.0;
+  double cerrarEn = -1.0, miradaHub = 0.0;
   while (!g_cierraPanel && !ov.conexionCaida()) {
     ov.waitAndDispatch(100);
     Overlay::Golpe g;
@@ -2967,6 +2969,14 @@ static int cmdAjustes(int argc, char **argv) {
     }
     if (repintar) ov.repaint();
     if (cerrarEn > 0.0 && reloj() >= cerrarEn) break;
+    /* abierto sobre un video en 3D: cuando ese video se acaba, el panel se va con el (si no, se
+       quedaba al doble de grande en medio del escritorio) */
+    if (haySesion && reloj() - miradaHub >= 1.0) {
+      miradaHub = reloj();
+      const auto h2 = ajuste::leerEstadoHub();
+      const auto s2 = h2.find("sesion");
+      if (s2 == h2.end() || s2->second.empty() || s2->second == "ninguna") break;
+    }
   }
   ov.hideAsk();
   ::unlink(rutaPid.c_str());
@@ -3063,7 +3073,10 @@ static int cmdHudSelfTest(int argc, char **argv) {
      pintado de CPU que usa la tarjeta de la orilla: sirve para mirarla sin el panel delante. */
   if (const char *png = std::getenv("ODYSSEYVK_HUD_PNG")) {
     std::vector<float> acum;
+    const auto tPinta = std::chrono::steady_clock::now();
     hud.pintarCpu(0.0f, 0.0f, W, H, acum);
+    std::printf("  pintado en CPU de %dx%d: %.1f ms\n", W, H,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tPinta).count());
     std::vector<uint8_t> rgba((size_t)W * (size_t)H * 4u);
     for (size_t p = 0; p < (size_t)W * (size_t)H; p++) {
       const float A = acum[p * 4u + 3u];
