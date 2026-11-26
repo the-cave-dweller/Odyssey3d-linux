@@ -177,6 +177,11 @@ struct Overlay::Impl {
   int arrastrando = -1;
   /* mover el panel: se agarra por la cabecera y la capa sigue al raton cambiando sus margenes */
   bool moviendo = false, panelMontado = false;
+  /* cambiar el tamano del panel con su esquina (rama experimental): el tamano del que se partio, en
+     puntos del lienzo, y donde se agarro; y la flecha de la esquina puesta o no */
+  bool redimensionando = false, cursorEsquina = false;
+  float agarreAncho = 0.0f, agarreAlto = 0.0f;
+  uint32_t serialPuntero = 0;
   bool esperaMov = false;
   double tMov = 0.0;
   static void cuadroMov(void *data, wl_callback *cb, uint32_t) {
@@ -372,7 +377,7 @@ struct Overlay::Impl {
     if (dpy) wl_display_flush(dpy);
   }
   /* la flecha del tema (XCURSOR_THEME / XCURSOR_SIZE), al doble o al triple si la pantalla va escalada */
-  void ponCursor(uint32_t serial) {
+  void ponCursor(uint32_t serial, const char *forma = nullptr) {
 #ifdef HAVE_WAYLAND_CURSOR
     if (!pointer || !shm || !comp) return;
     const char *tam = std::getenv("XCURSOR_SIZE");
@@ -385,7 +390,9 @@ struct Overlay::Impl {
         temaEscala = esc;
       }
       if (!temaCursor) return nullptr;
-      wl_cursor *c = wl_cursor_theme_get_cursor(temaCursor, "default");
+      wl_cursor *c = forma ? wl_cursor_theme_get_cursor(temaCursor, forma) : nullptr;
+      if (!c && forma) c = wl_cursor_theme_get_cursor(temaCursor, "size_fdiag");
+      if (!c) c = wl_cursor_theme_get_cursor(temaCursor, "default");
       if (!c) c = wl_cursor_theme_get_cursor(temaCursor, "left_ptr");
       if (!c || c->image_count == 0) return nullptr;
       wl_cursor_image *im = c->images[0];
@@ -405,8 +412,23 @@ struct Overlay::Impl {
     wl_surface_commit(cursorSurf);
     wl_pointer_set_cursor(pointer, serial, cursorSurf, (int)im->hotspot_x / esc, (int)im->hotspot_y / esc);
 #else
-    (void)serial;
+    (void)serial, (void)forma;
 #endif
+  }
+  /* el sitio y el tamano del panel, para la proxima vez (rama experimental): margenes logicos y tamano
+     en puntos del lienzo, en ~/.local/state/odysseyvk/panel-ventana */
+  void guardaVentana() {
+    if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-ventana").c_str(), "we")) {
+      std::fprintf(f, "%d %d %.0f %.0f\n", margenIzq, margenArr, (double)hud.panelAnchoVisto(), (double)hud.panelAltoVisto());
+      std::fclose(f);
+    }
+  }
+  bool leeVentana(int &izq, int &arr, float &ancho, float &alto) const {
+    FILE *f = std::fopen(rutaEstadoOdyssey("panel-ventana").c_str(), "re");
+    if (!f) return false;
+    const bool ok = std::fscanf(f, "%d %d %f %f", &izq, &arr, &ancho, &alto) == 4;
+    std::fclose(f);
+    return ok && ancho > 0.0f && alto > 0.0f;
   }
 
   /* ---------- memoria compartida ---------- */
@@ -955,6 +977,8 @@ struct Overlay::Impl {
 
   static void ptrEnter(void *data, wl_pointer *, uint32_t serial, wl_surface *sobre, wl_fixed_t sx, wl_fixed_t sy) {
     Impl *s = static_cast<Impl *>(data);
+    s->serialPuntero = serial;
+    s->cursorEsquina = false;
     s->ponCursor(serial);
     if (sobre && sobre == s->veloSurf) {   /* el velo: fuera del panel, nada se resalta */
       s->ratonEnVelo = true;
@@ -986,6 +1010,24 @@ struct Overlay::Impl {
     }
   }
   void panelMovimiento() {
+    /* cambiar el tamano: la capa no se mueve (sus margenes se quedan), asi que el raton se mide siempre
+       contra la misma esquina de arriba a la izquierda; el panel crece hacia la derecha y hacia abajo */
+    if (redimensionando && layer) {
+      struct timespec ts;
+      clock_gettime(CLOCK_MONOTONIC, &ts);
+      const double ahora = (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+      if (esperaMov && ahora - tMov < 0.08) return;
+      const double k = escala / std::max(0.25, (double)hud.scale());   /* puntos logicos -> puntos del lienzo */
+      const float w = agarreAncho + (float)((supX - agarreX) * k), h = agarreAlto + (float)((supY - agarreY) * k);
+      if (std::fabs(w - hud.state().panelAncho) < 2.0f && std::fabs(h - hud.state().panelAlto) < 2.0f) return;
+      hud.state().panelAncho = w, hud.state().panelAlto = h;
+      esperaMov = true;
+      tMov = ahora;
+      if (wl_callback *cb = wl_surface_frame(surf)) wl_callback_add_listener(cb, &cuadroMovListener, this);
+      hud.begin(anchoE, altoE, altoLogico());
+      if (ajustaGeometria()) pintar();
+      return;
+    }
     if (moviendo && layer) {
       /* la capa se mueve con el raton, asi que la posicion del raton DENTRO de ella no cambia: lo
          que se haya movido respecto al agarre es justo lo que hay que correr.
@@ -1025,7 +1067,8 @@ struct Overlay::Impl {
   }
   void panelBoton(bool apretado) {
     if (!apretado) {
-      moviendo = false;
+      if (moviendo || redimensionando) guardaVentana();
+      moviendo = redimensionando = false;
       if (arrastrando >= 0) {
         golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.fracDeslizador(arrastrando, (float)ratonX), true});
         arrastrando = -1;
@@ -1048,6 +1091,12 @@ struct Overlay::Impl {
       agarreX = supX, agarreY = supY;
       return;
     }
+    if (h == Hud::HitPanelRedimensionar) {   /* la esquina: cambiar el tamano (rama experimental) */
+      redimensionando = true;
+      agarreX = supX, agarreY = supY;
+      agarreAncho = hud.panelAnchoVisto(), agarreAlto = hud.panelAltoVisto();
+      return;
+    }
     /* los botones de la cabecera tambien (el globo, su lista y la flecha de actualizar no llegaban nunca
        al bucle del panel; el pin es de la rama experimental), y cualquier otro clic con la lista de
        idiomas abierta, que la cierra */
@@ -1064,6 +1113,11 @@ struct Overlay::Impl {
     s->hud.setMouse((float)s->ratonX, (float)s->ratonY);
     s->supX = wl_fixed_to_double(sx), s->supY = wl_fixed_to_double(sy);
     if (s->hud.state().panel) {
+      const bool esquina = s->redimensionando || s->hud.hit((float)s->ratonX, (float)s->ratonY) == Hud::HitPanelRedimensionar;
+      if (esquina != s->cursorEsquina) {
+        s->cursorEsquina = esquina;
+        s->ponCursor(s->serialPuntero, esquina ? "se-resize" : nullptr);
+      }
       s->panelMovimiento();
       return;
     }
@@ -1428,6 +1482,13 @@ bool Overlay::takeGolpe(Golpe &g) {
 void Overlay::showPanel(bool grande, bool velo) {
   if (!available()) return;
   Impl &s = *d;
+  /* el tamano y el sitio de la ultima vez (rama experimental) */
+  int izqGuardado = -1, arrGuardado = -1;
+  if (!s.panelMontado) {
+    float an = 0.0f, al = 0.0f;
+    if (s.leeVentana(izqGuardado, arrGuardado, an, al)) s.hud.state().panelAncho = an, s.hud.state().panelAlto = al;
+    else izqGuardado = arrGuardado = -1;
+  }
   s.hud.state().panel = true;
   s.hud.state().ask = false;
   s.hud.state().overlayOn = false;
@@ -1480,8 +1541,13 @@ void Overlay::showPanel(bool grande, bool velo) {
   s.logAlto = (s.elegido && s.elegido->altoLog > 0) ? s.elegido->altoLog : (int)(s.altoE / std::max(0.25, s.escala));
   /* ya montado (se rehace su capa encima del velo al quitarle el pin): se queda donde estaba */
   if (!s.panelMontado) {
-    s.margenIzq = std::max(0, (s.logAncho - s.supAncho) / 2);
-    s.margenArr = std::max(0, (s.logAlto - s.supAlto) / 2);
+    if (izqGuardado >= 0) {   /* donde se dejo, sin salirse de la pantalla */
+      s.margenIzq = std::max(0, std::min(izqGuardado, s.logAncho - s.supAncho));
+      s.margenArr = std::max(0, std::min(arrGuardado, s.logAlto - s.supAlto));
+    } else {
+      s.margenIzq = std::max(0, (s.logAncho - s.supAncho) / 2);
+      s.margenArr = std::max(0, (s.logAlto - s.supAlto) / 2);
+    }
   }
   s.panelMontado = true;
   zwlr_layer_surface_v1_set_margin(s.layer, s.margenArr, 0, 0, s.margenIzq);

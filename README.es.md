@@ -89,7 +89,9 @@ En la rama `experimental`, el logo y el nombre de OdysseyVK, a la izquierda de l
 página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); luego van
 **Juegos**, **Ajustes** (arriba los datos de rendimiento —visor 3D, red de profundidad, tarjetas
 gráficas—; luego versión, actualizaciones, idioma, barra de tareas y bandeja, y **Desinstalar**
-plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. Todo está también en
+plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. En la rama `experimental` el panel toma el color de resaltado de KDE sobre un fondo gris, se
+redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
+dejaste. Todo está también en
 `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
 sin reiniciarse.
 

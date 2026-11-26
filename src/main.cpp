@@ -3069,6 +3069,8 @@ static int cmdAjustes(int argc, char **argv) {
   }
   /* el pin (rama experimental): fijado encima, sin velo y con el teclado a pedido */
   st.fijado = panelFijado();
+  /* y el acento del panel, el color de resaltado de KDE */
+  colorResaltadoKde(st.acentoPanel);
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
   /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
   ov.showPanel(grande, quiereVelo && !st.fijado);
@@ -3379,6 +3381,17 @@ static int cmdHudSelfTest(int argc, char **argv) {
     }
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
     hud.state().fijado = panelFijado();   /* el pin, como lo dejo el panel (rama experimental) */
+    colorResaltadoKde(hud.state().acentoPanel);   /* el acento de KDE; ODYSSEYVK_HUD_ACENTO=r,g,b lo fija a mano */
+    if (const char *ac = std::getenv("ODYSSEYVK_HUD_ACENTO")) {
+      int r = 0, g = 0, b = 0;
+      if (std::sscanf(ac, "%d,%d,%d", &r, &g, &b) == 3)
+        hud.state().acentoPanel[0] = r / 255.0f, hud.state().acentoPanel[1] = g / 255.0f, hud.state().acentoPanel[2] = b / 255.0f;
+    }
+    /* ODYSSEYVK_HUD_TAMANO=ANCHOxALTO: el panel con ese tamano, como si se le hubiera arrastrado la esquina */
+    if (const char *tm = std::getenv("ODYSSEYVK_HUD_TAMANO")) {
+      float an = 0, al = 0;
+      if (std::sscanf(tm, "%fx%f", &an, &al) == 2) hud.state().panelAncho = an, hud.state().panelAlto = al;
+    }
     /* ODYSSEYVK_HUD_SESION=1: como con un video o un juego en 3D debajo (sin la pestana de Juegos) */
     if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 1) hud.state().pestanas[1].clear();
     hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;

@@ -1393,14 +1393,22 @@ void Hud::cajaAyuda(const std::vector<std::string> &lineas, float x, float y, fl
    cambio. Los colores son los de la tarjeta de la orilla y la pastilla.
    --------------------------------------------------------------------------------------------- */
 void Hud::dibujaPanel(int vw, int vh) {
-  const float accent[3] = {0.46f, 0.37f, 0.92f};
+  /* rama experimental: el acento es el color de resaltado de KDE (lo pone quien ensena el panel) y el
+     fondo, gris; sobre un acento claro la letra va oscura */
+  const float accent[3] = {st_.acentoPanel[0], st_.acentoPanel[1], st_.acentoPanel[2]};
   const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   const float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
-  const float pw = std::min(820.0f, (float)vw - 48.0f), ph = std::min(600.0f, (float)vh - 48.0f);
+  const bool acentoClaro = 0.299f * accent[0] + 0.587f * accent[1] + 0.114f * accent[2] > 0.62f;
+  const float tinta[3] = {acentoClaro ? 0.08f : ink[0], acentoClaro ? 0.09f : ink[1], acentoClaro ? 0.11f : ink[2]};
+  /* el tamano: el de fabrica (820 x 600) o el que se le dio arrastrando la esquina, sin salirse */
+  const float pw = st_.panelAncho > 0.0f ? std::max(560.0f, std::min(st_.panelAncho, (float)vw - 48.0f))
+                                         : std::min(820.0f, (float)vw - 48.0f);
+  const float ph = st_.panelAlto > 0.0f ? std::max(400.0f, std::min(st_.panelAlto, (float)vh - 48.0f))
+                                        : std::min(600.0f, (float)vh - 48.0f);
   const float px = std::floor(((float)vw - pw) * 0.5f), py = std::floor(((float)vh - ph) * 0.5f);
   panelCaja_ = {px, py, pw, ph};
   mask9(panelCaja_, 1, 22.0f, 0.42f, 0.43f, 0.50f, 0.80f);                                   /* el filo */
-  mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.085f, 0.09f, 0.11f, 0.86f);   /* translucido */
+  mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.165f, 0.17f, 0.185f, 0.97f);   /* gris */
 
   /* cabecera: el pin, el nombre, pestanas en pildora y el aspa */
   panelFijar_ = {px + 18.0f, py + 22.0f, 28.0f, 28.0f};
@@ -1421,7 +1429,8 @@ void Hud::dibujaPanel(int vw, int vh) {
     const Rect baldosa{panelLogo_.x + 8.0f, panelLogo_.y + 5.0f, 22.0f, 22.0f};
     mask9(baldosa, 1, 5.0f, 1.0f, 1.0f, 1.0f, 1.0f);
     icono({baldosa.x + 1.0f, baldosa.y + 1.0f, 20.0f, 20.0f}, icoLogo_, 14.0f / 255.0f, 68.0f / 255.0f, 158.0f / 255.0f, 1.0f);
-    text("OdysseyVK", baldosa.x + baldosa.w + 9.0f, panelLogo_.y + 6.0f, 17.0f, ink[0], ink[1], ink[2], puesta || hov ? 1.0f : 0.90f);
+    text("OdysseyVK", baldosa.x + baldosa.w + 9.0f, panelLogo_.y + 6.0f, 17.0f, puesta ? tinta[0] : ink[0], puesta ? tinta[1] : ink[1],
+         puesta ? tinta[2] : ink[2], puesta || hov ? 1.0f : 0.90f);
   }
   const float tx0 = panelLogo_.x + panelLogo_.w;
   panelPestanas_.clear();
@@ -1453,7 +1462,8 @@ void Hud::dibujaPanel(int vw, int vh) {
     const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_);
     if (puesta) mask9(t, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
     else if (hov) mask9(t, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.10f);
-    text(st_.pestanas[i], t.x + t.w * 0.5f, t.y + 7.0f + (14.0f - tamPest) * 0.5f, tamPest, ink[0], ink[1], ink[2], puesta || hov ? 1.0f : 0.72f,
+    text(st_.pestanas[i], t.x + t.w * 0.5f, t.y + 7.0f + (14.0f - tamPest) * 0.5f, tamPest, puesta ? tinta[0] : ink[0],
+         puesta ? tinta[1] : ink[1], puesta ? tinta[2] : ink[2], puesta || hov ? 1.0f : 0.72f,
          true);
     tx += w + 8.0f;
   }
@@ -1581,7 +1591,11 @@ void Hud::dibujaPanel(int vw, int vh) {
         if (!it.valor) mask9(b, 0, 15.0f, 0.28f, 0.29f, 0.33f, 0.98f);
         else if (it.peligro) mask9(b, 0, 15.0f, 0.82f, 0.33f, 0.36f, hb ? 1.0f : 0.90f);
         else mask9(b, 0, 15.0f, accent[0], accent[1], accent[2], hb ? 1.0f : 0.92f);
-        text(it.valorTexto, b.x + b.w * 0.5f, b.y + 6.5f, 13.5f, 1.0f, 1.0f, 1.0f, it.valor ? 1.0f : 0.70f, true);
+        {
+          const bool sobreAcento = it.valor && !it.peligro;
+          text(it.valorTexto, b.x + b.w * 0.5f, b.y + 6.5f, 13.5f, sobreAcento ? tinta[0] : 1.0f, sobreAcento ? tinta[1] : 1.0f,
+               sobreAcento ? tinta[2] : 1.0f, it.valor ? 1.0f : 0.70f, true);
+        }
         break;
       }
       case ItemPanel::Interruptor: {
@@ -1632,8 +1646,8 @@ void Hud::dibujaPanel(int vw, int vh) {
           const bool puesta = (int)k == it.elegido, ho = dentro && o.inside(mx_, my_);
           if (puesta) mask9(o, 0, 14.0f, accent[0], accent[1], accent[2], 0.98f);
           else if (ho) mask9(o, 0, 14.0f, 1.0f, 1.0f, 1.0f, 0.10f);
-          text(it.opciones[k], o.x + o.w * 0.5f, o.y + 5.5f, 13.5f, ink[0], ink[1], ink[2], puesta || ho ? 1.0f : 0.70f,
-               true);
+          text(it.opciones[k], o.x + o.w * 0.5f, o.y + 5.5f, 13.5f, puesta ? tinta[0] : ink[0], puesta ? tinta[1] : ink[1],
+               puesta ? tinta[2] : ink[2], puesta || ho ? 1.0f : 0.70f, true);
           ox += w;
         }
         break;
@@ -1792,6 +1806,17 @@ void Hud::dibujaPanel(int vw, int vh) {
     bx = std::max(px + 12.0f, bx);
     cajaAyuda(lineas, bx, by, tam);
   }
+  /* la esquina de abajo a la derecha (rama experimental): seis puntitos en escalera; arrastrandola cambia
+     el tamano del panel */
+  {
+    panelEsquina_ = {px + pw - 28.0f, py + ph - 28.0f, 24.0f, 24.0f};
+    const bool he = panelEsquina_.inside(mx_, my_);
+    const float c = he ? 0.95f : 0.55f;
+    for (int fila = 0; fila < 3; fila++)
+      for (int k = 0; k <= fila; k++)
+        mask9({panelEsquina_.x + 18.0f - 5.0f * (float)k, panelEsquina_.y + 8.0f + 5.0f * (float)fila, 3.0f, 3.0f}, 0, 1.5f, c, c,
+              c + 0.02f, 1.0f);
+  }
   /* el rotulo del pin, al pasar por encima */
   if (hfij) {
     const std::string r = idioma::tr(st_.fijado ? "Fijado encima: un clic en el juego no cierra el panel. Pica para soltarlo."
@@ -1835,6 +1860,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (panelFijar_.inside(mx, my)) return HitPanelFijar;
+  if (panelEsquina_.inside(mx, my)) return HitPanelRedimensionar;
   if (panelLogo_.inside(mx, my)) {   /* el logo: la primera pestana */
     if (sub) *sub = 0;
     return HitPanelPestana;

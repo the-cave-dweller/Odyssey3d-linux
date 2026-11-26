@@ -111,6 +111,11 @@ public:
     /* el pin a la izquierda del nombre (rama experimental): fijado, el panel se queda encima aunque se
        pique el juego (sin velo y con el teclado a pedido) */
     bool fijado = false;
+    /* el panel de ajustes (rama experimental): su acento, el color de resaltado de KDE (de fabrica el
+       morado de siempre), y su tamano en puntos del lienzo (0 = el de fabrica, 820 x 600), que se cambia
+       arrastrando la esquina de abajo a la derecha */
+    float acentoPanel[3] = {0.46f, 0.37f, 0.92f};
+    float panelAncho = 0.0f, panelAlto = 0.0f;
     /* el renglon de las teclas de la pastilla cuando hay atajos cambiados (v1.09); vacio = el de fabrica */
     std::string teclas;
     /* la pastilla del modo rendimiento (rama experimental): el conversor va sin red. Lleva el acento
@@ -194,6 +199,7 @@ public:
     HitPanelIdioma,       /* el boton del idioma (v1.07): abre y cierra la lista */
     HitPanelIdiomaOpcion, /* un idioma de la lista: `sub` = cual (idioma::Lengua) */
     HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
+    HitPanelRedimensionar, /* la esquina de abajo a la derecha: cambiar el tamano del panel (rama experimental) */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
@@ -389,6 +395,13 @@ private:
   };
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
   Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
+  Rect panelEsquina_; /* la esquina para cambiar el tamano */
+public:
+  /* el tamano del panel que se dibujo en el ultimo `begin`, en puntos del lienzo (para la capa, que lo
+     cambia arrastrando la esquina) */
+  float panelAnchoVisto() const { return panelCaja_.w; }
+  float panelAltoVisto() const { return panelCaja_.h; }
+private:
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelPestanas_;
   std::vector<ZonaItem> zonas_;

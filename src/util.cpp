@@ -257,3 +257,30 @@ void fijarPanel(bool si) {
     std::fclose(f);
   }
 }
+
+/* el color de resaltado de KDE (rama experimental), de ~/.config/kdeglobals: `[General] AccentColor` si
+   esta (Plasma 6 con un acento propio) o `[Colors:Selection] BackgroundNormal` (el del esquema de color;
+   en Breeze, 61,174,233). Devuelve false si no hay KDE o no se entiende. */
+bool colorResaltadoKde(float rgb[3]) {
+  const char *xdg = std::getenv("XDG_CONFIG_HOME");
+  const char *home = std::getenv("HOME");
+  const std::string ruta = (xdg && *xdg) ? std::string(xdg) + "/kdeglobals" : std::string(home ? home : "") + "/.config/kdeglobals";
+  std::string txt;
+  if (!readSmallFile(ruta, txt)) return false;
+  std::string seccion, acento, seleccion;
+  size_t i = 0;
+  while (i < txt.size()) {
+    size_t f = txt.find('\n', i);
+    if (f == std::string::npos) f = txt.size();
+    const std::string l = strTrim(txt.substr(i, f - i));
+    i = f + 1;
+    if (!l.empty() && l[0] == '[') { seccion = l; continue; }
+    if (seccion == "[General]" && l.rfind("AccentColor=", 0) == 0) acento = l.substr(12);
+    if (seccion == "[Colors:Selection]" && l.rfind("BackgroundNormal=", 0) == 0) seleccion = l.substr(17);
+  }
+  const std::string &v = !acento.empty() ? acento : seleccion;
+  int r = 0, g = 0, b = 0;
+  if (v.empty() || std::sscanf(v.c_str(), "%d,%d,%d", &r, &g, &b) != 3) return false;
+  rgb[0] = (float)r / 255.0f, rgb[1] = (float)g / 255.0f, rgb[2] = (float)b / 255.0f;
+  return true;
+}

@@ -88,7 +88,8 @@ taskbar icon or the system-tray icon (click: settings, middle click: games). On 
 screen, keyboard shortcuts, apps that don't ask); then come **Games**, **Settings** (the performance
 figures — 3D viewer, depth network, GPUs — on top, then version, updates, language, taskbar and tray,
 and **Uninstall** folded under its arrow) and **Experimental**. Over a video or a game in 3D the Games tab is left
-out. Everything is also in
+out. On the `experimental` branch the panel takes KDE's highlight colour on a grey background, resizes
+from its bottom-right corner and reopens where and how big you left it. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
 ### Language

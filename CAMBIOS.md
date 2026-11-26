@@ -3,6 +3,23 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El panel se redimensiona, recuerda su sitio y toma el color de KDE (rama `experimental`)
+
+- Rodolfo: «añade redimensionar la ventana de settings, que recuerde la posición, también que el fondo
+  sea gris y que tome el color de resaltado de KDE».
+- **Redimensionar**: la esquina de abajo a la derecha (seis puntitos en escalera; al pasar por encima,
+  el cursor de redimensionar del tema) se arrastra y el panel crece hacia la derecha y hacia abajo
+  (la capa no se mueve; mínimo 560 × 400, máximo la pantalla). Se repinta una vez por cuadro del
+  compositor, como al moverlo.
+- **Recordar**: al soltar después de moverlo o de cambiarle el tamaño, sus márgenes y su tamaño van a
+  `~/.local/state/odysseyvk/panel-ventana`; al abrirse vuelve ahí, sin salirse de la pantalla. En un
+  KWin aparte, con «300 150 1000 700» guardado, abrió en x 300, y 150, de 1008 × 708 (el borde suave).
+- **Colores**: el fondo pasa a gris (antes casi negro y translúcido) y el acento (pestaña puesta,
+  opciones, interruptores, deslizadores, botones) es el color de resaltado de KDE, de
+  `~/.config/kdeglobals` (`[General] AccentColor` o `[Colors:Selection] BackgroundNormal`; el de
+  Rodolfo, el azul de Breeze 61,174,233). Sobre un acento claro, la letra va oscura.
+- Para la prueba de la interfaz: `ODYSSEYVK_HUD_ACENTO=r,g,b` y `ODYSSEYVK_HUD_TAMANO=ANCHOxALTO`.
+
 ## El logo abre la página principal; Programa pasa a llamarse Ajustes (rama `experimental`)
 
 - Rodolfo: «que visor 3D y tarjetas gráficas vayan encima de versión en Programa, y cámbiale el nombre a

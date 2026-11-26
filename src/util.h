@@ -51,6 +51,8 @@ std::string rutaRedVieja();
 /* el pin del panel de ajustes (rama experimental): fijado encima o no, en ~/.local/state/odysseyvk/panel-fijado */
 bool panelFijado();
 void fijarPanel(bool si);
+/* el color de resaltado de KDE (de ~/.config/kdeglobals), 0..1; false si no lo hay */
+bool colorResaltadoKde(float rgb[3]);
 
 /* True si el archivo existe y se puede leer. */
 bool fileExists(const std::string &path);
