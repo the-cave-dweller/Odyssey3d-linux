@@ -1736,6 +1736,7 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     else if (a == "--2d") { o.no3d = true; o.fmtGiven = true; }
     else if (a == "--tb" || a == "--top-bottom") { o.topBottom = true; o.fmtGiven = true; }
     else if (a == "--sbs" || a == "--side-by-side") o.fmtGiven = true;
+    else if (a == "--detectar") o.detectar = true;
     else if (a == "--conver" || a == "--convert") {
       o.conver = true;
       o.fmtGiven = true;   /* el formato ya esta elegido: no hace falta volver a preguntar */
@@ -4077,7 +4078,9 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
      visor, para que el modo que se ve marcado en la ventana sea el que sale en pantalla. Solo se
      refresca este valor; los demas siguen con los de arranque (y con las banderas de la linea de
      orden), que es lo que dice el README: esos numeros piden reiniciar el servicio. */
-  g_modoVisor = modoPedido;
+  /* `detectar` (rama experimental): arranca como video normal y el visor decide en los primeros segundos */
+  const bool detectar = modoPedido == "detectar";
+  g_modoVisor = detectar ? std::string("conv") : modoPedido;
   if (pila) {
     const std::map<std::string, std::string> conf = ajuste::leerServeConf();
     if (const auto it = conf.find("legado"); it != conf.end()) {
@@ -4096,7 +4099,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   }
   /* El modo que de verdad se lanza. «Dividido» (`sbs`, y el `suave` que guardo la 0.83) es UNA
      eleccion; que salga suavizado o tal cual lo dicen los ajustes del programa. */
-  const std::string modo = (pila && (modoPedido == "sbs" || modoPedido == "suave"))
+  const std::string modo = detectar ? std::string("conv")
+                           : (pila && (modoPedido == "sbs" || modoPedido == "suave"))
                                ? std::string(pila->divididoSuave && !pila->divididoAuto ? "suave" : "sbs")
                                : modoPedido;
   pid_t pid = ::fork();
@@ -4112,6 +4116,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
   if (modo == "sbs") args.push_back("--sbs");
   if (modo == "tb") args.push_back("--tb");
   if (modo == "flat") args.push_back("--2d");
+  if (detectar) args.push_back("--detectar");
   /* la casilla de «no volver a preguntar» dentro del video: `aplicacion:modo`, y si ya esta apuntada */
   if (!recordar.empty()) {
     args.push_back("--recordar");
@@ -6261,6 +6266,20 @@ static int cmdServe(int argc, char **argv) {
         } else if (fija != cfg.porApp.end() && fija->second == "flat") {
           std::printf("[serve] %s esta marcada como 2D plano: no se hace nada\n", app.c_str());
           std::fflush(stdout);
+        } else if (!esJuego(w.appId) && !dry) {
+          /* rama experimental: siempre automatico (Rodolfo: «it should override, will always be auto now»).
+             Ni tarjeta ni el modo guardado para la aplicacion: el visor arranca como video normal, mira los
+             primeros segundos y, si es un video dividido, se cambia solo. Los juegos siguen por su camino. */
+          hijo = spawnViewer(exe, w.uuid, "detectar", cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo,
+                             cfg.suavizado, &cfg);
+          hijoDesde = now;
+          hijoUuid = w.uuid;
+          hijoApp = strLower(w.appId);
+          visorEscondidas = 0;
+          std::printf("[serve] lanzando 3D por %s | %s: el tipo de video lo decide el visor en los primeros segundos\n",
+                      w.appId.c_str(), w.title.c_str());
+          std::fflush(stdout);
+          if (hijo > 0 && unaVez) break;
         } else if (fija != cfg.porApp.end()) {
           if (dry) {
             std::printf("[serve] (dry) %s ya está ajustada a %s, no se pregunta\n", app.c_str(), fija->second.c_str());

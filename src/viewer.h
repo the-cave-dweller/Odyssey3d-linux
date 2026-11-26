@@ -32,6 +32,9 @@ struct ViewerOpts {
   /* conversor de video normal (2D) a 3D: la red de profundidad dice cuanto desplazar cada ojo.
      vacio = el modelo que esta en ~/.local/share/odysseyvk/modelos */
   bool conver = false;
+  /* `--detectar` (rama experimental): el tipo de video lo decide el visor mirando los primeros segundos
+     (normal, lado a lado o arriba y abajo) y luego deja de mirar */
+  bool detectar = false;
   std::string modelPath;
   /* la otra red de profundidad, la del boton 1 / 2 de la pastilla (--alterno RUTA) */
   std::string altModel;

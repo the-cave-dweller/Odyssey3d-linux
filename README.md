@@ -64,6 +64,13 @@ to 3D) or **Split video** (side-by-side). Pick one; the pill in the top-right co
 the 3D is on, with the ON/OFF switch, depth, pop-out, the two video-type buttons and the gear that
 opens the settings panel. Tick "Don't ask again" and that app goes straight to 3D next time.
 
+On the `experimental` branch there is no card: the video goes straight to 3D and the viewer looks at
+its first seconds to tell a normal video from a split one (side by side or top and bottom), switches
+by itself and stops looking. It compares the two halves of the frame — the picture and its fine
+detail — and was measured on three side-by-side 3D videos and three normal ones (18 of 18 three-second
+windows right on each). Apps marked as 2D and games keep their own way; the pill can still switch by
+hand.
+
 Keys (they also work while the video or game has the keyboard):
 
 | Keys | What |

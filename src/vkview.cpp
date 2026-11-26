@@ -426,6 +426,108 @@ const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativ
    es la interfaz: la trama sigue tejiendose y el rastreo sigue mirando los ojos, que es lo que uno
    quiere mientras ve algo a pantalla completa. La region de entrada se rehace con `inputChanged`,
    porque sin pastilla no hay nada que picar salvo el rincon de arriba a la derecha. */
+/* ---- el tipo de video, detectado en los primeros segundos (rama experimental) ----
+   En un video dividido las dos mitades son casi la misma imagen, corrida unos puntos en horizontal (el
+   paralaje); en uno normal no se parecen. Se miran dos cosas, sobre el cuadro chico que ya se lee para
+   la red (reducido a la mitad): el parecido de la imagen y el del detalle (la imagen menos su version
+   borrosa), con la mitad derecha corrida hasta 6 puntos. Con la imagen sola, un paisaje (cielo arriba y
+   suelo abajo en las dos mitades) parecia dividido; con el detalle solo, una pelicula oscura se acercaba
+   a un 3D de detalle suave. MEDIDO 26-nov con tres videos 3D lado a lado y tres normales de YouTube
+   (ventanas de 3 s, 5 muestras por segundo): los 3D dan imagen 0,77-0,99 y detalle 0,27-0,83; los
+   normales, imagen hasta 0,86 con detalle hasta 0,03 (paisaje) o detalle hasta 0,21 con imagen hasta
+   0,50 (pelicula). Regla: dividido si imagen > 0,65 Y detalle > 0,12 (18 de 18 ventanas en los 3D, 0
+   de 18 en los normales). Arriba y abajo, igual con las mitades de arriba y de abajo (sin ejemplos
+   medidos todavia). Se decide con 3 s que tengan imagen (no negro); como mucho a los 8 s. */
+struct DetectorTipo {
+  bool activo = false, decidido = false;
+  double desde = -1.0;
+  std::vector<float> lumLR, detLR, lumTB, detTB;
+  static float ncc(const std::vector<float> &a, const std::vector<float> &b, int w, int ax, int bx, int ay, int by, int ancho,
+                   int alto) {
+    double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+    const int n = ancho * alto;
+    for (int y = 0; y < alto; y++)
+      for (int x = 0; x < ancho; x++) {
+        const double va = a[(size_t)(ay + y) * w + ax + x], vb = b[(size_t)(by + y) * w + bx + x];
+        sa += va, sb += vb, saa += va * va, sbb += vb * vb, sab += va * vb;
+      }
+    const double ca = saa - sa * sa / n, cb = sbb - sb * sb / n, cab = sab - sa * sb / n;
+    return (ca > 1e-9 && cb > 1e-9) ? (float)(cab / std::sqrt(ca * cb)) : 0.0f;
+  }
+  /* el mejor parecido entre dos rectangulos de `img` (ancho `w`) del mismo tamano, con el segundo corrido
+     en horizontal hasta `d` */
+  static float mejor(const std::vector<float> &img, int w, int ax, int ay, int bx, int by, int ancho, int alto, int d) {
+    float m = -1.0f;
+    for (int dx = -d; dx <= d; dx++) {
+      const int a0 = dx >= 0 ? ax + dx : ax, b0 = dx >= 0 ? bx : bx - dx, an = ancho - std::abs(dx);
+      m = std::max(m, ncc(img, img, w, a0, b0, ay, by, an, alto));
+    }
+    return m;
+  }
+  /* una muestra; true si ya hay decision en `tipo` (0 normal, 2 lado a lado, 4 arriba y abajo) */
+  bool muestra(const uint8_t *rgba, int sz, double ahora, int &tipo) {
+    if (!activo || decidido) return false;
+    if (desde < 0.0) desde = ahora;
+    const int n = sz / 2;
+    std::vector<float> g((size_t)n * n), b((size_t)n * n), t((size_t)n * n), h((size_t)n * n);
+    for (int y = 0; y < n; y++)
+      for (int x = 0; x < n; x++) {
+        float s = 0.0f;
+        for (int k = 0; k < 4; k++) {
+          const uint8_t *p = rgba + ((size_t)(2 * y + (k >> 1)) * sz + (size_t)(2 * x + (k & 1))) * 4;
+          s += 0.299f * p[0] + 0.587f * p[1] + 0.114f * p[2];
+        }
+        g[(size_t)y * n + x] = s / (4.0f * 255.0f);
+      }
+    /* el borroso: [1 4 6 4 1] / 16 en las dos direcciones, dos veces */
+    auto pasa = [&](const std::vector<float> &de, std::vector<float> &a, bool horizontal) {
+      static const float k[5] = {1 / 16.f, 4 / 16.f, 6 / 16.f, 4 / 16.f, 1 / 16.f};
+      for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) {
+          float s = 0.0f;
+          for (int j = -2; j <= 2; j++) {
+            const int xx = horizontal ? std::max(0, std::min(n - 1, x + j)) : x, yy = horizontal ? y : std::max(0, std::min(n - 1, y + j));
+            s += k[j + 2] * de[(size_t)yy * n + xx];
+          }
+          a[(size_t)y * n + x] = s;
+        }
+    };
+    pasa(g, t, true), pasa(t, b, false), pasa(b, t, true), pasa(t, b, false);
+    for (size_t i = 0; i < h.size(); i++) h[i] = g[i] - b[i];
+    /* con poca imagen (negro, un fundido) la muestra no cuenta */
+    auto desv = [&](int x0, int ancho) {
+      double s = 0, ss = 0;
+      for (int y = 0; y < n; y++)
+        for (int x = x0; x < x0 + ancho; x++) s += g[(size_t)y * n + x], ss += (double)g[(size_t)y * n + x] * g[(size_t)y * n + x];
+      const double m = s / (ancho * n);
+      return std::sqrt(std::max(0.0, ss / (ancho * n) - m * m));
+    };
+    const int mitad = n / 2;
+    if (std::min(desv(0, mitad), desv(mitad, mitad)) > 0.03) {
+      lumLR.push_back(mejor(g, n, 0, 0, mitad, 0, mitad, n, 6));
+      detLR.push_back(mejor(h, n, 0, 0, mitad, 0, mitad, n, 6));
+      lumTB.push_back(mejor(g, n, 0, 0, 0, mitad, n, mitad, 6));
+      detTB.push_back(mejor(h, n, 0, 0, 0, mitad, n, mitad, 6));
+    }
+    const bool bastan = ahora - desde >= 3.0 && lumLR.size() >= 5;
+    if (!bastan && ahora - desde < 8.0) return false;
+    decidido = true;
+    auto mediana = [](std::vector<float> v) {
+      if (v.empty()) return 0.0f;
+      std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+      return v[v.size() / 2];
+    };
+    const float iLR = mediana(lumLR), dLR = mediana(detLR), iTB = mediana(lumTB), dTB = mediana(detTB);
+    tipo = (iLR > 0.65f && dLR > 0.12f) ? 2 : ((iTB > 0.65f && dTB > 0.12f) ? 4 : 0);
+    std::printf("[tipo] %s en %.1f s (%zu muestras con imagen): lado a lado imagen %.2f detalle %.2f · arriba/abajo imagen %.2f "
+                "detalle %.2f\n",
+                tipo == 2 ? "video dividido lado a lado" : tipo == 4 ? "video dividido arriba y abajo" : "video normal",
+                ahora - desde, lumLR.size(), iLR, dLR, iTB, dTB);
+    std::fflush(stdout);
+    return true;
+  }
+};
+
 /* ---- el cursor de los juegos (rama experimental) ---- */
 static bool monitorVentanas(VkUi &ui) {
 #ifdef HAVE_WAYLAND_WM
@@ -3328,6 +3430,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         medLeeMax = std::max(medLeeMax, (glfwGetTime() - tLee0) * 1000.0);
         medLeeN++;
         if (leido) {
+          /* el tipo de video, en los primeros segundos (rama experimental): si sale dividido, se cambia
+             como con el boton de la pastilla; despues no se vuelve a mirar */
+          static DetectorTipo detector;
+          if (opts.detectar && !detector.decidido) {
+            detector.activo = true;
+            int tipo = 0;
+            if (detector.muestra(chico.data(), wv.converterSize(), now, tipo) && tipo != 0) {
+              applyHit(ui, Hud::HitModoDividido);
+              if (tipo == 4) ui.tune.topBottom = true;
+            }
+          }
           /* La dureza de los dos planos se puede subir o bajar con `g`/`v` en mitad de la pelicula:
              se pasa a la red justo antes de lanzar la pasada, que es el unico momento en que su hilo
              esta libre y no hay dos sitios tocando el mismo numero. */

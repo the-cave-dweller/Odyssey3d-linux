@@ -849,11 +849,12 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VÍDEO");
     pon(s, "");
+    /* rama experimental: el tipo de video ya no se elige ni se pregunta; lo detecta el visor */
     Hud::ItemPanel m;
-    m.tipo = Hud::ItemPanel::Opciones, m.rotulo = idioma::tr("Al ver un vídeo a pantalla completa");
-    m.opciones = {idioma::tr("Preguntar"), idioma::tr("Vídeo normal"), idioma::tr("Vídeo dividido")};
-    m.elegido = v.modo == "conv" ? 1 : (v.modo == "sbs" ? 2 : 0);
-    pon(m, "modo");
+    m.tipo = Hud::ItemPanel::Info;
+    m.rotulo = idioma::tr("El tipo de vídeo se detecta solo");
+    m.nota = idioma::tr("Al ponerse a pantalla completa, el visor mira los primeros segundos (normal, lado a lado o arriba y abajo) y luego deja de mirar; en la pastilla se puede cambiar a mano.");
+    pon(m, "");
     Hud::ItemPanel d;
     d.tipo = Hud::ItemPanel::Opciones, d.rotulo = idioma::tr("Suavizar los vídeos divididos");
     d.opciones = {idioma::tr("Siempre"), idioma::tr("Si hace falta"), idioma::tr("Nunca")};

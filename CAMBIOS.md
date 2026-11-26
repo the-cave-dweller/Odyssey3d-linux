@@ -3,6 +3,40 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El tipo de vídeo se detecta solo (rama `experimental`)
+
+- Rodolfo: «¿te puedo entrenar para que identifiques un vídeo normal de uno dividido? que tomes los
+  primeros segundos para cambiar el modo y ya luego dejes de inspeccionar», «en base a eso determina
+  siempre el modo», «it should override, will always be auto now». Pasó tres vídeos 3D lado a lado
+  de YouTube para medir (20 s de cada uno; los tres normales eran los de antes).
+- **Cómo**: en un vídeo dividido las dos mitades son casi la misma imagen corrida unos puntos (el
+  paralaje). Sobre el cuadro chico que ya se lee para la red, reducido a 259 × 259, se mide el
+  parecido de las mitades con la derecha corrida hasta 6 puntos: el de la imagen y el del detalle (la
+  imagen menos su versión borrosa, [1 4 6 4 1]/16 dos veces). Dividido si imagen > 0,65 **y**
+  detalle > 0,12 (mediana de 3 s con imagen; como mucho 8 s). Arriba y abajo, igual con las mitades de
+  arriba y de abajo.
+- MEDIDO (ventanas de 3 s, 5 muestras por segundo):
+
+  | Vídeo | Imagen | Detalle | Dividido |
+  |---|---|---|---|
+  | 3D 1 (IMAX, anémonas; parte con bandas) | 0,94–0,99 | 0,50–0,83 | 18/18 |
+  | 3D 2 (submarino, detalle suave) | 0,90–0,95 | 0,27–0,42 | 18/18 |
+  | 3D 3 (selva) | 0,77–0,92 | 0,62–0,70 | 18/18 |
+  | Hablando | −0,01–0,25 | 0,02–0,03 | 0/18 |
+  | Paisaje | 0,00–0,86 | 0,01–0,02 | 0/18 |
+  | Película subtitulada | 0,11–0,50 | 0,01–0,21 | 0/18 |
+
+  Con la imagen sola, el paisaje (cielo arriba, suelo abajo en las dos mitades) llegaba a 0,86 como un
+  3D; con el detalle solo, la película oscura llegaba a 0,30 y el 3D submarino bajaba a 0,21 (a 518 de
+  lado). Las dos juntas los separan.
+- **Siempre automático**: el servicio ya no pone la tarjeta ni usa el modo guardado por aplicación;
+  lanza el visor como vídeo normal con `--detectar` y el visor, si sale dividido, se cambia como con
+  el botón de la pastilla (suavizado o no según los ajustes). Las aplicaciones marcadas como 2D plano y
+  los juegos siguen su camino. En el panel, «Al ver un vídeo a pantalla completa» pasa a ser una nota.
+- En el visor aparte: un cuadro 3D → «[tipo] video dividido lado a lado en 3.2 s … imagen 0.87 detalle
+  0.31» y el cambio a dividido suavizado; el cuadro de paisaje → «video normal en 3.0 s … imagen 0.79
+  detalle 0.01». Arriba y abajo no tiene todavía ejemplos medidos.
+
 ## El panel se redimensiona, recuerda su sitio y toma el color de KDE (rama `experimental`)
 
 - Rodolfo: «añade redimensionar la ventana de settings, que recuerde la posición, también que el fondo

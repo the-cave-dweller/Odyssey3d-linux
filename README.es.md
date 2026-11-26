@@ -65,6 +65,12 @@ queda mientras dura el 3D, con el interruptor ON/OFF, la profundidad, la salida,
 del tipo de vídeo y el engranaje que abre el panel de ajustes. Marca «No volver a preguntar» y esa
 aplicación pasa directa al 3D la próxima vez.
 
+En la rama `experimental` ya no hay tarjeta: el vídeo pasa directo al 3D y el visor mira sus primeros
+segundos para distinguir un vídeo normal de uno dividido (lado a lado o arriba y abajo), se cambia
+solo y deja de mirar. Compara las dos mitades del cuadro —la imagen y su detalle fino— y se midió con
+tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s bien en cada uno). Las
+aplicaciones marcadas como 2D y los juegos siguen su camino; en la pastilla se puede cambiar a mano.
+
 Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 
 | Teclas | Qué |
