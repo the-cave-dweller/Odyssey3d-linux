@@ -3,6 +3,24 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Fase 3b: encontrada la capa del HUD de Cyberpunk (v1.13)
+
+- Vuelta de Rodolfo con la sonda de los destinos (16:23 a 16:27): cuatro ventanas (la primera en un menú, 25
+  dibujos con destino; las otras tres en juego, 100 a 118), sin caídas y **sin ninguna pasada clásica**: todo va
+  por `vkCmdBeginRendering`, como se esperaba de vkd3d-proton.
+- **El HUD tiene su propia imagen**: 3840 × 2160 (la resolución de salida) en R8G8B8A8_SRGB, que se limpia a
+  (0, 0, 0, 0) y recibe 34 a 36 dibujos. Copiada al acabar ese dibujo trae el HUD entero sobre transparente
+  (minimapa, misión, botones, munición, iconos, vida, marcas de distancia) y su alfa es la máscara exacta:
+  4,3 a 5,2 % de los puntos, sin un solo falso en neones, luces de freno ni el halo del sol. Después se
+  dibuja en ella a 1920, 960, 480 y 240 (sus niveles chicos, para los paneles borrosos) y el nivel grande no
+  cambia (4,7 % antes y después).
+- **La regla para reconocerla es única** en las tres ventanas: un solo destino de color a la resolución de
+  salida, RGBA8, limpiado a (0, 0, 0, 0), con decenas de dibujos; las tres veces la misma imagen. La escena ya
+  con posproceso y sin HUD es otro destino (3840 × 2160 RGBA16F, un dibujo) y la mezcla final otro más (RGBA8
+  UNORM, igual al cuadro presentado).
+- Sobre el cuadro presentado algunos rótulos salen corridos unos píxeles (el HUD se mece al moverse, y la
+  copia puede ser del cuadro siguiente): en el 3D la máscara irá un poco engordada.
+
 ## Fase 3b, el HUD: la sonda de los destinos de dibujo (v1.13)
 
 - Rodolfo: «Sí, prepárala» (buscar la imagen donde el juego dibuja el HUD: su alfa sería la máscara exacta).
