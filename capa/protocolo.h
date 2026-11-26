@@ -21,17 +21,23 @@
    imagen donde el juego dibuja su HUD (MEDIDO en Cyberpunk: 3840x2160 RGBA8, limpiada a transparente
    en cada cuadro), reducida en la tarjeta del juego a 960x540 RGBA8 (cada punto, la media de 4x4); su
    alfa es el HUD. Mismo orden de escrituras y la misma comprobacion, con `hudUltimoSeq`. Si el juego
-   no tiene esa imagen, `hudUltimoSeq` se queda en 0. */
+   no tiene esa imagen, `hudUltimoSeq` se queda en 0.
+
+   Version 3: cada hueco del HUD lleva hasta ODVK_HUD_CAPAS capas del mismo cuadro (MEDIDO en Cyberpunk: en
+   los menus hay dos imagenes limpiadas a transparente por cuadro, el HUD y el menu) y en su byte 8 cuantas
+   lleva (uint32). El HUD es la union: el maximo de sus alfas. */
 #pragma once
 #include <stdint.h>
 
 #define ODVK_PROF_MAGIA 0x4f564450u   /* "PDVO" */
-#define ODVK_PROF_VERSION 2u
+#define ODVK_PROF_VERSION 3u
 #define ODVK_PROF_HUECOS 3u
 #define ODVK_PROF_CABECERA 4096u
 #define ODVK_PROF_DATOS 64u           /* los datos de cada hueco empiezan aqui; seqAntes va en el 0 */
 #define ODVK_HUD_ANCHO 960u
 #define ODVK_HUD_ALTO 540u
+#define ODVK_HUD_CAPAS 2u             /* capas por hueco: la k empieza en 64 + k * ancho * alto * 4 */
+#define ODVK_HUD_CUANTAS 8u           /* donde va, dentro del hueco, cuantas capas lleva (uint32) */
 
 typedef struct OdvkProfCabecera {
   uint32_t magia;
@@ -52,6 +58,7 @@ typedef struct OdvkProfCabecera {
   uint64_t hudTamHueco;                  /* 64 + datos + 8, redondeado */
   uint64_t hudUltimoSeq;                 /* lo escribe la tarjeta; 0 = no hay (o no se encontro) HUD */
   uint32_t hudFuenteAncho, hudFuenteAlto;  /* la imagen del HUD del juego, para el registro */
+  uint32_t hudCapasMax;                  /* version 3: ODVK_HUD_CAPAS */
 } OdvkProfCabecera;
 
 /* donde va cada cosa dentro de la region */

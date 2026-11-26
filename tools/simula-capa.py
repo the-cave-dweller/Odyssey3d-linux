@@ -18,8 +18,8 @@ import struct
 import sys
 import time
 
-MAGIA, VERSION, HUECOS, CABECERA, DATOS = 0x4F564450, 2, 3, 4096, 64
-HUD_W, HUD_H = 960, 540
+MAGIA, VERSION, HUECOS, CABECERA, DATOS = 0x4F564450, 3, 3, 4096, 64
+HUD_W, HUD_H, HUD_CAPAS = 960, 540, 2
 D32 = 126   # VK_FORMAT_D32_SFLOAT
 
 
@@ -45,6 +45,7 @@ def main():
     p.add_argument("--cada", type=float, default=3.0, help="segundos de cada una al turnarse (con --otra)")
     p.add_argument("--hud", help="la capa del HUD (RGBA8) volcada por la sonda: su alfa va como mascara")
     p.add_argument("--hud-medida", default="3840x2160")
+    p.add_argument("--hud2", help="una segunda capa del mismo cuadro (como el menu sobre el HUD): va su union")
     a = p.parse_args()
     nombre = os.environ.get("ODYSSEYVK_PROFUNDIDAD_SHM", f"/odysseyvk-profundidad-{os.getuid()}")
     lista = [a.profundidad] + ([a.otra] if a.otra else [])
@@ -56,11 +57,13 @@ def main():
     if a.hud:
         hw, hh = (int(v) for v in a.hud_medida.split("x"))
         hud = reduce_hud(a.hud, hw, hh)
+        if a.hud2:
+            hud += reduce_hud(a.hud2, hw, hh)
     datos = todas[0]
     redondea = lambda v: (v + 4095) // 4096 * 4096
     hueco = redondea(DATOS + len(datos) + 8)
     hud_inicio = redondea(CABECERA + HUECOS * hueco)
-    hud_hueco = redondea(DATOS + HUD_W * HUD_H * 4 + 8)
+    hud_hueco = redondea(DATOS + HUD_CAPAS * HUD_W * HUD_H * 4 + 8)
     total = hud_inicio + HUECOS * hud_hueco
     ruta = "/dev/shm" + nombre
     fd = os.open(ruta, os.O_CREAT | os.O_RDWR, 0o600)
@@ -71,6 +74,7 @@ def main():
     struct.pack_into("<IIiIIIIIQ", m, 0, 0, VERSION, os.getpid(), a.ancho, a.alto, D32, 4, HUECOS, hueco)
     # version 2: hudAncho, hudAlto, hudBytesPunto, hudHuecos, hudInicio, hudTamHueco (offset 56), la fuente (96)
     struct.pack_into("<IIIIQQ", m, 56, HUD_W, HUD_H, 4, HUECOS, hud_inicio, hud_hueco)
+    struct.pack_into("<I", m, 104, HUD_CAPAS)   # version 3: hudCapasMax
     if hud:
         hw, hh = (int(v) for v in a.hud_medida.split("x"))
         struct.pack_into("<II", m, 96, hw, hh)
@@ -95,6 +99,7 @@ def main():
             if hud:                                                 # lo mismo con el HUD (hudUltimoSeq en 88)
                 h = hud_inicio + (seq % HUECOS) * hud_hueco
                 struct.pack_into("<Q", m, h, seq)
+                struct.pack_into("<I", m, h + 8, len(hud) // (HUD_W * HUD_H * 4))   # cuantas capas
                 m[h + DATOS:h + DATOS + len(hud)] = hud
                 struct.pack_into("<Q", m, h + hud_hueco - 8, seq)
                 struct.pack_into("<Q", m, 88, seq)

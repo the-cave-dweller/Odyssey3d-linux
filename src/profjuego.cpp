@@ -244,9 +244,10 @@ bool ProfundidadJuego::leerHud(std::vector<uint8_t> &alfa, int &w, int &h) {
   volatile OdvkProfCabecera *c = (volatile OdvkProfCabecera *)base_;
   if (c->magia != ODVK_PROF_MAGIA || c->version != ODVK_PROF_VERSION) return false;
   const uint32_t hw = c->hudAncho, hh = c->hudAlto, bpp = c->hudBytesPunto, huecos = c->hudHuecos;
+  const uint32_t capasMax = c->hudCapasMax;
   const uint64_t inicio = c->hudInicio, tamHueco = c->hudTamHueco;
-  if (hw < 2 || hh < 2 || bpp != 4 || huecos == 0 || inicio < ODVK_PROF_CABECERA ||
-      inicio + (uint64_t)huecos * tamHueco > tam_ || ODVK_PROF_DATOS + (uint64_t)hw * hh * 4 + 8 > tamHueco)
+  if (hw < 2 || hh < 2 || bpp != 4 || huecos == 0 || capasMax == 0 || capasMax > 8 || inicio < ODVK_PROF_CABECERA ||
+      inicio + (uint64_t)huecos * tamHueco > tam_ || ODVK_PROF_DATOS + (uint64_t)capasMax * hw * hh * 4 + 8 > tamHueco)
     return false;
   const uint64_t seq = c->hudUltimoSeq;
   const double t = segundos();
@@ -261,9 +262,14 @@ bool ProfundidadJuego::leerHud(std::vector<uint8_t> &alfa, int &w, int &h) {
   std::atomic_thread_fence(std::memory_order_acquire);
   if (*(volatile const uint64_t *)(hueco + tamHueco - 8) != seq) return false;
   const size_t n = (size_t)hw * hh;
-  alfa.resize(n);
-  const uint8_t *s = hueco + ODVK_PROF_DATOS + 3;   /* RGBA8: el alfa es el cuarto */
-  for (size_t i = 0; i < n; i++) alfa[i] = s[i * 4];
+  /* (version 3) las capas del mismo cuadro (en los menus de Cyberpunk, el HUD y el menu): su union */
+  uint32_t capas = *(volatile const uint32_t *)(hueco + ODVK_HUD_CUANTAS);
+  capas = capas < 1 ? 1 : (capas > capasMax ? capasMax : capas);
+  alfa.assign(n, 0);
+  for (uint32_t k = 0; k < capas; k++) {
+    const uint8_t *s = hueco + ODVK_PROF_DATOS + (size_t)k * n * 4 + 3;   /* RGBA8: el alfa es el cuarto */
+    for (size_t i = 0; i < n; i++) alfa[i] = std::max(alfa[i], s[i * 4]);
+  }
   std::atomic_thread_fence(std::memory_order_acquire);
   if (*(volatile const uint64_t *)hueco != seq) return false;   /* la tarjeta ya lo estaba pisando */
   w = (int)hw, h = (int)hh;

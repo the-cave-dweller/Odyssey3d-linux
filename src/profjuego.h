@@ -27,7 +27,7 @@ public:
   /* lo que se leyo la ultima vez, para el registro: «1920x1080 D32_SFLOAT, Z invertida» */
   const std::string &descripcion() const { return desc_; }
   /* (fase 3c) la mascara del HUD del juego: el alfa de su capa del HUD reducida a w x h (960 x 540, el cuadro
-     entero; 0 = nada de HUD). Falso si la capa no la escribe (otro juego, ODYSSEYVK_HUD=0), si lo ultimo tiene
+     entero; 0 = nada de HUD); si el cuadro tuvo dos capas (un menu encima), la union. Falso si la capa no la escribe (otro juego, ODYSSEYVK_HUD=0), si lo ultimo tiene
      mas de medio segundo o si salio a medio escribir. Despues de leer(), en el mismo hilo. */
   bool leerHud(std::vector<uint8_t> &alfa, int &w, int &h);
   /* el tamano de la imagen del HUD del juego, para el registro */

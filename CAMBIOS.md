@@ -3,6 +3,30 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El juego ya no se congela al cambiar el modo de DLSS; el HUD con los menús encima (v1.13)
+
+- Rodolfo: «i think game froze after changing the dlss resolution». MEDIDO en el registro de la capa: al pasar
+  DLSS de 1920 × 1080 a 1280 × 720 la capa rehízo la memoria compartida para la medida nueva y **ahí se paró
+  todo** (ni un lanzamiento de DLSS más, ni el resumen de cada 10 s). Para rehacerla esperaba a la tarjeta
+  (`vkDeviceWaitIdle`) dentro del lanzamiento de DLSS y con su candado tomado; la tarjeta esperaba trabajo que el
+  juego aún no había enviado, y el hilo que lo envía estaba parado en ese candado (lo toman `vkQueueSubmit` y,
+  desde la fase 3c, cada `vkCmdBeginRendering`): un bloqueo para siempre. Venía de la fase 2 (el cambio de modo
+  solo se había probado con el simulador); los ganchos nuevos lo hicieron mucho más probable.
+- Ahora la región vieja **se aparta entera** (su nombre se borra y la nueva es otro objeto, que el visor vuelve a
+  abrir) y vive hasta que se cierra el dispositivo: la tarjeta aún puede estar copiando en ella y vkd3d-proton
+  puede volver a enviar un buffer de comandos ya grabado. Se espera a la tarjeta solo al cerrar el dispositivo,
+  fuera del candado. Y lo mismo en la sonda: sus volcados esperaban a la cola con el candado tomado; ahora fuera.
+- **El HUD con un menú encima**: MEDIDO en esa misma partida, en los menús hay **dos** imágenes limpiadas a
+  transparente por cuadro (unas 100 líneas por segundo en el registro a ~57 fps, turnándose: 11 000 líneas). El
+  visor ya mostraba los menús al 100 % y el juego al 9-13 %. **Protocolo versión 3**: cada hueco del HUD lleva
+  hasta dos capas del mismo cuadro (el cuadro se cuenta por las presentaciones) y cuántas lleva; la máscara es
+  su unión. Y cada imagen del HUD sale una sola vez en el registro; el resumen dice cuántas máscaras y capas.
+- Probado sin juego: la capa en el visor con `ODYSSEYVK_CAPA_HUD_PRUEBA=1` y `ODYSSEYVK_CAPA_RECREAR_CADA=3` (de
+  taller: rehace la memoria compartida cada 3 s con otra medida, como un cambio de modo de DLSS): 6 veces en 20
+  s, sin tirones (hueco máximo 18 ms, como un cuadro normal) y a 60 fps; el lector la volvió a abrir 7 veces, 1231
+  máscaras enteras y ninguna a medio escribir. La unión en el visor con el simulador (`--hud2`): una capa 9,3 % del
+  mapa, dos capas 13,6 %. El bloqueo en sí no se puede reproducir sin el juego (depende de sus semáforos).
+
 ## Fase 3c: el HUD del juego, plano en la pantalla con su máscara exacta (v1.13)
 
 - Rodolfo: «Sí, conéctala». **La capa** (siempre que comparte la profundidad; `ODYSSEYVK_HUD=0` lo quita)

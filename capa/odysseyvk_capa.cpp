@@ -275,11 +275,25 @@ struct Dispositivo {
   /* fase 3c: la mascara del HUD al visor (ver protocolo.h, version 2). La imagen del HUD se reduce en la
      tarjeta del juego en dos pasos a la mitad (3840 -> 1920 -> 960: cada punto, la media de 4 x 4, asi un
      trazo fino de una letra no se pierde entre dos muestras) y se copia a la memoria compartida */
+  /* las regiones compartidas viejas (la profundidad cambio de tamano): viven hasta cerrar el dispositivo */
+  struct Retirada {
+    int fd;
+    uint8_t *shm;
+    size_t tam;
+    VkBuffer buf;
+    VkDeviceMemory mem;
+  };
+  std::vector<Retirada> retiradas;
+  double shmCreada = 0.0;
   PFN_vkGetImageMemoryRequirements imgReqs = nullptr;
   PFN_vkBindImageMemory bindImg = nullptr;
   PFN_vkCmdBlitImage blit = nullptr;
-  VkImage hudA = VK_NULL_HANDLE, hudB = VK_NULL_HANDLE;   /* 1920x1080 y 960x540, nuestras */
-  VkDeviceMemory hudAMem = VK_NULL_HANDLE, hudBMem = VK_NULL_HANDLE;
+  VkImage hudA = VK_NULL_HANDLE, hudB[ODVK_HUD_CAPAS]{};   /* 1920x1080 y una de 960x540 por capa, nuestras */
+  VkDeviceMemory hudAMem = VK_NULL_HANDLE, hudBMem[ODVK_HUD_CAPAS]{};
+  int hudCapa = 0;                      /* la capa de este cuadro que se escribio la ultima */
+  long hudMarca = -1;                   /* el cuadro (presentaciones) de esa capa */
+  int hudCapasCuadro = 0, hudCapasMaxVistas = 0;
+  std::unordered_set<VkImage> hudVistas;   /* las imagenes ya apuntadas como HUD (una linea cada una) */
   bool hudFallo = false;
   uint64_t hudSeq = 0;
   double hudUltima = 0.0;
@@ -517,22 +531,31 @@ void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &
   d->armado = false;
 }
 
-void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuffer> &enviados) {
-  bool alguno = false;
-  for (const Pendiente &p : d->pendientes)
-    for (VkCommandBuffer cb : enviados)
-      if (cb == p.cb) alguno = true;
-  if (!alguno) return;
-  d->waitIdle(cola);
-  std::vector<Pendiente> quedan;
+/* con g_mx tomado: saca las copias grabadas en estos buffers de comandos (ya enviados) */
+std::vector<Pendiente> sacarPendientes(Dispositivo *d, const std::vector<VkCommandBuffer> &enviados) {
+  std::vector<Pendiente> listos, quedan;
   for (const Pendiente &p : d->pendientes) {
     bool este = false;
     for (VkCommandBuffer cb : enviados)
       if (cb == p.cb) este = true;
-    if (!este) { quedan.push_back(p); continue; }
+    (este ? listos : quedan).push_back(p);
+  }
+  d->pendientes.swap(quedan);
+  return listos;
+}
+/* SIN g_mx: espera a la cola y escribe los archivos. Esperar con el candado tomado puede dejar al juego parado
+   para siempre (ver liberarCompartida) */
+void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<Pendiente> &listos) {
+  if (listos.empty()) return;
+  d->waitIdle(cola);
+  for (const Pendiente &p : listos) {
     void *ptr = nullptr;
     if (p.color && d->map(d->dev, p.mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
-      const int k = p.tipo ? ++d->volcadosDestino : ++d->volcadosColor;
+      int k;
+      {
+        std::lock_guard<std::mutex> g(g_mx);
+        k = p.tipo ? ++d->volcadosDestino : ++d->volcadosColor;
+      }
       const std::string base = carpetaVolcados() + "/" + (p.tipo ? p.tipo : "color") + "-" + std::to_string((long)getpid()) +
                                "-" + std::to_string(k);
       if (FILE *o = std::fopen((base + ".raw").c_str(), "wb")) {
@@ -562,7 +585,11 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
         std::memcpy(f.data(), ptr, n * 4);
       }
       d->unmap(d->dev, p.mem);
-      const int k = ++d->volcados;
+      int k;
+      {
+        std::lock_guard<std::mutex> g(g_mx);
+        k = ++d->volcados;
+      }
       const std::string base = carpetaVolcados() + "/profundidad-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
       if (FILE *o = std::fopen((base + ".r32f").c_str(), "wb")) {
         std::fwrite(f.data(), 4, n, o);
@@ -581,7 +608,6 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
     d->destroyBuffer(d->dev, p.buf, nullptr);
     d->free(d->dev, p.mem, nullptr);
   }
-  d->pendientes.swap(quedan);
 }
 
 /* ---------- fase 2: la memoria compartida con el visor (capa/protocolo.h) ---------- */
@@ -610,8 +636,15 @@ uint64_t monotonoNs() {
   return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
 }
 
+/* Suelta la region de ahora SIN esperar a la tarjeta: solo vale para una que la tarjeta no ha usado (un fallo al
+   crearla) o al cerrar el dispositivo, despues de esperarla (cerrarCompartidas).
+   MEDIDO (26-nov 16:50, Cyberpunk congelado al cambiar DLSS de 1920x1080 a 1280x720): antes aqui se esperaba a
+   la tarjeta (vkDeviceWaitIdle) dentro del lanzamiento de DLSS y con g_mx tomado. La tarjeta esperaba trabajo que
+   el juego aun no habia enviado, y el hilo que lo envia estaba parado en g_mx (vkQueueSubmit y, desde la fase
+   3c, cada vkCmdBeginRendering pasan por el): bloqueo para siempre. Ahora la region vieja se retira entera
+   (retirarCompartida) y vive hasta que se cierra el dispositivo: la tarjeta aun puede estar copiando en ella, y
+   vkd3d-proton puede volver a enviar un buffer de comandos ya grabado. */
 void liberarCompartida(Dispositivo *d, bool borrar) {
-  if (d->shmBuf || d->shmMem) d->devWaitIdle(d->dev);   /* la tarjeta puede estar escribiendo ahi */
   if (d->shmBuf) d->destroyBuffer(d->dev, d->shmBuf, nullptr);
   if (d->shmMem) d->free(d->dev, d->shmMem, nullptr);
   d->shmBuf = VK_NULL_HANDLE;
@@ -624,19 +657,43 @@ void liberarCompartida(Dispositivo *d, bool borrar) {
   if (borrar) shm_unlink(nombreShm().c_str());
 }
 
+/* la region de ahora se aparta sin tocarla (ver liberarCompartida) y su nombre se borra: la nueva sera otro
+   objeto (otro inodo, el visor la vuelve a abrir), y la vieja sigue viva mientras este mapeada aqui */
+void retirarCompartida(Dispositivo *d) {
+  if (!d->shm) return;
+  d->retiradas.push_back({d->shmFd, d->shm, d->shmTam, d->shmBuf, d->shmMem});
+  d->shmFd = -1, d->shm = nullptr, d->shmTam = 0, d->shmBuf = VK_NULL_HANDLE, d->shmMem = VK_NULL_HANDLE;
+  shm_unlink(nombreShm().c_str());
+  anota("[compartir] la region vieja se aparta (%zu apartadas): se suelta al cerrar el dispositivo", d->retiradas.size());
+}
+/* al cerrar el dispositivo, fuera de g_mx: ahi si se puede esperar a la tarjeta */
+void cerrarCompartidas(Dispositivo *d) {
+  const bool habia = d->shm != nullptr;
+  if (habia || !d->retiradas.empty() || d->hudA) d->devWaitIdle(d->dev);
+  liberarCompartida(d, habia);   /* y se borra: el visor vuelve a la red */
+  for (const Dispositivo::Retirada &r : d->retiradas) {
+    if (r.buf) d->destroyBuffer(d->dev, r.buf, nullptr);
+    if (r.mem) d->free(d->dev, r.mem, nullptr);
+    if (r.shm) munmap(r.shm, r.tam);
+    if (r.fd >= 0) close(r.fd);
+  }
+  d->retiradas.clear();
+}
+
 /* la region entera (cabecera + 3 huecos), mapeada aqui e importada en Vulkan */
 bool crearCompartida(Dispositivo *d, const Imagen &im) {
-  liberarCompartida(d, false);
+  retirarCompartida(d);
   const bool dos = im.formato == VK_FORMAT_D16_UNORM || im.formato == VK_FORMAT_D16_UNORM_S8_UINT;
   const uint64_t bpp = dos ? 2 : 4;
   const uint64_t a = d->alineacionHost < 4096 ? 4096 : d->alineacionHost;
   auto redondea = [a](uint64_t v) { return (v + a - 1) / a * a; };
   const uint64_t hueco = redondea(ODVK_PROF_DATOS + (uint64_t)im.w * im.h * bpp + 8);
-  /* (version 2) y detras, los tres de la mascara del HUD: 2 MB cada uno */
+  /* (version 2) y detras, los tres de la mascara del HUD: 2 MB por capa (version 3: dos capas) */
   const uint64_t hudInicio = redondea(ODVK_PROF_CABECERA + ODVK_PROF_HUECOS * hueco);
-  const uint64_t hudHueco = redondea(ODVK_PROF_DATOS + (uint64_t)ODVK_HUD_ANCHO * ODVK_HUD_ALTO * 4 + 8);
+  const uint64_t hudHueco = redondea(ODVK_PROF_DATOS + ODVK_HUD_CAPAS * (uint64_t)ODVK_HUD_ANCHO * ODVK_HUD_ALTO * 4 + 8);
   const uint64_t total = hudInicio + ODVK_PROF_HUECOS * hudHueco;
   const std::string nombre = nombreShm();
+  shm_unlink(nombre.c_str());   /* siempre un objeto nuevo: la de un juego anterior que se cayo, o la retirada */
   d->shmFd = shm_open(nombre.c_str(), O_CREAT | O_RDWR, 0600);
   if (d->shmFd < 0 || ftruncate(d->shmFd, (off_t)total) != 0) {
     anota("[compartir] no se pudo crear %s: %s", nombre.c_str(), std::strerror(errno));
@@ -677,6 +734,7 @@ bool crearCompartida(Dispositivo *d, const Imagen &im) {
   c->hudHuecos = ODVK_PROF_HUECOS;
   c->hudInicio = hudInicio;
   c->hudTamHueco = hudHueco;
+  c->hudCapasMax = ODVK_HUD_CAPAS;
   d->hudSeq = 0;
 
   VkMemoryHostPointerPropertiesEXT hp{VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT};
@@ -716,6 +774,7 @@ bool crearCompartida(Dispositivo *d, const Imagen &im) {
     return false;
   }
   d->shmW = im.w, d->shmH = im.h, d->shmFmt = im.formato;
+  d->shmCreada = ahora();
   std::atomic_thread_fence(std::memory_order_release);
   c->magia = ODVK_PROF_MAGIA;   /* la ultima: con ella el visor ya puede leer */
   anota("[compartir] %s lista: %ux%u %s, %u huecos de %llu bytes (%.1f MB)", nombre.c_str(), im.w, im.h,
@@ -1030,7 +1089,8 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
     if (t - d->ultimoResumen >= 10.0) {
       d->ultimoResumen = t;
       anota("[resumen] numeros pedidos %ld · lanzamientos %ld · con profundidad %ld · imagenes de profundidad leidas %zu · "
-            "copias al visor %ld", d->pedidos, d->lanzamientos, d->conProfundidad, d->vistasDeProfundidad.size(), d->copias);
+            "copias al visor %ld · mascaras del HUD %ld (capas en el ultimo cuadro %d)", d->pedidos, d->lanzamientos,
+            d->conProfundidad, d->vistasDeProfundidad.size(), d->copias, d->hudCopias, d->hudCapasCuadro);
     }
   }
   d->cuLaunch(cb, li);
@@ -1100,20 +1160,28 @@ VKAPI_ATTR VkResult VKAPI_CALL GetSwapchainImagesKHR(VkDevice device, VkSwapchai
 /* La copia va en un buffer de comandos propio, en la misma cola: espera a lo que esperaba la presentacion,
    copia la imagen y avisa con un semaforo nuestro, que es lo que espera la presentacion de verdad. Despues
    se espera a la cola una vez (un tiron de un cuadro por volcado) y se escribe el archivo. */
+/* SIN g_mx: espera a la cola (ver liberarCompartida); lo que necesita de d se copia con el candado */
 VkResult presentarCapturando(Dispositivo *d, VkQueue q, const VkPresentInfoKHR *pi) {
-  d->capturarPresente = false;
-  auto it = d->swaps.find(pi->pSwapchains[0]);
+  Dispositivo::Swap w;
+  bool hay;
+  uint32_t fam;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d->capturarPresente = false;
+    auto it = d->swaps.find(pi->pSwapchains[0]);
+    hay = it != d->swaps.end();
+    if (hay) w = it->second;
+    fam = d->familias.count(q) ? d->familias[q] : 0;
+  }
   const uint32_t idx = pi->pImageIndices[0];
-  if (it == d->swaps.end() || !it->second.copiable || idx >= it->second.imgs.size() || !bytesColor(it->second.fmt)) {
+  if (!hay || !w.copiable || idx >= w.imgs.size() || !bytesColor(w.fmt)) {
     anota("[sonda] el cuadro presentado no se puede copiar (cadena desconocida, sin TRANSFER_SRC o formato %s)",
-          it == d->swaps.end() ? "?" : formato(it->second.fmt).c_str());
+          hay ? formato(w.fmt).c_str() : "?");
     return d->present(q, pi);
   }
-  const Dispositivo::Swap &w = it->second;
   const VkImage img = w.imgs[idx];
   const uint32_t bpp = bytesColor(w.fmt);
   const VkDeviceSize tam = (VkDeviceSize)w.ext.width * w.ext.height * bpp;
-  const uint32_t fam = d->familias.count(q) ? d->familias[q] : 0;
   VkCommandPool pool = VK_NULL_HANDLE;
   VkCommandBuffer cb = VK_NULL_HANDLE;
   VkSemaphore sem = VK_NULL_HANDLE;
@@ -1198,7 +1266,11 @@ VkResult presentarCapturando(Dispositivo *d, VkQueue q, const VkPresentInfoKHR *
   d->waitIdle(q);
   void *ptr = nullptr;
   if (d->map(d->dev, mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
-    const int k = ++d->volcadosPresente;
+    int k;
+    {
+      std::lock_guard<std::mutex> g(g_mx);
+      k = ++d->volcadosPresente;
+    }
     const std::string base = carpetaVolcados() + "/presente-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
     if (FILE *o = std::fopen((base + ".raw").c_str(), "wb")) {
       std::fwrite(ptr, 1, (size_t)tam, o);
@@ -1217,6 +1289,7 @@ VkResult presentarCapturando(Dispositivo *d, VkQueue q, const VkPresentInfoKHR *
 }
 VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR *pi) {
   Dispositivo *d;
+  bool capturar;
   {
     std::lock_guard<std::mutex> g(g_mx);
     d = dispositivo(q);
@@ -1238,8 +1311,9 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR
       return e ? std::atol(e) : -1L;
     }();
     if (kDestinos > 0 && d->presentes == kDestinos) abrirVentana(d, true);
-    if (d->capturarPresente && pi && pi->swapchainCount >= 1) return presentarCapturando(d, q, pi);
+    capturar = d->capturarPresente && pi && pi->swapchainCount >= 1;
   }
+  if (capturar) return presentarCapturando(d, q, pi);   /* fuera de g_mx: espera a la cola */
   return d->present(q, pi);
 }
 
@@ -1381,9 +1455,10 @@ bool imagenPropia(Dispositivo *d, uint32_t w, uint32_t h, VkImage *img, VkDevice
   return d->bindImg(d->dev, *img, *mem, 0) == VK_SUCCESS;
 }
 bool prepararHud(Dispositivo *d) {
-  if (d->hudA && d->hudB) return true;
-  if (!imagenPropia(d, ODVK_HUD_ANCHO * 2, ODVK_HUD_ALTO * 2, &d->hudA, &d->hudAMem) ||
-      !imagenPropia(d, ODVK_HUD_ANCHO, ODVK_HUD_ALTO, &d->hudB, &d->hudBMem)) {
+  if (d->hudA && d->hudB[ODVK_HUD_CAPAS - 1]) return true;
+  bool ok = imagenPropia(d, ODVK_HUD_ANCHO * 2, ODVK_HUD_ALTO * 2, &d->hudA, &d->hudAMem);
+  for (uint32_t k = 0; ok && k < ODVK_HUD_CAPAS; k++) ok = imagenPropia(d, ODVK_HUD_ANCHO, ODVK_HUD_ALTO, &d->hudB[k], &d->hudBMem[k]);
+  if (!ok) {
     anota("[hud] no se pudieron crear las imagenes para reducir el HUD: sin mascara");
     d->hudFallo = true;
     return false;
@@ -1392,17 +1467,21 @@ bool prepararHud(Dispositivo *d) {
 }
 void liberarHud(Dispositivo *d) {
   if (d->hudA) d->destroyImage(d->dev, d->hudA, nullptr);
-  if (d->hudB) d->destroyImage(d->dev, d->hudB, nullptr);
   if (d->hudAMem) d->free(d->dev, d->hudAMem, nullptr);
-  if (d->hudBMem) d->free(d->dev, d->hudBMem, nullptr);
-  d->hudA = d->hudB = VK_NULL_HANDLE;
-  d->hudAMem = d->hudBMem = VK_NULL_HANDLE;
+  d->hudA = VK_NULL_HANDLE, d->hudAMem = VK_NULL_HANDLE;
+  for (uint32_t k = 0; k < ODVK_HUD_CAPAS; k++) {
+    if (d->hudB[k]) d->destroyImage(d->dev, d->hudB[k], nullptr);
+    if (d->hudBMem[k]) d->free(d->dev, d->hudBMem[k], nullptr);
+    d->hudB[k] = VK_NULL_HANDLE, d->hudBMem[k] = VK_NULL_HANDLE;
+  }
 }
 
 /* en el buffer de comandos del juego, justo despues de su vkCmdEndRendering del HUD. La imagen del HUD se lee
    como GENERAL sin cambiarle el diseno, como la profundidad en la fase 2 (el controlador de NVIDIA no mira los
    disenos; DLSS solo existe ahi); las nuestras van con sus disenos de verdad */
-void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im) {
+/* `k`: la capa de este cuadro (0 la primera). Se reduce a su imagen y se publican las k + 1 capas del cuadro
+   juntas en un hueco: cada publicacion lleva todo lo de ese cuadro hasta ahi */
+void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, uint32_t k) {
   const OdvkProfCabecera *c = (const OdvkProfCabecera *)d->shm;
   const uint64_t seq = ++d->hudSeq;
   const uint64_t hueco = odvkHudHueco(c, seq % ODVK_PROF_HUECOS);
@@ -1417,7 +1496,7 @@ void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im
   /* 1. lo que dibujo el juego, visible para copiar; las dos nuestras a destino (lo de antes no importa) */
   mb.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-  ib[0].image = d->hudA, ib[1].image = d->hudB;
+  ib[0].image = d->hudA, ib[1].image = d->hudB[k];   /* las capas de antes de este cuadro se quedan como estan */
   for (VkImageMemoryBarrier &b : ib) {
     b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     b.srcAccessMask = 0, b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1434,7 +1513,7 @@ void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im
   d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib[0]);
   r.srcOffsets[1] = {(int32_t)aw, (int32_t)ah, 1};
   r.dstOffsets[1] = {(int32_t)bw, (int32_t)bh, 1};
-  d->blit(cb, d->hudA, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->hudB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r, VK_FILTER_LINEAR);
+  d->blit(cb, d->hudA, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->hudB[k], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r, VK_FILTER_LINEAR);
   ib[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ib[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   ib[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, ib[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
   d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib[1]);
@@ -1445,12 +1524,16 @@ void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im
     d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
   };
   d->updateBuf(cb, d->shmBuf, hueco, 8, &seq);
+  const uint32_t cuantas = k + 1;
+  d->updateBuf(cb, d->shmBuf, hueco + ODVK_HUD_CUANTAS, 4, &cuantas);
   paso();
-  VkBufferImageCopy reg{};
-  reg.bufferOffset = hueco + ODVK_PROF_DATOS;
-  reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-  reg.imageExtent = {bw, bh, 1};
-  d->copyImgBuf(cb, d->hudB, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->shmBuf, 1, &reg);
+  for (uint32_t j = 0; j <= k; j++) {
+    VkBufferImageCopy reg{};
+    reg.bufferOffset = hueco + ODVK_PROF_DATOS + (uint64_t)j * bw * bh * 4;
+    reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    reg.imageExtent = {bw, bh, 1};
+    d->copyImgBuf(cb, d->hudB[j], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->shmBuf, 1, &reg);
+  }
   paso();
   d->updateBuf(cb, d->shmBuf, hueco + c->hudTamHueco - 8, 8, &seq);
   paso();
@@ -1467,24 +1550,45 @@ void mirarHud(Dispositivo *d, VkCommandBuffer cb, const Ambito &a) {
   VkImage img = VK_NULL_HANDLE;
   const Imagen *im = nullptr;
   if (!esHud(d, a, &img, &im)) return;
-  if (!d->shm && hudPrueba() && !d->shmFallo) {   /* taller: sin DLSS no hay profundidad que la cree */
-    const Imagen falsa{VK_FORMAT_D32_SFLOAT, 64, 64, VK_SAMPLE_COUNT_1_BIT, 0};
-    if (!d->hostPtrProps || !crearCompartida(d, falsa)) d->shmFallo = true;
+  if (hudPrueba() && !d->shmFallo) {   /* taller: sin DLSS no hay profundidad que la cree */
+    /* ODYSSEYVK_CAPA_RECREAR_CADA=<s>: se rehace cada tantos segundos con otra medida, como cuando DLSS cambia de
+       modo (lo que congelo Cyberpunk el 26-nov: ver liberarCompartida) */
+    static const double kRecrear = [] {
+      const char *e = std::getenv("ODYSSEYVK_CAPA_RECREAR_CADA");
+      return e ? std::atof(e) : 0.0;
+    }();
+    if (!d->shm || (kRecrear > 0.0 && ahora() - d->shmCreada > kRecrear)) {
+      const uint32_t lado = d->shmW == 64 ? 32 : 64;
+      const Imagen falsa{VK_FORMAT_D32_SFLOAT, lado, lado, VK_SAMPLE_COUNT_1_BIT, 0};
+      if (!d->hostPtrProps || !crearCompartida(d, falsa)) d->shmFallo = true;
+    }
   }
   if (!d->shm) return;
-  if (d->hudImagen != img) {
-    d->hudImagen = img;
+  {
     OdvkProfCabecera *c = (OdvkProfCabecera *)d->shm;
     c->hudFuenteAncho = im->w, c->hudFuenteAlto = im->h;
-    anota("[hud] la capa del HUD: %p %ux%u %s%s", (void *)img, im->w, im->h, formato(im->formato).c_str(),
-          hudPrueba() ? " (ODYSSEYVK_CAPA_HUD_PRUEBA: cualquier destino grande)" : ", limpiada a transparente");
   }
+  /* una linea por imagen: MEDIDO en Cyberpunk, en los menus se turnan dos en cada cuadro (11 000 lineas) */
+  if (d->hudVistas.insert(img).second)
+    anota("[hud] una capa del HUD: %p %ux%u %s%s (%zu distintas hasta ahora)", (void *)img, im->w, im->h,
+          formato(im->formato).c_str(),
+          hudPrueba() ? " (ODYSSEYVK_CAPA_HUD_PRUEBA: cualquier destino grande)" : ", limpiada a transparente",
+          d->hudVistas.size());
   if (!hayLector(d)) return;
+  /* la capa de este cuadro: un cuadro nuevo (otra presentacion, o mas de 10 ms sin ninguna, como en la prueba
+     sin juego) empieza en la 0; una tercera del mismo cuadro no cabe y se deja */
   const double t = ahora();
-  if (t - d->hudUltima < 0.004) return;
-  d->hudUltima = t;
+  const bool nuevo = d->presentes != d->hudMarca || t - d->hudUltima > 0.010;
+  const int k = nuevo ? 0 : d->hudCapa + 1;
+  if (k >= (int)ODVK_HUD_CAPAS) return;
   if (!prepararHud(d)) return;
-  grabarHud(d, cb, img, *im);
+  d->hudMarca = d->presentes, d->hudCapa = k, d->hudUltima = t;
+  d->hudCapasCuadro = k + 1;
+  if (d->hudCapasCuadro > d->hudCapasMaxVistas) {
+    d->hudCapasMaxVistas = d->hudCapasCuadro;
+    anota("[hud] %d capas en un mismo cuadro: la mascara es su union", d->hudCapasMaxVistas);
+  }
+  grabarHud(d, cb, img, *im, (uint32_t)k);
   if (++d->hudCopias == 1) anota("[hud] primera mascara del HUD al visor (%ux%u)", ODVK_HUD_ANCHO, ODVK_HUD_ALTO);
 }
 
@@ -1650,24 +1754,32 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue q, uint32_t n, const VkSubmit
     d = dispositivo(q);
   }
   const VkResult r = d->submit(q, n, s, f);
-  std::lock_guard<std::mutex> g(g_mx);
-  if (!d->pendientes.empty()) {
-    std::vector<VkCommandBuffer> cbs;
-    for (uint32_t i = 0; i < n; i++)
-      for (uint32_t k = 0; k < s[i].commandBufferCount; k++) cbs.push_back(s[i].pCommandBuffers[k]);
-    leerPendientes(d, q, cbs);
+  std::vector<Pendiente> listos;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    if (!d->pendientes.empty()) {
+      std::vector<VkCommandBuffer> cbs;
+      for (uint32_t i = 0; i < n; i++)
+        for (uint32_t k = 0; k < s[i].commandBufferCount; k++) cbs.push_back(s[i].pCommandBuffers[k]);
+      listos = sacarPendientes(d, cbs);
+    }
   }
+  leerPendientes(d, q, listos);
   return r;
 }
 VkResult submit2Comun(Dispositivo *d, VkQueue q, uint32_t n, const VkSubmitInfo2 *s, VkFence f, bool khr) {
   const VkResult r = khr ? d->submit2khr(q, n, s, f) : d->submit2(q, n, s, f);
-  std::lock_guard<std::mutex> g(g_mx);
-  if (!d->pendientes.empty()) {
-    std::vector<VkCommandBuffer> cbs;
-    for (uint32_t i = 0; i < n; i++)
-      for (uint32_t k = 0; k < s[i].commandBufferInfoCount; k++) cbs.push_back(s[i].pCommandBufferInfos[k].commandBuffer);
-    leerPendientes(d, q, cbs);
+  std::vector<Pendiente> listos;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    if (!d->pendientes.empty()) {
+      std::vector<VkCommandBuffer> cbs;
+      for (uint32_t i = 0; i < n; i++)
+        for (uint32_t k = 0; k < s[i].commandBufferInfoCount; k++) cbs.push_back(s[i].pCommandBufferInfos[k].commandBuffer);
+      listos = sacarPendientes(d, cbs);
+    }
   }
+  leerPendientes(d, q, listos);
   return r;
 }
 VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue q, uint32_t n, const VkSubmitInfo2 *s, VkFence f) {
@@ -1697,7 +1809,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     anota("[dispositivo] cerrado · numeros pedidos %ld · lanzamientos %ld · con profundidad %ld", d->pedidos,
           d->lanzamientos, d->conProfundidad);
   }
-  liberarCompartida(d, d->shm != nullptr);   /* y se borra: el visor vuelve a la red */
+  cerrarCompartidas(d);   /* espera a la tarjeta (aqui, fuera de g_mx, si se puede) y lo suelta todo */
   liberarHud(d);
   PFN_vkDestroyDevice destruir = d->destroy;
   delete d;
@@ -1896,10 +2008,10 @@ PFN_vkVoidFunction gancho(const char *n) {
     G("vkCmdEndRendering", CmdEndRendering);
     G("vkCmdEndRenderingKHR", CmdEndRenderingKHR);
   }
+  if (sonda() || hudActivo()) G("vkQueuePresentKHR", QueuePresentKHR);   /* fase 3c: el cuadro de cada capa del HUD */
   if (sonda()) {   /* fase 3: el cuadro presentado, solo con la sonda */
     G("vkGetDeviceQueue", GetDeviceQueue);
     G("vkGetDeviceQueue2", GetDeviceQueue2);
-    G("vkQueuePresentKHR", QueuePresentKHR);
     /* fase 3b: los dibujos de cada destino */
     G("vkBeginCommandBuffer", BeginCommandBuffer);
     G("vkCmdBeginRenderPass", CmdBeginRenderPass);
