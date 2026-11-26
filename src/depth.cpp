@@ -2043,3 +2043,70 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
   }
   return tocadas / (float)((size_t)cw * ch);
 }
+
+/* ---------- (v1.13, fase 3c) el HUD del juego ---------- */
+bool DepthNet::mascaraHud(std::vector<uint8_t> &alfa, int &w, int &h, int *fuenteW, int *fuenteH) {
+  if (!juego_ || !permitirJuego_.load()) return false;
+  if (!juego_->leerHud(alfa, w, h)) return false;
+  if (fuenteW && fuenteH) juego_->fuenteHud(*fuenteW, *fuenteH);
+  return true;
+}
+
+float aplicarHud(std::vector<uint8_t> &mapa, int lado, float plano, const std::vector<uint8_t> &alfa, int aw, int ah) {
+  if (lado < 2 || aw < 2 || ah < 2 || mapa.size() != (size_t)lado * lado || alfa.size() != (size_t)aw * ah) return 0.0f;
+  /* 1. lo que es HUD: alfa por encima de 6/255. MEDIDO en Cyberpunk: el alfa medio del HUD es 0,6-0,7 y los
+        bordes de las letras, reducidos a 960 x 540 (la media de 4 x 4), bajan mucho; el fondo es 0 exacto */
+  const size_t n = (size_t)aw * ah;
+  /* sumas en una ventana que se desliza (lo mismo cueste el radio que cueste): en horizontal o en vertical, y
+     con `media` dividida por los puntos que caen dentro (en los bordes, menos) */
+  auto desliza = [aw, ah](const std::vector<float> &in, std::vector<float> &out, int r, bool horizontal, bool media) {
+    out.resize(in.size());
+    const int largo = horizontal ? aw : ah, lineas = horizontal ? ah : aw;
+    const size_t paso = horizontal ? 1 : (size_t)aw;
+    for (int l = 0; l < lineas; l++) {
+      const size_t base = horizontal ? (size_t)l * aw : (size_t)l;
+      float s = 0.0f;
+      for (int k = 0; k <= std::min(r, largo - 1); k++) s += in[base + (size_t)k * paso];
+      for (int i = 0; i < largo; i++) {
+        const int a0 = std::max(0, i - r), a1 = std::min(largo - 1, i + r);
+        out[base + (size_t)i * paso] = media ? s / (float)(a1 - a0 + 1) : s;
+        if (i + r + 1 < largo) s += in[base + (size_t)(i + r + 1) * paso];
+        if (i - r >= 0) s -= in[base + (size_t)(i - r) * paso];
+      }
+    }
+  };
+  std::vector<float> hud(n), tmp;
+  for (size_t i = 0; i < n; i++) hud[i] = alfa[i] > 6 ? 1.0f : 0.0f;
+  /* 2. engordado: 6 puntos de 960 (24 px en 4K). MEDIDO en los volcados de la sonda: los rotulos salen corridos
+        hasta unos 30 px de 4K entre la capa del HUD y el cuadro presentado (el HUD se mece al moverse) */
+  const int R = 6;
+  desliza(hud, tmp, R, true, false);
+  for (size_t i = 0; i < n; i++) tmp[i] = tmp[i] > 0.5f ? 1.0f : 0.0f;
+  desliza(tmp, hud, R, false, false);
+  for (size_t i = 0; i < n; i++) hud[i] = hud[i] > 0.5f ? 1.0f : 0.0f;
+  /* 3. el borde suave: la media de 5 x 5 (un escalon a pico en el relieve se ve como un corte) */
+  std::vector<float> peso;
+  desliza(hud, tmp, 2, true, true);
+  desliza(tmp, peso, 2, false, true);
+  /* 4. al mapa (el cuadro aplastado a cuadrado), con el peso interpolado, hacia el plano de apoyo */
+  const float destino = plano * 255.0f;
+  size_t tocadas = 0;
+  for (int y = 0; y < lado; y++) {
+    const float fy = ((float)y + 0.5f) * (float)ah / (float)lado - 0.5f;
+    const int y0 = std::max(0, std::min(ah - 1, (int)std::floor(fy))), y1 = std::min(ah - 1, y0 + 1);
+    const float ty = std::max(0.0f, std::min(1.0f, fy - (float)y0));
+    for (int x = 0; x < lado; x++) {
+      const float fx = ((float)x + 0.5f) * (float)aw / (float)lado - 0.5f;
+      const int x0 = std::max(0, std::min(aw - 1, (int)std::floor(fx))), x1 = std::min(aw - 1, x0 + 1);
+      const float tx = std::max(0.0f, std::min(1.0f, fx - (float)x0));
+      const float p = (peso[(size_t)y0 * aw + x0] * (1.0f - tx) + peso[(size_t)y0 * aw + x1] * tx) * (1.0f - ty) +
+                      (peso[(size_t)y1 * aw + x0] * (1.0f - tx) + peso[(size_t)y1 * aw + x1] * tx) * ty;
+      if (p <= 0.002f) continue;
+      const size_t i = (size_t)y * lado + x;
+      const float v = (float)mapa[i];
+      mapa[i] = (uint8_t)(v + (destino - v) * p + 0.5f);
+      tocadas += p >= 0.5f;
+    }
+  }
+  return (float)tocadas / (float)((size_t)lado * lado);
+}

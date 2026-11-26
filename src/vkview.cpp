@@ -1851,6 +1851,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      std::vector<uint8_t> saliencia; /* la rejilla de la saliencia de este mapa (v1.12, vista de depuracion) */
      int salLado = 0;
      MemoriaTexto memoriaTexto;    /* el apoyo de los rotulos de un mapa al siguiente (v0.74); solo la toca el hilo */
+     /* (v1.13, fase 3c) el HUD del juego al plano de la pantalla: si llega su mascara y cuanto tapa (solo el hilo) */
+     bool hudPuesto = false;
+     double hudAviso = 0.0;
      int mw = 0, mh = 0;
      float textoFrac = 0.0f;      /* parte del mapa que se apoyo en la pantalla */
      std::string error;
@@ -1898,6 +1901,25 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               apoyado, y lo demas deja de estar quieto y sale solo en dos mapas. */
            frac = anclarTexto(t.copia.data(), t.sz, t.sz, m, t.red->focusPlane(), 8, &mk, &gw, &gh, &memoriaTexto,
                               t.juego);
+         }
+         /* (v1.13, fase 3c) el HUD del juego, con su mascara exacta (la capa lee la imagen donde el juego lo dibuja):
+            al plano de la pantalla, como un rotulo. Sin ella (otro juego, ODYSSEYVK_HUD=0) no cambia nada */
+         if (ok && t.juego && m.size() == (size_t)t.red->size() * t.red->size()) {
+           std::vector<uint8_t> hud;
+           int hw = 0, hh = 0, fw = 0, fh = 0;
+           const bool hay = t.red->mascaraHud(hud, hw, hh, &fw, &fh);
+           const float fracHud = hay ? aplicarHud(m, t.red->size(), t.red->focusPlane(), hud, hw, hh) : 0.0f;
+           const double ahoraS = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+           if (hay != hudPuesto || (hay && ahoraS - hudAviso > 10.0)) {
+             if (hay)
+               std::printf("[hud] el HUD del juego al plano de la pantalla: %.1f%% del mapa (su capa %dx%d, mascara %dx%d)\n",
+                           fracHud * 100.0f, fw, fh, hw, hh);
+             else
+               std::printf("[hud] sin la mascara del HUD del juego\n");
+             std::fflush(stdout);
+             hudPuesto = hay;
+             hudAviso = ahoraS;
+           }
          }
          /* y el reparto por ojo con los huecos rellenos (antes lo hacia el hilo que dibuja) */
          std::vector<uint8_t> rg;

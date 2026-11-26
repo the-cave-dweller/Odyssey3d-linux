@@ -29,6 +29,13 @@
    de la resolucion de salida se copian (destino-<pid>-<n>.raw + .json con su orden, dibujos y limpiado).
    ODYSSEYVK_CAPA_DESTINOS_TRAS=<n> (taller, sin DLSS) la abre en la presentacion n.
 
+   Fase 3c, siempre que se comparte (ODYSSEYVK_HUD=0 lo quita): LA MASCARA DEL HUD. Al acabar el dibujo cuyo
+   destino es la imagen del HUD (el unico de color a la resolucion de salida, RGBA8, limpiado a (0,0,0,0),
+   entero y sin profundidad: MEDIDO en la fase 3b), esa imagen se reduce en la tarjeta del juego a 960x540
+   (dos vkCmdBlitImage a la mitad) y se copia a los huecos del HUD de la memoria compartida (protocolo.h,
+   version 2). El visor pone en el plano de la pantalla lo que su alfa marca. ODYSSEYVK_CAPA_HUD_PRUEBA=1
+   (taller) toma cualquier destino grande como HUD y crea la memoria compartida sin DLSS.
+
    Se enciende por juego, como MangoHud o Neural Forge: con `ODYSSEYVK=1` en las opciones de
    lanzamiento (el manifiesto la declara capa implicita con esa variable; ODYSSEYVK_DISABLE=1 la quita).
    Sin ella no se carga.
@@ -143,7 +150,7 @@ struct Ambito {
   std::vector<VkImage> colores;
   std::vector<int> cargas;                /* VkAttachmentLoadOp de cada uno */
   std::vector<VkClearColorValue> limpia;
-  bool conProf = false, reanuda = false;
+  bool conProf = false, reanuda = false, suspende = false;
   uint32_t w = 0, h = 0;
   long dibujos = 0;
 };
@@ -265,6 +272,20 @@ struct Dispositivo {
   std::unordered_map<VkImage, int> ventanaCopiadas;
   int volcadosDestino = 0;
   long pasadasClasicas = 0;
+  /* fase 3c: la mascara del HUD al visor (ver protocolo.h, version 2). La imagen del HUD se reduce en la
+     tarjeta del juego en dos pasos a la mitad (3840 -> 1920 -> 960: cada punto, la media de 4 x 4, asi un
+     trazo fino de una letra no se pierde entre dos muestras) y se copia a la memoria compartida */
+  PFN_vkGetImageMemoryRequirements imgReqs = nullptr;
+  PFN_vkBindImageMemory bindImg = nullptr;
+  PFN_vkCmdBlitImage blit = nullptr;
+  VkImage hudA = VK_NULL_HANDLE, hudB = VK_NULL_HANDLE;   /* 1920x1080 y 960x540, nuestras */
+  VkDeviceMemory hudAMem = VK_NULL_HANDLE, hudBMem = VK_NULL_HANDLE;
+  bool hudFallo = false;
+  uint64_t hudSeq = 0;
+  double hudUltima = 0.0;
+  VkImage hudImagen = VK_NULL_HANDLE;   /* la ultima reconocida como HUD (para el registro) */
+  long hudCopias = 0;
+  uint32_t salidaW = 0, salidaH = 0;    /* la cadena de presentacion: el HUD va a ese tamano */
 };
 /* sube al destruir un dispositivo: la cache por hilo de los ganchos de dibujo deja de valer */
 std::atomic<uint64_t> g_generacion{1};
@@ -331,6 +352,28 @@ bool sonda() {
     return e && e[0] == '1';
   }();
   return s;
+}
+/* fase 3c: la mascara del HUD va con la profundidad salvo ODYSSEYVK_HUD=0 (o sin compartir nada) */
+bool hudActivo() {
+  static const bool h = [] {
+    const char *e = std::getenv("ODYSSEYVK_HUD");
+    const char *c = std::getenv("ODYSSEYVK_COMPARTIR");
+    return !(e && e[0] == '0') && !(c && c[0] == '0');
+  }();
+  return h;
+}
+/* ODYSSEYVK_CAPA_HUD_PRUEBA=1 (taller, sin juego): cualquier destino de color grande de un solo color vale como
+   HUD, y la memoria compartida se crea sin DLSS. Sirve para probar el camino de la tarjeta con el visor */
+bool hudPrueba() {
+  static const bool p = [] {
+    const char *e = std::getenv("ODYSSEYVK_CAPA_HUD_PRUEBA");
+    return e && e[0] == '1';
+  }();
+  return p;
+}
+bool esRgba8(VkFormat f) {
+  return f == VK_FORMAT_R8G8B8A8_UNORM || f == VK_FORMAT_R8G8B8A8_SRGB || f == VK_FORMAT_B8G8R8A8_UNORM ||
+         f == VK_FORMAT_B8G8R8A8_SRGB;
 }
 
 std::string carpetaVolcados() {
@@ -589,7 +632,10 @@ bool crearCompartida(Dispositivo *d, const Imagen &im) {
   const uint64_t a = d->alineacionHost < 4096 ? 4096 : d->alineacionHost;
   auto redondea = [a](uint64_t v) { return (v + a - 1) / a * a; };
   const uint64_t hueco = redondea(ODVK_PROF_DATOS + (uint64_t)im.w * im.h * bpp + 8);
-  const uint64_t total = redondea(ODVK_PROF_CABECERA + ODVK_PROF_HUECOS * hueco);
+  /* (version 2) y detras, los tres de la mascara del HUD: 2 MB cada uno */
+  const uint64_t hudInicio = redondea(ODVK_PROF_CABECERA + ODVK_PROF_HUECOS * hueco);
+  const uint64_t hudHueco = redondea(ODVK_PROF_DATOS + (uint64_t)ODVK_HUD_ANCHO * ODVK_HUD_ALTO * 4 + 8);
+  const uint64_t total = hudInicio + ODVK_PROF_HUECOS * hudHueco;
   const std::string nombre = nombreShm();
   d->shmFd = shm_open(nombre.c_str(), O_CREAT | O_RDWR, 0600);
   if (d->shmFd < 0 || ftruncate(d->shmFd, (off_t)total) != 0) {
@@ -626,6 +672,12 @@ bool crearCompartida(Dispositivo *d, const Imagen &im) {
   c->bytesPunto = (uint32_t)bpp;
   c->huecos = ODVK_PROF_HUECOS;
   c->tamHueco = hueco;
+  c->hudAncho = ODVK_HUD_ANCHO, c->hudAlto = ODVK_HUD_ALTO;
+  c->hudBytesPunto = 4;
+  c->hudHuecos = ODVK_PROF_HUECOS;
+  c->hudInicio = hudInicio;
+  c->hudTamHueco = hudHueco;
+  d->hudSeq = 0;
 
   VkMemoryHostPointerPropertiesEXT hp{VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT};
   if (d->hostPtrProps(d->dev, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, d->shm, &hp) != VK_SUCCESS) {
@@ -770,6 +822,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateI
   /* (fase 3b) y los destinos de dibujo de color: entre ellos esta donde se dibuja el HUD */
   if (sonda() && bytesColor(c.format) && c.extent.width >= 1280 && c.samples == VK_SAMPLE_COUNT_1_BIT &&
       (c.usage & (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)))
+    c.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  /* fase 3c: los destinos RGBA8 grandes, entre los que esta la imagen del HUD, para poder reducirla */
+  if (hudActivo() && esRgba8(c.format) && c.extent.width >= 1280 && c.samples == VK_SAMPLE_COUNT_1_BIT &&
+      (c.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
     c.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   const VkResult r = d->createImage(device, &c, a, img);
   if (r == VK_SUCCESS) {
@@ -1009,10 +1065,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapc
     d = dispositivo(device);
   }
   VkSwapchainCreateInfoKHR c = *ci;
-  c.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   /* para copiar el cuadro con el HUD */
-  bool copiable = true;
+  if (sonda()) c.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   /* para copiar el cuadro con el HUD */
+  bool copiable = sonda();
   VkResult r = d->createSwapchain(device, &c, a, sw);
-  if (r != VK_SUCCESS) {
+  if (r != VK_SUCCESS && sonda()) {
     copiable = false;
     r = d->createSwapchain(device, ci, a, sw);
   }
@@ -1020,8 +1076,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapc
     std::lock_guard<std::mutex> g(g_mx);
     Dispositivo::Swap &w = d->swaps[*sw];
     w.fmt = ci->imageFormat, w.ext = ci->imageExtent, w.copiable = copiable;
-    anota("[sonda] cadena de presentacion %ux%u %s%s", ci->imageExtent.width, ci->imageExtent.height,
-          formato(ci->imageFormat).c_str(), copiable ? "" : " (no se puede copiar)");
+    /* fase 3c: el tamano de salida, el del HUD */
+    d->salidaW = ci->imageExtent.width, d->salidaH = ci->imageExtent.height;
+    anota("[cadena] de presentacion %ux%u %s%s", ci->imageExtent.width, ci->imageExtent.height,
+          formato(ci->imageFormat).c_str(), sonda() && !copiable ? " (no se puede copiar)" : "");
   }
   return r;
 }
@@ -1260,6 +1318,8 @@ void empezarAmbito(Dispositivo *d, VkCommandBuffer cb, const VkRenderingInfo *ri
   Ambito &a = c.actual;
   a.w = ri->renderArea.extent.width, a.h = ri->renderArea.extent.height;
   a.reanuda = (ri->flags & VK_RENDERING_RESUMING_BIT) != 0;
+  /* suspendido: sigue en otro vkCmdBeginRendering con RESUMING y entre los dos no se puede grabar nada */
+  a.suspende = (ri->flags & VK_RENDERING_SUSPENDING_BIT) != 0;
   for (uint32_t i = 0; i < ri->colorAttachmentCount; i++) {
     const VkRenderingAttachmentInfo &at = ri->pColorAttachments[i];
     auto v = d->vistas.find(at.imageView);
@@ -1279,15 +1339,165 @@ bool esDeLaCadena(Dispositivo *d, VkImage img) {
   return false;
 }
 
+/* ---------- fase 3c: la mascara del HUD ---------- */
+/* La imagen del HUD, como se MIDIO en Cyberpunk (fase 3b, las tres ventanas de juego): el unico destino de
+   color del cuadro que esta a la resolucion de salida, es RGBA8, se limpia a (0, 0, 0, 0), cubre la imagen
+   entera y va sin profundidad. Ninguna otra pasada del cuadro cumple las cinco cosas. */
+bool esHud(Dispositivo *d, const Ambito &a, VkImage *img, const Imagen **im) {
+  if (a.colores.size() != 1 || a.conProf || a.reanuda || a.suspende) return false;
+  auto it = d->imagenes.find(a.colores[0]);
+  if (it == d->imagenes.end()) return false;
+  const Imagen &m = it->second;
+  if (!esRgba8(m.formato) || m.muestras != VK_SAMPLE_COUNT_1_BIT || !(m.uso & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return false;
+  if (a.w != m.w || a.h != m.h || m.w < 1280) return false;
+  if (!hudPrueba()) {
+    const VkClearColorValue &l = a.limpia[0];
+    if (a.cargas[0] != VK_ATTACHMENT_LOAD_OP_CLEAR || l.uint32[0] || l.uint32[1] || l.uint32[2] || l.uint32[3]) return false;
+    if (d->salidaW && (m.w != d->salidaW || m.h != d->salidaH)) return false;
+  }
+  if (esDeLaCadena(d, a.colores[0])) return false;
+  *img = a.colores[0];
+  *im = &m;
+  return true;
+}
+
+bool imagenPropia(Dispositivo *d, uint32_t w, uint32_t h, VkImage *img, VkDeviceMemory *mem) {
+  VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  ci.imageType = VK_IMAGE_TYPE_2D;
+  ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+  ci.extent = {w, h, 1};
+  ci.mipLevels = ci.arrayLayers = 1;
+  ci.samples = VK_SAMPLE_COUNT_1_BIT;
+  ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+  ci.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  if (d->createImage(d->dev, &ci, nullptr, img) != VK_SUCCESS) return false;   /* la de abajo: no la apuntamos */
+  VkMemoryRequirements mr{};
+  d->imgReqs(d->dev, *img, &mr);
+  VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  ai.allocationSize = mr.size;
+  ai.memoryTypeIndex = tipoMemoria(d, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  if (ai.memoryTypeIndex == UINT32_MAX || d->alloc(d->dev, &ai, nullptr, mem) != VK_SUCCESS) return false;
+  return d->bindImg(d->dev, *img, *mem, 0) == VK_SUCCESS;
+}
+bool prepararHud(Dispositivo *d) {
+  if (d->hudA && d->hudB) return true;
+  if (!imagenPropia(d, ODVK_HUD_ANCHO * 2, ODVK_HUD_ALTO * 2, &d->hudA, &d->hudAMem) ||
+      !imagenPropia(d, ODVK_HUD_ANCHO, ODVK_HUD_ALTO, &d->hudB, &d->hudBMem)) {
+    anota("[hud] no se pudieron crear las imagenes para reducir el HUD: sin mascara");
+    d->hudFallo = true;
+    return false;
+  }
+  return true;
+}
+void liberarHud(Dispositivo *d) {
+  if (d->hudA) d->destroyImage(d->dev, d->hudA, nullptr);
+  if (d->hudB) d->destroyImage(d->dev, d->hudB, nullptr);
+  if (d->hudAMem) d->free(d->dev, d->hudAMem, nullptr);
+  if (d->hudBMem) d->free(d->dev, d->hudBMem, nullptr);
+  d->hudA = d->hudB = VK_NULL_HANDLE;
+  d->hudAMem = d->hudBMem = VK_NULL_HANDLE;
+}
+
+/* en el buffer de comandos del juego, justo despues de su vkCmdEndRendering del HUD. La imagen del HUD se lee
+   como GENERAL sin cambiarle el diseno, como la profundidad en la fase 2 (el controlador de NVIDIA no mira los
+   disenos; DLSS solo existe ahi); las nuestras van con sus disenos de verdad */
+void grabarHud(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im) {
+  const OdvkProfCabecera *c = (const OdvkProfCabecera *)d->shm;
+  const uint64_t seq = ++d->hudSeq;
+  const uint64_t hueco = odvkHudHueco(c, seq % ODVK_PROF_HUECOS);
+  const uint32_t aw = ODVK_HUD_ANCHO * 2, ah = ODVK_HUD_ALTO * 2, bw = ODVK_HUD_ANCHO, bh = ODVK_HUD_ALTO;
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  VkImageMemoryBarrier ib[2]{};
+  for (VkImageMemoryBarrier &b : ib) {
+    b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  }
+  /* 1. lo que dibujo el juego, visible para copiar; las dos nuestras a destino (lo de antes no importa) */
+  mb.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  ib[0].image = d->hudA, ib[1].image = d->hudB;
+  for (VkImageMemoryBarrier &b : ib) {
+    b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    b.srcAccessMask = 0, b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  }
+  d->barrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 2, ib);
+  /* 2. a la mitad, y otra vez a la mitad (con filtro lineal y medida exacta, cada paso es la media de 2 x 2) */
+  VkImageBlit r{};
+  r.srcSubresource = r.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  r.srcOffsets[1] = {(int32_t)im.w, (int32_t)im.h, 1};
+  r.dstOffsets[1] = {(int32_t)aw, (int32_t)ah, 1};
+  d->blit(cb, img, VK_IMAGE_LAYOUT_GENERAL, d->hudA, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r, VK_FILTER_LINEAR);
+  ib[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ib[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  ib[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, ib[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib[0]);
+  r.srcOffsets[1] = {(int32_t)aw, (int32_t)ah, 1};
+  r.dstOffsets[1] = {(int32_t)bw, (int32_t)bh, 1};
+  d->blit(cb, d->hudA, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->hudB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r, VK_FILTER_LINEAR);
+  ib[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ib[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  ib[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, ib[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ib[1]);
+  /* 3. al hueco, con las cuatro escrituras de siempre (ver protocolo.h) */
+  auto paso = [&]() {
+    mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  };
+  d->updateBuf(cb, d->shmBuf, hueco, 8, &seq);
+  paso();
+  VkBufferImageCopy reg{};
+  reg.bufferOffset = hueco + ODVK_PROF_DATOS;
+  reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  reg.imageExtent = {bw, bh, 1};
+  d->copyImgBuf(cb, d->hudB, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->shmBuf, 1, &reg);
+  paso();
+  d->updateBuf(cb, d->shmBuf, hueco + c->hudTamHueco - 8, 8, &seq);
+  paso();
+  d->updateBuf(cb, d->shmBuf, offsetof(OdvkProfCabecera, hudUltimoSeq), 8, &seq);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
+  d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb,
+             0, nullptr, 0, nullptr);
+}
+
+/* con g_mx tomado, al acabar cada dibujo con destino */
+void mirarHud(Dispositivo *d, VkCommandBuffer cb, const Ambito &a) {
+  if (!hudActivo() || d->hudFallo || !d->blit || !d->imgReqs || !d->bindImg || !d->updateBuf) return;
+  VkImage img = VK_NULL_HANDLE;
+  const Imagen *im = nullptr;
+  if (!esHud(d, a, &img, &im)) return;
+  if (!d->shm && hudPrueba() && !d->shmFallo) {   /* taller: sin DLSS no hay profundidad que la cree */
+    const Imagen falsa{VK_FORMAT_D32_SFLOAT, 64, 64, VK_SAMPLE_COUNT_1_BIT, 0};
+    if (!d->hostPtrProps || !crearCompartida(d, falsa)) d->shmFallo = true;
+  }
+  if (!d->shm) return;
+  if (d->hudImagen != img) {
+    d->hudImagen = img;
+    OdvkProfCabecera *c = (OdvkProfCabecera *)d->shm;
+    c->hudFuenteAncho = im->w, c->hudFuenteAlto = im->h;
+    anota("[hud] la capa del HUD: %p %ux%u %s%s", (void *)img, im->w, im->h, formato(im->formato).c_str(),
+          hudPrueba() ? " (ODYSSEYVK_CAPA_HUD_PRUEBA: cualquier destino grande)" : ", limpiada a transparente");
+  }
+  if (!hayLector(d)) return;
+  const double t = ahora();
+  if (t - d->hudUltima < 0.004) return;
+  d->hudUltima = t;
+  if (!prepararHud(d)) return;
+  grabarHud(d, cb, img, *im);
+  if (++d->hudCopias == 1) anota("[hud] primera mascara del HUD al visor (%ux%u)", ODVK_HUD_ANCHO, ODVK_HUD_ALTO);
+}
+
 /* con g_mx tomado, despues del vkCmdEndRendering de abajo (ya fuera del dibujo: se puede copiar) */
 void acabarAmbito(Dispositivo *d, VkCommandBuffer cb) {
-  if (!d->ventana) return;
+  CbSonda &c = d->cbs[cb];
+  const Ambito &a = c.actual;
+  mirarHud(d, cb, a);
+  if (!d->ventana || a.suspende) return;   /* (suspendido: hasta que se reanude no se puede grabar nada) */
   if (ahora() - d->ventanaDesde > 1.0) {
     cerrarVentana(d, "un segundo sin presentar");
     return;
   }
-  CbSonda &c = d->cbs[cb];
-  const Ambito &a = c.actual;
   const int k = ++d->ventanaAmbitos;
   /* el tamano de render de DLSS (el de su profundidad): lo que se dibuja a ese tamano es de ANTES de DLSS (la
      escena del cuadro siguiente, que ya se graba); el HUD va despues, a la resolucion de salida */
@@ -1488,6 +1698,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
           d->lanzamientos, d->conProfundidad);
   }
   liberarCompartida(d, d->shm != nullptr);   /* y se borra: el visor vuelve a la red */
+  liberarHud(d);
   PFN_vkDestroyDevice destruir = d->destroy;
   delete d;
   destruir(device, a);
@@ -1603,6 +1814,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   CARGA(drawIndirectCountKHR, "vkCmdDrawIndirectCountKHR");
   CARGA(drawIndexedIndirectCount, "vkCmdDrawIndexedIndirectCount");
   CARGA(drawIndexedIndirectCountKHR, "vkCmdDrawIndexedIndirectCountKHR");
+  CARGA(imgReqs, "vkGetImageMemoryRequirements");
+  CARGA(bindImg, "vkBindImageMemory");
+  CARGA(blit, "vkCmdBlitImage");
   if (conHost) CARGA(hostPtrProps, "vkGetMemoryHostPointerPropertiesEXT");
 #undef CARGA
   if (conHost && inst->props2) {
@@ -1674,18 +1888,20 @@ PFN_vkVoidFunction gancho(const char *n) {
   G("vkQueueSubmit2KHR", QueueSubmit2KHR);
   G("vkDestroyDevice", DestroyDevice);
   if (modoPrueba()) G("vkCmdEndRenderPass", CmdEndRenderPass);
-  if (sonda()) {   /* fase 3: el cuadro presentado, solo con la sonda */
-    G("vkGetDeviceQueue", GetDeviceQueue);
-    G("vkGetDeviceQueue2", GetDeviceQueue2);
+  if (sonda() || hudActivo()) {   /* fase 3c: la cadena (su tamano) y los destinos de dibujo, para el HUD */
     G("vkCreateSwapchainKHR", CreateSwapchainKHR);
     G("vkGetSwapchainImagesKHR", GetSwapchainImagesKHR);
-    G("vkQueuePresentKHR", QueuePresentKHR);
-    /* fase 3b: los destinos de dibujo */
-    G("vkBeginCommandBuffer", BeginCommandBuffer);
     G("vkCmdBeginRendering", CmdBeginRendering);
     G("vkCmdBeginRenderingKHR", CmdBeginRenderingKHR);
     G("vkCmdEndRendering", CmdEndRendering);
     G("vkCmdEndRenderingKHR", CmdEndRenderingKHR);
+  }
+  if (sonda()) {   /* fase 3: el cuadro presentado, solo con la sonda */
+    G("vkGetDeviceQueue", GetDeviceQueue);
+    G("vkGetDeviceQueue2", GetDeviceQueue2);
+    G("vkQueuePresentKHR", QueuePresentKHR);
+    /* fase 3b: los dibujos de cada destino */
+    G("vkBeginCommandBuffer", BeginCommandBuffer);
     G("vkCmdBeginRenderPass", CmdBeginRenderPass);
     G("vkCmdBeginRenderPass2", CmdBeginRenderPass2);
     G("vkCmdBeginRenderPass2KHR", CmdBeginRenderPass2KHR);

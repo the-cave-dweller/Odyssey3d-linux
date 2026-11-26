@@ -26,6 +26,12 @@ public:
   bool leer(std::vector<float> &cercania, int lado);
   /* lo que se leyo la ultima vez, para el registro: «1920x1080 D32_SFLOAT, Z invertida» */
   const std::string &descripcion() const { return desc_; }
+  /* (fase 3c) la mascara del HUD del juego: el alfa de su capa del HUD reducida a w x h (960 x 540, el cuadro
+     entero; 0 = nada de HUD). Falso si la capa no la escribe (otro juego, ODYSSEYVK_HUD=0), si lo ultimo tiene
+     mas de medio segundo o si salio a medio escribir. Despues de leer(), en el mismo hilo. */
+  bool leerHud(std::vector<uint8_t> &alfa, int &w, int &h);
+  /* el tamano de la imagen del HUD del juego, para el registro */
+  void fuenteHud(int &w, int &h) const;
 
 private:
   bool abrir();
@@ -37,6 +43,8 @@ private:
   uint64_t ultimoSeq_ = 0;
   double cuandoCambio_ = 0.0, ultimoIntento_ = -10.0, avisoDescarte_ = -10.0;
   uint64_t descartados_ = 0;   /* cuadros tirados por no ser una profundidad (ver leer) */
+  uint64_t hudSeq_ = 0;
+  double hudCambio_ = 0.0;
   std::vector<uint8_t> crudo_;
   std::vector<float> fila_;
   std::string desc_;

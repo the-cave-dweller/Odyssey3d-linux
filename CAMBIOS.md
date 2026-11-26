@@ -3,6 +3,33 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Fase 3c: el HUD del juego, plano en la pantalla con su máscara exacta (v1.13)
+
+- Rodolfo: «Sí, conéctala». **La capa** (siempre que comparte la profundidad; `ODYSSEYVK_HUD=0` lo quita)
+  sigue los destinos de dibujo (`vkCmdBeginRendering`, sin contar dibujos: eso sigue siendo de la sonda) y
+  reconoce la imagen del HUD con la regla medida en la fase 3b: el único destino de color a la resolución de
+  la cadena de presentación, RGBA8, limpiado a (0, 0, 0, 0), entero y sin profundidad. Al acabar ese dibujo, en
+  el mismo buffer de comandos del juego, la reduce a 960 × 540 con dos `vkCmdBlitImage` a la mitad (cada punto,
+  la media de 4 × 4: un trazo fino de una letra no se pierde) y la copia a la memoria compartida, con la misma
+  comprobación de cuadro entero que la profundidad. A los destinos RGBA8 grandes se les añade TRANSFER_SRC al
+  crearlos (como a la profundidad).
+- **Protocolo, versión 2** (`capa/protocolo.h`): tres huecos más con la máscara (2 MB cada uno) y `hudUltimoSeq`.
+  Capa y visor van juntos en `install.sh`; un visor viejo con una capa nueva (o al revés) no lee nada y usa la
+  red.
+- **El visor** (`ProfundidadJuego::leerHud`, `aplicarHud`): el alfa por encima de 6/255 es HUD; se engorda 24 px
+  de 4K (MEDIDO en la sonda: el HUD se mece y la máscara puede ser de otro cuadro, hasta ~30 px) con ventanas
+  deslizantes, el borde se suaviza (5 × 5) y esa parte del mapa va al plano de apoyo, como un rótulo. Registro:
+  `[hud] el HUD del juego al plano de la pantalla: X % del mapa`.
+- Probado sin juego, por partes:
+  - el visor con `tools/simula-capa.py --hud destino.raw` (el simulador ya habla la versión 2) sobre el cuadro, la
+    profundidad y la capa del HUD de un mismo volcado de la sonda: minimapa, misión, botones, iconos y munición en
+    el plano de la pantalla (la línea cian de la vista de profundidad), el resto igual; 9,3 % del mapa (el HUD
+    es el 4,6 % y el resto es el margen);
+  - la capa con el visor de anfitrión y `ODYSSEYVK_CAPA_HUD_PRUEBA=1` (toma su pase de afinado de 4K como HUD)
+    y un lector en Python que da el latido: 1096 máscaras en 22 s (una por cuadro a 60 fps), ninguna a medio
+    escribir, el contenido es el destino reducido, a 60 fps y sin caídas.
+- Falta verlo en Cyberpunk: que la regla salte ahí y cómo se ve.
+
 ## Fase 3b: encontrada la capa del HUD de Cyberpunk (v1.13)
 
 - Vuelta de Rodolfo con la sonda de los destinos (16:23 a 16:27): cuatro ventanas (la primera en un menú, 25

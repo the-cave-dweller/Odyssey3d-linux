@@ -56,6 +56,13 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
                   int celdaPx, std::vector<uint8_t> *mascara, int *cw, int *ch,
                   MemoriaTexto *memoria = nullptr, bool juego = false);
 
+/* (v1.13, fase 3c) El HUD del juego al plano de la pantalla, como los rotulos de anclarTexto pero con su
+   mascara exacta: el alfa de la imagen donde el juego dibuja el HUD (de la capa, `alfa` de aw x ah, el cuadro
+   entero). Se engorda un poco (el HUD se mece y la mascara puede ser de un cuadro antes o despues que la
+   imagen capturada) y se suaviza el borde. `mapa` es el de lado x lado (el cuadro aplastado a cuadrado).
+   Devuelve la parte del mapa que queda en el plano. */
+float aplicarHud(std::vector<uint8_t> &mapa, int lado, float plano, const std::vector<uint8_t> &alfa, int aw, int ah);
+
 /* --- los dos planos ------------------------------------------------------------
    El conversor da una profundidad distinta a cada punto, y con eso todo el cuadro se
    trata igual: un sujeto y el fondo detras solo se separan si caen a lados opuestos del
@@ -214,6 +221,9 @@ public:
      ODYSSEYVK_PROFUNDIDAD_JUEGO=0 la apaga. */
   void setPermitirJuego(bool p) { permitirJuego_.store(p); }
   bool usandoJuego() const { return usandoJuego_.load(); }
+  /* (v1.13, fase 3c) la mascara del HUD del juego, de la capa (ver ProfundidadJuego::leerHud); en el hilo del
+     mapa, despues de estimate. `fuenteW/H`: el tamano de la imagen del HUD del juego, para el registro */
+  bool mascaraHud(std::vector<uint8_t> &alfa, int &w, int &h, int *fuenteW = nullptr, int *fuenteH = nullptr);
 
 private:
   void cierra();          /* suelta la sesion de ONNX Runtime */

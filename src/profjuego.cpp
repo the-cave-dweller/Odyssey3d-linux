@@ -238,3 +238,41 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
           (invertida ? "invertida" : "normal");
   return true;
 }
+
+bool ProfundidadJuego::leerHud(std::vector<uint8_t> &alfa, int &w, int &h) {
+  if (!base_) return false;
+  volatile OdvkProfCabecera *c = (volatile OdvkProfCabecera *)base_;
+  if (c->magia != ODVK_PROF_MAGIA || c->version != ODVK_PROF_VERSION) return false;
+  const uint32_t hw = c->hudAncho, hh = c->hudAlto, bpp = c->hudBytesPunto, huecos = c->hudHuecos;
+  const uint64_t inicio = c->hudInicio, tamHueco = c->hudTamHueco;
+  if (hw < 2 || hh < 2 || bpp != 4 || huecos == 0 || inicio < ODVK_PROF_CABECERA ||
+      inicio + (uint64_t)huecos * tamHueco > tam_ || ODVK_PROF_DATOS + (uint64_t)hw * hh * 4 + 8 > tamHueco)
+    return false;
+  const uint64_t seq = c->hudUltimoSeq;
+  const double t = segundos();
+  if (seq == 0) return false;
+  if (seq != hudSeq_) {
+    hudSeq_ = seq;
+    hudCambio_ = t;
+  } else if (t - hudCambio_ > 0.5) {
+    return false;   /* el juego ya no dibuja su HUD (o esta en pausa) */
+  }
+  const uint8_t *hueco = base_ + inicio + (seq % huecos) * tamHueco;
+  std::atomic_thread_fence(std::memory_order_acquire);
+  if (*(volatile const uint64_t *)(hueco + tamHueco - 8) != seq) return false;
+  const size_t n = (size_t)hw * hh;
+  alfa.resize(n);
+  const uint8_t *s = hueco + ODVK_PROF_DATOS + 3;   /* RGBA8: el alfa es el cuarto */
+  for (size_t i = 0; i < n; i++) alfa[i] = s[i * 4];
+  std::atomic_thread_fence(std::memory_order_acquire);
+  if (*(volatile const uint64_t *)hueco != seq) return false;   /* la tarjeta ya lo estaba pisando */
+  w = (int)hw, h = (int)hh;
+  return true;
+}
+
+void ProfundidadJuego::fuenteHud(int &w, int &h) const {
+  w = h = 0;
+  if (!base_) return;
+  const volatile OdvkProfCabecera *c = (const volatile OdvkProfCabecera *)base_;
+  w = (int)c->hudFuenteAncho, h = (int)c->hudFuenteAlto;
+}
