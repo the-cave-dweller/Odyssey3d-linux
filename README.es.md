@@ -46,7 +46,7 @@ el monitor: reinicia su hub interno y la lente, el scaler y la cámara desaparec
 La primera vez que el servicio arranca sin red de profundidad, el panel de ajustes se abre solo y
 ofrece bajarla (50 MB, Depth Anything V2 pequeña a media precisión, de
 [huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)).
-En la rama `experimental` esta versión fp16, más ligera, es la de fábrica: el mismo mapa con un 35 %
+Desde la 1.12 esta versión fp16, más ligera, es la de fábrica: el mismo mapa con un 35 %
 menos de tiempo de red y 260 MB menos en la tarjeta; si ya tienes el archivo de 95 MB de antes, el
 panel ofrece la ligera con un botón.
 Al acabar la descarga el panel se cierra y la red se carga. Desde la terminal es:
@@ -59,17 +59,16 @@ odysseyvk ctl red descargar
 
 ## Uso
 
-Pon un vídeo a pantalla completa. Sale una tarjeta en la esquina: **Vídeo normal** (una imagen, se
-convierte a 3D) o **Vídeo dividido** (lado a lado). Elige; la pastilla de arriba a la derecha se
-queda mientras dura el 3D, con el interruptor ON/OFF, la profundidad, la salida, los dos botones
-del tipo de vídeo y el engranaje que abre el panel de ajustes. Marca «No volver a preguntar» y esa
-aplicación pasa directa al 3D la próxima vez.
+Pon un vídeo a pantalla completa y pasa directo al 3D. En sus primeros segundos el visor distingue
+un **vídeo normal** (una imagen, se convierte a 3D) de uno **dividido** (lado a lado o arriba y abajo),
+se cambia solo y deja de mirar. Compara las dos mitades del cuadro —la imagen y su detalle fino— y se
+midió con tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s bien en cada uno). Las
+aplicaciones marcadas como 2D y los juegos siguen su camino. (Hasta la 1.11 una tarjeta en la esquina
+preguntaba qué vídeo era.)
 
-En la rama `experimental` ya no hay tarjeta: el vídeo pasa directo al 3D y el visor mira sus primeros
-segundos para distinguir un vídeo normal de uno dividido (lado a lado o arriba y abajo), se cambia
-solo y deja de mirar. Compara las dos mitades del cuadro —la imagen y su detalle fino— y se midió con
-tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s bien en cada uno). Las
-aplicaciones marcadas como 2D y los juegos siguen su camino; en la pastilla se puede cambiar a mano.
+La pastilla de arriba a la derecha se queda mientras dura el 3D: el interruptor ON/OFF, el botón del
+relieve (**Auto** o **Manual**, ver abajo; su menú trae también los dos botones del tipo de vídeo para
+cambiarlo a mano) y el engranaje que abre el panel de ajustes.
 
 Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 
@@ -91,14 +90,14 @@ teclas; Esc lo cierra.
 
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
-En la rama `experimental` la cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
+La cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
 abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan), y a su
 lado un interruptor **Neural | Rendimiento** (del mismo ancho en los dos extremos) elige el vídeo normal con la red de profundidad (azul, con el
 chip) o sin ella (ámbar, con el rayo). En la segunda, centradas: **Juegos**, **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
 variable durante el 3D y el tope de arrastre; versión, actualizaciones, idioma, barra de tareas y
-bandeja, y **Desinstalar** plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. En la rama `experimental` el panel toma el color de resaltado de KDE sobre un fondo gris, se
-redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
+bandeja, y **Desinstalar** plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. El panel toma el color de resaltado de KDE
+sobre un fondo negro un poco transparente (como la pastilla y sus menús), se redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
 dejaste. Todo está también en
 `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
 sin reiniciarse.
@@ -107,8 +106,7 @@ sin reiniciarse.
 
 **Ajustes → Otros → Idioma** (Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
 rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
-(`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel; en la
-rama `experimental` ya no está.)
+(`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel.)
 
 ## Qué hace bueno el 3D
 
@@ -197,40 +195,52 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 Lo demás (calibración del paso de la lente, seguimiento de cabeza, variables de taller) está en
 las guías.
 
-## Rama experimental
-
-La rama `experimental` añade al panel una pestaña **Experimental** con pruebas sacadas de leer
-[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): la red de profundidad viendo el cuadro a su
-proporción 16:9 (`exp_red = cuadrado | 518 | 770`), un mapa de profundidad más grande
-(`exp_mapa = 518 | 770 | 1022`), un tope de arrastre en el suavizado en el tiempo
-(`exp_tope_arrastre = si`) y la anticipación de la cabeza en milisegundos (`exp_anticipacion = 25`).
-Cada una vale desde el siguiente vídeo; lo que funcione pasa a la versión normal. El **alcance del
-relieve** (`exp_topes_red = 2,75`, x1–x4) ensancha los topes por ojo con la red, en marcha: con los de
-fábrica, más fuerza o Profundidad solo aplasta la imagen contra ellos (medido: el 85 % del cuadro con
-Profundidad 100 y relieve x2).
+## Relieve: Auto y Manual
 
 En el vídeo normal con la red la pastilla se vuelve azul claro: junto al interruptor, un botón con un
-**chip «AI»** dice **Auto** o **Manual** y abre su menú. **Auto**: en cada escena un mapa de saliencia
-busca lo que llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, y la salida
-se calcula para el mayor relieve que cabe sin aplastar la imagen contra los topes (medido: un 0,9 % del
-cuadro en los topes en vez del 61 % con una salida fija). **Manual**: Profundidad y Salida a mano.
+chip dice **Auto** o **Manual** y abre su menú.
 
-Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`, el
-interruptor Neural | Rendimiento de la cabecera del panel),
-sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).
-Es más basta que la de la red, pero más estable. La pastilla se vuelve ámbar y, en vez de
-Profundidad y Salida, lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos
-(**Suave · Medio · Intenso**) y cuatro deslizadores finos (mezcla, fuerza, alcance y paralaje de la
-cabeza), que se aplican al momento; al pasar el ratón por cada uno se ve qué cambia. En este modo la
-frecuencia variable queda como la tenga el escritorio.
+- **Auto**: en cada escena un mapa de saliencia busca lo que llama la atención (una cara, un objeto) y
+  lo deja en el plano de la pantalla. El alcance del relieve sigue la distancia de tus ojos (medio
+  grado de paralaje entre los ojos: 1,44 veces los topes de fábrica a 65 cm), y la salida se calcula
+  para el mayor relieve que cabe sin aplastar la imagen contra esos topes (medido: un 0,9 % del cuadro
+  en los topes en vez del 61 % con una salida fija).
+- **Manual**: Profundidad y Salida a mano, con el alcance de la pestaña Experimental.
 
-**Los juegos y el cursor.** Cuando un juego entra al 3D, la pastilla se ve unos segundos, para que
+Los subtítulos y los rótulos se quedan en el plano de la pantalla, cada renglón de una pieza. En los
+cantos, el escalón de profundidad sigue el color de la imagen, y lo que un objeto destapa al correrse
+se rellena con el fondo de al lado.
+
+## Modo rendimiento
+
+Profundidad sin la red (`exp_sin_red = si`, el interruptor **Neural | Rendimiento** de la cabecera del
+panel), sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que
+ocupa la red en la tarjeta). Es más basta que la de la red, pero más estable. La pastilla se vuelve
+ámbar y lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos (**Suave · Medio ·
+Intenso**) y cuatro deslizadores finos (mezcla, fuerza, alcance y paralaje de la cabeza), que se
+aplican al momento; al pasar el ratón por cada uno se ve qué cambia. En este modo la frecuencia
+variable queda como la tenga el escritorio.
+
+## Los juegos y el cursor
+
+Cuando un juego entra al 3D, la pastilla se ve unos segundos, para que
 se lean los atajos, y se oculta sola. Si la traes con `Ctrl+Shift+F1`, le quita el cursor al juego
 (el juego deja de ser la ventana activa y suelta el cursor encerrado); al ocultarla otra vez, o con
 un clic en cualquier parte del juego, se lo devuelve. El panel de ajustes hace lo mismo mientras está
 abierto sobre un juego: un clic fuera de él lo cierra y devuelve el control, salvo que lo fijes con el
 pin a la izquierda de su nombre: fijado, se queda encima y un clic en el juego solo le devuelve el
 ratón y el teclado.
+
+## Pestaña Experimental
+
+La pestaña **Experimental** del panel trae pruebas sacadas de leer
+[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): la red de profundidad viendo el cuadro a su
+proporción 16:9 (`exp_red = cuadrado | 518 | 770`), un mapa de profundidad más grande
+(`exp_mapa = 518 | 770 | 1022`), un tope de arrastre en el suavizado en el tiempo donde la imagen se
+mueve (`exp_tope_arrastre = si`, en *Ajustes → Fluidez*) y la anticipación de la cabeza en milisegundos
+(`exp_anticipacion = 25`). Cada una vale desde el siguiente vídeo. El **alcance del relieve**
+(`exp_topes_red`, x1–x4) ensancha los topes por ojo con la red en Manual, en marcha; en Auto el alcance
+se calcula solo.
 
 ## Documentación
 

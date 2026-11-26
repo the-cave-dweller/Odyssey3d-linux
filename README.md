@@ -46,7 +46,7 @@ monitor: it resets its internal hub and the lens, scaler and camera disappear un
 The first time the service starts without a depth network, the settings panel opens by itself
 and offers to download it (50 MB, Depth Anything V2 Small at half precision, from
 [huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)).
-On the `experimental` branch this lighter fp16 version is the default: the same map with 35 % less
+Since 1.12 this lighter fp16 version is the default: the same map with 35 % less
 network time and 260 MB less GPU memory; if you already have the older 95 MB file, the panel offers
 the lighter one with a button.
 When the download finishes the panel closes and the network loads. From a terminal it is:
@@ -59,17 +59,16 @@ odysseyvk ctl red descargar
 
 ## Use
 
-Put a video in fullscreen. A card appears in the corner: **Normal video** (one image, converted
-to 3D) or **Split video** (side-by-side). Pick one; the pill in the top-right corner stays while
-the 3D is on, with the ON/OFF switch, depth, pop-out, the two video-type buttons and the gear that
-opens the settings panel. Tick "Don't ask again" and that app goes straight to 3D next time.
+Put a video in fullscreen and it goes straight to 3D. In its first seconds the viewer tells a
+**normal video** (one image, converted to 3D) from a **split** one (side by side or top and bottom),
+switches by itself and stops looking. It compares the two halves of the frame — the picture and its
+fine detail — and was measured on three side-by-side 3D videos and three normal ones (18 of 18
+three-second windows right on each). Apps marked as 2D and games keep their own way. (Up to 1.11 a
+card in the corner asked which kind of video it was.)
 
-On the `experimental` branch there is no card: the video goes straight to 3D and the viewer looks at
-its first seconds to tell a normal video from a split one (side by side or top and bottom), switches
-by itself and stops looking. It compares the two halves of the frame — the picture and its fine
-detail — and was measured on three side-by-side 3D videos and three normal ones (18 of 18 three-second
-windows right on each). Apps marked as 2D and games keep their own way; the pill can still switch by
-hand.
+The pill in the top-right corner stays while the 3D is on: the ON/OFF switch, the relief button
+(**Auto** or **Manual**, see below; its menu also has the two video-type buttons to switch by hand)
+and the gear that opens the settings panel.
 
 Keys (they also work while the video or game has the keyboard):
 
@@ -90,24 +89,23 @@ no keys; Esc closes it.
 ![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
-taskbar icon or the system-tray icon (click: settings, middle click: games). On the
-`experimental` branch the header has two rows. On the first, the OdysseyVK logo and name open the
+taskbar icon or the system-tray icon (click: settings, middle click: games). The header has two
+rows. On the first, the OdysseyVK logo and name open the
 main page (video, screen, keyboard shortcuts, apps that don't ask), and next to them a **Neural |
 Performance** switch (the same width in both positions) picks normal video with the depth network (blue, with the chip) or without it
 (amber, with the lightning bolt). On the second, centred: **Games**, **Settings** (the performance
 figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D and the
 drag cap; version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow) and
 **Experimental**. Over a video or a game in 3D the Games tab is left
-out. On the `experimental` branch the panel takes KDE's highlight colour on a grey background, resizes
-from its bottom-right corner and reopens where and how big you left it. Everything is also in
+out. The panel takes KDE's highlight colour on a slightly transparent black background (like the pill
+and its menus), resizes from its bottom-right corner and reopens where and how big you left it. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
 ### Language
 
 **Settings → Other → Language** (Program up to 1.11) switches the language at once: the panel, the pill, the cards and
 the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
-(`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header; on the
-`experimental` branch it is gone.)
+(`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header.)
 
 ## What makes the 3D good
 
@@ -195,38 +193,50 @@ in 3D. The **Settings** tab (Program up to 1.11) also has "Update automatically"
 Numbers use a decimal comma in this file. Everything else (lens pitch calibration, head tracking,
 workshop variables) is in the guides.
 
-## Experimental branch
+## Relief: Auto and Manual
 
-The `experimental` branch adds an **Experimental** tab to the panel with trials taken from reading
-[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): the depth network seeing the frame at its
-16:9 proportion (`exp_red = cuadrado | 518 | 770`), a bigger depth map (`exp_mapa = 518 | 770 |
-1022`), a lag cap on the smoothing over time (`exp_tope_arrastre = si`) and head anticipation in
-milliseconds (`exp_anticipacion = 25`). Each applies from the next video; what works moves to the
-normal version. **Depth reach** (`exp_topes_red = 2,75`, x1–x4) widens the per-eye limits with the
-network, live: with them at factory width, more strength or Depth only flattens the image against
-them (measured: 85 % of the frame at Depth 100 and relief x2).
+In normal video with the network the pill turns light blue: next to the switch, a button with a chip
+says **Auto** or **Manual** and opens its menu.
 
-In normal video with the network the pill turns light blue: next to the switch, a button with an
-**AI chip** says **Auto** or **Manual** and opens its menu. **Auto**: in each scene a saliency map finds
-what draws the eye (a face, an object) and puts it on the screen plane, and the pop-out is worked out
-for the most relief that fits without flattening the image against the limits (measured: 0.9 % of the
-frame on the limits instead of 61 % with a fixed pop-out). **Manual**: Depth and Pop-out by hand.
+- **Auto**: in each scene a saliency map finds what draws the eye (a face, an object) and puts it on
+  the screen plane. The depth reach follows the distance of your eyes (half a degree of parallax
+  between the eyes: 1.44 times the factory limits at 65 cm), and the pop-out is worked out for the most
+  relief that fits without flattening the image against those limits (measured: 0.9 % of the frame on
+  the limits instead of 61 % with a fixed pop-out).
+- **Manual**: Depth and Pop-out by hand, with the reach of the Experimental tab.
 
-It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`, the
-Neural | Performance switch in the panel header),
-worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's ~1.1 GB on the GPU). It is rougher
-than the network but steadier. The pill turns amber and, instead of Depth and Pop-out, carries a
+Subtitles and captions stay on the screen plane, each line in one piece. On thin edges the depth
+step follows the colour of the picture, and what an object uncovers when it shifts is filled with the
+background next to it.
+
+## Performance mode
+
+Depth without the network (`exp_sin_red = si`, the **Neural | Performance** switch in the panel
+header), worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's
+~1.1 GB on the GPU). It is rougher than the network but steadier. The pill turns amber and carries a
 lightning-bolt button: its drop-down menu has three measured presets (**Gentle · Medium · Intense**)
 and four fine sliders (mix, strength, reach, head parallax), all applied at once; hover over each to
 see what it changes. In this mode variable refresh is left as the desktop has it.
 
-**Games and the cursor.** When a game enters 3D the pill shows for a few seconds, so the shortcuts
+## Games and the cursor
+
+When a game enters 3D the pill shows for a few seconds, so the shortcuts
 can be read, and then hides by itself. While you bring it back with `Ctrl+Shift+F1` it takes the
 cursor from the game (the game stops being the active window, so it lets go of a locked cursor);
 hiding it again, or clicking anywhere on the game, gives the cursor back. The settings panel does
 the same while it is open over a game: a click outside it closes it and returns control, unless you
 pin it with the pin left of its name: pinned, it stays on top and a click on the game just gives the
 game the mouse and keyboard back.
+
+## Experimental tab
+
+The **Experimental** tab of the panel has trials taken from reading
+[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): the depth network seeing the frame at its
+16:9 proportion (`exp_red = cuadrado | 518 | 770`), a bigger depth map (`exp_mapa = 518 | 770 |
+1022`), a lag cap on the smoothing over time where the picture moves (`exp_tope_arrastre = si`, under
+*Settings → Smoothness*) and head anticipation in milliseconds (`exp_anticipacion = 25`). Each applies
+from the next video. **Depth reach** (`exp_topes_red`, x1–x4) widens the per-eye limits with the
+network in Manual, live; in Auto the reach is worked out by itself.
 
 ## Documentation
 

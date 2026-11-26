@@ -49,8 +49,8 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
 
 ## 2D → 3D conversion
 
-- Network: Depth Anything V2 Small (open; on the `experimental` branch the 50 MB fp16 file
-  `depth_anything_v2_small_fp16.onnx`, else the 95 MB one) in `~/.local/share/odysseyvk/modelos/`. If the
+- Network: Depth Anything V2 Small (open; since 1.12 the 50 MB fp16 file
+  `depth_anything_v2_small_fp16.onnx`, before it the 95 MB one) in `~/.local/share/odysseyvk/modelos/`. If the
   Odyssey 3D Hub's own `mde_large.onnx` is in that folder it is used automatically (key `1`/`2`
   switches). `modelo = /path.onnx` in `serve.conf` forces another file.
 - A map is computed 6 times per second on the GPU (`mapas_por_segundo`); the panel's Performance
@@ -86,8 +86,9 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 | `hz` | 120 | panel refresh in 3D |
 | `vrr_en_3d` | `no` | `si` keeps variable refresh (VRR) during 3D; off by default since 1.11 |
 | `profundidad_conv` / `salida_conv` | 75 / 50 | starting Depth (fixed screen plane; `auto` = saliency) and Pop-out for normal video; `_suave` 75/50, `_sbs` 50/0; written when the sliders move |
-| `exp_red` / `exp_mapa` / `exp_tope_arrastre` / `exp_anticipacion` | — | the Experimental tab (branch `experimental` only): network input proportion (`cuadrado`/`518`/`770`), depth map size (`518`/`770`/`1022`), lag cap (`si`), head anticipation in ms |
-| `exp_sin_red` / `exp_sin_red_mezcla` / `exp_sin_red_relieve` / `exp_sin_red_topes` / `exp_sin_red_paralaje` | `no` / `0,35` / `1,00` / `2,75` / `2,00` | performance mode (branch `experimental` only): depth from the image on the CPU instead of the network (`si`), its floor ↔ image mix, relief strength, relief reach (the per-eye caps multiplied) and head-parallax exaggeration; the lightning-bolt menu on the pill writes all four (a preset or the sliders); in this mode Depth, Pop-out and `relieve` don't apply. With it on, VRR stays as the desktop has it |
+| `exp_red` / `exp_mapa` / `exp_tope_arrastre` / `exp_anticipacion` | — | the Experimental tab: network input proportion (`cuadrado`/`518`/`770`), depth map size (`518`/`770`/`1022`), lag cap (`si`), head anticipation in ms |
+| `exp_topes_red` | 1,00 | depth reach with the network in Manual: the per-eye limits multiplied (x1–x4); in Auto it follows the distance of your eyes (half a degree of parallax) |
+| `exp_sin_red` / `exp_sin_red_mezcla` / `exp_sin_red_relieve` / `exp_sin_red_topes` / `exp_sin_red_paralaje` | `no` / `0,35` / `1,00` / `2,75` / `2,00` | performance mode (the Neural | Performance switch): depth from the image on the CPU instead of the network (`si`), its floor ↔ image mix, relief strength, relief reach (the per-eye caps multiplied) and head-parallax exaggeration; the lightning-bolt menu on the pill writes all four (a preset or the sliders); in this mode Depth, Pop-out and `relieve` don't apply. With it on, VRR stays as the desktop has it |
 | `atajo_<action>` | factory | a shortcut, e.g. `atajo_3d = Ctrl+Alt+3`; set in the panel's main page (the OdysseyVK logo) → Keyboard shortcuts |
 | `cantos` | finos | `viejo` = pre-0.89 edges, to compare |
 | `barra_2d` | `si` | player bar rows: `si` / `entera` (raw) / `no` |

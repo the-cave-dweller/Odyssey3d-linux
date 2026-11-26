@@ -3,6 +3,35 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Versión estable 1.12: lo de la rama `experimental` pasa a la normal (v1.12)
+
+- Rodolfo: «déjalo en 10, ya quiero subir un estable». Todo lo de abajo hasta la 1.11 entra en la
+  versión normal; el detalle y las medidas de cada cosa, en su entrada.
+- **Vídeo**: sin tarjeta; el tipo de vídeo (normal, lado a lado, arriba y abajo) se detecta solo en los
+  primeros segundos (18 de 18 ventanas de 3 s bien en seis vídeos). La red de fábrica es la fp16 (el
+  mismo mapa, 35 % menos de tiempo y 260 MB menos en la tarjeta). Las bandas negras de las películas,
+  en el plano de la pantalla. El HDR del escritorio siempre.
+- **Relieve**: la pastilla azul con **Auto | Manual**. Auto: la saliencia pone el sujeto en la
+  pantalla, el alcance sigue la distancia de los ojos (medio grado de paralaje: x1,44 a 65 cm) y la
+  Salida se calcula para el mayor relieve sin aplastar (0,9 % del cuadro en los topes en vez del 61 %).
+  Cantos con el alcance grande sin dientes ni franjas grises; subtítulos de una pieza en la pantalla
+  (letras a 0–1 px entre los ojos). Mezcla entre las vistas de fábrica al 10 % de Samsung, con
+  deslizador.
+- **Modo rendimiento** (interruptor **Neural | Rendimiento**): profundidad sin la red en el procesador,
+  con el menú del rayo (tres preajustes medidos y cuatro deslizadores); el VRR como el escritorio.
+- **Juegos**: la pastilla y el panel le quitan el cursor al juego y se lo devuelven; el pin deja el
+  panel encima; la pastilla se ve unos segundos al entrar y se oculta.
+- **Panel**: cabecera en dos filas (el logo abre la página principal; Juegos, Ajustes y Experimental
+  centradas), se redimensiona y recuerda su sitio, color de resaltado de KDE sobre negro translúcido;
+  Ajustes trae el rendimiento, la Fluidez (VRR y tope de arrastre) y Desinstalar plegado; secciones
+  plegables; Juegos fuera del panel durante un 3D.
+- **Pestaña Experimental**: la red a su proporción, el mapa más grande, el tope de arrastre (solo donde
+  la imagen se mueve), la anticipación de la cabeza y el alcance del relieve para Manual.
+- Arranque del visor sin caché de sombreadores: 4,1 s (8,0 en la 1.11).
+- **Probado en su panel**: el alcance a medio grado y la mezcla al 10 % («este último sirvió súper
+  bien», «sí bajó»). **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
+  interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
+
 ## Fondo negro translúcido y el interruptor «Neural» (rama `experimental`)
 
 - Rodolfo: «cambia el fondo gris de todos los hud por un negro ligeramente transparente» y «cambia en
