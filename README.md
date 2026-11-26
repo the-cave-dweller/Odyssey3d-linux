@@ -97,15 +97,17 @@ rows. On the first, the OdysseyVK logo and name open the
 main page (video, screen, keyboard shortcuts, apps that don't ask); the **Neural | Performance** switch
 lives on the pill (up to the first 1.12 builds it was here too). On the second, centred: **Games** and **Settings** (the
 performance figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D,
-the drag cap and the viewer's GPU priority; *Head tracking*: head anticipation in milliseconds;
-version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow). Over a video
+the drag cap and the viewer's GPU priority; *Head tracking*: following your head with the camera and
+head anticipation in milliseconds; *App*: the installed version, what GitHub has and the check/update
+button in one row, updates, language, taskbar and tray; and **Uninstall** folded under its arrow).
+Each option takes one row: its explanation shows when the mouse rests on it. Over a video
 or a game in 3D the Games tab is left out. The panel takes KDE's highlight colour on a slightly transparent black background (like the pill
 and its menus), resizes from its bottom-right corner and reopens where and how big you left it. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
 ### Language
 
-**Settings → Other → Language** (Program up to 1.11) switches the language at once: the panel, the pill, the cards and
+**Settings → App → Language** (Other in the first 1.12 builds, the Program tab up to 1.11) switches the language at once: the panel, the pill, the cards and
 the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
 (`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header.)
 
@@ -179,7 +181,7 @@ in 3D. The **Settings** tab (Program up to 1.11) also has "Update automatically"
 | `modo = ask \| conv \| sbs` | ask with the card / always normal video / always split video |
 | `auto = app:conv` | an app that goes straight to 3D (the card's "Don't ask again" writes these) |
 | `pantalla = DP-4` | which output is the Odyssey |
-| `rastreo = si` | follow your eyes with the monitor's IR camera |
+| `rastreo = si` | follow your eyes with the monitor's IR camera (Settings → Head tracking) |
 | `relieve = 1,00` | strength of the converter's relief (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | smooth split videos: always / when needed / never |
 | `crosstalk_base = 0,013` | how much of the other eye's image to subtract (ghosting) |

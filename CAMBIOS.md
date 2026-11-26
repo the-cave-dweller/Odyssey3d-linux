@@ -103,6 +103,25 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
+## Los ajustes, más compactos (v1.12)
+
+- Rodolfo: «en settings reacomoda las opciones que quedan para ser compactas y útiles»; «los juegos
+  están bien así» (Juegos no se toca).
+- **Página principal** (`src/preferencias.cpp`): *Vídeo* con la fuerza del relieve y suavizar los
+  vídeos divididos; *Pantalla* con reducir el fantasma y suavizar entre las vistas; luego los atajos y
+  las aplicaciones que no preguntan, plegados. Fuera la fila «El tipo de vídeo se detecta solo» (va en
+  la ayuda de suavizar los vídeos divididos); seguir la cabeza con la cámara pasa a Ajustes.
+- **Ajustes**: el rendimiento; *Fluidez*; *Seguimiento de la cabeza*: seguir la cabeza con la cámara y
+  anticiparla; *Programa*, lo que eran Versión y Otros: la versión instalada, lo de GitHub (en su
+  segunda línea) y el botón de buscar o actualizar en una fila (antes tres), avisar, actualizar solo,
+  idioma, barra de tareas y bandeja; Desinstalar, plegado como antes.
+- **Las explicaciones, a la ayuda**: las segundas líneas de cada opción salen al dejar el ratón encima,
+  y cada opción ocupa una fila. Con el panel a 820×400 la página principal corre 102 puntos (258 antes)
+  y Ajustes 638 (844 antes), con la fila de la cámara de más.
+- La memoria de la tarjeta gráfica, «3.7 / 24 GB» (decía «de» en todos los idiomas).
+- Traducciones: «PROGRAMA» y «En GitHub: {}» nuevas; fuera «VERSIÓN», «Instalada», «OTROS», «Buscar
+  actualizaciones» y «El tipo de vídeo se detecta solo».
+
 ## El arranque del 3D, en paralelo (v1.12)
 
 - Rodolfo: «acelera el arranque». MEDIDO en su panel con la línea `[arranque]` (cinco arranques, ms de

@@ -71,13 +71,13 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 
 | Key | Default | Meaning |
 |---|---|---|
-| `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (Settings → Other → Language; Program up to 1.11) |
+| `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (Settings → App → Language; Other in the first 1.12 builds, the Program tab up to 1.11) |
 | `modo` | `ask` | `ask` / `conv` / `sbs` / `tb` / `flat` |
 | `auto` | — | `app:modo`, one per line; the card's "remember" writes them |
 | `ignore` | system apps | app ids never offered 3D |
 | `pantalla` | auto | output name of the Odyssey (`DP-4`) |
 | `espera` | 40 | seconds the card stays |
-| `rastreo` | `no` | eye tracking with the IR camera |
+| `rastreo` | `no` | eye tracking with the IR camera (Settings → Head tracking) |
 | `suavizado` | 0,35 | tracker filter |
 | `relieve` | 1,00 | converter relief strength |
 | `dividido_suavizado` | `si` | smooth split videos: `si` / `auto` / `no` |

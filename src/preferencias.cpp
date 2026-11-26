@@ -654,7 +654,7 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
       std::string nombre = c[0];
       if (nombre.rfind("NVIDIA GeForce ", 0) == 0) nombre = nombre.substr(15);
       char txt[128];
-      std::snprintf(txt, sizeof txt, "%s %% · %.1f de %.0f GB · %.0f °C", c[1].c_str(), std::atof(c[2].c_str()) / 1024.0,
+      std::snprintf(txt, sizeof txt, "%s %% · %.1f / %.0f GB · %.0f °C", c[1].c_str(), std::atof(c[2].c_str()) / 1024.0,
                     std::atof(c[3].c_str()) / 1024.0, std::atof(c[4].c_str()));
       std::string t = txt;
       for (char &ch : t) if (ch == '.') ch = idioma::decimal();
@@ -701,14 +701,14 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       if (!sinRedPuesto) {
         Hud::ItemPanel vr;
         vr.tipo = Hud::ItemPanel::Interruptor, vr.rotulo = idioma::tr("Frecuencia variable (VRR) durante el 3D");
-        vr.nota = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones");
         vr.valor = v.vrrEn3d;
-        vr.ayuda = idioma::tr("Con ella la pantalla sigue el ritmo del juego. En Cyberpunk, por debajo de 100 cuadros daba tirones (25 % de los cuadros tarde); sin ella, 165 Hz fijos.");
+        vr.ayuda = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones") + std::string(". ") +
+                   idioma::tr("Con ella la pantalla sigue el ritmo del juego. En Cyberpunk, por debajo de 100 cuadros daba tirones (25 % de los cuadros tarde); sin ella, 165 Hz fijos.");
         pon(vr, "vrr_en_3d");
       }
       Hud::ItemPanel t;
       t.tipo = Hud::ItemPanel::Interruptor, t.rotulo = idioma::tr("Tope de arrastre");
-      t.nota = idioma::tr("Donde la imagen se mueve, ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
+      t.ayuda = idioma::tr("Donde la imagen se mueve, ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
       t.valor = v.expTope;
       pon(t, "exp_tope_arrastre");
       /* la prioridad del visor en la tarjeta (salio de Experimental en la 1.12): con un juego llenando la
@@ -717,77 +717,74 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       pr.tipo = Hud::ItemPanel::Opciones, pr.rotulo = idioma::tr("Prioridad del visor en la tarjeta");
       pr.opciones = {idioma::tr("Normal"), idioma::tr("Alta"), idioma::tr("Tiempo real")};
       pr.elegido = v.expPrioridad == "alta" ? 1 : (v.expPrioridad == "tiempo_real" ? 2 : 0);
+      pr.ayuda = idioma::tr("Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.");
       pon(pr, "exp_prioridad");
-      Hud::ItemPanel prn;
-      prn.tipo = Hud::ItemPanel::Nota;
-      prn.rotulo = idioma::tr("Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.");
-      pon(prn, "");
     }
     /* SEGUIMIENTO DE LA CABEZA (26-nov, «manda anticipar la cabeza a Ajustes»): salio de Experimental */
     {
       Hud::ItemPanel sc;
       sc.tipo = Hud::ItemPanel::Seccion, sc.rotulo = idioma::tr("SEGUIMIENTO DE LA CABEZA");
       pon(sc, "");
+      Hud::ItemPanel c;
+      c.tipo = Hud::ItemPanel::Interruptor, c.rotulo = idioma::tr("Seguir la cabeza con la cámara");
+      c.ayuda = idioma::tr("Desde el siguiente vídeo"), c.valor = v.rastreo;
+      pon(c, "rastreo");
       Hud::ItemPanel a;
       a.tipo = Hud::ItemPanel::Deslizador, a.rotulo = idioma::tr("Anticipar la cabeza");
-      a.nota = idioma::tr("La trama apunta a donde estarán los ojos dentro de estos milisegundos · 0 = apagado");
-      a.ayuda = idioma::tr("Al mover la cabeza, la cámara y la trama llegan tarde unos milisegundos; con esto la trama se calcula para donde estarán los ojos, siguiendo su velocidad. Any2Odyssey usa 25 ms; de más, la trama se pasa al frenar.");
+      a.ayuda = idioma::tr("La trama apunta a donde estarán los ojos dentro de estos milisegundos · 0 = apagado") + std::string(". ") + idioma::tr("Al mover la cabeza, la cámara y la trama llegan tarde unos milisegundos; con esto la trama se calcula para donde estarán los ojos, siguiendo su velocidad. Any2Odyssey usa 25 ms; de más, la trama se pasa al frenar.");
       a.frac = (float)v.expAnticipacion / 60.0f;
       a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
       pon(a, "exp_anticipacion");
     }
     Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VERSIÓN");
+    /* PROGRAMA (v1.12): la version y lo de GitHub en UNA fila con su boton (antes «Instalada», «En
+       GitHub» y el boton, tres filas), las actualizaciones, el idioma y donde se ve OdysseyVK (antes
+       OTROS); las explicaciones, en la ayuda al pasar el raton */
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("PROGRAMA");
     pon(s, "");
-    Hud::ItemPanel f;
-    f.tipo = Hud::ItemPanel::Fila, f.rotulo = idioma::tr("Instalada"), f.valorTexto = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
-    pon(f, "");
-    Hud::ItemPanel g;
-    g.tipo = Hud::ItemPanel::Fila, g.rotulo = idioma::tr("En GitHub");
-    if (comprobacionEnMarcha()) g.valorTexto = idioma::tr("comprobando…");
-    else if (act.remota.empty()) g.valorTexto = idioma::tr("sin comprobar todavía");
+    std::string enGitHub;
+    if (comprobacionEnMarcha()) enGitHub = idioma::tr("comprobando…");
+    else if (act.remota.empty()) enGitHub = idioma::tr("sin comprobar todavía");
     else {
       char cuando[64] = {0};
       const time_t t = (time_t)act.hora;
       std::strftime(cuando, sizeof cuando, "%H:%M", std::localtime(&t));
-      g.valorTexto = idioma::trf(act.pendiente ? "OdysseyVK {} · hay una versión nueva (visto a las {})" : "OdysseyVK {} · estás al día (visto a las {})", {act.remota, cuando});
+      enGitHub = idioma::trf(act.pendiente ? "OdysseyVK {} · hay una versión nueva (visto a las {})" : "OdysseyVK {} · estás al día (visto a las {})", {act.remota, cuando});
     }
-    pon(g, "");
     Hud::ItemPanel b;
     b.tipo = Hud::ItemPanel::Boton;
-    b.rotulo = act.pendiente ? idioma::trf("Actualizar a OdysseyVK {}", {act.remota}) : std::string(idioma::tr("Buscar actualizaciones"));
-    b.nota = act.pendiente ? std::string(idioma::tr("Se baja de GitHub, se compila, se instala (pide tu clave) y el servicio se reinicia; el vídeo o juego en 3D se reabre."))
-                           : idioma::trf("Mira el repositorio {}", {std::string(kRepoGitHub).substr(8)});
+    b.rotulo = act.pendiente ? idioma::trf("Actualizar a OdysseyVK {}", {act.remota}) : std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+    b.nota = idioma::trf("En GitHub: {}", {enGitHub});
+    b.ayuda = act.pendiente ? std::string(idioma::tr("Se baja de GitHub, se compila, se instala (pide tu clave) y el servicio se reinicia; el vídeo o juego en 3D se reabre."))
+                            : idioma::trf("Mira el repositorio {}", {std::string(kRepoGitHub).substr(8)});
     b.valorTexto = idioma::tr(comprobacionEnMarcha() ? "Comprobando…" : (act.pendiente ? "Actualizar" : "Buscar"));
     b.valor = !comprobacionEnMarcha();
     pon(b, act.pendiente ? "actualizar" : "buscar_actualizacion");
     Hud::ItemPanel a;
     a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = idioma::tr("Avisar cuando haya una versión nueva");
-    a.nota = idioma::tr("Una tarjeta en la orilla de la pantalla con el botón de actualizar; sin esto, solo el botón junto al aspa");
+    a.ayuda = idioma::tr("Una tarjeta en la orilla de la pantalla con el botón de actualizar; sin esto, solo el botón junto al aspa");
     a.valor = v.avisarActualizaciones;
     pon(a, "actualizaciones");
     Hud::ItemPanel au;
     au.tipo = Hud::ItemPanel::Interruptor, au.rotulo = idioma::tr("Actualizar automáticamente");
-    au.nota = idioma::tr("En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)");
+    au.ayuda = idioma::tr("En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)");
     au.valor = v.actualizarAuto;
     pon(au, "actualizar_auto");
-    /* Otros (v1.02): si la ventana del visor 3D sale en la barra de tareas del panel y en Alt+Tab */
-    s.rotulo = idioma::tr("OTROS");
-    pon(s, "");
-    /* el idioma (v1.07): lo mismo que el boton del globo de la cabecera */
+    /* el idioma (v1.07) */
     Hud::ItemPanel li;
     li.tipo = Hud::ItemPanel::Opciones, li.rotulo = idioma::tr("Idioma");
     for (int k = 0; k < idioma::kLenguas; k++) li.opciones.push_back(idioma::nombre(k));
     li.elegido = idioma::actual();
     pon(li, "idioma");
+    /* (v1.02) si la ventana del visor 3D sale en la barra de tareas del panel y en Alt+Tab */
     Hud::ItemPanel bt;
     bt.tipo = Hud::ItemPanel::Interruptor, bt.rotulo = idioma::tr("Mostrar OdysseyVK en la barra de tareas");
-    bt.nota = idioma::tr("En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos");
+    bt.ayuda = idioma::tr("En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos");
     bt.valor = v.enBarraTareas;
     pon(bt, "barra_tareas");
     Hud::ItemPanel sw;
     sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = idioma::tr("Mostrar OdysseyVK en la bandeja del sistema");
-    sw.nota = idioma::tr("El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos");
+    sw.ayuda = idioma::tr("El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos");
     sw.valor = v.enBandeja;
     pon(sw, "bandeja");
     /* desinstalar va plegado, con su flechita (rama experimental): no queda a mano de un clic suelto */
@@ -811,42 +808,35 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VÍDEO");
     pon(s, "");
-    /* rama experimental: el tipo de video ya no se elige ni se pregunta; lo detecta el visor */
-    Hud::ItemPanel m;
-    m.tipo = Hud::ItemPanel::Info;
-    m.rotulo = idioma::tr("El tipo de vídeo se detecta solo");
-    m.nota = idioma::tr("Al ponerse a pantalla completa, el visor mira los primeros segundos (normal, lado a lado o arriba y abajo) y luego deja de mirar; en la pastilla se puede cambiar a mano.");
-    pon(m, "");
+    /* (v1.12, «reacomoda las opciones que quedan para ser compactas y utiles»): el aviso de que el tipo de
+       video se detecta solo ya no ocupa una fila; las explicaciones de segunda linea pasan a la ayuda que
+       sale al pasar el raton, y el seguimiento de la cabeza se va a Ajustes, junto a la anticipacion */
+    Hud::ItemPanel r;
+    r.tipo = Hud::ItemPanel::Deslizador, r.rotulo = idioma::tr("Fuerza del relieve");
+    r.ayuda = idioma::tr("Para el vídeo normal y el dividido suavizado · desde el siguiente vídeo");
+    r.frac = (float)((v.relieve - 0.5) / 1.5), r.valorTexto = conDecimal(v.relieve, 2);
+    pon(r, "relieve");
     Hud::ItemPanel d;
     d.tipo = Hud::ItemPanel::Opciones, d.rotulo = idioma::tr("Suavizar los vídeos divididos");
     d.opciones = {idioma::tr("Siempre"), idioma::tr("Si hace falta"), idioma::tr("Nunca")};
     d.elegido = v.suavizar == 1 ? 0 : (v.suavizar == 2 ? 1 : 2);
+    d.ayuda = idioma::tr("Al ponerse a pantalla completa, el visor mira los primeros segundos (normal, lado a lado o arriba y abajo) y luego deja de mirar; en la pastilla se puede cambiar a mano.");
     pon(d, "dividido_suavizado");
-    Hud::ItemPanel r;
-    r.tipo = Hud::ItemPanel::Deslizador, r.rotulo = idioma::tr("Fuerza del relieve");
-    r.nota = idioma::tr("Para el vídeo normal y el dividido suavizado · desde el siguiente vídeo");
-    r.frac = (float)((v.relieve - 0.5) / 1.5), r.valorTexto = conDecimal(v.relieve, 2);
-    pon(r, "relieve");
 
     s.rotulo = idioma::tr("PANTALLA");
     pon(s, "");
     Hud::ItemPanel f;
     f.tipo = Hud::ItemPanel::Deslizador, f.rotulo = idioma::tr("Reducir el fantasma");
-    f.nota = idioma::tr("Cuánta imagen del otro ojo se resta · se nota al momento");
+    f.ayuda = idioma::tr("Cuánta imagen del otro ojo se resta · se nota al momento");
     f.frac = (float)(v.fantasma / 0.10), f.valorTexto = conDecimal(v.fantasma * 100.0, 1) + " %";
     pon(f, "crosstalk_base");
     /* la pendiente del filtro de la trama (rama experimental, 26-nov), como parte del ciclo mezclada */
     Hud::ItemPanel mz;
     mz.tipo = Hud::ItemPanel::Deslizador, mz.rotulo = idioma::tr("Suavizar entre las vistas");
-    mz.nota = idioma::tr("Al mover la cabeza, el otro ojo entra poco a poco · se nota al momento");
     mz.frac = (float)((v.mezclaVistas - 0.10) / 0.90);
     mz.valorTexto = std::to_string((int)std::lround(v.mezclaVistas * 100.0)) + " %";
     mz.ayuda = idioma::tr("La lente reparte los subpíxeles entre tu ojo izquierdo y el derecho. Con el 10 % (lo de Samsung) el paso de una vista a la otra es casi un escalón: si el rastreo va un poco atrasado, una franja de la pantalla salta de golpe a la imagen del otro ojo. Más mezcla hace ese paso gradual; con demasiada, algo del otro ojo se ve aun con la cabeza quieta.");
     pon(mz, "filtro");
-    Hud::ItemPanel c;
-    c.tipo = Hud::ItemPanel::Interruptor, c.rotulo = idioma::tr("Seguir la cabeza con la cámara");
-    c.nota = idioma::tr("Desde el siguiente vídeo"), c.valor = v.rastreo;
-    pon(c, "rastreo");
 
     /* ATAJOS DE TECLADO (v1.09): el interruptor de los globales y cada atajo, que se cambia picando
        su tecla y pulsando la combinacion nueva */

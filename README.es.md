@@ -99,8 +99,10 @@ interruptor **Neural | Rendimiento** vive en la pastilla (en las primeras compil
 también estaba aquí). En la segunda, centradas: **Juegos** y **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
 variable durante el 3D, el tope de arrastre y la prioridad del visor en la tarjeta; *Seguimiento de la
-cabeza*: la anticipación de la cabeza en milisegundos; versión, actualizaciones, idioma, barra de
-tareas y bandeja, y **Desinstalar** plegado bajo su flechita). Sobre un vídeo o un juego en 3D no sale
+cabeza*: seguir la cabeza con la cámara y la anticipación en milisegundos; *Programa*: la versión
+instalada, lo que hay en GitHub y el botón de buscar o actualizar en una fila, actualizaciones, idioma,
+barra de tareas y bandeja; y **Desinstalar** plegado bajo su flechita). Cada opción ocupa una fila: su
+explicación sale al dejar el ratón encima. Sobre un vídeo o un juego en 3D no sale
 la de Juegos. El panel toma el color de resaltado de KDE
 sobre un fondo negro un poco transparente (como la pastilla y sus menús), se redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
 dejaste. Todo está también en
@@ -109,7 +111,7 @@ sin reiniciarse.
 
 ### Idioma
 
-**Ajustes → Otros → Idioma** (Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
+**Ajustes → Programa → Idioma** (Otros en las primeras compilaciones de la 1.12, la pestaña Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
 rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
 (`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel.)
 
@@ -184,7 +186,7 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 | `modo = ask \| conv \| sbs` | preguntar con la tarjeta / siempre vídeo normal / siempre vídeo dividido |
 | `auto = app:conv` | una aplicación que pasa directa al 3D («No volver a preguntar» escribe estas) |
 | `pantalla = DP-4` | qué salida es el Odyssey |
-| `rastreo = si` | seguir tus ojos con la cámara infrarroja del monitor |
+| `rastreo = si` | seguir tus ojos con la cámara infrarroja del monitor (Ajustes → Seguimiento de la cabeza) |
 | `relieve = 1,00` | fuerza del relieve del conversor (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | suavizar los vídeos divididos: siempre / si hace falta / nunca |
 | `crosstalk_base = 0,013` | cuánta imagen del otro ojo se resta (fantasma) |
