@@ -141,6 +141,10 @@ struct Dispositivo {
   int volcados = 0;
   std::vector<Pendiente> pendientes;
   std::unordered_set<VkImage> vistasDeProfundidad;     /* imagenes de profundidad que DLSS ha leido */
+  /* la ultima imagen de profundidad a la que DLSS le pidio numero (MEDIDO en Cyberpunk: 1920x1080
+     D32_SFLOAT, el tamano de render, varias veces al cambiar de escena) */
+  VkImage ultimaPedida = VK_NULL_HANDLE;
+  long extrasVistos = 0;
 };
 std::unordered_map<void *, Dispositivo *> g_dev;
 
@@ -326,6 +330,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAl
     d = dispositivo(device);
     d->imagenes.erase(img);
     d->vistasDeProfundidad.erase(img);
+    if (d->ultimaPedida == img) d->ultimaPedida = VK_NULL_HANDLE;
   }
   d->destroyImage(device, img, a);
 }
@@ -356,6 +361,13 @@ void apuntarNumero(Dispositivo *d, const VkImageViewHandleInfoNVX *info, uint64_
   d->pedidos++;
   d->numeros[n] = info->imageView;
   d->numeros32.insert((uint32_t)n);
+  {
+    auto v = d->vistas.find(info->imageView);
+    if (v != d->vistas.end()) {
+      auto im = d->imagenes.find(v->second.img);
+      if (im != d->imagenes.end() && esProfundidad(im->second.formato)) d->ultimaPedida = v->second.img;
+    }
+  }
   if (d->pedidos <= 300) {
     auto v = d->vistas.find(info->imageView);
     if (v != d->vistas.end()) {
@@ -425,6 +437,28 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
     for (size_t i = 0; li && i < li->paramCount; i++)
       if (li->pParams && li->pParams[i]) buscarEn(d, (const uint8_t *)li->pParams[i], 4, vistas);
     /* los «extra» de CUDA: {BUFFER_POINTER=1, ptr, BUFFER_SIZE=2, &tam, END=0} */
+    if (li && li->pExtras && li->extraCount > 0 && d->extrasVistos < 6) {
+      d->extrasVistos++;
+      std::string crudo;
+      char tmp[64];
+      for (size_t i = 0; i < li->extraCount && i < 8; i++) {
+        std::snprintf(tmp, sizeof tmp, " [%zu]=%p", i, li->pExtras[i]);
+        crudo += tmp;
+      }
+      anota("[extra] lanzamiento %ld · %zu extra:%s", d->lanzamientos, li->extraCount, crudo.c_str());
+      for (size_t i = 0; i < li->extraCount && i < 2; i++) {
+        const uintptr_t v = (uintptr_t)li->pExtras[i];
+        if (v > 0x10000 && v < 0x7fffffffffffull && (v % 8) == 0) {
+          const uint32_t *w = (const uint32_t *)li->pExtras[i];
+          std::string hex;
+          for (int k = 0; k < 16; k++) {
+            std::snprintf(tmp, sizeof tmp, " %08x", w[k]);
+            hex += tmp;
+          }
+          anota("[extra]   [%zu] apunta a:%s", i, hex.c_str());
+        }
+      }
+    }
     const void *bufp = nullptr;
     size_t buft = 0;
     for (size_t i = 0; li && li->pExtras && i + 1 < li->extraCount; i += 2) {
@@ -449,6 +483,13 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
       d->detallados++;
       anota("[lanzar] %ld · parametros %zu, extra %zu (bufer de %zu bytes) · imagenes:%s", d->lanzamientos,
             li ? li->paramCount : 0, li ? li->extraCount : 0, buft, lista.empty() ? " (ninguna conocida)" : lista.c_str());
+    }
+    if (prof == VK_NULL_HANDLE && d->armado && d->ultimaPedida != VK_NULL_HANDLE) {
+      auto im = d->imagenes.find(d->ultimaPedida);
+      if (im != d->imagenes.end()) {
+        anota("[volcar] por la ultima imagen de profundidad a la que DLSS pidio numero (los parametros no la nombran)");
+        grabarCopia(d, cb, d->ultimaPedida, im->second);
+      }
     }
     if (prof != VK_NULL_HANDLE) {
       d->conProfundidad++;

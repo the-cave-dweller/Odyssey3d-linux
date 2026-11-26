@@ -27,9 +27,22 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Probado** sin juego: `vulkaninfo` con la capa (instancia y un dispositivo por tarjeta, sin fallos) y
   el visor de OdysseyVK en el compositor aparte con la capa puesta: la misma imagen que sin ella (0,004 de
   diferencia media de 255, como entre dos pasadas sin capa). Falta lo que importa: un juego con DLSS.
+- **MEDIDO en Cyberpunk** (Rodolfo, con `ODYSSEYVK_CAPA=1` y Neural Forge a la vez, los dos volcados con
+  la misma orden): DLSS pide número para una imagen **1920 × 1080 `D32_SFLOAT`**, el tamaño de render (y
+  vuelve a pedirlo al cambiar de escena: 4 veces en un minuto, con 39 números en total). Los parámetros
+  de los lanzamientos no vienen como esperaba («0 parámetros, 1 extra», y ese extra vale `0x1`, que es la
+  clave `CU_LAUNCH_PARAM_BUFFER_POINTER` de CUDA: la lista de extras sigue después aunque `extraCount`
+  diga 1), así que en 90 000 lanzamientos ninguno «nombró» la profundidad y la copia no se grababa. Ahora,
+  si los parámetros no la nombran, se copia la última imagen de profundidad a la que DLSS pidió número.
+  Resultado: la profundidad de la capa y la del volcado de Neural Forge del mismo cuadro son **idénticas
+  bit a bit** (2 073 600 de 2 073 600 puntos, diferencia 0; con el cuadro siguiente, correlación 0,9986,
+  lo que se movió). Sin Neural Forge, OdysseyVK tiene exactamente la profundidad que recibe DLSS. (El
+  primer volcado salió en la carga, un suelo pelado: la orden llegó antes de la partida.)
 - Fases que siguen: (2) compartir la profundidad en vivo con el visor (mismo GPU, sin copias por la CPU) y
-  usarla en vez de la red en ese juego; (3) el HUD (no tiene profundidad: la salida de DLSS, sin HUD,
-  dejaría separarlo), la instalación y un interruptor por juego en la pestaña Juegos.
+  usarla en vez de la red en ese juego, leyendo la lista de extras de CUDA hasta su fin para saber qué
+  lanzamiento usa qué imagen (los juegos que alternan dos profundidades); (3) el HUD (no tiene
+  profundidad: la salida de DLSS, sin HUD, dejaría separarlo), la instalación y un interruptor por juego
+  en la pestaña Juegos.
 
 ## Los rótulos ya no aplanan el mundo: renglones en medio, y en los juegos solo frases (v1.13)
 
