@@ -3,6 +3,17 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Otros: icono en la bandeja del sistema en vez de Alt+Tab (v1.03)
+
+- Rodolfo, con la 1.02: «no en Alt+Tab, sino en el panel de notificaciones». El segundo interruptor
+  de Otros pasa a ser «Mostrar OdysseyVK en la bandeja del sistema» (`bandeja = si|no`, encendido
+  de fábrica); el de Alt+Tab se quita.
+- MEDIDO con un programa de prueba: la bandeja de KDE lo registra, contesta el icono y el texto, y
+  el clic central llega. El icono es un StatusNotifierItem por D-Bus de sesión (`src/bandeja.cpp`), puesto por el
+  servicio mientras corre: clic = panel de ajustes, clic central = la pestaña Juegos, y el texto al
+  pasar por encima. Si la bandeja aún no está (el panel de KDE arrancando), se reintenta cada medio
+  minuto. Al apagar el interruptor se quita al momento.
+
 ## Otros: el visor en la barra de tareas y en Alt+Tab, a elegir (v1.02)
 
 - Rodolfo: «añade en otros una sección que ofrezca apagar y encender el mostrar en el administrador

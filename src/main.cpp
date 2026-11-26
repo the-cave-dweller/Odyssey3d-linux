@@ -12,6 +12,7 @@
 #include "ajuste.h"
 #include "barra.h"
 #include "preferencias.h"
+#include "bandeja.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
 #include "overlay.h"
@@ -3540,7 +3541,8 @@ struct ServeCfg {
                                entera = tejerlas tal cual vienen, sin la limpieza de la v0.90 */
   std::string actualizaciones;  /* no = no avisar con la tarjeta cuando hay una version nueva en GitHub (v0.95) */
   std::string actualizarAuto;   /* si = con una version nueva, `odysseyvk actualizar` sin preguntar (v0.95) */
-  bool barraTareas = true, selectorVentanas = true;   /* el visor en la barra de tareas y en Alt+Tab (v1.02) */
+  bool barraTareas = true;   /* el visor en la barra de tareas (v1.02) */
+  bool bandeja = true;       /* el icono en la bandeja del sistema (v1.03) */
   double actualizacionesCada = 6.0;   /* horas entre miradas a GitHub (v0.99: `actualizaciones_cada`, 0,25..168) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
@@ -3682,7 +3684,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "actualizaciones") cfg.actualizaciones = v;
     else if (k == "actualizar_auto") cfg.actualizarAuto = v;
     else if (k == "barra_tareas") cfg.barraTareas = !(strLower(v) == "no" || v == "0");
-    else if (k == "selector_ventanas") cfg.selectorVentanas = !(strLower(v) == "no" || v == "0");
+    else if (k == "bandeja") cfg.bandeja = !(strLower(v) == "no" || v == "0");
     else if (k == "actualizaciones_cada") {
       std::string numero = v;
       for (char &c : numero)
@@ -4623,6 +4625,20 @@ static int cmdServe(int argc, char **argv) {
   double avisoT = 0.0;
   std::string tarjetaUuid, tarjetaApp;         /* ventana a la que le pusimos la tarjeta */
   double tarjetaT = 0.0;
+  /* el icono de la bandeja (v1.03): clic = panel de ajustes, clic central = la pestana Juegos */
+  Bandeja bandeja;
+  double bandejaIntento = -100.0;
+  bandeja.alPicar([&](const std::string &como) {
+    const pid_t p = ::fork();
+    if (p == 0) {
+      ::setsid();
+      if (como == "medio") ::execl(exe.c_str(), exe.c_str(), "ajustes", "--juegos", (char *)nullptr);
+      else ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
+      ::_exit(127);
+    }
+    std::printf("[bandeja] %s: el panel de ajustes\n", como.c_str());
+    std::fflush(stdout);
+  });
   /* la actualizacion (v0.95): se mira la version de GitHub medio minuto despues de arrancar y luego
      cada seis horas; con una mas nueva, la tarjeta de la orilla lo avisa (una vez por version) */
   double proximaComprobacion = 0.0;
@@ -4877,6 +4893,7 @@ static int cmdServe(int argc, char **argv) {
       nt.process();
       nt.flush();
     }
+    bandeja.atender();
     double now = 0.0;
     {
       struct timespec ts;
@@ -5143,9 +5160,8 @@ static int cmdServe(int argc, char **argv) {
            cambio en el panel vale al momento, tambien en la sesion en curso */
         {
           std::string e8;
-          const bool fueraBarra = (w.states & WindowInfo::SkipTaskbar) != 0, fueraSelector = (w.states & WindowInfo::SkipSwitcher) != 0;
+          const bool fueraBarra = (w.states & WindowInfo::SkipTaskbar) != 0;
           if (fueraBarra == cfg.barraTareas) wm.setState(w.uuid, WindowInfo::SkipTaskbar, !cfg.barraTareas, &e8);
-          if (fueraSelector == cfg.selectorVentanas) wm.setState(w.uuid, WindowInfo::SkipSwitcher, !cfg.selectorVentanas, &e8);
         }
         hayVisor = true;
       }
@@ -5581,6 +5597,20 @@ static int cmdServe(int argc, char **argv) {
       }
     }
 
+    /* el icono de la bandeja: puesto o quitado segun serve.conf; si la bandeja no lo acepta (aun no
+       arranco el panel de KDE), se reintenta cada medio minuto */
+    if (!dry && cfg.bandeja && !bandeja.puesta() && now - bandejaIntento >= 30.0) {
+      bandejaIntento = now;
+      std::string eb;
+      if (bandeja.poner(&eb)) std::printf("[bandeja] icono puesto en la bandeja del sistema\n");
+      else std::printf("[bandeja] %s (se reintenta)\n", eb.c_str());
+      std::fflush(stdout);
+    } else if (!cfg.bandeja && bandeja.puesta()) {
+      bandeja.quitar();
+      std::printf("[bandeja] icono quitado\n");
+      std::fflush(stdout);
+    }
+
     /* La actualizacion (v0.95): mirar GitHub de vez en cuando y, con una version nueva, la tarjeta */
     if (proximaComprobacion == 0.0) proximaComprobacion = now + 30.0;
     if (cfg.actualizaciones != "no" && now >= proximaComprobacion && !prefs::comprobacionEnMarcha()) {
@@ -5681,7 +5711,7 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.actualizaciones != cfg.actualizaciones || nuevo.actualizarAuto != cfg.actualizarAuto;
           cfg.actualizaciones = nuevo.actualizaciones;
           cfg.barraTareas = nuevo.barraTareas;
-          cfg.selectorVentanas = nuevo.selectorVentanas;
+          cfg.bandeja = nuevo.bandeja;
           cfg.actualizarAuto = nuevo.actualizarAuto;
           if (nuevo.actualizacionesCada != cfg.actualizacionesCada) {
             cfg.actualizacionesCada = nuevo.actualizacionesCada;

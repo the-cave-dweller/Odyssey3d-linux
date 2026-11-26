@@ -248,7 +248,7 @@ Valores leer() {
   v.avisarActualizaciones = si(de("actualizaciones"), true);
   v.actualizarAuto = si(de("actualizar_auto"), false);
   v.enBarraTareas = si(de("barra_tareas"), true);
-  v.enSelector = si(de("selector_ventanas"), true);
+  v.enBandeja = si(de("bandeja"), true);
   if (!v.modelo.empty() && v.modelo[0] == '~') {
     const char *home = std::getenv("HOME");
     v.modelo = std::string(home ? home : "") + v.modelo.substr(1);
@@ -590,10 +590,10 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     bt.valor = v.enBarraTareas;
     pon(bt, "barra_tareas");
     Hud::ItemPanel sw;
-    sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = "Mostrarlo en el selector de ventanas (Alt+Tab)";
-    sw.nota = "Apagado, Alt+Tab salta del vídeo o el juego a lo siguiente sin pasar por el visor";
-    sw.valor = v.enSelector;
-    pon(sw, "selector_ventanas");
+    sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = "Mostrar OdysseyVK en la bandeja del sistema";
+    sw.nota = "El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos";
+    sw.valor = v.enBandeja;
+    pon(sw, "bandeja");
     s.rotulo = "DESINSTALAR";
     pon(s, "");
     Hud::ItemPanel d;
@@ -809,11 +809,11 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
                                                 : "se avisará con un aviso del escritorio";
     return true;
   }
-  if (id == "barra_tareas" || id == "selector_ventanas") {
-    const bool ahora = id == "barra_tareas" ? v.enBarraTareas : v.enSelector;
+  if (id == "barra_tareas" || id == "bandeja") {
+    const bool ahora = id == "barra_tareas" ? v.enBarraTareas : v.enBandeja;
     if (!fija(id, ahora ? "no" : "si")) return false;
-    if (aviso) *aviso = std::string(ahora ? "el visor 3D ya no sale " : "el visor 3D vuelve a salir ") +
-                        (id == "barra_tareas" ? "en la barra de tareas" : "en Alt+Tab");
+    if (aviso) *aviso = id == "barra_tareas" ? std::string(ahora ? "el visor 3D ya no sale en la barra de tareas" : "el visor 3D vuelve a salir en la barra de tareas")
+                                             : std::string(ahora ? "sin icono en la bandeja del sistema" : "con icono en la bandeja del sistema");
     return true;
   }
   if (id == "actualizar_auto") {
