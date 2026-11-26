@@ -3,6 +3,24 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Fase 3, el HUD: lo que dijo la sonda en Cyberpunk (v1.13)
+
+- Vuelta de Rodolfo con `ODYSSEYVK_CAPA_VOLCAR_CADA=45`: tres volcados (16:07 a 16:09), dos con juego y el
+  cuadro presentado del mismo momento (a pie y conduciendo); el primero cayó en una pantalla de carga. De paso,
+  el arreglo de arriba en vivo: a las 16:07:29 se tiró un cuadro a medio hacer (159 799 puntos fuera) sin caída.
+- **La escena sin HUD es la entrada de color de DLSS**: 1920 × 1080 RGBA16F, descriptor de muestreo (0x2),
+  lineal y antes del posproceso. Las 3840 × 2160 con 0xa son su historia interna (codificada, no sirve tal
+  cual). La salida 4K (solo almacenamiento, 0x8), copiada al volcar, ya tiene **trozos del HUD**: el juego
+  dibuja el HUD en una imagen propia que comparte memoria con esa salida.
+- **Máscara por diferencia** (de taller, en el scratchpad): la escena llevada al aspecto final con un ajuste
+  global (polinomio en log del color + viñeta, tres vueltas quitando lo que no encaja) y se queda solo lo
+  FINO de lo que el ajuste no explica, menos los cantos de la propia escena, en bloques de 8 × 8. Recoge todo
+  el HUD (minimapa, misión, iconos, munición, velocímetro, avisos, marcas de distancia); se equivoca en lo que
+  brilla (neones, el halo del sol, luces de freno) y en el detalle lejano: ~10 % de los bloques marcados, la
+  mitad de más. Sin el ajuste fino (solo el color) eran el 21 %.
+- Lo exacto sería la imagen donde el juego dibuja el HUD: su alfa ES la máscara, sin ajustes ni falsos.
+  Siguiente paso: buscarla con la sonda (los destinos de dibujo de cada cuadro después de DLSS).
+
 ## El visor ya no se cae con una profundidad del juego a medio escribir (v1.13)
 
 - Rodolfo: «no cargo el layer». La capa sí cargó (la sonda dejó dos volcados), lo que se cayó fue **el visor**:
