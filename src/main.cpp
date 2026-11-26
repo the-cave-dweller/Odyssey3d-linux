@@ -3156,6 +3156,17 @@ static int cmdAjustes(int argc, char **argv) {
       }
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelModoRed) {
+        /* el interruptor AI | Rendimiento de la cabecera: el video normal con la red o sin ella */
+        std::string aviso;
+        bool cerrar = false;
+        if ((g.sub == 1) != st.sinRedPanel && prefs::aplicar("exp_sin_red", g.sub, 0.0f, true, juegos, &aviso, &cerrar)) {
+          st.pie = aviso;
+          rellenar();
+          std::printf("[ajustes] %s\n", g.sub == 1 ? "modo rendimiento (sin red)" : "AI (con la red)");
+          std::fflush(stdout);
+        }
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelFijar) {
         /* el pin: fijado, el velo se va y el teclado pasa a pedido (un clic en el juego se lo lleva y
            el panel se queda); suelto, vuelve el velo (encima del juego) y el teclado exclusivo */

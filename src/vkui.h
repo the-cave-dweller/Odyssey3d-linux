@@ -116,6 +116,9 @@ public:
        arrastrando la esquina de abajo a la derecha */
     float acentoPanel[3] = {0.46f, 0.37f, 0.92f};
     float panelAncho = 0.0f, panelAlto = 0.0f;
+    /* el interruptor AI | Rendimiento junto al logo (rama experimental): el video normal con la red (AI) o
+       sin ella (modo rendimiento) */
+    bool sinRedPanel = false;
     /* el renglon de las teclas de la pastilla cuando hay atajos cambiados (v1.09); vacio = el de fabrica */
     std::string teclas;
     /* la pastilla del modo rendimiento (rama experimental): el conversor va sin red. Lleva el acento
@@ -200,6 +203,7 @@ public:
     HitPanelIdiomaOpcion, /* un idioma de la lista: `sub` = cual (idioma::Lengua) */
     HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
     HitPanelRedimensionar, /* la esquina de abajo a la derecha: cambiar el tamano del panel (rama experimental) */
+    HitPanelModoRed,      /* el interruptor AI | Rendimiento: `sub` 0 = AI (con la red), 1 = Rendimiento (sin red) */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
@@ -396,6 +400,7 @@ private:
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
   Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
   Rect panelEsquina_; /* la esquina para cambiar el tamano */
+  Rect panelModo_;    /* el interruptor AI | Rendimiento */
 public:
   /* el tamano del panel que se dibujo en el ultimo `begin`, en puntos del lienzo (para la capa, que lo
      cambia arrastrando la esquina) */

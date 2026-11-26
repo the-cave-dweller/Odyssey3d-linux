@@ -1432,22 +1432,37 @@ void Hud::dibujaPanel(int vw, int vh) {
     text("OdysseyVK", baldosa.x + baldosa.w + 9.0f, panelLogo_.y + 6.0f, 17.0f, puesta ? tinta[0] : ink[0], puesta ? tinta[1] : ink[1],
          puesta ? tinta[2] : ink[2], puesta || hov ? 1.0f : 0.90f);
   }
-  const float tx0 = panelLogo_.x + panelLogo_.w;
-  panelPestanas_.clear();
-  float tx = tx0 + 26.0f;
-  /* v1.07: en ruso («Производительность») las pestanas no cabian hasta el globo: la letra se achica */
-  float tamPest = 14.0f;
+  /* el interruptor AI | Rendimiento (rama experimental), junto al logo: toma el color y el logo del
+     extremo puesto (azul con el chip para AI, ambar con el rayo para Rendimiento); la bola blanca va en ese
+     extremo y el nombre al otro lado. Como el ON/OFF de la pastilla, un clic en cualquier parte lo pasa al
+     otro extremo. */
   {
-    const float limite = px + pw - 20.0f - 32.0f - 40.0f - 8.0f - 12.0f;   /* sin el globo del idioma */
+    const char *nAI = "AI", *nRend = idioma::tr("Rendimiento");
+    const bool rend = st_.sinRedPanel;
+    /* mide lo que el nombre puesto (con el mas largo sobraba hueco, y en ruso mucho) */
+    const float wTexto = std::max(28.0f, textWidth(rend ? nRend : nAI, 13.0f));
+    panelModo_ = {panelLogo_.x + panelLogo_.w + 14.0f, py + 20.0f, 4.0f + 26.0f + 10.0f + wTexto + 14.0f, 32.0f};
+    const bool hov = panelModo_.inside(mx_, my_) && !st_.menuIdioma;
+    const float c[3] = {rend ? 0.93f : 0.40f, rend ? 0.62f : 0.72f, rend ? 0.12f : 1.0f};
+    const float t = hov ? 1.08f : 1.0f;
+    mask9(panelModo_, 0, 16.0f, std::min(1.0f, c[0] * t), std::min(1.0f, c[1] * t), std::min(1.0f, c[2] * t), 0.95f);
+    const Rect bola{rend ? panelModo_.x + panelModo_.w - 4.0f - 26.0f : panelModo_.x + 4.0f, panelModo_.y + 3.0f, 26.0f, 26.0f};
+    mask9(bola, 0, 13.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+    icono({bola.x + 4.0f, bola.y + 4.0f, 18.0f, 18.0f}, rend ? icoRayo_ : icoChip_, c[0] * 0.85f, c[1] * 0.85f, c[2] * 0.85f, 1.0f);
+    const char *nombre = rend ? nRend : nAI;
+    const float xt = rend ? panelModo_.x + 14.0f : bola.x + bola.w + 10.0f;
+    text(nombre, xt, panelModo_.y + 8.0f, 13.0f, 0.08f, 0.09f, 0.11f, 1.0f);
+  }
+  /* las pestanas, en una segunda fila y centradas (rama experimental) */
+  panelPestanas_.clear();
+  float tamPest = 14.0f;
+  float tx = px;
+  {
     float total = 0.0f;
     for (const std::string &p : st_.pestanas)
-      if (!p.empty()) total += textWidth(p, 14.0f) + 32.0f + 8.0f;
-    if (tx + total > limite && total > 0.0f) {
-      float fijo = 0.0f;
-      for (const std::string &p : st_.pestanas)
-        if (!p.empty()) fijo += 40.0f;
-      tamPest = std::max(10.0f, 14.0f * std::max(0.0f, limite - tx - fijo) / std::max(1.0f, total - fijo));
-    }
+      if (!p.empty()) total += textWidth(p, tamPest) + 32.0f + 8.0f;
+    total = std::max(0.0f, total - 8.0f);
+    tx = px + std::max(20.0f, (pw - total) * 0.5f);
   }
   for (size_t i = 0; i < st_.pestanas.size(); i++) {
     /* una pestana sin nombre no se ensena (la de Juegos sobre un video o un juego en 3D); su caja queda
@@ -1457,7 +1472,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       continue;
     }
     const float w = textWidth(st_.pestanas[i], tamPest) + 32.0f;
-    const Rect t{tx, py + 20.0f, w, 32.0f};
+    const Rect t{tx, py + 62.0f, w, 32.0f};
     panelPestanas_.push_back(t);
     const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_);
     if (puesta) mask9(t, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
@@ -1497,10 +1512,10 @@ void Hud::dibujaPanel(int vw, int vh) {
   const int lengua = idioma::actual();
   panelIdioma_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   const bool hi = false;
-  solid(px + 20.0f, py + 68.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
+  solid(px + 20.0f, py + 106.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);   /* bajo las dos filas */
 
   /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */
-  panelCuerpo_ = {px + 12.0f, py + 76.0f, pw - 24.0f, ph - 76.0f - 44.0f};
+  panelCuerpo_ = {px + 12.0f, py + 114.0f, pw - 24.0f, ph - 114.0f - 44.0f};
   const float izq = panelCuerpo_.x + 16.0f, der = panelCuerpo_.x + panelCuerpo_.w - 22.0f;
   auto alto = [](const ItemPanel &it) {
     switch (it.tipo) {
@@ -1817,6 +1832,15 @@ void Hud::dibujaPanel(int vw, int vh) {
         mask9({panelEsquina_.x + 18.0f - 5.0f * (float)k, panelEsquina_.y + 8.0f + 5.0f * (float)fila, 3.0f, 3.0f}, 0, 1.5f, c, c,
               c + 0.02f, 1.0f);
   }
+  /* la ayuda del interruptor AI | Rendimiento: lo que hace el modo puesto */
+  if (panelModo_.inside(mx_, my_) && !st_.menuIdioma) {
+    const bool derecha = st_.sinRedPanel;
+    const std::vector<std::string> lineas = renglones(
+        idioma::tr(derecha ? "La profundidad sale de la propia imagen en el procesador (~9 ms por mapa), sin tocar la tarjeta: más basta, pero más estable. La pastilla lleva un rayo con su menú (los preajustes y los ajustes finos), y la frecuencia variable queda como en el escritorio."
+                           : "La red Depth Anything: la forma de verdad de cada objeto. Ocupa la tarjeta: ~1,1 GB y 14-18 ms por mapa."),
+        12.5f, 420.0f);
+    cajaAyuda(lineas, panelModo_.x, panelModo_.y + panelModo_.h + 8.0f, 12.5f);
+  }
   /* el rotulo del pin, al pasar por encima */
   if (hfij) {
     const std::string r = idioma::tr(st_.fijado ? "Fijado encima: un clic en el juego no cierra el panel. Pica para soltarlo."
@@ -1861,6 +1885,10 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (panelFijar_.inside(mx, my)) return HitPanelFijar;
   if (panelEsquina_.inside(mx, my)) return HitPanelRedimensionar;
+  if (panelModo_.inside(mx, my)) {   /* el interruptor AI | Rendimiento: como el ON/OFF, pasa al otro extremo */
+    if (sub) *sub = st_.sinRedPanel ? 0 : 1;
+    return HitPanelModoRed;
+  }
   if (panelLogo_.inside(mx, my)) {   /* el logo: la primera pestana */
     if (sub) *sub = 0;
     return HitPanelPestana;
@@ -1872,7 +1900,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
       if (sub) *sub = (int)i;
       return HitPanelPestana;
     }
-  if (my < panelCaja_.y + 68.0f) return HitPanelTitulo;
+  if (my < panelCaja_.y + 106.0f) return HitPanelTitulo;
   if (!panelCuerpo_.inside(mx, my)) return HitPanel;
   for (size_t i = 0; i < zonas_.size() && i < st_.items.size(); i++) {
     const ZonaItem &z = zonas_[i];

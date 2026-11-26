@@ -3,6 +3,22 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La cabecera del panel en dos filas, con el interruptor AI | Rendimiento (rama `experimental`)
+
+- Rodolfo: «pasa el tope de arrastre y la frecuencia variable ya a ajustes; junto al logo de Odyssey pon
+  AI y performance en una pill, que la pill cambie de logo y color con el extremo que tenga el clic»,
+  «pasa Juegos, Ajustes y Experimental a una segunda fila y centra las pestañas».
+- **Primera fila**: el pin, el logo y el nombre (la página principal), el interruptor **AI |
+  Rendimiento**, la flecha de actualizar y el aspa. El interruptor es el «Con la red / Sin red» de antes
+  (`exp_sin_red`): azul con la bola y el chip a la izquierda en AI, ámbar con el rayo a la derecha en
+  Rendimiento; como el ON/OFF de la pastilla, un clic en cualquier parte lo pasa al otro extremo, y al
+  pasar el ratón explica el modo puesto. Mide lo que el nombre puesto.
+- **Segunda fila**, centrada: Juegos, Ajustes y Experimental. El cuerpo empieza más abajo (106 en vez
+  de 68); se arrastra por cualquier sitio de las dos filas que no sea un botón.
+- **Ajustes → Fluidez**: la frecuencia variable durante el 3D (solo con la red: en Rendimiento el 3D deja
+  la del escritorio) y el tope de arrastre, que salen de Experimental. Experimental pierde «Modo
+  rendimiento» y «Suavizado en el tiempo».
+
 ## El tipo de vídeo se detecta solo (rama `experimental`)
 
 - Rodolfo: «¿te puedo entrenar para que identifiques un vídeo normal de uno dividido? que tomes los

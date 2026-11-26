@@ -91,11 +91,13 @@ teclas; Esc lo cierra.
 
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
-En la rama `experimental`, el logo y el nombre de OdysseyVK, a la izquierda de las pestañas, abren la
-página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); luego van
-**Juegos**, **Ajustes** (arriba los datos de rendimiento —visor 3D, red de profundidad, tarjetas
-gráficas—; luego versión, actualizaciones, idioma, barra de tareas y bandeja, y **Desinstalar**
-plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. En la rama `experimental` el panel toma el color de resaltado de KDE sobre un fondo gris, se
+En la rama `experimental` la cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
+abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan), y a su
+lado un interruptor **AI | Rendimiento** elige el vídeo normal con la red de profundidad (azul, con el
+chip) o sin ella (ámbar, con el rayo). En la segunda, centradas: **Juegos**, **Ajustes** (arriba los
+datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
+variable durante el 3D y el tope de arrastre; versión, actualizaciones, idioma, barra de tareas y
+bandeja, y **Desinstalar** plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. En la rama `experimental` el panel toma el color de resaltado de KDE sobre un fondo gris, se
 redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
 dejaste. Todo está también en
 `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
@@ -212,7 +214,8 @@ busca lo que llama la atención (una cara, un objeto) y lo deja en el plano de l
 se calcula para el mayor relieve que cabe sin aplastar la imagen contra los topes (medido: un 0,9 % del
 cuadro en los topes en vez del 61 % con una salida fija). **Manual**: Profundidad y Salida a mano.
 
-Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`),
+Trae también un **modo rendimiento** para el vídeo normal: profundidad sin la red (`exp_sin_red = si`, el
+interruptor AI | Rendimiento de la cabecera del panel),
 sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que ocupa la red en la tarjeta).
 Es más basta que la de la red, pero más estable. La pastilla se vuelve ámbar y, en vez de
 Profundidad y Salida, lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos

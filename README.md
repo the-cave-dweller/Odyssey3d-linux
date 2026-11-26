@@ -91,10 +91,13 @@ no keys; Esc closes it.
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
 taskbar icon or the system-tray icon (click: settings, middle click: games). On the
-`experimental` branch the OdysseyVK logo and name, left of the tabs, open the main page (video,
-screen, keyboard shortcuts, apps that don't ask); then come **Games**, **Settings** (the performance
-figures — 3D viewer, depth network, GPUs — on top, then version, updates, language, taskbar and tray,
-and **Uninstall** folded under its arrow) and **Experimental**. Over a video or a game in 3D the Games tab is left
+`experimental` branch the header has two rows. On the first, the OdysseyVK logo and name open the
+main page (video, screen, keyboard shortcuts, apps that don't ask), and next to them an **AI |
+Performance** switch picks normal video with the depth network (blue, with the chip) or without it
+(amber, with the lightning bolt). On the second, centred: **Games**, **Settings** (the performance
+figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D and the
+drag cap; version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow) and
+**Experimental**. Over a video or a game in 3D the Games tab is left
 out. On the `experimental` branch the panel takes KDE's highlight colour on a grey background, resizes
 from its bottom-right corner and reopens where and how big you left it. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
@@ -208,7 +211,8 @@ what draws the eye (a face, an object) and puts it on the screen plane, and the 
 for the most relief that fits without flattening the image against the limits (measured: 0.9 % of the
 frame on the limits instead of 61 % with a fixed pop-out). **Manual**: Depth and Pop-out by hand.
 
-It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`),
+It also has a **performance mode** for normal video: depth without the network (`exp_sin_red = si`, the
+AI | Performance switch in the panel header),
 worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's ~1.1 GB on the GPU). It is rougher
 than the network but steadier. The pill turns amber and, instead of Depth and Pop-out, carries a
 lightning-bolt button: its drop-down menu has three measured presets (**Gentle · Medium · Intense**)

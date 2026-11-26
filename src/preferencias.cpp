@@ -675,6 +675,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
   st.pestanas = {"", idioma::tr("Juegos"), "", idioma::tr("Ajustes"), idioma::tr("Experimental")};
+  st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
@@ -689,6 +690,27 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     /* Ajustes (antes Programa, v0.95): arriba el rendimiento (el visor 3D, la red y las tarjetas), luego
        la version, la actualizacion, otros y el desinstalador */
     filasRendimiento(st, v, ids);
+    /* FLUIDEZ (rama experimental): lo que salio de Experimental. El VRR solo se elige con la red: en
+       Rendimiento el 3D deja el del escritorio */
+    {
+      const bool sinRedPuesto = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
+      Hud::ItemPanel fl;
+      fl.tipo = Hud::ItemPanel::Seccion, fl.rotulo = idioma::tr("FLUIDEZ");
+      pon(fl, "");
+      if (!sinRedPuesto) {
+        Hud::ItemPanel vr;
+        vr.tipo = Hud::ItemPanel::Interruptor, vr.rotulo = idioma::tr("Frecuencia variable (VRR) durante el 3D");
+        vr.nota = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones");
+        vr.valor = v.vrrEn3d;
+        vr.ayuda = idioma::tr("Con ella la pantalla sigue el ritmo del juego. En Cyberpunk, por debajo de 100 cuadros daba tirones (25 % de los cuadros tarde); sin ella, 165 Hz fijos.");
+        pon(vr, "vrr_en_3d");
+      }
+      Hud::ItemPanel t;
+      t.tipo = Hud::ItemPanel::Interruptor, t.rotulo = idioma::tr("Tope de arrastre");
+      t.nota = idioma::tr("Ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
+      t.valor = v.expTope;
+      pon(t, "exp_tope_arrastre");
+    }
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VERSIÓN");
     pon(s, "");
@@ -767,26 +789,9 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     i.nota = idioma::tr("Se aplican desde el siguiente vídeo. Lo que funcione pasará a la versión normal.");
     pon(i, "");
     Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("MODO RENDIMIENTO");
-    pon(s, "");
-    Hud::ItemPanel sr;
-    sr.tipo = Hud::ItemPanel::Opciones, sr.rotulo = idioma::tr("Profundidad del vídeo normal");
-    sr.opciones = {idioma::tr("Con la red"), idioma::tr("Sin red")};
-    /* `suelo` e `imagen` (escritos a mano) tambien son el modo rendimiento puesto, como en el servicio */
-    const bool sinRedPuesto = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
-    sr.elegido = sinRedPuesto ? 1 : 0;
-    sr.ayudas = {idioma::tr("La red Depth Anything: la forma de verdad de cada objeto. Ocupa la tarjeta: ~1,1 GB y 14-18 ms por mapa."),
-                 idioma::tr("La profundidad sale de la propia imagen en el procesador (~9 ms por mapa), sin tocar la tarjeta: más basta, pero más estable. La pastilla lleva un rayo con su menú (los preajustes y los ajustes finos), y la frecuencia variable queda como en el escritorio.")};
-    pon(sr, "exp_sin_red");
-    /* el VRR solo se elige sin el modo rendimiento: con el, el 3D lo deja como el escritorio */
-    if (!sinRedPuesto) {
-    Hud::ItemPanel vr;
-    vr.tipo = Hud::ItemPanel::Interruptor, vr.rotulo = idioma::tr("Frecuencia variable (VRR) durante el 3D");
-    vr.nota = idioma::tr("De fábrica se apaga: con ella, los juegos por debajo del refresco daban tirones");
-    vr.valor = v.vrrEn3d;
-    vr.ayuda = idioma::tr("Con ella la pantalla sigue el ritmo del juego. En Cyberpunk, por debajo de 100 cuadros daba tirones (25 % de los cuadros tarde); sin ella, 165 Hz fijos.");
-    pon(vr, "vrr_en_3d");
-    }
+    /* rama experimental: «Con la red / Sin red» es ahora el interruptor AI | Rendimiento de la cabecera, y
+       la frecuencia variable y el tope de arrastre pasaron a Ajustes → Fluidez */
+    s.tipo = Hud::ItemPanel::Seccion;
     s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
     pon(s, "");
     /* el alcance del relieve con la red: lo que deja meter mas profundidad (se aplica en marcha) */
@@ -815,13 +820,6 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     mn.tipo = Hud::ItemPanel::Nota;
     mn.rotulo = idioma::tr("Puntos a lo ancho del mapa que llega a la trama: más puntos, bordes más finos y más tiempo de limpieza.");
     pon(mn, "");
-    s.rotulo = idioma::tr("SUAVIZADO EN EL TIEMPO");
-    pon(s, "");
-    Hud::ItemPanel t;
-    t.tipo = Hud::ItemPanel::Interruptor, t.rotulo = idioma::tr("Tope de arrastre");
-    t.nota = idioma::tr("Ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
-    t.valor = v.expTope;
-    pon(t, "exp_tope_arrastre");
     s.rotulo = idioma::tr("VISOR");
     pon(s, "");
     Hud::ItemPanel pr;

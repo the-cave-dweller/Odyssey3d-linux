@@ -1102,6 +1102,7 @@ struct Overlay::Impl {
        idiomas abierta, que la cierra */
     if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem || h == Hud::HitPanelIdioma ||
         h == Hud::HitPanelIdiomaOpcion || h == Hud::HitPanelActualizar || h == Hud::HitPanelFijar ||
+        h == Hud::HitPanelModoRed ||
         (hud.state().menuIdioma && (h == Hud::HitPanel || h == Hud::HitPanelTitulo)))
       golpes.push_back({(int)h, item, sub, fr, true});
   }
