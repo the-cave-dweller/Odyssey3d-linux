@@ -100,7 +100,13 @@ public:
   bool quemada() const { return quemada_; }
   const std::string &modelPath() const { return ruta_; }   /* la .onnx que esta abierta ahora */
   bool ready() const { return ready_; }
-  int size() const { return sz_; }                    /* el modelo trabaja a sz_ x sz_ */
+  int size() const { return sz_; }                    /* el mapa que sale es de sz_ x sz_ */
+  /* la entrada de la red (rama experimental): de fabrica 518 x 518 (la imagen 16:9 aplastada a un
+     cuadrado); con ODYSSEYVK_RED_ENTRADA=WxH la red ve el cuadro a esa medida (su proporcion, y mas
+     grande si se quiere) y la salida se remuestrea al mapa de sz_. ODYSSEYVK_MAPA cambia sz_, que es
+     cosa aparte. */
+  int entradaAncho() const { return inW_; }
+  int entradaAlto() const { return inH_; }
   const std::string &device() const { return dev_; }  /* "NVIDIA" o "CPU" */
   double lastMs() const { return ms_; }               /* lo que tardo la ultima estimacion */
   double lastMsRed() const { return msRed_; }          /* solo la pasada de la red */
@@ -180,6 +186,8 @@ private:
   bool ready_ = false;
   std::string ruta_;      /* la ruta de la red abierta ahora */
   int sz_ = 518;
+  int inW_ = 518, inH_ = 518;           /* la entrada de la red (ver entradaAncho) */
+  bool topeArrastre_ = false;           /* rama experimental: tope de 1/16 al arrastre del suavizado */
   int gpu_ = 0;
   std::string dev_ = "nada";
   double ms_ = 0.0;

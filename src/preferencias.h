@@ -57,6 +57,11 @@ struct Valores {
   bool enBarraTareas = true;           /* `barra_tareas = no`: el visor 3D no sale en la barra de tareas (v1.02) */
   bool enBandeja = true;               /* `bandeja = no`: sin icono en la bandeja del sistema (v1.03) */
   std::vector<std::pair<std::string, std::string>> recordadas;   /* aplicacion -> modo */
+  /* la rama experimental (pestana Experimental) */
+  std::string expRed = "cuadrado";   /* `exp_red`: cuadrado | 518 | 770 | 1022 */
+  int expMapa = 518;                 /* `exp_mapa`: 518 | 770 | 1022 */
+  bool expTope = false;              /* `exp_tope_arrastre = si` */
+  int expAnticipacion = 0;           /* `exp_anticipacion`: ms, 0 = apagada */
 };
 Valores leer();
 

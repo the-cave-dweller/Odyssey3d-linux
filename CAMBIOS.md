@@ -3,6 +3,50 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Rama `experimental`: la pestaña Experimental (sobre la v1.10)
+
+- Rodolfo, tras leer Any2Odyssey (github.com/jlobue10/Any2Odyssey, 1.0.7, GPL-3: visor en Rust para
+  el mismo G90XF; en Linux pasa por Wine con los programas de Leia): «haz la rama, y en las ramas mete
+  todo a una pestaña llamada experimental, con opciones por categoría también». Se toman IDEAS, no
+  código (su licencia no es la nuestra).
+- Pestaña **Experimental** (la quinta), con tres categorías; cada prueba se guarda en serve.conf, se
+  pasa al visor por entorno y vale desde el siguiente vídeo:
+  - RED DE PROFUNDIDAD · «La red ve el cuadro a su proporción» (`exp_red = cuadrado|518|770` →
+    `ODYSSEYVK_RED_ENTRADA=WxH`): de fábrica la imagen 16:9 se aplasta a 518×518; con 518 o 770 la
+    red la ve a 518×294 o 770×434 (parches de 14) y la salida se remuestrea al mapa. «Tamaño del mapa
+    de profundidad» (`exp_mapa = 518|770|1022` → `ODYSSEYVK_MAPA`): los puntos del mapa que llega a la
+    trama; la entrada de la red es cosa aparte (de fábrica 518², siempre).
+  - SUAVIZADO EN EL TIEMPO · «Tope de arrastre» (`exp_tope_arrastre = si` → `ODYSSEYVK_TOPE_ARRASTRE=1`):
+    la idea de Any2Odyssey 1.0.0; tras mezclar el mapa nuevo con el anterior, ningún punto se queda
+    a más de 1/16 de la escala del nuevo.
+  - SEGUIMIENTO DE LA CABEZA · «Anticipar la cabeza» (`exp_anticipacion = 0..60` ms →
+    `ODYSSEYVK_ANTICIPACION`): la pose de los ojos se adelanta su velocidad (media móvil 0,5 sobre las
+    muestras aceptadas) por esos milisegundos, topado a 3 cm. Any2Odyssey da 25 ms a 120 Hz al
+    tejedor de Leia. 0 = apagado.
+- La red (Depth Anything V2 Small, el mismo archivo que usa Any2Odyssey) tiene los ejes dinámicos:
+  acepta cualquier entrada múltiplo de 14 sin reexportar. MEDIDO con una sonda aparte en CPU: 518²
+  128 ms, 518×294 96, 770×434 238, 1022×574 502, 1274×714 1120.
+- MEDIDO con `odysseyvk mapa --sueltas` en la RTX 4090 (ms por mapa, voy-03 / core-03):
+  - de fábrica (518², mapa 518): 13,6 / 15,4 · 518×294: 12,4 / 11,0 · 770×434: 19,5 / 20,2.
+  - mapa 770 (red 518²): 25,3 / 25,3 · mapa 1022: 41,7 / 39,2 · 770×434 + mapa 1022 + tope: 43,9 / 41,0.
+  - **No abren en CUDA** 770×770 ni 1022×574: `Non-zero status code … Softmax node /blocks.0/attn`
+    (más de ~1 700 parches; 770×434 = 1 705 abre, 1022×574 = 2 993 no). Por eso el panel ofrece
+    hasta 770 y la entrada de la red no sigue al tamaño del mapa.
+  - Lo que cambia el mapa a su proporción (`../pruebas/experimental-red-proporcion-2026-11-26.jpg`):
+    la silueta de la nave sale más ceñida; en el globo cambia mucho (a cuadrado el globo queda
+    oscuro, lejos; a 16:9 sale redondo con su degradado y el aro delante). El plano de apoyo que
+    elige la saliencia cambia con ello: voy-03 0,953 → 0,828 (518×294) → 0,766 (770×434); core-03
+    0,391 → 0,641 → 0,297. Cuál es «mejor» hay que verlo en el panel.
+  - Tope de arrastre, con tres cuadros iguales y luego la nave corrida 150 px (sin corte de escena):
+    contra el mapa del cuadro corrido suelto, diferencia media 13,4 → 8,8 de 255, máxima 112 → 27,
+    puntos a más de 1/8 de la escala 10,8 % → 0 % (a más de 1/16, 26,9 % → 22,5 %: el filtro guiado
+    va después del tope).
+- Sin probar: la anticipación (en el taller no hay cámara) y todo ello en el panel con un vídeo.
+- Ideas de Any2Odyssey que NO entran (todavía): TensorRT en media precisión (1,2 ms por mapa en su
+  5090, pero 2,8 GB de bibliotecas que Arch no empaqueta), retener los cuadros tempranos de una
+  película a 24 (primero medir si nos pasa), su script de KWin (nosotros capturamos la ventana, no la
+  pantalla).
+
 ## Profundidad 75 y Salida 50 de fábrica, recordadas por modo (v1.10)
 
 - Rodolfo: «on conversion default the depth to 75 and salida to 50 (corrigió el 100), on side by

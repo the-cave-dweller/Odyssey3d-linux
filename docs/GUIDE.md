@@ -84,6 +84,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 | `hz` | 120 | panel refresh in 3D |
 | `hdr_en_3d` | `no` | keep HDR in 3D |
 | `profundidad_conv` / `salida_conv` | 75 / 50 | starting Depth (fixed screen plane; `auto` = saliency) and Pop-out for normal video; `_suave` 75/50, `_sbs` 50/0; written when the sliders move |
+| `exp_red` / `exp_mapa` / `exp_tope_arrastre` / `exp_anticipacion` | — | the Experimental tab (branch `experimental` only): network input proportion (`cuadrado`/`518`/`770`), depth map size (`518`/`770`/`1022`), lag cap (`si`), head anticipation in ms |
 | `atajo_<action>` | factory | a shortcut, e.g. `atajo_3d = Ctrl+Alt+3`; set in Settings → Keyboard shortcuts |
 | `cantos` | finos | `viejo` = pre-0.89 edges, to compare |
 | `barra_2d` | `si` | player bar rows: `si` / `entera` (raw) / `no` |

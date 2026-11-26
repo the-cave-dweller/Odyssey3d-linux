@@ -261,6 +261,12 @@ Valores leer() {
   v.actualizarAuto = si(de("actualizar_auto"), false);
   v.enBarraTareas = si(de("barra_tareas"), true);
   v.enBandeja = si(de("bandeja"), true);
+  v.expRed = de("exp_red");
+  if (v.expRed != "518" && v.expRed != "770") v.expRed = "cuadrado";   /* 1022 no abre en CUDA */
+  v.expMapa = std::atoi(de("exp_mapa").c_str());
+  if (v.expMapa != 770 && v.expMapa != 1022) v.expMapa = 518;
+  v.expTope = si(de("exp_tope_arrastre"), false);
+  v.expAnticipacion = std::max(0, std::min(60, std::atoi(de("exp_anticipacion").c_str())));
   if (!v.modelo.empty() && v.modelo[0] == '~') {
     const char *home = std::getenv("HOME");
     v.modelo = std::string(home ? home : "") + v.modelo.substr(1);
@@ -544,7 +550,8 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
 }  // namespace
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  st.pestanas = {idioma::tr("Ajustes"), idioma::tr("Juegos"), idioma::tr("Rendimiento"), idioma::tr("Programa")};
+  st.pestanas = {idioma::tr("Ajustes"), idioma::tr("Juegos"), idioma::tr("Rendimiento"), idioma::tr("Programa"),
+                 idioma::tr("Experimental")};
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
@@ -620,6 +627,52 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     d.valor = true;
     d.peligro = true;
     pon(d, "desinstalar");
+    return;
+  }
+  if (st.pestana == 4) {
+    /* Experimental (rama experimental): las pruebas sacadas de leer Any2Odyssey, por categoria. Cada
+       una se compara contra lo de fabrica y se aplica desde el siguiente video. */
+    Hud::ItemPanel i;
+    i.tipo = Hud::ItemPanel::Info;
+    i.rotulo = idioma::tr("Pruebas de la rama experimental: cada una se compara contra lo de fábrica.");
+    i.nota = idioma::tr("Se aplican desde el siguiente vídeo. Lo que funcione pasará a la versión normal.");
+    pon(i, "");
+    Hud::ItemPanel s;
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
+    pon(s, "");
+    Hud::ItemPanel r;
+    r.tipo = Hud::ItemPanel::Opciones, r.rotulo = idioma::tr("La red ve el cuadro a su proporción");
+    r.opciones = {idioma::tr("Cuadrado"), "16:9 · 518", "16:9 · 770"};
+    r.elegido = v.expRed == "518" ? 1 : (v.expRed == "770" ? 2 : 0);
+    pon(r, "exp_red");
+    Hud::ItemPanel rn;
+    rn.tipo = Hud::ItemPanel::Nota;
+    rn.rotulo = idioma::tr("De fábrica la imagen 16:9 se aplasta a un cuadrado de 518; a su proporción la red la ve sin deformar, y más grande ve mejor lo delgado (más tiempo por mapa).");
+    pon(rn, "");
+    Hud::ItemPanel m;
+    m.tipo = Hud::ItemPanel::Opciones, m.rotulo = idioma::tr("Tamaño del mapa de profundidad");
+    m.opciones = {"518", "770", "1022"};
+    m.elegido = v.expMapa == 770 ? 1 : (v.expMapa == 1022 ? 2 : 0);
+    pon(m, "exp_mapa");
+    Hud::ItemPanel mn;
+    mn.tipo = Hud::ItemPanel::Nota;
+    mn.rotulo = idioma::tr("Puntos a lo ancho del mapa que llega a la trama: más puntos, bordes más finos y más tiempo de limpieza.");
+    pon(mn, "");
+    s.rotulo = idioma::tr("SUAVIZADO EN EL TIEMPO");
+    pon(s, "");
+    Hud::ItemPanel t;
+    t.tipo = Hud::ItemPanel::Interruptor, t.rotulo = idioma::tr("Tope de arrastre");
+    t.nota = idioma::tr("Ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
+    t.valor = v.expTope;
+    pon(t, "exp_tope_arrastre");
+    s.rotulo = idioma::tr("SEGUIMIENTO DE LA CABEZA");
+    pon(s, "");
+    Hud::ItemPanel a;
+    a.tipo = Hud::ItemPanel::Deslizador, a.rotulo = idioma::tr("Anticipar la cabeza");
+    a.nota = idioma::tr("La trama se calcula para donde estarán los ojos dentro de estos milisegundos (0 = apagado; Any2Odyssey usa 25)");
+    a.frac = (float)v.expAnticipacion / 60.0f;
+    a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
+    pon(a, "exp_anticipacion");
     return;
   }
   if (st.pestana == 0) {
@@ -896,6 +949,30 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     }
     g_capturando = d->nombre;
     if (aviso) *aviso = idioma::trf("Pulsa la combinación nueva para «{}» · Esc cancela", {idioma::tr(d->texto)});
+    return true;
+  }
+  if (id == "exp_red") {
+    static const char *kVal[] = {"cuadrado", "518", "770"};
+    if (sub < 0 || sub > 2 || !fija("exp_red", kVal[sub])) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_mapa") {
+    static const char *kVal[] = {"518", "770", "1022"};
+    if (sub < 0 || sub > 2 || !fija("exp_mapa", kVal[sub])) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_tope_arrastre") {
+    if (!fija("exp_tope_arrastre", v.expTope ? "no" : "si")) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_anticipacion") {
+    if (!soltado) return false;
+    const int ms = (int)std::lround(std::max(0.0f, std::min(1.0f, frac)) * 60.0f);
+    if (!fija("exp_anticipacion", std::to_string(ms))) return false;
+    if (aviso) *aviso = idioma::trf("anticipación {} ms · desde el siguiente vídeo", {std::to_string(ms)});
     return true;
   }
   if (id == "idioma") {

@@ -181,6 +181,15 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 Lo demás (calibración del paso de la lente, seguimiento de cabeza, variables de taller) está en
 las guías.
 
+## Rama experimental
+
+La rama `experimental` añade al panel una pestaña **Experimental** con pruebas sacadas de leer
+[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): la red de profundidad viendo el cuadro a su
+proporción 16:9 (`exp_red = cuadrado | 518 | 770`), un mapa de profundidad más grande
+(`exp_mapa = 518 | 770 | 1022`), un tope de arrastre en el suavizado en el tiempo
+(`exp_tope_arrastre = si`) y la anticipación de la cabeza en milisegundos (`exp_anticipacion = 25`).
+Cada una vale desde el siguiente vídeo; lo que funcione pasa a la versión normal.
+
 ## Documentación
 
 - [docs/GUIA.md](docs/GUIA.md) — el manual completo en español, con las medidas detrás de cada decisión.

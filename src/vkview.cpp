@@ -3463,6 +3463,47 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
            dos marcos caen iguales justo en la pose nominal (8.3916 cm) */
         e.y = altoCm * 0.5 - y + opts.trackOffsetY;
         e.z = z + opts.trackOffsetZ;
+        /* Anticipacion de la cabeza (rama experimental). El tejedor de Leia calcula la trama para donde
+           estaran los ojos cuando el cuadro llegue al panel; Any2Odyssey lo probo a ojo y le fue mejor
+           con 25 ms a 120 Hz. Aqui: la velocidad de la pose (media movil sobre las muestras aceptadas)
+           por ODYSSEYVK_ANTICIPACION milisegundos, topada a 3 cm. 0 = apagado (lo de siempre). */
+        {
+          static const double kAnticipacion = [] {
+            const char *a = entornoOdyssey("ODYSSEYVK_ANTICIPACION");
+            std::string t = a ? a : "";
+            for (char &c : t)
+              if (c == ',') c = '.';
+            const double v = t.empty() ? 0.0 : std::atof(t.c_str());
+            return (v > 0.0 && v <= 60.0) ? v : 0.0;
+          }();
+          static EyePose antes{};
+          static double tAntes = -1.0, vx = 0.0, vy = 0.0, vz = 0.0;
+          static long avisos = 0;
+          if (kAnticipacion > 0.0) {
+            if (tAntes >= 0.0) {
+              const double dt = now - tAntes;
+              if (dt > 0.001 && dt < 0.3) {
+                const double a = 0.5;   /* media movil corta: el temblor del rastreo no se anticipa */
+                vx += ((e.x - antes.x) / dt - vx) * a;
+                vy += ((e.y - antes.y) / dt - vy) * a;
+                vz += ((e.z - antes.z) / dt - vz) * a;
+              } else if (dt >= 0.3) {
+                vx = vy = vz = 0.0;   /* un hueco largo sin cara: la velocidad vieja no vale */
+              }
+            }
+            antes = e;
+            tAntes = now;
+            const double sAnt = kAnticipacion / 1000.0;
+            auto tope = [](double d) { return d < -3.0 ? -3.0 : (d > 3.0 ? 3.0 : d); };
+            e.x += tope(vx * sAnt);
+            e.y += tope(vy * sAnt);
+            e.z += tope(vz * sAnt);
+            if (avisos++ == 0) {
+              std::printf("[rastreo] anticipacion de %.0f ms (rama experimental)\n", kAnticipacion);
+              std::fflush(stdout);
+            }
+          }
+        }
         ui.ojoBase = e;
       }
       /* Paralaje de movimiento (v0.67): al mover la cabeza, lo cercano se desliza respecto a lo lejano.

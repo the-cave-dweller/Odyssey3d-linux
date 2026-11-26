@@ -177,6 +177,15 @@ in 3D. The **Program** tab also has "Update automatically" (off by default) and 
 Numbers use a decimal comma in this file. Everything else (lens pitch calibration, head tracking,
 workshop variables) is in the guides.
 
+## Experimental branch
+
+The `experimental` branch adds an **Experimental** tab to the panel with trials taken from reading
+[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): the depth network seeing the frame at its
+16:9 proportion (`exp_red = cuadrado | 518 | 770`), a bigger depth map (`exp_mapa = 518 | 770 |
+1022`), a lag cap on the smoothing over time (`exp_tope_arrastre = si`) and head anticipation in
+milliseconds (`exp_anticipacion = 25`). Each applies from the next video; what works moves to the
+normal version.
+
 ## Documentation
 
 - [docs/GUIDE.md](docs/GUIDE.md) — the short guide in English: every command, every key, troubleshooting.

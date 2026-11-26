@@ -3111,7 +3111,7 @@ static int cmdAjustes(int argc, char **argv) {
         }
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
-        st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
+        st.pestana = (g.sub >= 0 && g.sub <= 4) ? g.sub : 0;
         st.corrida = 0.0f;
         st.pie.clear();
         rellenar();
@@ -3282,7 +3282,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;
-    hud.state().pestana = std::max(0, std::min(3, std::atoi(pn)));
+    hud.state().pestana = std::max(0, std::min(4, std::atoi(pn)));
     std::vector<std::string> ids;
     /* ODYSSEYVK_HUD_CAPTURA=3d (v1.09): ese atajo esperando su combinacion nueva */
     std::string pieCaptura;
@@ -3627,6 +3627,11 @@ struct ServeCfg {
   bool bandeja = true;       /* el icono en la bandeja del sistema (v1.03) */
   double actualizacionesCada = 6.0;   /* horas entre miradas a GitHub (v0.99: `actualizaciones_cada`, 0,25..168) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
+  /* la rama experimental (pestana Experimental del panel): cada prueba se pasa al visor por entorno */
+  std::string expRed;             /* la entrada de la red: cuadrado (de fabrica) | 518 | 770 | 1022 (16:9, lado largo) */
+  std::string expMapa;            /* puntos a lo ancho del mapa: 518 (de fabrica) | 770 | 1022 */
+  std::string expTope;            /* si = tope de arrastre en el suavizado en el tiempo */
+  double expAnticipacion = -1.0;  /* ms de anticipacion de la cabeza; < 0 = no puesto (0) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
@@ -3775,6 +3780,14 @@ static void loadServeCfg(ServeCfg &cfg) {
       cfg.actualizacionesCada = (d >= 0.25 && d <= 168.0) ? d : 6.0;
     }
     else if (k == "atajos_globales") cfg.atajosGlobales = v;
+    else if (k == "exp_red") cfg.expRed = strLower(v);
+    else if (k == "exp_mapa") cfg.expMapa = v;
+    else if (k == "exp_tope_arrastre") cfg.expTope = strLower(v);
+    else if (k == "exp_anticipacion") {
+      std::string t = v;
+      for (char &c : t) if (c == ',') c = '.';
+      cfg.expAnticipacion = std::max(0.0, std::min(60.0, std::atof(t.c_str())));
+    }
     else if (k == "escala_3d") cfg.escala3d = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
     else if (k == "hz") {
@@ -4105,6 +4118,29 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_ESCALA_3D", (pila->escala3d == "1" || pila->escala3d == "1,0" || pila->escala3d == "1.0") ? "1" : "escritorio", 1);
     if (!pila->atajosGlobales.empty())
       ::setenv("ODYSSEYVK_ATAJOS", (pila->atajosGlobales == "no" || pila->atajosGlobales == "0") ? "0" : "1", 1);
+    /* la rama experimental: lo que no esta puesto se QUITA del entorno, que el servicio es el mismo
+       proceso de una sesion a otra y una prueba apagada en el panel tiene que dejar de llegar */
+    {
+      const int L = std::atoi(pila->expRed.c_str());
+      if (L >= 294) {
+        const int w = (L / 14) * 14, h = (int)std::lround((double)L * 9.0 / 16.0 / 14.0) * 14;
+        std::snprintf(valor, sizeof valor, "%dx%d", w, h);
+        ::setenv("ODYSSEYVK_RED_ENTRADA", valor, 1);
+      } else {
+        ::unsetenv("ODYSSEYVK_RED_ENTRADA");
+      }
+      const int M = std::atoi(pila->expMapa.c_str());
+      if (M >= 294 && M != 518) ::setenv("ODYSSEYVK_MAPA", std::to_string((M / 14) * 14).c_str(), 1);
+      else ::unsetenv("ODYSSEYVK_MAPA");
+      if (pila->expTope == "si" || pila->expTope == "1") ::setenv("ODYSSEYVK_TOPE_ARRASTRE", "1", 1);
+      else ::unsetenv("ODYSSEYVK_TOPE_ARRASTRE");
+      if (pila->expAnticipacion > 0.0) {
+        std::snprintf(valor, sizeof valor, "%.1f", pila->expAnticipacion);
+        ::setenv("ODYSSEYVK_ANTICIPACION", valor, 1);
+      } else {
+        ::unsetenv("ODYSSEYVK_ANTICIPACION");
+      }
+    }
     if (pila->pivote >= 0.0) {
       std::snprintf(valor, sizeof valor, "%.4f", pila->pivote);
       ::setenv("ODYSSEYVK_PIVOTE", valor, 1);
@@ -5834,6 +5870,8 @@ static int cmdServe(int argc, char **argv) {
           cfg.rastreo = nuevo.rastreo;
           cfg.hdrEn3d = nuevo.hdrEn3d;
           cfg.atajosGlobales = nuevo.atajosGlobales;
+          cfg.expRed = nuevo.expRed, cfg.expMapa = nuevo.expMapa, cfg.expTope = nuevo.expTope;
+          cfg.expAnticipacion = nuevo.expAnticipacion;
           cfg.crosstalkBase = nuevo.crosstalkBase;
           cfg.relieve = nuevo.relieve;
           cfg.divididoSuave = nuevo.divididoSuave;

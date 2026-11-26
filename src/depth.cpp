@@ -69,11 +69,12 @@ long requisitoMiB(const std::string &ruta) {
   return (esRedDeSamsung(ruta) ? kSamsungMiB : kNativaMiB) + colchon;
 }
 
-/* Muestreo bilineal sobre la imagen de origen (RGBA, primera fila arriba). */
-void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) {
-  const float sx = (float)w / (float)sz, sy = (float)h / (float)sz;
-  const size_t plane = (size_t)sz * (size_t)sz;
-  for (int y = 0; y < sz; y++) {
+/* Muestreo bilineal sobre la imagen de origen (RGBA, primera fila arriba), a ow x oh planar. */
+void sampleBilinearWH(const uint8_t *src, int w, int h, float *dstPlanar, int ow, int oh) {
+  const int sz = ow;
+  const float sx = (float)w / (float)ow, sy = (float)h / (float)oh;
+  const size_t plane = (size_t)ow * (size_t)oh;
+  for (int y = 0; y < oh; y++) {
     float fy = ((float)y + 0.5f) * sy - 0.5f;
     if (fy < 0.0f) fy = 0.0f;
     if (fy > (float)(h - 1)) fy = (float)(h - 1);
@@ -96,6 +97,28 @@ void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) 
         const float v = (a * (1.0f - wy) + b * wy) / 255.0f;
         dstPlanar[(size_t)c * plane + o] = v;
       }
+    }
+  }
+}
+void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) {
+  sampleBilinearWH(src, w, h, dstPlanar, sz, sz);
+}
+
+/* un plano de floats de ow x oh a dw x dh, bilineal (la salida de la red al tamano del mapa) */
+void remuestrea(const float *src, int ow, int oh, float *dst, int dw, int dh) {
+  for (int y = 0; y < dh; y++) {
+    float fy = ((float)y + 0.5f) * (float)oh / (float)dh - 0.5f;
+    fy = fy < 0.0f ? 0.0f : (fy > (float)(oh - 1) ? (float)(oh - 1) : fy);
+    const int y0 = (int)fy, y1 = y0 + 1 < oh ? y0 + 1 : y0;
+    const float wy = fy - (float)y0;
+    for (int x = 0; x < dw; x++) {
+      float fx = ((float)x + 0.5f) * (float)ow / (float)dw - 0.5f;
+      fx = fx < 0.0f ? 0.0f : (fx > (float)(ow - 1) ? (float)(ow - 1) : fx);
+      const int x0 = (int)fx, x1 = x0 + 1 < ow ? x0 + 1 : x0;
+      const float wx = fx - (float)x0;
+      const float a = src[(size_t)y0 * ow + x0] * (1.0f - wx) + src[(size_t)y0 * ow + x1] * wx;
+      const float b = src[(size_t)y1 * ow + x0] * (1.0f - wx) + src[(size_t)y1 * ow + x1] * wx;
+      dst[(size_t)y * dw + x] = a * (1.0f - wy) + b * wy;
     }
   }
 }
@@ -393,6 +416,24 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     limpieza_ = lim[0] != '0';
   if (const char *dl = entornoOdyssey("ODYSSEYVK_DILATAR"))    /* taller: radio del dilatado (0..6) */
     setDilatar(std::atoi(dl));
+  /* la rama experimental: el tamano del mapa, la entrada de la red y el tope de arrastre */
+  if (const char *m = entornoOdyssey("ODYSSEYVK_MAPA")) {
+    const int v = std::atoi(m);
+    if (v >= 224 && v <= 1400) sz_ = (v / 14) * 14;
+  }
+  /* la entrada de la red es cosa aparte del mapa: de fabrica el cuadrado de 518 con que se entreno.
+     MEDIDO (26-nov, RTX 4090, onnxruntime-cuda): el complemento CUDA falla en el Softmax del primer
+     bloque con entradas de mas de ~1700 parches (770x770 = 3025 y 1022x574 = 2993 fallan; 770x434 =
+     1705 abre); en CPU las mismas entradas van bien. */
+  inW_ = inH_ = 518;
+  if (const char *e = entornoOdyssey("ODYSSEYVK_RED_ENTRADA")) {
+    int w = 0, h = 0;
+    if (std::sscanf(e, "%dx%d", &w, &h) == 2 && w >= 224 && h >= 224 && w <= 1400 && h <= 1400) {
+      inW_ = (w / 14) * 14;   /* la red trabaja por parches de 14 */
+      inH_ = (h / 14) * 14;
+    }
+  }
+  if (const char *t = entornoOdyssey("ODYSSEYVK_TOPE_ARRASTRE")) topeArrastre_ = t[0] == '1' || t[0] == 's';
   struct stat stt {};
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
@@ -502,12 +543,12 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
       return false;
     }
   }
-  auto abrir = [](OrtImpl *q, const std::string &ruta, int sz) {
+  auto abrir = [](OrtImpl *q, const std::string &ruta, int iw, int ih) {
     q->ses = new Ort::Session(q->env, ruta.c_str(), q->so);
     q->inN = q->ses->GetInputNameAllocated(0, q->alloc).get();
     q->outN = q->ses->GetOutputNameAllocated(0, q->alloc).get();
-    q->in.assign((size_t)3 * (size_t)sz * (size_t)sz, 0.0f);
-    std::vector<int64_t> shape{1, 3, sz, sz};
+    q->in.assign((size_t)3 * (size_t)iw * (size_t)ih, 0.0f);
+    std::vector<int64_t> shape{1, 3, ih, iw};
     Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     Ort::Value tin = Ort::Value::CreateTensor<float>(mem, q->in.data(), q->in.size(), shape.data(), shape.size());
     const char *inN = q->inN.c_str(), *outN = q->outN.c_str();
@@ -515,7 +556,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   };
   std::string fallo;
   try {
-    abrir(im, path, sz_);
+    abrir(im, path, inW_, inH_);
   } catch (const std::exception &e) {
     fallo = resumenOrt(e.what());
     const std::string donde = dev_;
@@ -539,7 +580,8 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   impl_ = im;
   ready_ = true;
   ruta_ = path;
-  std::printf("[conversor] modelo %s (%d x %d) con %s\n", path.c_str(), sz_, sz_, dev_.c_str());
+  std::printf("[conversor] modelo %s (entrada %d x %d · mapa %d x %d%s) con %s\n", path.c_str(), inW_, inH_, sz_, sz_,
+              topeArrastre_ ? " · tope de arrastre" : "", dev_.c_str());
   return true;
 #else
   (void)path;
@@ -684,26 +726,37 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
 #endif
   const auto t0 = std::chrono::steady_clock::now();
   const size_t plane = (size_t)sz_ * (size_t)sz_;
-  sampleBilinear(rgba, w, h, im->in.data(), sz_);
+  const size_t planeIn = (size_t)inW_ * (size_t)inH_;
+  sampleBilinearWH(rgba, w, h, im->in.data(), inW_, inH_);
   /* guia para limpiar el mapa despues: la luminancia de la foto, tomada antes de normalizarla
-     para la red (es la que dice donde estan los cantos de los objetos) */
+     para la red (es la que dice donde estan los cantos de los objetos). Va al tamano del MAPA: si
+     la red ve el cuadro a otra medida (rama experimental), se muestrea aparte. */
   guia_.resize(plane);
   opRG_.resize(plane);
   opBY_.resize(plane);
-  for (size_t i = 0; i < plane; i++) {
-    const float r = im->in[i], g = im->in[plane + i], b = im->in[2 * plane + i];
-    guia_[i] = 0.299f * r + 0.587f * g + 0.114f * b;
-    opRG_[i] = r - g;               /* canales oponentes: la parte de color del Lab de la saliencia */
-    opBY_[i] = b - 0.5f * (r + g);
+  {
+    std::vector<float> cuad;
+    const float *src = im->in.data();
+    if (inW_ != sz_ || inH_ != sz_) {
+      cuad.resize(3 * plane);
+      sampleBilinearWH(rgba, w, h, cuad.data(), sz_, sz_);
+      src = cuad.data();
+    }
+    for (size_t i = 0; i < plane; i++) {
+      const float r = src[i], g = src[plane + i], b = src[2 * plane + i];
+      guia_[i] = 0.299f * r + 0.587f * g + 0.114f * b;
+      opRG_[i] = r - g;               /* canales oponentes: la parte de color del Lab de la saliencia */
+      opBY_[i] = b - 0.5f * (r + g);
+    }
   }
   /* normalizacion de la foto: la misma con la que se entreno el modelo */
   static const float mean[3] = {0.485f, 0.456f, 0.406f}, sd[3] = {0.229f, 0.224f, 0.225f};
   for (int c = 0; c < 3; c++) {
     const float m = mean[c], s = sd[c];
-    float *p = im->in.data() + (size_t)c * plane;
-    for (size_t i = 0; i < plane; i++) p[i] = (p[i] - m) / s;
+    float *p = im->in.data() + (size_t)c * planeIn;
+    for (size_t i = 0; i < planeIn; i++) p[i] = (p[i] - m) / s;
   }
-  std::vector<int64_t> shape{1, 3, sz_, sz_};
+  std::vector<int64_t> shape{1, 3, inH_, inW_};
   Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   Ort::Value tin =
       Ort::Value::CreateTensor<float>(mem, im->in.data(), im->in.size(), shape.data(), shape.size());
@@ -719,8 +772,30 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   const auto tRed1 = std::chrono::steady_clock::now();
   const float *d = outs[0].GetTensorData<float>();
   auto info = outs[0].GetTensorTypeAndShapeInfo();
-  const size_t n = info.GetElementCount();
+  size_t n = info.GetElementCount();
   if (!n) return false;
+  /* la red contesta a su tamano: si no es el del mapa (rama experimental), se remuestrea aqui y
+     todo lo de abajo (corte, escala, filtros, planos) trabaja con el mapa cuadrado de sz_ */
+  std::vector<float> dRe;
+  {
+    auto shp = info.GetShape();
+    int ow = 0, oh = 0;
+    if (shp.size() >= 2) {
+      ow = (int)shp[shp.size() - 1];
+      oh = (int)shp[shp.size() - 2];
+    }
+    if (ow <= 0 || oh <= 0 || (size_t)ow * (size_t)oh != n) {
+      if (n != plane) {
+        if (err) *err = "la red contesto con " + std::to_string(n) + " puntos y el mapa es de " + std::to_string(plane);
+        return false;
+      }
+    } else if (ow != sz_ || oh != sz_) {
+      dRe.resize(plane);
+      remuestrea(d, ow, oh, dRe.data(), sz_, sz_);
+      d = dRe.data();
+      n = plane;
+    }
+  }
 
   /* el modelo dice cuanto de cerca esta cada punto, en unidades suyas: lo llevamos a 0..1 con el
      minimo y el maximo, mirando solo una muestra de puntos para que un pixel raro no mande. */
@@ -793,31 +868,12 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   }
   const float inv = 1.0f / (hiS_ - loS_);
 
-  auto shp = info.GetShape();
-  int ow = sz_, oh = sz_;
-  if (shp.size() >= 2) {
-    ow = (int)shp[shp.size() - 1];
-    oh = (int)shp[shp.size() - 2];
-  }
-  if ((size_t)ow * (size_t)oh != n) ow = oh = 0;   /* respondio a otra resolucion: remuestreamos */
-
   /* nueve huecos de trabajo: cinco medias del filtro guiado, dos productos (guia x guia y
      guia x prof) y una fila de paso para cada caja. Si se anade otra pasada, subir aqui. */
   std::vector<float> mapa(plane), limpio(plane), salida(plane), trabajo((size_t)9 * plane);
-  if (ow == 0) {
-    for (int y = 0; y < sz_; y++) {
-      const int sy = (int)((float)y * (float)oh / (float)sz_);
-      for (int x = 0; x < sz_; x++) {
-        const int sx = (int)((float)x * (float)ow / (float)sz_);
-        float v = (d[(size_t)(sy < oh ? sy : oh - 1) * (size_t)ow + (sx < ow ? sx : ow - 1)] - loS_) * inv;
-        mapa[(size_t)y * (size_t)sz_ + (size_t)x] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
-      }
-    }
-  } else {
-    for (size_t i = 0; i < plane; i++) {
-      float v = (d[i] - loS_) * inv;
-      mapa[i] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
-    }
+  for (size_t i = 0; i < plane; i++) {
+    float v = (d[i] - loS_) * inv;
+    mapa[i] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
   }
 
   /* en el tiempo: el mapa nuevo entra con el peso que pide el usuario, salvo en un cambio de plano,
@@ -833,6 +889,17 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   if (suavizar) {
     for (size_t i = 0; i < plane; i++)
       limpio[i] = mapa[i] * q + ((float)prev_[i] / 255.0f) * smooth_;
+    /* tope de arrastre (rama experimental, la idea de Any2Odyssey 1.0.0): ningun punto se queda mas
+       de 1/16 de la escala por detras del mapa nuevo. Un cambio chico se sigue calmando con el
+       peso de arriba; uno grande (algo que se mueve) se toma de una, salvo ese dieciseisavo, y asi
+       lo que se mueve no deja detras una estela con la profundidad vieja. */
+    if (topeArrastre_) {
+      const float tope = 1.0f / 16.0f;
+      for (size_t i = 0; i < plane; i++) {
+        const float lo2 = mapa[i] - tope, hi2 = mapa[i] + tope;
+        limpio[i] = limpio[i] < lo2 ? lo2 : (limpio[i] > hi2 ? hi2 : limpio[i]);
+      }
+    }
   } else {
     limpio = mapa;
   }
