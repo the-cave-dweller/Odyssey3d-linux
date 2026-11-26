@@ -367,6 +367,11 @@ bool vigilarDescarga() {
 /* ---- la actualizacion (v0.95) ---------------------------------------------------------------- */
 const char *const kRepoGitHub = "https://github.com/the-cave-dweller/Odyssey3d-linux";
 const char *const kUrlVersionRemota = "https://raw.githubusercontent.com/the-cave-dweller/Odyssey3d-linux/main/VERSION";
+/* La API de GitHub da el archivo al momento. raw.githubusercontent pasa por una cache de hasta 5 min
+   (MEDIDO el 26-nov 00:31: con la 1.00 ya subida, raw seguia dando 0.98, «x-cache: HIT») y una mirada
+   que caiga en esa ventana deja la version vieja apuntada hasta la siguiente (v1.01). Se pide la API
+   y, si falla (sin red o pasado su limite de 60 por hora), raw. */
+const char *const kUrlVersionApi = "https://api.github.com/repos/the-cave-dweller/Odyssey3d-linux/contents/VERSION?ref=main";
 
 bool versionMasNueva(const std::string &a, const std::string &b) {
   size_t i = 0, j = 0;
@@ -405,7 +410,13 @@ bool comprobarActualizacion(std::string *err) {
     const int nulo = ::open("/dev/null", O_RDWR);
     if (nulo >= 0) { ::dup2(nulo, 0); ::dup2(nulo, 1); ::dup2(nulo, 2); }
     const char *url = std::getenv("ODYSSEYVK_URL_VERSION");   /* taller: otra direccion (vale file://) */
-    ::execlp("curl", "curl", "-fsSL", "--max-time", "25", "-o", g_comprobacion.parte.c_str(), url ? url : kUrlVersionRemota, (char *)nullptr);
+    if (url)
+      ::execlp("curl", "curl", "-fsSL", "--max-time", "25", "-o", g_comprobacion.parte.c_str(), url, (char *)nullptr);
+    else
+      ::execlp("sh", "sh", "-c",
+               "curl -fsSL --max-time 20 -H 'Accept: application/vnd.github.raw' -o \"$0\" \"$1\" || "
+               "curl -fsSL --max-time 20 -o \"$0\" \"$2\"",
+               g_comprobacion.parte.c_str(), kUrlVersionApi, kUrlVersionRemota, (char *)nullptr);
     ::_exit(127);
   }
   g_comprobacion.pid = pid;

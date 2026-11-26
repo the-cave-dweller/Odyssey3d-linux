@@ -3,6 +3,16 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La versión nueva se ve al momento (v1.01)
+
+- Rodolfo: «la 0.98 no detecta la 1.0 en GitHub». MEDIDO a las 00:31: la rama main ya era la 1.00
+  (`git ls-remote`), pero `raw.githubusercontent.com` seguía sirviendo 0.98 desde su caché
+  (`cache-control: max-age=300`, `x-cache: HIT`). Y además el servicio había mirado a las 00:17 y no
+  volvía a mirar hasta seis horas después.
+- Ahora se pide primero a la API de GitHub (`api.github.com/repos/…/contents/VERSION`, sin caché;
+  daba 1.00 en el mismo momento) y, si falla, a raw. Y estando al día, la siguiente mirada es como
+  mucho a la hora, no a las seis.
+
 ## Juegos: el aviso de por qué el 3D queda detrás y el detector de caídas (v1.00)
 
 - Rodolfo, con Cyberpunk (también bajo gamescope): «it can't see the content of the game and it

@@ -5574,6 +5574,9 @@ static int cmdServe(int argc, char **argv) {
     if (proximaComprobacion == 0.0) proximaComprobacion = now + 30.0;
     if (cfg.actualizaciones != "no" && now >= proximaComprobacion && !prefs::comprobacionEnMarcha()) {
       proximaComprobacion = now + cfg.actualizacionesCada * 3600.0;
+      /* con la version de GitHub igual a la instalada, la siguiente mirada antes (una hora como
+         mucho): asi una version recien subida no espera seis horas a verse (v1.01) */
+      if (prefs::estadoActualizacion().alDia) proximaComprobacion = now + std::min(cfg.actualizacionesCada, 1.0) * 3600.0;
       prefs::comprobarActualizacion(nullptr);
     }
     if (prefs::comprobacionEnMarcha() && prefs::vigilarComprobacion()) {
