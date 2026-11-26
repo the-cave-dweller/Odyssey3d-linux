@@ -1212,6 +1212,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
 
+  /* el app_id, dicho por nosotros (v1.11): sin esto KWin lo saca de /proc/<pid>/exe, y con
+     `setcap` en el binario el proceso no se deja leer (no volcable). MEDIDO 26-nov: el servicio no
+     encontraba la ventana del visor, no bajaba el juego y el juego quedaba encima del 3D. */
+  glfwWindowHintString(GLFW_WAYLAND_APP_ID, "odysseyvk");
   GLFWwindow *win = glfwCreateWindow(W, H, NOMBRE_APP, (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
   if (!win) {
     const char *desc = nullptr;
@@ -1388,7 +1392,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     glfwTerminate();
     return 1;
   }
-  std::printf("[vulkan] %s · %s\n", dev.deviceName().c_str(), dev.hasDmaBufImport() ? "dma-buf disponible" : "sin dma-buf");
+  std::printf("[vulkan] %s · %s · cola de prioridad %s%s%s\n", dev.deviceName().c_str(),
+              dev.hasDmaBufImport() ? "dma-buf disponible" : "sin dma-buf", dev.prioridad().c_str(),
+              dev.prioridadNota().empty() ? "" : " · ", dev.prioridadNota().c_str());
 
   VkWeave wv;
   if (!wv.init(dev, surface, fbW, fbH, &err)) {
@@ -1462,6 +1468,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      cuadros que pierden un refresco */
   double medLeeMs = 0.0, medSubeMs = 0.0, medUltimo = 0.0;
   long long medLeeN = 0, medSubeN = 0, medLentos = 0;
+  /* Los tirones (v1.11), cada 5 s en la linea [fps]: si el que se atasca es el
+     juego (huecos entre sus cuadros) o el visor (vueltas cuyo trabajo no cabe en un refresco,
+     presentaciones que esperan a la tarjeta, leer la copia chica o subir el mapa). */
+  double medLeeMax = 0.0, medSubeMax = 0.0;
+  double tirFuenteUlt = 0.0, tirFuenteMax = 0.0, tirTrabajoMax = 0.0, tirPresentaMax = 0.0, tirPresentaUlt = 0.0,
+         tirPresentaHueco = 0.0, tirTrabajo0 = 0.0, tirRedMs = 0.0;
+  long long tirFuenteN = 0, tirFuenteHuecos = 0, tirTrabajoLargos = 0, tirPresentaLargas = 0, tirRedN = 0;
   int cadaConv = opts.convEach;
   bool apoyoAuto = true;      /* el plano de apoyo lo sigue la red; Ctrl+Shift+3/4 lo vuelve manual */
   int profundidadVista = ui.hud.state().depth;
@@ -2744,6 +2757,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     if (!opts.alwaysRender && kind == SourceKind::Capture && !algoNuevo &&
         now - ultimoPresente < 1.0 / 30.0)
       continue;
+    tirTrabajo0 = glfwGetTime();
+    if (newSource) {   /* los huecos entre cuadros del juego (o del video): si son grandes, el que tira es el */
+      if (tirFuenteUlt > 0.0) {
+        const double g = tirTrabajo0 - tirFuenteUlt;
+        tirFuenteMax = std::max(tirFuenteMax, g);
+        if (g > 0.050) tirFuenteHuecos++;
+      }
+      tirFuenteUlt = tirTrabajo0;
+      tirFuenteN++;
+    }
 
     /* la interfaz se rehace en CPU cada cuadro (son pocos triángulos) y se sube su geometría */
     WeaveTuning &t = wv.tuning();
@@ -3091,6 +3114,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         const double tLee0 = glfwGetTime();
         const bool leido = wv.readSmall(chico, &cerr);
         medLeeMs += (glfwGetTime() - tLee0) * 1000.0;
+        medLeeMax = std::max(medLeeMax, (glfwGetTime() - tLee0) * 1000.0);
         medLeeN++;
         if (leido) {
           /* La dureza de los dos planos se puede subir o bajar con `g`/`v` en mitad de la pelicula:
@@ -3122,7 +3146,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                                       ? wv.setDepthMapRG(mapaRG.data(), red.size(), red.size(), &cerr)
                                       : wv.setDepthMap(mapa.data(), red.size(), red.size(), &cerr);
         medSubeMs += (glfwGetTime() - tSube0) * 1000.0;
+        medSubeMax = std::max(medSubeMax, (glfwGetTime() - tSube0) * 1000.0);
         medSubeN++;
+        tirRedMs += msHecho;
+        tirRedN++;
         if (subido) {
           /* con --dump guardamos tambien el mapa del primer cuadro: sirve para ver si la red
              esta entendiendo bien la escena (claro = cerca, oscuro = lejos) */
@@ -3550,7 +3577,22 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 
     ultimoPresente = now;
     ui.inputChanged = false;
-    if (!wv.frame(&err)) {
+    const double tirPresenta0 = glfwGetTime();
+    {
+      const double periodo = 1.0 / (hz > 0 ? (double)hz : 120.0);
+      const double trabajo = tirPresenta0 - tirTrabajo0;
+      tirTrabajoMax = std::max(tirTrabajoMax, trabajo);
+      if (trabajo > periodo) tirTrabajoLargos++;
+    }
+    const bool frameBien = wv.frame(&err);
+    {   /* cuanto espero la presentacion a la tarjeta y al refresco, y el hueco entre presentaciones */
+      const double t1 = glfwGetTime(), periodo = 1.0 / (hz > 0 ? (double)hz : 120.0);
+      tirPresentaMax = std::max(tirPresentaMax, t1 - tirPresenta0);
+      if (t1 - tirPresenta0 > 2.0 * periodo) tirPresentaLargas++;
+      if (tirPresentaUlt > 0.0) tirPresentaHueco = std::max(tirPresentaHueco, t1 - tirPresentaUlt);
+      tirPresentaUlt = t1;
+    }
+    if (!frameBien) {
       if (wv.lost()) {
         glfwGetFramebufferSize(win, &fbW, &fbH);
         if (!wv.resize(fbW, fbH)) {
@@ -3655,7 +3697,34 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     if (now - clock > 5.0) {
       g_fpsVisto = frames / (now - clock);
-      std::printf("[fps] %.1f\n", g_fpsVisto);
+      /* la linea de siempre y, detras, lo de los tirones (ver tirFuente*): fuente = cuadros nuevos
+         del juego o del video por segundo y su hueco mas largo; vuelta = el trabajo del visor antes
+         de presentar (si pasa de un refresco, el visor pierde su turno); presentar = lo que espera
+         a la tarjeta y al refresco; leer/subir = la copia chica para la red y el mapa de vuelta */
+      {
+        const double seg = now - clock;
+        const double periodoMs = 1000.0 / (hz > 0 ? (double)hz : 120.0);
+        std::printf("[fps] %.1f · fuente %.1f/s hueco max %.0f ms (%lld de mas de 50) · vuelta max %.1f ms (%lld de "
+                    "mas de %.1f) · presentar max %.1f ms (%lld de mas de %.1f), hueco max %.0f ms · leer %.1f/%.1f ms · "
+                    "subir %.1f/%.1f ms · red %.0f ms\n",
+                    g_fpsVisto, seg > 0.0 ? (double)tirFuenteN / seg : 0.0, tirFuenteMax * 1000.0, tirFuenteHuecos,
+                    tirTrabajoMax * 1000.0, tirTrabajoLargos, periodoMs, tirPresentaMax * 1000.0, tirPresentaLargas,
+                    2.0 * periodoMs, tirPresentaHueco * 1000.0, medLeeN ? medLeeMs / (double)medLeeN : 0.0, medLeeMax,
+                    medSubeN ? medSubeMs / (double)medSubeN : 0.0, medSubeMax, tirRedN ? tirRedMs / (double)tirRedN : 0.0);
+        /* y dentro de presentar: valla = esperar a que la tarjeta acabe el cuadro anterior de ese hueco,
+           adquirir = esperar una imagen libre (el refresco), entregar; tarjeta = lo que tarda nuestro
+           cuadro en la tarjeta, de principio a fin (con el juego compartiendola, incluye esperar turno) */
+        const VkWeave::TiemposCuadro tc = wv.tomaTiempos();
+        std::printf("[tirones] valla max %.1f · adquirir max %.1f · entregar max %.1f ms · tarjeta %.2f media / %.1f max "
+                    "ms (%ld cuadros) · cola %s\n",
+                    tc.vallaMax, tc.adquirirMax, tc.presentarMax, tc.gpuMedia, tc.gpuMax, tc.gpuN,
+                    dev.prioridad().c_str());
+        tirFuenteMax = tirTrabajoMax = tirPresentaMax = tirPresentaHueco = 0.0;
+        tirFuenteN = tirFuenteHuecos = tirTrabajoLargos = tirPresentaLargas = 0;
+        medLeeMax = medSubeMax = 0.0;
+        tirRedMs = 0.0;
+        tirRedN = 0;
+      }
       /* Cada 20 s, lo que ha hecho el pase de afinado de los cantos finos (v0.89): asi el registro de
          una sesion dice si estuvo puesto y cuantas veces tuvo que repetirse. */
       {

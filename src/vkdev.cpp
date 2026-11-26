@@ -1,5 +1,10 @@
 /* vkdev.cpp — implementación de VkDev (ver vkdev.h). */
 #include "vkdev.h"
+
+#include <linux/capability.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include "frame.h"
 
 #include <fcntl.h>
@@ -234,13 +239,58 @@ bool VkDev::createDevice(const std::vector<const char *> &extraDevExts, VkSurfac
   f13.dynamicRendering = VK_TRUE;
   f13.synchronization2 = VK_TRUE;
 
+  /* Prioridad de la cola (rama experimental, tirones en Cyberpunk 26-nov): con el juego llenando la
+     tarjeta, nuestros cuadros esperaban en la fila detras de los suyos 15-23 ms al presentar. Con
+     prioridad alta la tarjeta pasa el cuadro del visor por delante, como hacen los compositores de
+     realidad virtual; el juego pierde un poco. Si el controlador no la da (VK_ERROR_NOT_PERMITTED),
+     se crea el dispositivo con la prioridad de siempre. */
+  VkDeviceQueueGlobalPriorityCreateInfoKHR gp{VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR};
+  std::string pedida;
+  if (const char *e = std::getenv("ODYSSEYVK_PRIORIDAD")) pedida = e;
+  const bool quiereAlta = pedida == "alta" || pedida == "high" || pedida == "1";
+  const bool quiereTR = pedida == "tiempo_real" || pedida == "realtime" || pedida == "2";
+  const char *extPrio = has("VK_KHR_global_priority") ? "VK_KHR_global_priority"
+                        : (has("VK_EXT_global_priority") ? "VK_EXT_global_priority" : nullptr);
   VkDeviceCreateInfo di{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
   di.pNext = &f13;
   di.queueCreateInfoCount = 1;
   di.pQueueCreateInfos = &qci;
-  di.enabledExtensionCount = static_cast<uint32_t>(names.size());
-  di.ppEnabledExtensionNames = names.data();
-  VKTRY(vkCreateDevice(phys_, &di, nullptr, &device_));
+  VkResult rDev = VK_ERROR_INITIALIZATION_FAILED;
+  if ((quiereAlta || quiereTR) && extPrio) {
+    std::vector<const char *> conPrio = names;
+    conPrio.push_back(extPrio);
+    for (int intento = 0; intento < 2; intento++) {
+      const bool tr = quiereTR && intento == 0;
+      if (intento == 1 && !quiereTR) break;
+      gp.globalPriority = tr ? VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR : VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
+      qci.pNext = &gp;
+      di.enabledExtensionCount = static_cast<uint32_t>(conPrio.size());
+      di.ppEnabledExtensionNames = conPrio.data();
+      rDev = vkCreateDevice(phys_, &di, nullptr, &device_);
+      if (rDev == VK_SUCCESS) {
+        prioridad_ = tr ? "tiempo real" : "alta";
+        break;
+      }
+      prioridadNota_ += std::string(prioridadNota_.empty() ? "" : "; ") + (tr ? "tiempo real" : "alta") + " no: " +
+                        (rDev == VK_ERROR_NOT_PERMITTED_KHR ? std::string("sin permiso (hace falta CAP_SYS_NICE)")
+                                                            : std::string(vkResultName(rDev)) + " " + std::to_string((int)rDev));
+    }
+  } else if (quiereAlta || quiereTR) {
+    prioridadNota_ = "la tarjeta no ofrece VK_KHR_global_priority";
+  }
+  if (rDev == VK_SUCCESS) {
+    /* Ya tenemos la cola con su prioridad: el permiso (CAP_SYS_NICE de `setcap`) no hace falta para
+       nada mas. Se suelta, y el proceso vuelve a dejarse leer (/proc, depurador) como cualquier otro. */
+    __user_cap_header_struct cab{_LINUX_CAPABILITY_VERSION_3, 0};
+    __user_cap_data_struct datos[2]{};
+    if (syscall(SYS_capset, &cab, datos) == 0) prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
+  }
+  if (rDev != VK_SUCCESS) {
+    qci.pNext = nullptr;
+    di.enabledExtensionCount = static_cast<uint32_t>(names.size());
+    di.ppEnabledExtensionNames = names.data();
+    VKTRY(vkCreateDevice(phys_, &di, nullptr, &device_));
+  }
   if (!f13.dynamicRendering) {
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;

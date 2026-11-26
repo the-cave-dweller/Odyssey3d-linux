@@ -144,9 +144,16 @@ void Rig::bringUp(const ViewerOpts &o) {
             Panel::clearSnapshot();
           }
         }
-        if (!st.vrr.empty() && st.vrr != "Never")
-          std::printf("[panel] sincronizacion adaptativa: %s, como en el escritorio (se apaga solo durante el 3D con"
-                      " `vrr_en_3d = no` en serve.conf)\n", st.vrr.c_str());
+        if (!st.vrr.empty() && st.vrr != "Never") {
+          /* v1.11: el mensaje dice lo que queda puesto, no solo lo que habia en el escritorio */
+          const char *e = entornoOdyssey("ODYSSEYVK_VRR_3D");
+          const bool deja = e && (e[0] == '1' || e[0] == 's');
+          if (deja)
+            std::printf("[panel] sincronizacion adaptativa: %s, como en el escritorio (`vrr_en_3d = si`)\n", st.vrr.c_str());
+          else
+            std::printf("[panel] sincronizacion adaptativa: apagada durante el 3D (en el escritorio: %s; al salir vuelve)\n",
+                        st.vrr.c_str());
+        }
       }
     }
   }

@@ -1,4 +1,5 @@
 #include "notify.h"
+#include "bususuario.h"
 
 #include <systemd/sd-bus.h>
 
@@ -118,7 +119,7 @@ bool Notifier::remove(const std::string &id) {
 /* ---------------- conexión ---------------- */
 
 bool Notifier::open(std::string *err) {
-  int r = sd_bus_open_user(&bus_);
+  int r = abrirBusUsuario(&bus_);
   if (r < 0) {
     if (err) *err = "no hay sesión de D-Bus de usuario";
     bus_ = nullptr;

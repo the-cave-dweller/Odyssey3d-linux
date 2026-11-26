@@ -539,7 +539,8 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   impl_ = im;
   ready_ = true;
   ruta_ = path;
-  std::printf("[conversor] modelo %s (%d x %d) con %s\n", path.c_str(), sz_, sz_, dev_.c_str());
+  std::printf("[conversor] modelo %s (%d x %d) con %s%s\n", path.c_str(), sz_, sz_, dev_.c_str(),
+              dev_ == "NVIDIA" ? (" (tarjeta " + std::to_string(gpu_) + ")").c_str() : "");
   return true;
 #else
   (void)path;

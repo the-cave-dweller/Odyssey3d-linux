@@ -1,4 +1,5 @@
 #include "atajos.h"
+#include "bususuario.h"
 #include "ajuste.h"
 #include "idioma.h"
 
@@ -349,7 +350,7 @@ AtajosGlobales::~AtajosGlobales() { cerrar(); }
 bool AtajosGlobales::abrir(std::string *err) {
 #ifdef HAVE_SDBUS
   if (bus_) return true;
-  if (sd_bus_open_user(&bus_) < 0) {
+  if (abrirBusUsuario(&bus_) < 0) {
     bus_ = nullptr;
     if (err) *err = "no hay bus del usuario";
     return false;
@@ -449,7 +450,7 @@ void AtajosGlobales::cerrar() {
 void AtajosGlobales::desactivar() {
 #ifdef HAVE_SDBUS
   sd_bus *bus = nullptr;
-  if (sd_bus_open_user(&bus) < 0) return;
+  if (abrirBusUsuario(&bus) < 0) return;
   for (const Accion &a : kAcciones) llamar(bus, "setInactive", a, nullptr, 0, nullptr);
   sd_bus_flush_close_unref(bus);
 #endif

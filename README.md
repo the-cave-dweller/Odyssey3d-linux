@@ -169,6 +169,7 @@ in 3D. The **Program** tab also has "Update automatically" (off by default) and 
 | `profundidad_conv = 75` / `salida_conv = 50` | starting Depth and Pop-out for normal video (`_suave` smoothed split, `_sbs` split); written when you move the sliders; `profundidad_conv = auto` = automatic screen plane |
 | `hz = 165` | panel refresh rate in 3D (default 120; the G90XF also runs at 165) |
 | `hdr_en_3d = si` | keep HDR during 3D |
+| `vrr_en_3d = si` | keep variable refresh (VRR) during 3D; by default it is switched off while the 3D runs (with it on, games below the refresh rate stuttered) |
 | `atajo_3d = Ctrl+Shift+1` | a shortcut (the panel writes these): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |
 | `barra_tareas = no` / `bandeja = no` | hide OdysseyVK from the taskbar / the system tray |
 | `actualizaciones = no` / `actualizar_auto = si` | no update card / install updates automatically |

@@ -252,7 +252,14 @@ static std::map<std::string, std::string> paresDe(const std::string &ruta) {
     if (l.empty() || l[0] == '#') continue;
     const size_t eq = l.find('=');
     if (eq == std::string::npos) continue;
-    pares[strLower(recortar(l.substr(0, eq)))] = recortar(l.substr(eq + 1));
+    std::string v = recortar(l.substr(eq + 1));
+    /* el comentario al final de la linea no es parte del valor (ver loadServeCfg) */
+    for (size_t h = v.find('#'); h != std::string::npos; h = v.find('#', h + 1))
+      if (h > 0 && (v[h - 1] == ' ' || v[h - 1] == '\t')) {
+        v = recortar(v.substr(0, h));
+        break;
+      }
+    pares[strLower(recortar(l.substr(0, eq)))] = v;
   }
   return pares;
 }

@@ -3628,7 +3628,7 @@ struct ServeCfg {
   double actualizacionesCada = 6.0;   /* horas entre miradas a GitHub (v0.99: `actualizaciones_cada`, 0,25..168) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
-  std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
+  std::string vrrEn3d;      /* si = dejar la sincronizacion adaptativa durante el 3D; de fabrica se apaga (v1.11) */
   double hz = -1.0;         /* frecuencia del panel en 3D; -1 = la de fabrica (120) (v0.71) */
   double relieveLocal = -1.0; /* alfa del relieve local; -1 = el de fabrica (1,0), 0 = apagado (v0.66) */
   double focoIir = -1.0;    /* cuanto se mueve el plano de apoyo por estimacion; -1 = el de fabrica (0,06) */
@@ -3710,6 +3710,13 @@ static void loadServeCfg(ServeCfg &cfg) {
     size_t eq = l.find('=');
     if (eq == std::string::npos) return;
     std::string k = strLower(strTrim(l.substr(0, eq))), v = strTrim(l.substr(eq + 1));
+    /* un comentario al final de la linea («vrr_en_3d = no   # prueba») no es parte del valor. Sin esto
+       el valor era «no   # prueba», que no es «no»: MEDIDO 26-nov, el VRR siguio puesto en el 3D. */
+    for (size_t h = v.find('#'); h != std::string::npos; h = v.find('#', h + 1))
+      if (h > 0 && (v[h - 1] == ' ' || v[h - 1] == '\t')) {
+        v = strTrim(v.substr(0, h));
+        break;
+      }
     if (k == "ignore") splitList(v, cfg.ignore);
     else if (k == "espera") cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
     else if (k == "red") cfg.red = std::max(0, std::atoi(v.c_str()));
@@ -4094,8 +4101,11 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (!pila->cantos.empty()) ::setenv("ODYSSEYVK_CANTOS", pila->cantos.c_str(), 1);
     if (!pila->hdrEn3d.empty())
       ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
-    if (!pila->vrrEn3d.empty())
-      ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
+    /* v1.11: la sincronizacion adaptativa se APAGA de fabrica durante el 3D. MEDIDO 26-nov con
+       Cyberpunk: con el VRR puesto el refresco seguia al juego y el visor esperaba su imagen libre
+       15-35 ms; 25 % de las presentaciones tarde con el juego bajo 100 cuadros. Apagado: 165 Hz fijos,
+       0,1 % tarde, y Rodolfo lo noto fluido. `vrr_en_3d = si` lo deja como en el escritorio. */
+    ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "si" || pila->vrrEn3d == "1") ? "1" : "0", 1);
     if (!pila->barra2d.empty())
       ::setenv("ODYSSEYVK_BARRA_2D",
                (pila->barra2d == "no" || pila->barra2d == "0") ? "0" : (pila->barra2d == "entera" ? "entera" : "1"), 1);
@@ -5834,6 +5844,11 @@ static int cmdServe(int argc, char **argv) {
           cfg.rastreo = nuevo.rastreo;
           cfg.hdrEn3d = nuevo.hdrEn3d;
           cfg.atajosGlobales = nuevo.atajosGlobales;
+          /* la tarjeta de la red (`red = 1`): vale desde el siguiente visor, sin reiniciar el servicio */
+          if (nuevo.red != cfg.red) {
+            std::printf("[serve] la red de profundidad pasa a la tarjeta %d desde el siguiente video\n", nuevo.red);
+            cfg.red = nuevo.red;
+          }
           cfg.crosstalkBase = nuevo.crosstalkBase;
           cfg.relieve = nuevo.relieve;
           cfg.divididoSuave = nuevo.divididoSuave;
