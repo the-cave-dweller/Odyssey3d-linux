@@ -342,7 +342,7 @@ private:
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
-      icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_, icoLlave_;
+      icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_, icoLlave_, icoLogo_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -388,6 +388,7 @@ private:
     Rect pista;               /* la pista de un deslizador */
   };
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
+  Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelPestanas_;
   std::vector<ZonaItem> zonas_;

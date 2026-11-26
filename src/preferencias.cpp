@@ -671,9 +671,10 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
 }  // namespace
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  /* la de Rendimiento (2) ya no se ensena: sus filas van en Programa; con el nombre vacio las demas
-     conservan su numero */
-  st.pestanas = {idioma::tr("Ajustes"), idioma::tr("Juegos"), "", idioma::tr("Programa"), idioma::tr("Experimental")};
+  /* rama experimental: la primera (0) no es una pildora, la abre el logo y el nombre del programa; la de
+     Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
+     «Ajustes». Con el nombre vacio las demas conservan su numero. */
+  st.pestanas = {"", idioma::tr("Juegos"), "", idioma::tr("Ajustes"), idioma::tr("Experimental")};
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
@@ -685,7 +686,9 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
   st.actualizacion = act.pendiente ? act.remota : std::string();
   st.alDia = act.alDia;
   if (st.pestana == 3) {
-    /* Programa (v0.95): la version, la actualizacion y el desinstalador */
+    /* Ajustes (antes Programa, v0.95): arriba el rendimiento (el visor 3D, la red y las tarjetas), luego
+       la version, la actualizacion, otros y el desinstalador */
+    filasRendimiento(st, v, ids);
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VERSIÓN");
     pon(s, "");
@@ -722,7 +725,6 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     au.valor = v.actualizarAuto;
     pon(au, "actualizar_auto");
     /* Otros (v1.02): si la ventana del visor 3D sale en la barra de tareas del panel y en Alt+Tab */
-    filasRendimiento(st, v, ids);
     s.rotulo = idioma::tr("OTROS");
     pon(s, "");
     /* el idioma (v1.07): lo mismo que el boton del globo de la cabecera */

@@ -74,7 +74,7 @@ Keys (they also work while the video or game has the keyboard):
 | `Ctrl+Shift+F1` | hide / show the pill |
 | `Esc` (in the viewer) | leave 3D |
 
-Every shortcut can be changed in **Settings → Keyboard shortcuts** (the section folds with the arrow
+Every shortcut can be changed in the panel's main page → **Keyboard shortcuts** (the section folds with the arrow
 on its header, like *Apps that don't ask*; both start folded): click it and press the new
 combination (it needs Ctrl, Alt or Meta; Esc cancels, the circular arrow puts the factory one
 back). While the settings panel is open it keeps the whole keyboard, so the game underneath gets
@@ -83,16 +83,17 @@ no keys; Esc closes it.
 ![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
-taskbar icon or the system-tray icon (click: settings, middle click: games). Its tabs are
-**Settings**, **Games** and **Program** (version, updates, the performance figures — frame rate,
-converter time, GPUs —, language, taskbar and tray, and **Uninstall** folded under its arrow); on the
-`experimental` branch, also **Experimental**. Over a video or a game in 3D the Games tab is left
+taskbar icon or the system-tray icon (click: settings, middle click: games). On the
+`experimental` branch the OdysseyVK logo and name, left of the tabs, open the main page (video,
+screen, keyboard shortcuts, apps that don't ask); then come **Games**, **Settings** (the performance
+figures — 3D viewer, depth network, GPUs — on top, then version, updates, language, taskbar and tray,
+and **Uninstall** folded under its arrow) and **Experimental**. Over a video or a game in 3D the Games tab is left
 out. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
 ### Language
 
-**Program → Other → Language** switches the language at once: the panel, the pill, the cards and
+**Settings → Other → Language** (Program up to 1.11) switches the language at once: the panel, the pill, the cards and
 the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
 (`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header; on the
 `experimental` branch it is gone.)
@@ -153,9 +154,9 @@ The service checks this repository every six hours. With a new version, a card a
 corner with **Update**, **Later** and a small "Don't notify about updates"; the arrow next to the
 close cross in the panel turns yellow (green = up to date). Update downloads, builds, installs
 (a window asks for your password), restarts the service and reopens the video or game that was
-in 3D. The **Program** tab also has "Update automatically" (off by default) and **Uninstall**.
+in 3D. The **Settings** tab (Program up to 1.11) also has "Update automatically" (off by default) and **Uninstall**.
 
-![Program tab and the update card](docs/img/settings-program.png)
+![Settings tab and the update card](docs/img/settings-program.png)
 
 ## Configuration
 

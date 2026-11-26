@@ -3,6 +3,17 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El logo abre la página principal; Programa pasa a llamarse Ajustes (rama `experimental`)
+
+- Rodolfo: «que visor 3D y tarjetas gráficas vayan encima de versión en Programa, y cámbiale el nombre a
+  Ajustes, la primer pestaña que parta del mismo logo del programa».
+- **El logo**: el de la aplicación (`assets/hicolor/512x512/apps/odysseyvk.png`), con sus puntos azules
+  sacados como máscara del atlas (azul menos rojo, a 96×96, en `src/logo_mascara.inc`) y la baldosa
+  blanca pintada aparte, junto a «OdysseyVK»: es la primera pestaña, la página principal (vídeo, pantalla,
+  atajos, aplicaciones que no preguntan). Puesta, va en una píldora del acento como las demás.
+- **Programa → Ajustes**, con el visor 3D, la red y las tarjetas gráficas arriba, encima de la versión.
+- Las pestañas conservan su número (la 0 y la 2 van sin píldora).
+
 ## El alcance del relieve, automático en Auto (rama `experimental`)
 
 - Rodolfo: «que el alcance del relieve también lo definas automáticamente».

@@ -71,7 +71,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 
 | Key | Default | Meaning |
 |---|---|---|
-| `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (Program → Other → Language) |
+| `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (Settings → Other → Language; Program up to 1.11) |
 | `modo` | `ask` | `ask` / `conv` / `sbs` / `tb` / `flat` |
 | `auto` | — | `app:modo`, one per line; the card's "remember" writes them |
 | `ignore` | system apps | app ids never offered 3D |
@@ -87,7 +87,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 | `profundidad_conv` / `salida_conv` | 75 / 50 | starting Depth (fixed screen plane; `auto` = saliency) and Pop-out for normal video; `_suave` 75/50, `_sbs` 50/0; written when the sliders move |
 | `exp_red` / `exp_mapa` / `exp_tope_arrastre` / `exp_anticipacion` | — | the Experimental tab (branch `experimental` only): network input proportion (`cuadrado`/`518`/`770`), depth map size (`518`/`770`/`1022`), lag cap (`si`), head anticipation in ms |
 | `exp_sin_red` / `exp_sin_red_mezcla` / `exp_sin_red_relieve` / `exp_sin_red_topes` / `exp_sin_red_paralaje` | `no` / `0,35` / `1,00` / `2,75` / `2,00` | performance mode (branch `experimental` only): depth from the image on the CPU instead of the network (`si`), its floor ↔ image mix, relief strength, relief reach (the per-eye caps multiplied) and head-parallax exaggeration; the lightning-bolt menu on the pill writes all four (a preset or the sliders); in this mode Depth, Pop-out and `relieve` don't apply. With it on, VRR stays as the desktop has it |
-| `atajo_<action>` | factory | a shortcut, e.g. `atajo_3d = Ctrl+Alt+3`; set in Settings → Keyboard shortcuts |
+| `atajo_<action>` | factory | a shortcut, e.g. `atajo_3d = Ctrl+Alt+3`; set in the panel's main page (the OdysseyVK logo) → Keyboard shortcuts |
 | `cantos` | finos | `viejo` = pre-0.89 edges, to compare |
 | `barra_2d` | `si` | player bar rows: `si` / `entera` (raw) / `no` |
 | `actualizaciones` | `si` | update card |

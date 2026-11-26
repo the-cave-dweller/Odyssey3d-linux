@@ -2,6 +2,7 @@
 #include "vkui.h"
 #include "idioma.h"
 #include "rendimiento.h"
+#include "logo_mascara.inc"
 
 #include <algorithm>
 #include <cctype>
@@ -258,6 +259,11 @@ bool Hud::buildAtlas(std::string *err) {
           chip[(size_t)j * n + i] = cubre(d);
         }
       cupo = subir(n, n, chip, &icoChip_) && cupo;
+    }
+    /* el logo del programa (rama experimental): sus puntos, de assets/ (logo_mascara.inc) */
+    {
+      std::vector<uint8_t> logo(kLogoMascara, kLogoMascara + kLogoLado * kLogoLado);
+      cupo = subir(kLogoLado, kLogoLado, logo, &icoLogo_) && cupo;
     }
     /* la llave del Manual (rama experimental): el mango en diagonal y la cabeza abierta arriba a la derecha */
     {
@@ -1403,7 +1409,21 @@ void Hud::dibujaPanel(int vw, int vh) {
   else if (hfij) mask9(panelFijar_, 0, 14.0f, 1.0f, 1.0f, 1.0f, 0.12f);
   icono({panelFijar_.x + 5.0f, panelFijar_.y + 5.0f, 18.0f, 18.0f}, icoPin_, ink[0], ink[1], ink[2],
         st_.fijado ? 1.0f : (hfij ? 0.95f : 0.55f));
-  const float tx0 = text("OdysseyVK", px + 52.0f, py + 24.0f, 20.0f, ink[0], ink[1], ink[2], 1.0f);
+  /* el logo y el nombre son la primera pestana (rama experimental; Rodolfo: «la primer pestaña que parta del
+     mismo logo del programa»): la baldosa blanca con los puntos azules del icono y «OdysseyVK»; puesta, en
+     una pildora del acento como las demas pestanas */
+  {
+    const float wLogo = 8.0f + 22.0f + 9.0f + textWidth("OdysseyVK", 17.0f) + 14.0f;
+    panelLogo_ = {px + 50.0f, py + 20.0f, wLogo, 32.0f};
+    const bool puesta = st_.pestana == 0, hov = panelLogo_.inside(mx_, my_) && !st_.menuIdioma;
+    if (puesta) mask9(panelLogo_, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
+    else if (hov) mask9(panelLogo_, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.10f);
+    const Rect baldosa{panelLogo_.x + 8.0f, panelLogo_.y + 5.0f, 22.0f, 22.0f};
+    mask9(baldosa, 1, 5.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+    icono({baldosa.x + 1.0f, baldosa.y + 1.0f, 20.0f, 20.0f}, icoLogo_, 14.0f / 255.0f, 68.0f / 255.0f, 158.0f / 255.0f, 1.0f);
+    text("OdysseyVK", baldosa.x + baldosa.w + 9.0f, panelLogo_.y + 6.0f, 17.0f, ink[0], ink[1], ink[2], puesta || hov ? 1.0f : 0.90f);
+  }
+  const float tx0 = panelLogo_.x + panelLogo_.w;
   panelPestanas_.clear();
   float tx = tx0 + 26.0f;
   /* v1.07: en ruso («Производительность») las pestanas no cabian hasta el globo: la letra se achica */
@@ -1815,6 +1835,10 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (panelFijar_.inside(mx, my)) return HitPanelFijar;
+  if (panelLogo_.inside(mx, my)) {   /* el logo: la primera pestana */
+    if (sub) *sub = 0;
+    return HitPanelPestana;
+  }
   if (panelIdioma_.inside(mx, my)) return HitPanelIdioma;
   if (panelActualizar_.inside(mx, my)) return HitPanelActualizar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)

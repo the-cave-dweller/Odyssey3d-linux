@@ -75,7 +75,7 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla |
 | `Esc` (en el visor) | salir del 3D |
 
-Cada atajo se cambia en **Ajustes → Atajos de teclado** (la sección se pliega con la flechita de su
+Cada atajo se cambia en la página principal del panel → **Atajos de teclado** (la sección se pliega con la flechita de su
 cabecera, como *Aplicaciones que no preguntan*; las dos empiezan plegadas): pícalo y pulsa la combinación nueva
 (necesita Ctrl, Alt o Meta; Esc cancela y la flecha circular vuelve a la de fábrica). Mientras el
 panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
@@ -85,16 +85,17 @@ teclas; Esc lo cierra.
 
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
-Sus pestañas son **Ajustes**, **Juegos** y **Programa** (versión, actualizaciones, los datos de
-rendimiento —cuadros por segundo, tiempo del conversor, tarjetas gráficas—, idioma, barra de tareas y
-bandeja, y **Desinstalar** plegado bajo su flechita); en la rama `experimental`, también
-**Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. Todo está también en
+En la rama `experimental`, el logo y el nombre de OdysseyVK, a la izquierda de las pestañas, abren la
+página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); luego van
+**Juegos**, **Ajustes** (arriba los datos de rendimiento —visor 3D, red de profundidad, tarjetas
+gráficas—; luego versión, actualizaciones, idioma, barra de tareas y bandeja, y **Desinstalar**
+plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. Todo está también en
 `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
 sin reiniciarse.
 
 ### Idioma
 
-**Programa → Otros → Idioma** cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
+**Ajustes → Otros → Idioma** (Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
 rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
 (`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel; en la
 rama `experimental` ya no está.)
@@ -156,7 +157,7 @@ El servicio mira este repositorio cada seis horas. Con una versión nueva sale u
 esquina con **Actualizar**, **Luego** y un pequeño «No avisar de actualizaciones»; la flecha junto
 al aspa del panel se pone amarilla (verde = al día). Actualizar baja, compila, instala (una ventana
 pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. La pestaña
-**Programa** tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
+**Ajustes** (Programa hasta la 1.11) tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
 
 ![La pestaña Programa y la tarjeta de actualización](docs/img/es/settings-program.png)
 
