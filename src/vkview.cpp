@@ -897,7 +897,7 @@ static std::string comboDeGlfw(int key, int mods) {
   std::string t;
   if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z) t = std::string(1, (char)('A' + key - GLFW_KEY_A));
   else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) t = std::string(1, (char)('0' + key - GLFW_KEY_0));
-  else if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F12) t = "F" + std::to_string(key - GLFW_KEY_F1 + 1);
+  else if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F24) t = "F" + std::to_string(key - GLFW_KEY_F1 + 1);   /* F13..F24 desde la 1.12 */
   else if (key == GLFW_KEY_LEFT) t = "Left";
   else if (key == GLFW_KEY_RIGHT) t = "Right";
   else if (key == GLFW_KEY_UP) t = "Up";
@@ -909,6 +909,10 @@ static std::string comboDeGlfw(int key, int mods) {
   else if (key == GLFW_KEY_INSERT) t = "Insert";
   else if (key == GLFW_KEY_DELETE) t = "Delete";
   else if (key == GLFW_KEY_SPACE) t = "Space";
+  else if (key == GLFW_KEY_PAUSE) t = "Pause";          /* v1.12: la PB y compania */
+  else if (key == GLFW_KEY_PRINT_SCREEN) t = "Print";
+  else if (key == GLFW_KEY_SCROLL_LOCK) t = "ScrollLock";
+  else if (key == GLFW_KEY_MENU) t = "Menu";
   else if (key >= 0x21 && key <= 0x7e) t = std::string(1, (char)key);   /* los signos: su posicion de EE. UU. */
   else return "";
   std::string c;
@@ -977,6 +981,16 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
     if (!ui->entregada && !ui->entregar) ui->entregar = true;
     return;
   }
+  /* (v1.12) tambien una tecla sola si se le dio a un atajo en el panel: manda sobre la del visor
+     (P, C, PB...), que solo vale si no es de ningun atajo. Va antes de la PB: si la Pausa se le dio
+     a un atajo, manda el atajo */
+  {
+    const auto it = ui->atajosPuestos.find(comboDeGlfw(key, mods));
+    if (it != ui->atajosPuestos.end()) {
+      atajoHub(*ui, it->second, "tecla");
+      return;
+    }
+  }
   /* PB (Pausa / Alto): la pastilla siempre a la vista. Si esta ocultada vuelve, y si el gestor de
      ventanas nos minimizo nos devolvemos nosotros. Cuando el foco lo tiene el video esta tecla no
      nos llega a nosotros: ahi la responde el hub con `ctl aparece`, que se puede atar a la misma
@@ -997,15 +1011,6 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
      Ctrl+Shift+2 era la tecla del boton que ya no esta y sigue valiendo por costumbre.
      Ninguna de las dos choca con el escritorio: lo que tiene KWin asignado es Ctrl+F1 (cambiar de
      escritorio) y Meta+F1, no Ctrl+Shift+F1. F1 con Ctrl+Shift tampoco la pide el navegador. */
-  /* (v1.12) tambien una tecla sola si se le dio a un atajo en el panel: manda sobre la del visor
-     (P, C, ...), que solo vale si no es de ningun atajo */
-  {
-    const auto it = ui->atajosPuestos.find(comboDeGlfw(key, mods));
-    if (it != ui->atajosPuestos.end()) {
-      atajoHub(*ui, it->second, "tecla");
-      return;
-    }
-  }
   if ((mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT)) return;   /* Ctrl+Shift sin atajo: nada */
   /* P o la tecla de reproduccion: pausar y reanudar el video del navegador sin quitar la
      capa. Hace falta porque el visor se queda el teclado y el raton de la pantalla. */

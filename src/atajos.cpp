@@ -71,6 +71,8 @@ const Nombrada kEspeciales[] = {
     {"Left", 0x01000012}, {"Up", 0x01000013}, {"Right", 0x01000014}, {"Down", 0x01000015},
     {"PgUp", 0x01000016}, {"PgDown", 0x01000017}, {"Home", 0x01000010}, {"End", 0x01000011},
     {"Insert", 0x01000006}, {"Delete", 0x01000007}, {"Space", 0x20}, {"Plus", '+'},
+    /* v1.12 (Rodolfo: «I want to set PB key, i cant»): Pausa/Inter, Impr Pant, Bloq Despl y Menu */
+    {"Pause", 0x01000008}, {"Print", 0x01000009}, {"ScrollLock", 0x01000026}, {"Menu", 0x01000055},
 };
 
 std::string minusculas(std::string s) {
@@ -90,13 +92,17 @@ std::string nombreDeTecla(const std::string &t0) {
   }
   if (t.size() >= 2 && t[0] == 'f' && std::isdigit((unsigned char)t[1])) {
     const int n = std::atoi(t.c_str() + 1);
-    if (n >= 1 && n <= 12) return "F" + std::to_string(n);
+    if (n >= 1 && n <= 24) return "F" + std::to_string(n);   /* F13..F24 desde la 1.12 */
   }
   if (t == "pageup" || t == "prior" || t == "repag") return "PgUp";
   if (t == "pagedown" || t == "next" || t == "avpag") return "PgDown";
   if (t == "del" || t == "supr") return "Delete";
   if (t == "ins") return "Insert";
   if (t == "espacio") return "Space";
+  if (t == "pausa" || t == "break" || t == "pb" || t == "pausa/inter") return "Pause";
+  if (t == "printscreen" || t == "impr" || t == "imprpant" || t == "sysrq") return "Print";
+  if (t == "scroll" || t == "scroll_lock" || t == "bloqdespl") return "ScrollLock";
+  if (t == "menú" || t == "apps") return "Menu";
   for (const Nombrada &n : kEspeciales)
     if (t == minusculas(n.nombre)) return n.nombre;
   return "";

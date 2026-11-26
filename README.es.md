@@ -88,7 +88,9 @@ Cada atajo se cambia en la página principal del panel → **Atajos de teclado**
 cabecera, como *Aplicaciones que no preguntan*; las dos empiezan plegadas): pícalo y pulsa la combinación nueva
 o una tecla sola (Esc cancela y la flecha circular vuelve a la de fábrica). Una tecla sola, o con
 Mayús nada más, vale desde la 1.12 (hasta la 1.11 hacía falta Ctrl, Alt o Meta): mientras haya 3D,
-esa tecla ya no llega al vídeo ni al juego, y el panel lo avisa al ponerla. Mientras el
+esa tecla ya no llega al vídeo ni al juego, y el panel lo avisa al ponerla. Vale cualquier letra,
+número o signo, F1–F24, las flechas y las de moverse por la página, Espacio y, desde la 1.12, también
+Pausa/Inter, Impr Pant, Bloq Despl y Menú. Mientras el
 panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
 teclas; Esc lo cierra.
 

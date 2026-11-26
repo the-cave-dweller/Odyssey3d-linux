@@ -1218,7 +1218,7 @@ struct Overlay::Impl {
     if (k >= XKB_KEY_a && k <= XKB_KEY_z) nombre = std::string(1, (char)('A' + (k - XKB_KEY_a)));
     else if (k >= XKB_KEY_A && k <= XKB_KEY_Z) nombre = std::string(1, (char)k);
     else if (k >= XKB_KEY_0 && k <= XKB_KEY_9) nombre = std::string(1, (char)k);
-    else if (k >= XKB_KEY_F1 && k <= XKB_KEY_F12) nombre = "F" + std::to_string(k - XKB_KEY_F1 + 1);
+    else if (k >= XKB_KEY_F1 && k <= XKB_KEY_F24) nombre = "F" + std::to_string(k - XKB_KEY_F1 + 1);   /* F13..F24 desde la 1.12 */
     else if (k == XKB_KEY_Left) nombre = "Left";
     else if (k == XKB_KEY_Right) nombre = "Right";
     else if (k == XKB_KEY_Up) nombre = "Up";
@@ -1231,6 +1231,11 @@ struct Overlay::Impl {
     else if (k == XKB_KEY_Delete) nombre = "Delete";
     else if (k == XKB_KEY_space) nombre = "Space";
     else if (k == XKB_KEY_plus) nombre = "Plus";
+    /* v1.12: Pausa/Inter (la PB), Impr Pant, Bloq Despl y Menu; antes se ignoraban y no habia modo de ponerlas */
+    else if (k == XKB_KEY_Pause || k == XKB_KEY_Break) nombre = "Pause";
+    else if (k == XKB_KEY_Print || k == XKB_KEY_Sys_Req) nombre = "Print";
+    else if (k == XKB_KEY_Scroll_Lock) nombre = "ScrollLock";
+    else if (k == XKB_KEY_Menu) nombre = "Menu";
     else if (k >= 0x21 && k <= 0x7e) nombre = std::string(1, (char)k);
     else return;   /* los modificadores solos, Bloq Mayus, las teclas raras: se espera a la de verdad */
     auto activo = [&](const char *m) {

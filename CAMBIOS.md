@@ -120,6 +120,16 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   enseña la D en la lista. Sin probar todavía: el registro de una tecla sola en kglobalaccel con el
   visor de verdad (`ctl atajos` lo registraría en el escritorio de Rodolfo).
 - Traducciones: fuera «{}: el atajo necesita Ctrl, Alt o Meta»; nueva la del aviso.
+- **La tecla PB** (Rodolfo: «I want to set PB key, i cant»): el panel solo entendía letras, números,
+  signos, F1–F12, flechas, las de moverse por la página y Espacio; cualquier otra se ignoraba al
+  esperar la combinación, así que Pausa/Inter no había modo de ponerla. Ahora también Pausa/Inter
+  (`Pause`), Impr Pant (`Print`), Bloq Despl (`ScrollLock`), Menú (`Menu`) y F13–F24, en los tres
+  sitios que nombran teclas: el panel (`src/overlay.cpp`, por xkb), el registro en kglobalaccel
+  (`src/atajos.cpp`, con su código de Qt) y la tecla con el visor enfocado (`src/vkview.cpp`, por GLFW).
+  Con el visor enfocado el atajo se busca antes que la PB de siempre (sacar la pastilla), así que si
+  la Pausa es de un atajo, manda el atajo. Probado en el visor aparte con `atajo_ver_profundidad =
+  Pause`: `tecla:pause` pone y quita la vista de profundidad y el panel enseña «Pause»; en KDE la
+  Pausa no la tenía ningún otro atajo.
 
 ## Vista de depuración de la profundidad: Ctrl+Mayús+9 (v1.12)
 

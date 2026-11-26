@@ -89,7 +89,8 @@ on its header, like *Apps that don't ask*; both start folded): click it and pres
 combination or a single key (Esc cancels, the circular arrow puts the factory one back). A single
 key, or one with only Shift, works too since 1.12 (up to 1.11 it needed Ctrl, Alt or Meta): while
 the 3D is on, that key no longer reaches the video or the game, and the panel says so when you set
-it. While the settings panel is open it keeps the whole keyboard, so the game underneath gets
+it. Any letter, digit or sign, F1–F24, the arrows and navigation keys, Space, and since 1.12 also
+Pause/Break, Print Screen, Scroll Lock and Menu. While the settings panel is open it keeps the whole keyboard, so the game underneath gets
 no keys; Esc closes it.
 
 ![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)
