@@ -3,6 +3,23 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Corrección: las caídas de Cyberpunk desde las 16:50 son todas el mismo fallo de la tarjeta, y la causa no está clara (v1.13)
+
+- Rodolfo: «otra vez se trabó» (17:25, ya con la elección de la profundidad de abajo puesta). MEDIDO en el núcleo:
+  **las cuatro** (16:50:42, 17:02:17, 17:07:22 y 17:25:05) son `NVRM: Xid 31 … MMU Fault: ENGINE CE0 … FAULT_P*E
+  ACCESS_TYPE_VIRT_READ` (el motor de copia leyendo memoria que no existe), y el juego dejó un `gpucrash` en cada
+  una: tres en `TXAA_Blurs` (la lista donde Cyberpunk corre DLSS, la misma donde la capa graba la copia de la
+  profundidad) y la de las 16:50 en `PostFX`.
+- **Dos cosas de abajo no se sostienen**: lo de las 16:50 no fue (o no solo) el bloqueo del candado, porque el
+  núcleo registra este fallo en ese mismo segundo; y elegir la profundidad que el juego usa no lo arregló (volvió
+  a las 17:25). Los dos cambios se quedan, porque son correctos de todos modos (esperar con el candado tomado sí
+  puede bloquear, y copiar una imagen que el juego no usa sí dio NaN a las 15:54), pero no eran la causa probada.
+- Lo que hay: (1) en las sesiones de antes de la máscara del HUD (fases 2, 3 y 3b) ningún fallo, y desde la 3c
+  (16:41) todas cayeron en minutos; (2) pero desde las 16:50 Rodolfo tiene DLSS en **Ultra Performance** (1280 ×
+  720 por dentro, modelo Transformer2; antes 1920 × 1080), y todas las caídas son con ese modo; (3) y hay
+  `gpucrash` del 10 y del 14 de noviembre, antes de que existiera la capa, con el mismo «Device Removed» en
+  `TXAA_Blurs`. Hace falta una prueba que separe las dos cosas antes de tocar más.
+
 ## Cyberpunk ya no se cae al entrar y salir del menú: solo se copia una profundidad que el juego está usando (v1.13)
 
 - Rodolfo: «cyberpunk now crashed when entering the menu and leaving». MEDIDO: el núcleo dice
