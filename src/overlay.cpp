@@ -126,6 +126,13 @@ struct Overlay::Impl {
   int arrastrando = -1;
   /* mover el panel: se agarra por la cabecera y la capa sigue al raton cambiando sus margenes */
   bool moviendo = false, panelMontado = false;
+  bool esperaMov = false;
+  double tMov = 0.0;
+  static void cuadroMov(void *data, wl_callback *cb, uint32_t) {
+    static_cast<Impl *>(data)->esperaMov = false;
+    wl_callback_destroy(cb);
+  }
+  static const struct wl_callback_listener cuadroMovListener;
   double agarreX = 0.0, agarreY = 0.0, supX = 0.0, supY = 0.0;
   int margenIzq = 0, margenArr = 0, logAncho = 0, logAlto = 0;
   long firmaVista = -1;
@@ -702,7 +709,19 @@ struct Overlay::Impl {
   void panelMovimiento() {
     if (moviendo && layer) {
       /* la capa se mueve con el raton, asi que la posicion del raton DENTRO de ella no cambia: lo
-         que se haya movido respecto al agarre es justo lo que hay que correr */
+         que se haya movido respecto al agarre es justo lo que hay que correr.
+         Pero el compositor tarda un cuadro en mover la capa, y los movimientos del raton que llegan
+         mientras tanto vienen medidos contra el sitio VIEJO: sumarlos otra vez corria el panel dos
+         veces y daba un tiron (lo vio Rodolfo con la 0.86). Despues de cada corrimiento se espera a
+         que el compositor pinte ese cuadro (o 80 ms, por si no avisa) antes de mirar otro. */
+      struct timespec ts;
+      clock_gettime(CLOCK_MONOTONIC, &ts);
+      const double ahora = (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+      if (esperaMov && ahora - tMov < 0.08) return;
+      if (std::lround(supX - agarreX) == 0 && std::lround(supY - agarreY) == 0) return;
+      esperaMov = true;
+      tMov = ahora;
+      if (wl_callback *cb = wl_surface_frame(surf)) wl_callback_add_listener(cb, &cuadroMovListener, this);
       margenIzq = std::max(0, std::min(std::max(0, logAncho - 80), margenIzq + (int)std::lround(supX - agarreX)));
       margenArr = std::max(0, std::min(std::max(0, logAlto - 60), margenArr + (int)std::lround(supY - agarreY)));
       zwlr_layer_surface_v1_set_margin(layer, margenArr, 0, 0, margenIzq);
@@ -825,6 +844,7 @@ const struct wl_pointer_listener Overlay::Impl::pointerListener = {
     Impl::ptrFrame, Impl::ptrAxisSource, Impl::ptrAxisStop, Impl::ptrAxisDiscrete};
 
 const struct wl_buffer_listener Overlay::Impl::bufferListener = {Impl::bufferReleased};
+const struct wl_callback_listener Overlay::Impl::cuadroMovListener = {Impl::cuadroMov};
 
 #ifdef HAVE_FRACTIONAL_SCALE
 const struct wp_fractional_scale_v1_listener Overlay::Impl::escalaListener = {Impl::escalaSuperficie};

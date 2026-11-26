@@ -3,6 +3,16 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El panel se arrastra sin tirones (v0.87)
+
+- Rodolfo, con la 0.86: la pausa ya se respeta (MEDIDO en su registro: pausa a los 3 s, sin
+  reanudar). El panel «se mueve pero de repente da tirones a otra parte de la pantalla».
+- HIPÓTESIS (derivada del código): el compositor tarda un cuadro en mover la capa y los movimientos
+  del ratón que llegan mientras tanto vienen medidos contra el sitio viejo; sumarlos otra vez corría
+  el panel dos veces. `src/overlay.cpp` espera, después de cada corrimiento, a que el compositor
+  pinte ese cuadro (o 80 ms) antes de mirar otro movimiento.
+- MEDIDO: el panel real abre y cierra. **No probado**: el arrastre con el ratón.
+
 ## Pausas respetadas, panel movible y pestaña de rendimiento (v0.86)
 
 - Rodolfo, con la 0.85 (el cursor del panel «ya está bien»): «por unos segundos volvió a darle play
