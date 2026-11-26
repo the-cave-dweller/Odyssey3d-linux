@@ -3,6 +3,18 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Rendimiento dentro de Programa, Desinstalar plegado y sin el globo del idioma (rama `experimental`)
+
+- Rodolfo: «mete la info de rendimiento en la casilla de Programa, que desinstalar esté debajo de un
+  dropdown contextual con una flechita, también quita el pill del idioma, basta con tenerlo en Otros».
+- **Rendimiento** ya no es una pestaña: el visor 3D, la red y las tarjetas gráficas van en Programa,
+  entre la versión y «Otros», y se refrescan cada segundo mientras Programa está a la vista. La
+  pestaña conserva su número (nombre vacío), así que las demás no cambian.
+- **Desinstalar**: sección plegable con su flechita, de fábrica plegada (se recuerda como las otras
+  en `panel-secciones`).
+- **El globo del idioma** sale de la cabecera; el idioma se elige en Programa → Otros → Idioma. Las
+  pestañas ganan ese sitio.
+
 ## Las bandas negras de las películas, en el plano de la pantalla (rama `experimental`)
 
 - Rodolfo: «Sí, arréglalas», tras medir con su YouTube que la red les daba 0,64–0,78 de cercanía con

@@ -589,11 +589,91 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
   b.valor = !descargaEnMarcha() && !ligera;
   pon(b, "descargar_red");
 }
+/* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que dice
+   nvidia-smi de las tarjetas. Desde la rama experimental va dentro de Programa (Rodolfo: «mete la info de
+   rendimiento en la casilla de programa»); se rellena cada segundo mientras esta a la vista. */
+void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string> &ids) {
+  auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    st.items.push_back(std::move(it));
+    ids.push_back(id);
+  };
+  /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que
+     dice nvidia-smi de las tarjetas. Se rellena de nuevo cada segundo mientras esta a la vista. */
+  auto fila = [&](const std::string &que, const std::string &cuanto) {
+    Hud::ItemPanel f;
+    f.tipo = Hud::ItemPanel::Fila, f.rotulo = que, f.valorTexto = cuanto;
+    pon(f, "");
+  };
+  Hud::ItemPanel s;
+  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VISOR 3D");
+  pon(s, "");
+  const auto hub = ajuste::leerEstadoHub();
+  const auto ses = hub.find("sesion");
+  const bool abierta = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
+  if (!abierta) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No hay ningún vídeo ni juego en 3D ahora mismo.");
+    pon(n, "");
+  } else {
+    const auto e = ajuste::leerEstado();
+    auto de = [&](const char *k) {
+      const auto it = e.find(k);
+      return it == e.end() ? std::string("-") : it->second;
+    };
+    std::string fps = de("fps"), ms = de("mapa_ms"), modelo = de("modelo");
+    for (char &c : fps) if (c == '.') c = idioma::decimal();
+    for (char &c : ms) if (c == '.') c = idioma::decimal();
+    const size_t barra = modelo.rfind('/');
+    if (barra != std::string::npos) modelo = modelo.substr(barra + 1);
+    fila(idioma::tr("Cuadros por segundo"), fps);
+    const bool conv = de("conversor") == "puesto";
+    fila(idioma::tr("Conversor de relieve"), conv ? idioma::trf("puesto · {} ms por mapa", {ms}) : std::string(idioma::tr("apagado")));
+    if (conv) fila(idioma::tr("Red de profundidad"), modelo + " · " + de("tarjeta"));
+    fila(idioma::tr("Cámara"), de("facetracking") == "abierto" ? de("camara_nota") : std::string(idioma::tr("sin abrir")));
+  }
+  filasDeLaRed(st, v, ids);
+  s.rotulo = idioma::tr("TARJETAS GRÁFICAS");
+  pon(s, "");
+  bool alguna = false;
+  if (FILE *f = ::popen("nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu "
+                        "--format=csv,noheader,nounits 2>/dev/null", "r")) {
+    char linea[256];
+    while (std::fgets(linea, sizeof linea, f)) {
+      std::vector<std::string> c;
+      std::string campo;
+      for (const char *q = linea; *q; q++) {
+        if (*q == ',' || *q == '\n') {
+          c.push_back(strTrim(campo));
+          campo.clear();
+        } else {
+          campo += *q;
+        }
+      }
+      if (c.size() < 5) continue;
+      std::string nombre = c[0];
+      if (nombre.rfind("NVIDIA GeForce ", 0) == 0) nombre = nombre.substr(15);
+      char txt[128];
+      std::snprintf(txt, sizeof txt, "%s %% · %.1f de %.0f GB · %.0f °C", c[1].c_str(), std::atof(c[2].c_str()) / 1024.0,
+                    std::atof(c[3].c_str()) / 1024.0, std::atof(c[4].c_str()));
+      std::string t = txt;
+      for (char &ch : t) if (ch == '.') ch = idioma::decimal();
+      fila(nombre, t);
+      alguna = true;
+    }
+    ::pclose(f);
+  }
+  if (!alguna) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("nvidia-smi no respondió: no hay datos de las tarjetas.");
+    pon(n, "");
+  }
+}
 }  // namespace
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  st.pestanas = {idioma::tr("Ajustes"), idioma::tr("Juegos"), idioma::tr("Rendimiento"), idioma::tr("Programa"),
-                 idioma::tr("Experimental")};
+  /* la de Rendimiento (2) ya no se ensena: sus filas van en Programa; con el nombre vacio las demas
+     conservan su numero */
+  st.pestanas = {idioma::tr("Ajustes"), idioma::tr("Juegos"), "", idioma::tr("Programa"), idioma::tr("Experimental")};
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
@@ -642,6 +722,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     au.valor = v.actualizarAuto;
     pon(au, "actualizar_auto");
     /* Otros (v1.02): si la ventana del visor 3D sale en la barra de tareas del panel y en Alt+Tab */
+    filasRendimiento(st, v, ids);
     s.rotulo = idioma::tr("OTROS");
     pon(s, "");
     /* el idioma (v1.07): lo mismo que el boton del globo de la cabecera */
@@ -660,8 +741,12 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     sw.nota = idioma::tr("El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos");
     sw.valor = v.enBandeja;
     pon(sw, "bandeja");
-    s.rotulo = idioma::tr("DESINSTALAR");
-    pon(s, "");
+    /* desinstalar va plegado, con su flechita (rama experimental): no queda a mano de un clic suelto */
+    Hud::ItemPanel sp;
+    sp.tipo = Hud::ItemPanel::Seccion, sp.rotulo = idioma::tr("DESINSTALAR"), sp.plegable = true;
+    sp.valor = seccionesAbiertas().count("desinstalar") > 0;
+    pon(sp, "plegar:desinstalar");
+    if (!sp.valor) return;
     Hud::ItemPanel d;
     d.tipo = Hud::ItemPanel::Boton, d.rotulo = idioma::tr("Desinstalar OdysseyVK");
     d.nota = idioma::tr("Quita el programa, el servicio y la red de profundidad (pide tu clave); tu configuración se queda.");
@@ -832,76 +917,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     }
     }
   } else if (st.pestana == 2) {
-    /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que
-       dice nvidia-smi de las tarjetas. Se rellena de nuevo cada segundo mientras esta a la vista. */
-    auto fila = [&](const std::string &que, const std::string &cuanto) {
-      Hud::ItemPanel f;
-      f.tipo = Hud::ItemPanel::Fila, f.rotulo = que, f.valorTexto = cuanto;
-      pon(f, "");
-    };
-    Hud::ItemPanel s;
-    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VISOR 3D");
-    pon(s, "");
-    const auto hub = ajuste::leerEstadoHub();
-    const auto ses = hub.find("sesion");
-    const bool abierta = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
-    if (!abierta) {
-      Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No hay ningún vídeo ni juego en 3D ahora mismo.");
-      pon(n, "");
-    } else {
-      const auto e = ajuste::leerEstado();
-      auto de = [&](const char *k) {
-        const auto it = e.find(k);
-        return it == e.end() ? std::string("-") : it->second;
-      };
-      std::string fps = de("fps"), ms = de("mapa_ms"), modelo = de("modelo");
-      for (char &c : fps) if (c == '.') c = idioma::decimal();
-      for (char &c : ms) if (c == '.') c = idioma::decimal();
-      const size_t barra = modelo.rfind('/');
-      if (barra != std::string::npos) modelo = modelo.substr(barra + 1);
-      fila(idioma::tr("Cuadros por segundo"), fps);
-      const bool conv = de("conversor") == "puesto";
-      fila(idioma::tr("Conversor de relieve"), conv ? idioma::trf("puesto · {} ms por mapa", {ms}) : std::string(idioma::tr("apagado")));
-      if (conv) fila(idioma::tr("Red de profundidad"), modelo + " · " + de("tarjeta"));
-      fila(idioma::tr("Cámara"), de("facetracking") == "abierto" ? de("camara_nota") : std::string(idioma::tr("sin abrir")));
-    }
-    filasDeLaRed(st, v, ids);
-    s.rotulo = idioma::tr("TARJETAS GRÁFICAS");
-    pon(s, "");
-    bool alguna = false;
-    if (FILE *f = ::popen("nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu "
-                          "--format=csv,noheader,nounits 2>/dev/null", "r")) {
-      char linea[256];
-      while (std::fgets(linea, sizeof linea, f)) {
-        std::vector<std::string> c;
-        std::string campo;
-        for (const char *q = linea; *q; q++) {
-          if (*q == ',' || *q == '\n') {
-            c.push_back(strTrim(campo));
-            campo.clear();
-          } else {
-            campo += *q;
-          }
-        }
-        if (c.size() < 5) continue;
-        std::string nombre = c[0];
-        if (nombre.rfind("NVIDIA GeForce ", 0) == 0) nombre = nombre.substr(15);
-        char txt[128];
-        std::snprintf(txt, sizeof txt, "%s %% · %.1f de %.0f GB · %.0f °C", c[1].c_str(), std::atof(c[2].c_str()) / 1024.0,
-                      std::atof(c[3].c_str()) / 1024.0, std::atof(c[4].c_str()));
-        std::string t = txt;
-        for (char &ch : t) if (ch == '.') ch = idioma::decimal();
-        fila(nombre, t);
-        alguna = true;
-      }
-      ::pclose(f);
-    }
-    if (!alguna) {
-      Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("nvidia-smi no respondió: no hay datos de las tarjetas.");
-      pon(n, "");
-    }
+    filasRendimiento(st, v, ids);   /* la pestana ya no se ensena: sus filas van en Programa */
   } else {
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "STEAM";

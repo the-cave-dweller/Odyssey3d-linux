@@ -85,20 +85,19 @@ teclas; Esc lo cierra.
 
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
-Sus pestañas son **Ajustes**, **Juegos**, **Rendimiento** (cuadros por segundo, tiempo del
-conversor, tarjetas gráficas) y **Programa** (versión, actualizaciones, barra de tareas y bandeja,
-desinstalar); sobre un vídeo o un juego en 3D no sale la de Juegos. Todo está también en
+Sus pestañas son **Ajustes**, **Juegos** y **Programa** (versión, actualizaciones, los datos de
+rendimiento —cuadros por segundo, tiempo del conversor, tarjetas gráficas—, idioma, barra de tareas y
+bandeja, y **Desinstalar** plegado bajo su flechita); en la rama `experimental`, también
+**Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. Todo está también en
 `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
 sin reiniciarse.
 
 ### Idioma
 
-El globo junto a la flecha de actualizar cambia el idioma al momento: el panel, la pastilla, las
-tarjetas y el rótulo de la bandeja. De fábrica va en inglés; la misma elección está en
-**Programa → Otros → Idioma**. El chino y el japonés usan el tipo Noto Sans CJK (`noto-fonts-cjk`
-en Arch).
-
-![La lista de idiomas](docs/img/es/language.png)
+**Programa → Otros → Idioma** cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
+rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
+(`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel; en la
+rama `experimental` ya no está.)
 
 ## Qué hace bueno el 3D
 

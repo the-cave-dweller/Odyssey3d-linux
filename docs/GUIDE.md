@@ -71,7 +71,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 
 | Key | Default | Meaning |
 |---|---|---|
-| `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (the globe in the panel) |
+| `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (Program → Other → Language) |
 | `modo` | `ask` | `ask` / `conv` / `sbs` / `tb` / `flat` |
 | `auto` | — | `app:modo`, one per line; the card's "remember" writes them |
 | `ignore` | system apps | app ids never offered 3D |

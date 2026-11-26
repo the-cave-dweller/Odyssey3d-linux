@@ -84,18 +84,18 @@ no keys; Esc closes it.
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
 taskbar icon or the system-tray icon (click: settings, middle click: games). Its tabs are
-**Settings**, **Games**, **Performance** (frame rate, converter time, GPUs) and **Program**
-(version, updates, taskbar and tray, uninstall); over a video or a game in 3D the Games tab is left
+**Settings**, **Games** and **Program** (version, updates, the performance figures — frame rate,
+converter time, GPUs —, language, taskbar and tray, and **Uninstall** folded under its arrow); on the
+`experimental` branch, also **Experimental**. Over a video or a game in 3D the Games tab is left
 out. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
 ### Language
 
-The globe next to the update arrow switches the language at once: the panel, the pill, the
-cards and the tray tooltip. English is the default; the same choice is in **Program → Other →
-Language**. Chinese and Japanese use the Noto Sans CJK font (`noto-fonts-cjk` on Arch).
-
-![The language list](docs/img/language.png)
+**Program → Other → Language** switches the language at once: the panel, the pill, the cards and
+the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
+(`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header; on the
+`experimental` branch it is gone.)
 
 ## What makes the 3D good
 

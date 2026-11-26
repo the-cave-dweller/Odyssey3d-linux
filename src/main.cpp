@@ -3243,7 +3243,7 @@ static int cmdAjustes(int argc, char **argv) {
       repintar = true;
     }
     /* la pestana de rendimiento se refresca sola, una vez por segundo */
-    if (st.pestana == 2 && reloj() - miradaRend >= 1.0) {
+    if ((st.pestana == 2 || st.pestana == 3) && reloj() - miradaRend >= 1.0) {   /* Programa lleva el rendimiento */
       miradaRend = reloj();
       rellenar();
       repintar = true;

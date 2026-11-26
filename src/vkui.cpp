@@ -1407,7 +1407,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   /* v1.07: en ruso («Производительность») las pestanas no cabian hasta el globo: la letra se achica */
   float tamPest = 14.0f;
   {
-    const float limite = px + pw - 20.0f - 32.0f - 40.0f - 8.0f - (40.0f + textWidth("XX", 13.0f)) - 12.0f;
+    const float limite = px + pw - 20.0f - 32.0f - 40.0f - 8.0f - 12.0f;   /* sin el globo del idioma */
     float total = 0.0f;
     for (const std::string &p : st_.pestanas)
       if (!p.empty()) total += textWidth(p, 14.0f) + 32.0f + 8.0f;
@@ -1460,20 +1460,11 @@ void Hud::dibujaPanel(int vw, int vh) {
       rotuloActualizar = idioma::tr("Aún no se ha buscado ninguna actualización. Pica para buscarla.");
     }
   }
-  /* el boton del idioma (v1.07), a la izquierda del de actualizar: el globo y el codigo (EN, ES...).
-     Picado, cuelga la lista de los siete idiomas, cada uno con su nombre en su idioma. */
+  /* el boton del idioma (v1.07) ya no esta en la cabecera (rama experimental; Rodolfo: «quita el pill
+     del idioma, basta con tenerlo en otros»): el idioma se elige en Programa → Otros */
   const int lengua = idioma::actual();
-  std::string codigoIdioma = idioma::codigo(lengua);
-  for (char &ch : codigoIdioma) ch = (char)std::toupper((unsigned char)ch);
-  const float wIdioma = 26.0f + textWidth(codigoIdioma, 13.0f) + 14.0f;
-  panelIdioma_ = {panelActualizar_.x - 8.0f - wIdioma, py + 20.0f, wIdioma, 32.0f};
-  const bool hi = panelIdioma_.inside(mx_, my_);
-  if (st_.menuIdioma) mask9(panelIdioma_, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
-  else mask9(panelIdioma_, 0, 16.0f, 1.0f, 1.0f, 1.0f, hi ? 0.16f : 0.07f);
-  icono({panelIdioma_.x + 9.0f, panelIdioma_.y + 7.0f, 18.0f, 18.0f}, icoGlobo_, ink[0], ink[1], ink[2],
-        hi || st_.menuIdioma ? 1.0f : 0.80f);
-  text(codigoIdioma, panelIdioma_.x + 32.0f, panelIdioma_.y + 7.5f, 13.0f, ink[0], ink[1], ink[2],
-       hi || st_.menuIdioma ? 1.0f : 0.85f);
+  panelIdioma_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  const bool hi = false;
   solid(px + 20.0f, py + 68.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
 
   /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */

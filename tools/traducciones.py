@@ -32,7 +32,6 @@ T = {
 "Idioma": ("Language", "Langue", "Sprache", "语言", "言語"),
 "Ajustes": ("Settings", "Réglages", "Einstellungen", "设置", "設定"),
 "Juegos": ("Games", "Jeux", "Spiele", "游戏", "ゲーム"),
-"Rendimiento": ("Performance", "Performances", "Leistung", "性能", "パフォーマンス"),
 "Programa": ("Program", "Programme", "Programm", "程序", "プログラム"),
 "OdysseyVK — Ajustes": ("OdysseyVK — Settings", "OdysseyVK — Réglages", "OdysseyVK — Einstellungen", "OdysseyVK — 设置", "OdysseyVK — 設定"),
 "Clic: ajustes · clic central: juegos": ("Click: settings · middle click: games", "Clic : réglages · clic du milieu : jeux", "Klick: Einstellungen · Mittelklick: Spiele", "单击：设置 · 中键：游戏", "クリック：設定 · 中クリック：ゲーム"),
