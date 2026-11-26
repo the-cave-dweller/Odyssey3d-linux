@@ -2938,7 +2938,7 @@ static int cmdAjustes(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
   };
-  double cerrarEn = -1.0, miradaHub = 0.0;
+  double cerrarEn = -1.0, miradaHub = 0.0, miradaRend = 0.0;
   while (!g_cierraPanel && !ov.conexionCaida()) {
     ov.waitAndDispatch(100);
     Overlay::Golpe g;
@@ -2947,7 +2947,7 @@ static int cmdAjustes(int argc, char **argv) {
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
-        st.pestana = g.sub == 1 ? 1 : 0;
+        st.pestana = (g.sub >= 0 && g.sub <= 2) ? g.sub : 0;
         st.corrida = 0.0f;
         st.pie.clear();
         rellenar();
@@ -2966,6 +2966,12 @@ static int cmdAjustes(int argc, char **argv) {
         if (cambio || !aviso.empty()) repintar = true;
         if (cerrar) cerrarEn = reloj() + 1.2;   /* que de tiempo a leer «arrancando ...» */
       }
+    }
+    /* la pestana de rendimiento se refresca sola, una vez por segundo */
+    if (st.pestana == 2 && reloj() - miradaRend >= 1.0) {
+      miradaRend = reloj();
+      rellenar();
+      repintar = true;
     }
     if (repintar) ov.repaint();
     if (cerrarEn > 0.0 && reloj() >= cerrarEn) break;
@@ -3051,7 +3057,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;
-    hud.state().pestana = std::atoi(pn) == 1 ? 1 : 0;
+    hud.state().pestana = std::max(0, std::min(2, std::atoi(pn)));
     std::vector<std::string> ids;
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
     hud.state().pie = "se aplica desde el siguiente vídeo";

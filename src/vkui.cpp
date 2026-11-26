@@ -964,6 +964,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
       if (sub) *sub = (int)i;
       return HitPanelPestana;
     }
+  if (my < panelCaja_.y + 68.0f) return HitPanelTitulo;
   if (!panelCuerpo_.inside(mx, my)) return HitPanel;
   for (size_t i = 0; i < zonas_.size() && i < st_.items.size(); i++) {
     const ZonaItem &z = zonas_[i];

@@ -156,6 +156,7 @@ void printTuning(const VkUi &ui, const char *what) {
    con las teclas de esa ventana. La ventana de ajustes (otro proceso) y `odysseyvk ctl ajuste` los
    mueven por ficheros: ver src/ajuste.h. Aqui esta la otra mitad: la foto de lo que el visor usa de
    verdad (el fichero `estado`) y la cuenta de lo que va cambiando (`preferencias.log`). */
+static double g_fpsVisto = 0.0, g_mapaMs = 0.0;   /* para el `estado`: lo ensena la pestana de rendimiento */
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
 static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
 /* La casilla de Previsualizacion de la ventana de ajustes (`vista = 1`): mientras esta pedida, la copia
@@ -310,6 +311,13 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
   s += "# estado real del visor: lo escribe el propio visor, lo lee la ventana de ajustes\n";
   s += std::string("hora = ") + hora + "\n";
   s += std::string("visor = ") + ODYSSEYVK_VERSION + "\n";
+  {
+    char num[64];
+    std::snprintf(num, sizeof num, "%.1f", g_fpsVisto);
+    s += std::string("fps = ") + num + "\n";
+    std::snprintf(num, sizeof num, "%.1f", g_mapaMs);
+    s += std::string("mapa_ms = ") + num + "\n";
+  }
   s += std::string("trama = ") + (ui.tune.weave && ui.hud.state().weaveOn ? "activa" : "apagada") + "\n";
   /* si la pastilla esta a la vista o ocultada (Ctrl+Shift+F1 / `ctl capa`): lo lee `ctl capa estado`
      y la ventana de ajustes. Con la pastilla oculta la trama sigue igual, solo se quita la interfaz. */
@@ -2512,7 +2520,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* v0.75: solo en los primeros segundos de la sesion (y al volver de Tab), que es cuando el
          cambio de modo lo deja parado. Antes valia toda la sesion: medido el 25-nov, cada pausa que
          ponia Rodolfo en el navegador se deshacia a los 1-3 s («se reanuda solo», hasta seis veces). */
-      if (media.playerFound() && now >= nextMediaCheck && (now - t0 < 8.0 || now < reanudaHasta)) {
+      if (media.playerFound() && now >= nextMediaCheck && ((now - t0 < 8.0 && !rig.panelSinGeometria) || now < reanudaHasta)) {
+        /* (v0.86) Al arrancar solo se reanuda si el 3D cambio el modo o la escala del monitor, que
+           es lo que hacia que el navegador parara el video. Desde la v0.76 no se cambia nada, y
+           esta reanudacion le daba play a las pausas de Rodolfo en los primeros 8 s de cada sesion
+           (MEDIDO 25/11 18:08: Paused a los 4 y a los 6 s, reanudado las dos veces). */
         nextMediaCheck = now + 3.0;
         std::string mst, merr;
         if (media.status(&mst, &merr) && mst != "Playing" && !ui.mediaPausaManual && reanudados < 6) {
@@ -2922,6 +2934,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       const int estado = hiloRed.recoger(mapa, msHecho, errHecho, &mascara, &masW, &masH, &fracTexto, &mapaRG);
       if (estado == 1) {
         convMs = msHecho;
+        g_mapaMs = msHecho;
         const double tSube0 = glfwGetTime();
         const bool subido = mapaRG.size() == mapa.size() * 2
                                 ? wv.setDepthMapRG(mapaRG.data(), red.size(), red.size(), &cerr)
@@ -3395,7 +3408,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       medUltimo = ahoraM;
     }
     if (now - clock > 5.0) {
-      std::printf("[fps] %.1f\n", frames / (now - clock));
+      g_fpsVisto = frames / (now - clock);
+      std::printf("[fps] %.1f\n", g_fpsVisto);
       /* ODYSSEYVK_MEDIR: donde se va el cuadro. `leer` es bajar la copia pequena para la red y
          `subir` es mandar el mapa nuevo a la tarjeta; las dos corren en el hilo que dibuja. */
       static const bool kMedir = entornoOdyssey("ODYSSEYVK_MEDIR") != nullptr;

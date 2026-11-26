@@ -124,6 +124,10 @@ struct Overlay::Impl {
   /* el panel de ajustes: el deslizador que se esta arrastrando, lo que habia bajo el raton la
      ultima vez (para no repintar de mas) y los golpes que esperan a quien lo ensena */
   int arrastrando = -1;
+  /* mover el panel: se agarra por la cabecera y la capa sigue al raton cambiando sus margenes */
+  bool moviendo = false, panelMontado = false;
+  double agarreX = 0.0, agarreY = 0.0, supX = 0.0, supY = 0.0;
+  int margenIzq = 0, margenArr = 0, logAncho = 0, logAlto = 0;
   long firmaVista = -1;
   std::vector<Overlay::Golpe> golpes;
   double ratonX = -1.0, ratonY = -1.0;
@@ -696,6 +700,15 @@ struct Overlay::Impl {
     }
   }
   void panelMovimiento() {
+    if (moviendo && layer) {
+      /* la capa se mueve con el raton, asi que la posicion del raton DENTRO de ella no cambia: lo
+         que se haya movido respecto al agarre es justo lo que hay que correr */
+      margenIzq = std::max(0, std::min(std::max(0, logAncho - 80), margenIzq + (int)std::lround(supX - agarreX)));
+      margenArr = std::max(0, std::min(std::max(0, logAlto - 60), margenArr + (int)std::lround(supY - agarreY)));
+      zwlr_layer_surface_v1_set_margin(layer, margenArr, 0, 0, margenIzq);
+      wl_surface_commit(surf);
+      return;
+    }
     if (arrastrando >= 0) {
       const float f = hud.fracDeslizador(arrastrando, (float)ratonX);
       if ((size_t)arrastrando < hud.state().items.size()) hud.state().items[(size_t)arrastrando].frac = f;
@@ -714,6 +727,7 @@ struct Overlay::Impl {
   }
   void panelBoton(bool apretado) {
     if (!apretado) {
+      moviendo = false;
       if (arrastrando >= 0) {
         golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.fracDeslizador(arrastrando, (float)ratonX), true});
         arrastrando = -1;
@@ -731,6 +745,11 @@ struct Overlay::Impl {
       sucio = true;
       return;
     }
+    if (h == Hud::HitPanelTitulo) {
+      moviendo = true;
+      agarreX = supX, agarreY = supY;
+      return;
+    }
     if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem)
       golpes.push_back({(int)h, item, sub, fr, true});
   }
@@ -740,6 +759,7 @@ struct Overlay::Impl {
     s->ratonX = s->ox + wl_fixed_to_double(sx) * s->escala;
     s->ratonY = s->oy + wl_fixed_to_double(sy) * s->escala;
     s->hud.setMouse((float)s->ratonX, (float)s->ratonY);
+    s->supX = wl_fixed_to_double(sx), s->supY = wl_fixed_to_double(sy);
     if (s->hud.state().panel) {
       s->panelMovimiento();
       return;
@@ -1023,8 +1043,15 @@ void Overlay::showPanel(bool grande) {
     zwlr_layer_surface_v1_add_listener(s.layer, &Impl::layerListener, d.get());
     s.capaEn = s.elegido ? s.elegido->obj : nullptr;
   }
-  zwlr_layer_surface_v1_set_anchor(s.layer, 0);   /* sin anclas: la capa queda centrada */
-  zwlr_layer_surface_v1_set_margin(s.layer, 0, 0, 0, 0);   /* la separacion vive dentro del lienzo */
+  /* Anclada arriba a la izquierda y colocada con margenes: asi se puede mover arrastrando su
+     titulo (v0.86). Empieza en el centro. */
+  zwlr_layer_surface_v1_set_anchor(s.layer, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
+  s.logAncho = (s.elegido && s.elegido->anchoLog > 0) ? s.elegido->anchoLog : (int)(s.anchoE / std::max(0.25, s.escala));
+  s.logAlto = (s.elegido && s.elegido->altoLog > 0) ? s.elegido->altoLog : (int)(s.altoE / std::max(0.25, s.escala));
+  s.margenIzq = std::max(0, (s.logAncho - s.supAncho) / 2);
+  s.margenArr = std::max(0, (s.logAlto - s.supAlto) / 2);
+  s.panelMontado = true;
+  zwlr_layer_surface_v1_set_margin(s.layer, s.margenArr, 0, 0, s.margenIzq);
   zwlr_layer_surface_v1_set_exclusive_zone(s.layer, -1);
   zwlr_layer_surface_v1_set_size(s.layer, (uint32_t)s.supAncho, (uint32_t)s.supAlto);
 #ifdef HAVE_FRACTIONAL_SCALE

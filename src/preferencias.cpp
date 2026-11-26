@@ -236,7 +236,7 @@ Valores leer() {
 }
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  st.pestanas = {"Ajustes", "Juegos"};
+  st.pestanas = {"Ajustes", "Juegos", "Rendimiento"};
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
@@ -295,6 +295,76 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       fila.tipo = Hud::ItemPanel::Fila, fila.rotulo = par.first, fila.valorTexto = nombreModo(par.second);
       fila.quitar = true;
       pon(fila, "auto:" + par.first);
+    }
+  } else if (st.pestana == 2) {
+    /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que
+       dice nvidia-smi de las tarjetas. Se rellena de nuevo cada segundo mientras esta a la vista. */
+    auto fila = [&](const std::string &que, const std::string &cuanto) {
+      Hud::ItemPanel f;
+      f.tipo = Hud::ItemPanel::Fila, f.rotulo = que, f.valorTexto = cuanto;
+      pon(f, "");
+    };
+    Hud::ItemPanel s;
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "VISOR 3D";
+    pon(s, "");
+    const auto hub = ajuste::leerEstadoHub();
+    const auto ses = hub.find("sesion");
+    const bool abierta = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
+    if (!abierta) {
+      Hud::ItemPanel n;
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = "No hay ningún vídeo ni juego en 3D ahora mismo.";
+      pon(n, "");
+    } else {
+      const auto e = ajuste::leerEstado();
+      auto de = [&](const char *k) {
+        const auto it = e.find(k);
+        return it == e.end() ? std::string("-") : it->second;
+      };
+      std::string fps = de("fps"), ms = de("mapa_ms"), modelo = de("modelo");
+      for (char &c : fps) if (c == '.') c = ',';
+      for (char &c : ms) if (c == '.') c = ',';
+      const size_t barra = modelo.rfind('/');
+      if (barra != std::string::npos) modelo = modelo.substr(barra + 1);
+      fila("Cuadros por segundo", fps);
+      const bool conv = de("conversor") == "puesto";
+      fila("Conversor de relieve", conv ? "puesto · " + ms + " ms por mapa" : "apagado");
+      if (conv) fila("Red de profundidad", modelo + " · " + de("tarjeta"));
+      fila("Cámara", de("facetracking") == "abierto" ? de("camara_nota") : "sin abrir");
+    }
+    s.rotulo = "TARJETAS GRÁFICAS";
+    pon(s, "");
+    bool alguna = false;
+    if (FILE *f = ::popen("nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu "
+                          "--format=csv,noheader,nounits 2>/dev/null", "r")) {
+      char linea[256];
+      while (std::fgets(linea, sizeof linea, f)) {
+        std::vector<std::string> c;
+        std::string campo;
+        for (const char *q = linea; *q; q++) {
+          if (*q == ',' || *q == '\n') {
+            c.push_back(strTrim(campo));
+            campo.clear();
+          } else {
+            campo += *q;
+          }
+        }
+        if (c.size() < 5) continue;
+        std::string nombre = c[0];
+        if (nombre.rfind("NVIDIA GeForce ", 0) == 0) nombre = nombre.substr(15);
+        char txt[128];
+        std::snprintf(txt, sizeof txt, "%s %% · %.1f de %.0f GB · %.0f °C", c[1].c_str(), std::atof(c[2].c_str()) / 1024.0,
+                      std::atof(c[3].c_str()) / 1024.0, std::atof(c[4].c_str()));
+        std::string t = txt;
+        for (char &ch : t) if (ch == '.') ch = ',';
+        fila(nombre, t);
+        alguna = true;
+      }
+      ::pclose(f);
+    }
+    if (!alguna) {
+      Hud::ItemPanel n;
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = "nvidia-smi no respondió: no hay datos de las tarjetas.";
+      pon(n, "");
     }
   } else {
     Hud::ItemPanel s;

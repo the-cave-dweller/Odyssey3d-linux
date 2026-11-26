@@ -116,6 +116,7 @@ public:
     HitPanel,          /* dentro del panel de ajustes, sobre nada que se pique */
     HitPanelCerrar,
     HitPanelPestana,   /* `sub` = cual */
+    HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
   };
 

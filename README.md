@@ -535,7 +535,9 @@ detalle completo sigue en `odysseyvk ctl estado` o `tail -f ~/.local/state/odyss
 `odysseyvk ajustes` —el icono de OdysseyVK del menú del sistema, o el engranaje de la pastilla
 cuando hay un vídeo en 3D— abre una tarjeta translúcida de esquinas redondas que flota en el centro
 de la pantalla, encima de lo que haya. Abrirla otra vez la cierra (también el aspa). Con un vídeo
-en 3D debajo se dibuja al doble, porque se ve a través de la lente. Dos pestañas:
+en 3D debajo se dibuja al doble, porque se ve a través de la lente. Se mueve arrastrando su cabecera
+(v0.86). Tres pestañas (la tercera, **Rendimiento**: cuadros por segundo, lo que tarda el conversor y el
+uso, la memoria y la temperatura de cada tarjeta gráfica):
 
 * **Ajustes**, solo lo de todos los días:
   * qué hacer al ver un vídeo a pantalla completa: preguntar, vídeo normal o vídeo dividido (`modo`);

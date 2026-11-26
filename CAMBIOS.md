@@ -3,6 +3,24 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Pausas respetadas, panel movible y pestaña de rendimiento (v0.86)
+
+- Rodolfo, con la 0.85 (el cursor del panel «ya está bien»): «por unos segundos volvió a darle play
+  a mis pausas»; quiere mover el menú arrastrando su título y una tercera pestaña con el rendimiento.
+- **Pausas**. MEDIDO en su registro (18:08): en los primeros 8 s de la sesión el visor reanudó el
+  vídeo tres veces («el navegador había parado el vídeo: se reanuda solo»), dos de ellas pausas
+  suyas. Esa reanudación era para cuando el 3D cambiaba el modo o la escala del monitor; desde la
+  v0.76 no se cambia nada, así que ya solo se hace si de verdad se cambió (y al volver de Tab).
+- **Mover el panel**: la capa va anclada arriba a la izquierda y colocada con márgenes (empieza en el
+  centro); agarrando la cabecera, los márgenes siguen al ratón (`src/overlay.cpp`, `HitPanelTitulo`).
+- **Rendimiento**: el visor apunta en su `estado` los cuadros por segundo y lo que tarda cada mapa;
+  la pestaña enseña eso, la red y la cámara, y por cada tarjeta lo que dice `nvidia-smi` (uso,
+  memoria, temperatura). Se refresca cada segundo.
+- MEDIDO: la pestaña pintada fuera del panel con sus dos tarjetas; el panel real se abrió y se cerró
+  en su escritorio con el anclaje nuevo, sin errores del compositor.
+- **No probado**: arrastrar el panel con el ratón; la pestaña con un vídeo en 3D abierto; que la
+  pausa aguante en los primeros segundos.
+
 ## El aspa del panel cierra y Esc se lo lleva (v0.85)
 
 - Rodolfo, con la 0.84 y el panel abierto con el engranaje sobre un vídeo: «no sirvió Esc para salir
