@@ -108,21 +108,15 @@ void Rig::bringUp(const ViewerOpts &o) {
           } else if (!Panel::saveSnapshot(st, &snapPath, &err, movidas.empty() ? nullptr : &originales)) {
             std::fprintf(stderr, "[aviso] %s\n", err.c_str());
           }
-          /* HDR en 3D (v0.71). De siempre se apagaba al entrar: con HDR el compositor convierte el
-             color con una matriz que mezcla los canales, y en la trama los tres subpixeles de un punto
-             pueden ser de ojos distintos. Pero Rodolfo lo probo en el panel el 25-nov (con
-             `kscreen-doctor output.DP-4.hdr.enable` en mitad de una sesion) y los colores dejan de
-             verse secos: `hdr_en_3d = si` en serve.conf (ODYSSEYVK_HDR_3D=1) lo deja como este en el
-             escritorio. Por defecto se sigue apagando. */
-          static const bool kHdrEn3d = [] {
-            const char *e = entornoOdyssey("ODYSSEYVK_HDR_3D");
-            return e && (e[0] == '1' || e[0] == 's');
-          }();
+          /* HDR en 3D: se respeta siempre el del escritorio (rama experimental, 26-nov). Hasta la v0.71
+             se apagaba al entrar (con HDR el compositor mezcla los canales y en la trama los tres
+             subpixeles de un punto pueden ser de ojos distintos), pero Rodolfo lo probo en el panel el
+             25-nov y con HDR los colores dejan de verse secos; desde entonces lo pidio sin opcion. */
           /* si el panel ya esta en el modo, la escala y la rotacion que hacen falta, no se manda
              ninguna orden de geometria: ni un parpadeo, ni un cambio de configuracion para KWin */
           const bool yaEsta = st.modeIndex == idx && std::fabs(st.scale - escala3d) < 1e-6 &&
                               st.rotation == RotNone && movidas.empty() && !residual;
-          if (Panel::apply(name, idx, escala3d, RotNone, !kHdrEn3d, &err, false, movidas.empty() ? nullptr : &movidas,
+          if (Panel::apply(name, idx, escala3d, RotNone, false, &err, false, movidas.empty() ? nullptr : &movidas,
                            yaEsta)) {
             panelSinGeometria = yaEsta;
             saved = st;
@@ -133,7 +127,7 @@ void Rig::bringUp(const ViewerOpts &o) {
             std::printf("[panel] %s: modo %d %s, escala %g%s, rotacion normal, HDR %s\n", name.c_str(), idx,
                         nombreModo.c_str(), escala3d,
                         yaEsta ? " (la del escritorio: no se cambia nada)" : "",
-                        kHdrEn3d ? "como en el escritorio (hdr_en_3d)" : "apagado");
+                        "como en el escritorio");
             if (!yaEsta) {
               std::printf("[panel] al salir se restaura el modo %d %s con escala %g y rotacion %s\n", saved.modeIndex,
                           saved.modeRes.c_str(), saved.scale, rotW(saved.rotation));

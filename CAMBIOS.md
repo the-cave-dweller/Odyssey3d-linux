@@ -3,6 +3,22 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El HDR del escritorio siempre, secciones plegables y Juegos fuera del panel en 3D (rama `experimental`)
+
+- Rodolfo: «quita la opción de HDR, que se respete siempre el escritorio», «en atajos de teclado pon
+  una flechita para contraer y expandir, también en aplicaciones que no preguntan», y «que la sección
+  de juegos no aparezca cuando se ejecute en un vídeo o un juego».
+- **HDR**: la sesión ya no lo apaga nunca; el 3D deja el que tenga el escritorio (el registro dice
+  «HDR como en el escritorio»). Fuera la fila «Mantener el HDR durante el 3D», la clave `hdr_en_3d` y
+  `ODYSSEYVK_HDR_3D`. Una línea `hdr_en_3d` que quede en serve.conf ya no hace nada.
+- **Secciones plegables**: «ATAJOS DE TECLADO» y «APLICACIONES QUE NO PREGUNTAN» llevan una flechita
+  a la derecha de la cabecera (hacia el lado plegada, hacia abajo desplegada) y se pican enteras. De
+  fábrica plegadas; lo desplegado se recuerda en `~/.local/state/odysseyvk/panel-secciones`. Esperando
+  un atajo nuevo, la de atajos se queda abierta.
+- **La pestaña Juegos** no sale con un vídeo o un juego en 3D debajo (las demás conservan su número;
+  el clic central de la bandeja abre entonces Ajustes). `ODYSSEYVK_HUD_SESION=1` la quita en la prueba
+  de la interfaz.
+
 ## Los juegos y el cursor: la pastilla y el panel se lo quitan y se lo devuelven (rama `experimental`)
 
 - Rodolfo: «quiero que el overlay me robe el cursor del juego mientras se muestre», «y claro,

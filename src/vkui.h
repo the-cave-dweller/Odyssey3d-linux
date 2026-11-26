@@ -48,6 +48,9 @@ public:
     float frac = 0.0f;               /* deslizador, 0..1 */
     bool quitar = false;             /* fila con aspa para quitarla */
     bool peligro = false;            /* boton en rojo suave: desinstalar (v1.06) */
+    /* una seccion que se pliega (rama experimental): la cabecera lleva una flechita y se pica entera;
+       `valor` = desplegada (las filas de debajo solo se ponen si lo esta) */
+    bool plegable = false;
     /* la ayuda al pasar el raton (rama experimental): `ayuda` para la fila entera y, en las opciones,
        `ayudas[k]` para cada una (si la hay, manda sobre `ayuda`) */
     std::string ayuda;
@@ -320,7 +323,7 @@ private:
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
-      icoRayo_, icoBajar_;
+      icoRayo_, icoBajar_, icoDerecha_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la

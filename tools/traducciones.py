@@ -108,7 +108,6 @@ T = {
 "Cuánta imagen del otro ojo se resta · se nota al momento": ("How much of the other eye's image is subtracted · applies instantly", "Part de l'image de l'autre œil soustraite · effet immédiat", "Wie viel vom anderen Auge abgezogen wird · wirkt sofort", "减去另一只眼图像的程度 · 立即生效", "反対の目の映像をどれだけ差し引くか · すぐに反映"),
 "Seguir la cabeza con la cámara": ("Track your head with the camera", "Suivre la tête avec la caméra", "Kopf mit der Kamera verfolgen", "用摄像头追踪头部", "カメラで頭を追跡"),
 "Desde el siguiente vídeo": ("From the next video", "Dès la prochaine vidéo", "Ab dem nächsten Video", "从下一个视频起", "次の動画から"),
-"Mantener el HDR durante el 3D": ("Keep HDR during 3D", "Garder le HDR pendant la 3D", "HDR während 3D beibehalten", "3D 时保持 HDR", "3D 中も HDR を維持"),
 "Atajos de teclado en todo el escritorio": ("Keyboard shortcuts across the desktop", "Raccourcis clavier sur tout le bureau", "Tastenkürzel im ganzen Desktop", "在整个桌面使用快捷键", "デスクトップ全体でショートカット"),
 "APLICACIONES QUE NO PREGUNTAN": ("APPS THAT DON'T ASK", "APPLIS QUI NE DEMANDENT PAS", "APPS OHNE NACHFRAGE", "不再询问的应用", "確認しないアプリ"),
 "Ninguna: se pregunta siempre (o se sigue lo de arriba).": ("None: it always asks (or follows the setting above).", "Aucune : on demande toujours (ou on suit le réglage ci-dessus).", "Keine: es wird immer gefragt (oder die Einstellung oben gilt).", "无：总是询问（或按上面的设置）。", "なし：常に確認します（または上の設定に従います）。"),

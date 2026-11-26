@@ -11,6 +11,7 @@
 #include <ctime>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <system_error>
 
 #include <fcntl.h>
@@ -252,7 +253,6 @@ Valores leer() {
     v.suavizar = (ds == "auto" || ds == "automatico") ? 2 : (si(ds, true) ? 1 : 0);
   }
   v.rastreo = si(de("rastreo"), false);
-  v.hdr = si(de("hdr_en_3d"), false);
   v.atajos = si(de("atajos_globales"), true);
   v.fantasma = std::max(0.0, std::min(0.10, numero(de("crosstalk_base"), 0.0128535)));
   v.relieve = std::max(0.5, std::min(2.0, numero(de("relieve"), 1.0)));
@@ -414,6 +414,24 @@ bool versionMasNueva(const std::string &a, const std::string &b) {
 
 namespace {
 std::string g_capturando;   /* la accion que espera su atajo nuevo (v1.09) */
+/* las secciones plegables de Ajustes que estan desplegadas (rama experimental): de fabrica plegadas.
+   Se recuerdan entre una apertura del panel y otra en ~/.local/state/odysseyvk/panel-secciones. */
+std::set<std::string> &seccionesAbiertas() {
+  static std::set<std::string> abiertas = [] {
+    std::set<std::string> s;
+    if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-secciones").c_str(), "re")) {
+      char linea[128];
+      while (std::fgets(linea, sizeof linea, f)) {
+        std::string l(linea);
+        while (!l.empty() && (l.back() == '\n' || l.back() == ' ')) l.pop_back();
+        if (!l.empty()) s.insert(l);
+      }
+      std::fclose(f);
+    }
+    return s;
+  }();
+  return abiertas;
+}
 long g_confirmarDesinstalar = 0;   /* el desinstalador pide dos clics seguidos: hasta cuando vale el primero */
 struct Comprobacion {
   pid_t pid = 0;
@@ -747,15 +765,19 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     c.tipo = Hud::ItemPanel::Interruptor, c.rotulo = idioma::tr("Seguir la cabeza con la cámara");
     c.nota = idioma::tr("Desde el siguiente vídeo"), c.valor = v.rastreo;
     pon(c, "rastreo");
-    Hud::ItemPanel h;
-    h.tipo = Hud::ItemPanel::Interruptor, h.rotulo = idioma::tr("Mantener el HDR durante el 3D");
-    h.nota = idioma::tr("Desde el siguiente vídeo"), h.valor = v.hdr;
-    pon(h, "hdr_en_3d");
 
     /* ATAJOS DE TECLADO (v1.09): el interruptor de los globales y cada atajo, que se cambia picando
        su tecla y pulsando la combinacion nueva */
-    s.rotulo = idioma::tr("ATAJOS DE TECLADO");
-    pon(s, "");
+    /* las dos secciones largas se pliegan con una flechita (rama experimental); esperando un atajo,
+       la de atajos se queda abierta */
+    auto plegable = [&](const char *rotulo, const std::string &clave, bool forzada) {
+      Hud::ItemPanel sp;
+      sp.tipo = Hud::ItemPanel::Seccion, sp.rotulo = idioma::tr(rotulo), sp.plegable = true;
+      sp.valor = forzada || seccionesAbiertas().count(clave) > 0;
+      pon(sp, "plegar:" + clave);
+      return sp.valor;
+    };
+    if (plegable("ATAJOS DE TECLADO", "atajos", !g_capturando.empty())) {
     Hud::ItemPanel a;
     a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = idioma::tr("Atajos de teclado en todo el escritorio");
     a.nota = idioma::tr("Los atajos valen aunque el teclado lo tenga el vídeo o el juego"), a.valor = v.atajos;
@@ -769,9 +791,9 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       at.quitar = puestos.at(d.nombre) != d.defecto;
       pon(at, std::string("atajo:") + d.nombre);
     }
+    }
 
-    s.rotulo = idioma::tr("APLICACIONES QUE NO PREGUNTAN");
-    pon(s, "");
+    if (plegable("APLICACIONES QUE NO PREGUNTAN", "apps", false)) {
     if (v.recordadas.empty()) {
       Hud::ItemPanel n;
       n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("Ninguna: se pregunta siempre (o se sigue lo de arriba).");
@@ -783,6 +805,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       fila.tipo = Hud::ItemPanel::Fila, fila.rotulo = par.first, fila.valorTexto = nombreModo(par.second);
       fila.quitar = true;
       pon(fila, "auto:" + par.first);
+    }
     }
   } else if (st.pestana == 2) {
     /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que
@@ -933,6 +956,17 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
     return false;
   };
+  /* plegar o desplegar una seccion de Ajustes: se apunta y el panel se vuelve a llenar */
+  if (id.rfind("plegar:", 0) == 0) {
+    std::set<std::string> &ab = seccionesAbiertas();
+    const std::string clave = id.substr(7);
+    if (!ab.erase(clave)) ab.insert(clave);
+    if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-secciones").c_str(), "we")) {
+      for (const std::string &c : ab) std::fprintf(f, "%s\n", c.c_str());
+      std::fclose(f);
+    }
+    return true;
+  }
   const Valores v = leer();
   if (id == "modo") {
     static const char *kModo[] = {"ask", "conv", "sbs"};
@@ -950,8 +984,8 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (aviso) *aviso = idioma::tr(kDice[sub]);
     return true;
   }
-  if (id == "rastreo" || id == "hdr_en_3d" || id == "atajos_globales") {
-    const bool ahora = id == "rastreo" ? v.rastreo : (id == "hdr_en_3d" ? v.hdr : v.atajos);
+  if (id == "rastreo" || id == "atajos_globales") {
+    const bool ahora = id == "rastreo" ? v.rastreo : v.atajos;
     if (!fija(id, ahora ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
     return true;

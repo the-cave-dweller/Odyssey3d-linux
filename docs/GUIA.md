@@ -597,8 +597,8 @@ uso, la memoria y la temperatura de cada tarjeta gráfica):
     nunca;
   * fuerza del relieve del conversor (`relieve`) y reducir el fantasma (`crosstalk_base`, se nota al
     momento con un vídeo abierto);
-  * seguir la cabeza con la cámara (`rastreo`), mantener el HDR durante el 3D (`hdr_en_3d`), atajos
-    de teclado en todo el escritorio (`atajos_globales`);
+  * seguir la cabeza con la cámara (`rastreo`) y atajos de teclado en todo el escritorio
+    (`atajos_globales`); el HDR ya no se elige: el 3D deja el del escritorio;
   * las aplicaciones que pasan sin preguntar (`auto = app:modo`), con un aspa para olvidar cada una.
 * **Juegos**: la biblioteca de Steam, leída de sus propios ficheros (`libraryfolders.vdf` y los
   `appmanifest_*.acf` de cada biblioteca; sin Proton ni los Steam Linux Runtime), los jugados hace

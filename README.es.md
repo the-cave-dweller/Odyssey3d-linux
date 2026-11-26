@@ -72,7 +72,8 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla |
 | `Esc` (en el visor) | salir del 3D |
 
-Cada atajo se cambia en **Ajustes → Atajos de teclado**: pícalo y pulsa la combinación nueva
+Cada atajo se cambia en **Ajustes → Atajos de teclado** (la sección se pliega con la flechita de su
+cabecera, como *Aplicaciones que no preguntan*; las dos empiezan plegadas): pícalo y pulsa la combinación nueva
 (necesita Ctrl, Alt o Meta; Esc cancela y la flecha circular vuelve a la de fábrica). Mientras el
 panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
 teclas; Esc lo cierra.
@@ -83,7 +84,8 @@ El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyV
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
 Sus pestañas son **Ajustes**, **Juegos**, **Rendimiento** (cuadros por segundo, tiempo del
 conversor, tarjetas gráficas) y **Programa** (versión, actualizaciones, barra de tareas y bandeja,
-desinstalar). Todo está también en `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
+desinstalar); sobre un vídeo o un juego en 3D no sale la de Juegos. Todo está también en
+`~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
 sin reiniciarse.
 
 ### Idioma
@@ -172,7 +174,6 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 | `crosstalk_base = 0,013` | cuánta imagen del otro ojo se resta (fantasma) |
 | `profundidad_conv = 75` / `salida_conv = 50` | Profundidad y Salida con que arranca el vídeo normal (`_suave` el dividido suavizado, `_sbs` el dividido); se escriben al mover los deslizadores; `profundidad_conv = auto` = plano automático |
 | `hz = 165` | frecuencia del panel en 3D (120 de fábrica; el G90XF también va a 165) |
-| `hdr_en_3d = si` | mantener el HDR durante el 3D |
 | `vrr_en_3d = si` | dejar la frecuencia variable (VRR) durante el 3D; de fábrica se apaga mientras dura el 3D (con ella puesta, los juegos por debajo del refresco daban tirones) |
 | `atajo_3d = Ctrl+Shift+1` | un atajo (los escribe el panel): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |
 | `barra_tareas = no` / `bandeja = no` | quitar OdysseyVK de la barra de tareas / de la bandeja |

@@ -3038,7 +3038,13 @@ static int cmdAjustes(int argc, char **argv) {
   Hud::State &st = ov.hud().state();
   st.pestana = enJuegos ? 1 : 0;
   st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
-  auto rellenar = [&] { prefs::llenar(st, prefs::leer(), juegos, ids); };
+  /* sobre un video o un juego en 3D no sale la pestana de Juegos (rama experimental): se lanzan desde
+     el escritorio. Su nombre vacio la esconde y las demas conservan su numero. */
+  if (haySesion && st.pestana == 1) st.pestana = 0;
+  auto rellenar = [&] {
+    prefs::llenar(st, prefs::leer(), juegos, ids);
+    if (haySesion && st.pestanas.size() > 1) st.pestanas[1].clear();
+  };
   /* al abrirse, una mirada a GitHub (v0.99): asi la pestana Programa y el boton junto al aspa estan
      al dia sin esperar a la mirada del servicio. Es un curl aparte; si no hay red, no pasa nada. */
   if (prefs::leer().avisarActualizaciones) prefs::comprobarActualizacion(nullptr);
@@ -3343,6 +3349,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
       prefs::aplicar(std::string("atajo:") + cap, 0, 0.0f, true, {}, &pieCaptura, &cerrar);
     }
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
+    /* ODYSSEYVK_HUD_SESION=1: como con un video o un juego en 3D debajo (sin la pestana de Juegos) */
+    if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 1) hud.state().pestanas[1].clear();
     hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
@@ -3621,7 +3629,7 @@ static int cmdDoctor(const ViewerOpts &o, const std::string &waylandSock) {
       std::printf("  modo activo   : %d %s\n", st.modeIndex, st.modeRes.c_str());
       std::printf("  escala        : %g  (la trama necesita 1)\n", st.scale);
       std::printf("  rotacion      : %s  (la trama necesita normal)\n", rotW(st.rotation));
-      std::printf("  HDR           : %s\n", st.hdr ? "activado (se apagara al reproducir)" : "apagado");
+      std::printf("  HDR           : %s\n", st.hdr ? "activado (se queda asi en el 3D)" : "apagado");
       std::printf("  sincron. adap.: %s\n", st.vrr.empty() ? "(sin dato)" : st.vrr.c_str());
       int idx = Panel::pickMode(st, o.hz);
       std::printf("  modo elegido  : %s\n", idx < 0 ? "(ninguno 3840x2160)" : Panel::modeName(st, idx).c_str());
@@ -3683,7 +3691,6 @@ struct ServeCfg {
   double paralaje = 999.0;  /* ganancia del paralaje de movimiento, -2..2; 999 = sin poner (apagado) (v0.67) */
   double detalle = -1.0;    /* fuerza del realce de detalle en el sujeto, 0..3; -1 = la de fabrica (0,4) (v0.68) */
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
-  std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
   std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
   std::string barra2d;      /* no = en el video dividido no tejer en 2D las filas de la barra del reproductor (v0.81);
                                entera = tejerlas tal cual vienen, sin la limpieza de la v0.90 */
@@ -3846,7 +3853,6 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "volcado") cfg.volcado = expansionRuta(v);
     else if (k == "saliencia") cfg.saliencia = v;
     else if (k == "cantos") cfg.cantos = v;
-    else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
     else if (k == "rastreo_fino") cfg.rastreoFino = v;
     else if (k == "barra_2d") cfg.barra2d = v;
     else if (k == "actualizaciones") cfg.actualizaciones = v;
@@ -4201,8 +4207,6 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_SALIENCIA", (pila->saliencia == "si" || pila->saliencia == "1") ? "1" : "0", 1);
     /* cantos finos (v0.89): de fabrica. `cantos = viejo` vuelve al camino de antes, para comparar */
     if (!pila->cantos.empty()) ::setenv("ODYSSEYVK_CANTOS", pila->cantos.c_str(), 1);
-    if (!pila->hdrEn3d.empty())
-      ::setenv("ODYSSEYVK_HDR_3D", (pila->hdrEn3d == "si" || pila->hdrEn3d == "1") ? "1" : "0", 1);
     /* v1.11: la sincronizacion adaptativa se APAGA de fabrica durante el 3D. MEDIDO 26-nov con
        Cyberpunk: con el VRR puesto el refresco seguia al juego y el visor esperaba su imagen libre
        15-35 ms; 25 % de las presentaciones tarde con el juego bajo 100 cuadros. Apagado: 165 Hz fijos,
@@ -5957,7 +5961,7 @@ static int cmdServe(int argc, char **argv) {
           marcaConf = marca;
           ServeCfg nuevo;
           loadServeCfg(nuevo);
-          const bool cambio = nuevo.modo != cfg.modo || nuevo.rastreo != cfg.rastreo || nuevo.hdrEn3d != cfg.hdrEn3d ||
+          const bool cambio = nuevo.modo != cfg.modo || nuevo.rastreo != cfg.rastreo ||
                               nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
                               nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
                               nuevo.divididoAuto != cfg.divididoAuto ||
@@ -5991,7 +5995,6 @@ static int cmdServe(int argc, char **argv) {
           }
           cfg.modo = nuevo.modo;
           cfg.rastreo = nuevo.rastreo;
-          cfg.hdrEn3d = nuevo.hdrEn3d;
           cfg.atajosGlobales = nuevo.atajosGlobales;
           /* la tarjeta de la red (`red = 1`): vale desde el siguiente visor, sin reiniciar el servicio */
           if (nuevo.red != cfg.red) {

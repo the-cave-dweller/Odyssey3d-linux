@@ -227,8 +227,10 @@ bool Hud::buildAtlas(std::string *err) {
     };
     static const float kRayo[][2] = {{38, 4}, {14, 36}, {29, 36}, {24, 60}, {50, 26}, {35, 26}, {44, 4}};
     static const float kBajar[][2] = {{8, 22}, {16, 14}, {32, 30}, {48, 14}, {56, 22}, {32, 46}};
+    static const float kDerecha[][2] = {{22, 8}, {46, 32}, {22, 56}, {14, 48}, {30, 32}, {14, 16}};
     cupo = poligono(kRayo, 7, &icoRayo_) && cupo;
     cupo = poligono(kBajar, 6, &icoBajar_) && cupo;
+    cupo = poligono(kDerecha, 6, &icoDerecha_) && cupo;
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -1240,13 +1242,22 @@ void Hud::dibujaPanel(int vw, int vh) {
   {
     const float limite = px + pw - 20.0f - 32.0f - 40.0f - 8.0f - (40.0f + textWidth("XX", 13.0f)) - 12.0f;
     float total = 0.0f;
-    for (const std::string &p : st_.pestanas) total += textWidth(p, 14.0f) + 32.0f + 8.0f;
+    for (const std::string &p : st_.pestanas)
+      if (!p.empty()) total += textWidth(p, 14.0f) + 32.0f + 8.0f;
     if (tx + total > limite && total > 0.0f) {
-      const float fijo = 40.0f * (float)st_.pestanas.size();
+      float fijo = 0.0f;
+      for (const std::string &p : st_.pestanas)
+        if (!p.empty()) fijo += 40.0f;
       tamPest = std::max(10.0f, 14.0f * std::max(0.0f, limite - tx - fijo) / std::max(1.0f, total - fijo));
     }
   }
   for (size_t i = 0; i < st_.pestanas.size(); i++) {
+    /* una pestana sin nombre no se ensena (la de Juegos sobre un video o un juego en 3D); su caja queda
+       fuera de la vista para que las demas conserven su numero */
+    if (st_.pestanas[i].empty()) {
+      panelPestanas_.push_back({-10.0f, -10.0f, 0.0f, 0.0f});
+      continue;
+    }
     const float w = textWidth(st_.pestanas[i], tamPest) + 32.0f;
     const Rect t{tx, py + 20.0f, w, 32.0f};
     panelPestanas_.push_back(t);
@@ -1355,13 +1366,18 @@ void Hud::dibujaPanel(int vw, int vh) {
       continue;
     }
     const bool hov = dentro && z.caja.inside(mx_, my_);
-    const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego || it.tipo == ItemPanel::Atajo;
+    const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego || it.tipo == ItemPanel::Atajo ||
+                         (it.tipo == ItemPanel::Seccion && it.plegable);
     if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
       mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
     const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
     switch (it.tipo) {
       case ItemPanel::Seccion:
         text(it.rotulo, izq, y + 17.0f, 11.5f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
+        /* plegable: la flechita a la derecha, hacia abajo si esta desplegada y hacia el lado si no */
+        if (it.plegable)
+          icono({der - 14.0f, y + 16.0f, 14.0f, 14.0f}, it.valor ? icoBajar_ : icoDerecha_, accent[0] + 0.22f,
+                accent[1] + 0.25f, 1.0f, hov ? 1.0f : 0.80f);
         break;
       case ItemPanel::Nota:
         textoCabe(it.rotulo, izq, y + 8.0f, 12.5f, der - izq, dim[0], dim[1], dim[2], 0.85f);
@@ -1646,6 +1662,8 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     switch (it.tipo) {
       case ItemPanel::Interruptor:
         return HitPanelItem;
+      case ItemPanel::Seccion:
+        return it.plegable ? HitPanelItem : HitPanel;
       case ItemPanel::Juego:
         if (!z.subs.empty() && z.subs[0].inside(mx, my) && sub) *sub = 1;
         return HitPanelItem;

@@ -8,7 +8,7 @@
      - que hacer al ver un video a pantalla completa (preguntar, video normal, video dividido)
      - suavizar los videos divididos (el unico sitio donde se quita)
      - seguir la cabeza con la camara
-     - HDR durante el 3D, atajos de teclado globales
+     - atajos de teclado globales (el HDR ya no se elige: se respeta el del escritorio)
      - cuanta imagen del otro ojo se resta (el fantasma) y la fuerza del relieve del conversor
      - las aplicaciones que pasan directas sin preguntar, para poder olvidarlas
 
@@ -47,7 +47,6 @@ struct Valores {
   std::string modo = "ask";       /* ask · conv · sbs */
   int suavizar = 1;               /* los videos divididos: 0 nunca · 1 siempre · 2 solo si hace falta */
   bool rastreo = false;
-  bool hdr = false;
   bool atajos = true;
   double fantasma = 0.0128535;    /* crosstalk_base: 0 .. 0,10 en el panel */
   double relieve = 1.0;           /* fuerza del relieve del conversor: 0,5 .. 2 */
