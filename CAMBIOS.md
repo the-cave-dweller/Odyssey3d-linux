@@ -42,6 +42,27 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   28)», y al volver a Manual `profundidad_conv = 68`, `salida_conv = 29`.
 - **Arreglo de paso (viene de main)**: arrastrar la Salida con el ratón daba 50 a mitad del recorrido
   (se tomaba de 0 a 100 en vez de −50 a +50): la bola saltaba al final y lo negativo no se alcanzaba.
+- **Con vídeo de verdad** (Rodolfo: «también puedes medir con mi YouTube»): 20 s de tres vídeos
+  suyos, 10 cuadros por segundo (el ritmo de mapas del visor con un vídeo de 30), por la red fp16 con la
+  saliencia en secuencia, y la Salida automática suavizada como en el visor (cortes por cambio de imagen):
+
+  | Vídeo | Alcance | Auto: pegado | Auto: relieve | Fija 50 `relieve` x2: pegado / relieve | Cambio por cuadro (p95) |
+  |---|---|---|---|---|---|
+  | Hablando, cortes rápidos (8 cortes) | x1 | 3,5 % | 28,6 px | 34,6 % / 39,1 px | 3,1 % (sin suavizar 7,7) |
+  | Paisaje y animales | x1 | 2,2 % | 38,5 px | 49,7 % / 45,3 px | 1,9 % |
+  | Película subtitulada (34 % de bandas) | x1 | 2,6 % | 31,0 px | 41,8 % / 42,5 px | 1,5 % |
+  | Hablando | x2,75 | 3,5 % | 78,6 px | 3,5 % / 72,6 px | 3,1 % |
+  | Paisaje | x2,75 | 2,2 % | 105,9 px | 0,0 % / 73,5 px | 1,9 % |
+  | Película | x2,75 | 2,6 % | 85,2 px | 1,6 % / 80,6 px | 1,5 % |
+
+  Con los topes de fábrica, la automática aplasta 10–20 veces menos que la fija de Rodolfo con algo
+  menos de recorrido; no bombea (0,4–1 % de cambio medio por cuadro). Con alcance x2,75 llena los topes:
+  en el paisaje llega a ~106 px de relieve, con cada punto dentro de sus topes; el alcance es lo que
+  pone el límite de comodidad.
+- **Las bandas negras de las películas salen hacia delante** (medido, no solo en Auto): la red les da
+  0,64–0,78 de cercanía cuando la imagen está en 0,20–0,35, así que flotan por delante de la película
+  (con la Salida 50 y `relieve = 2,00`, pegadas al tope de fuera) y se comen el margen de la Salida
+  automática. Queda por arreglar.
 - Rodolfo, después: «que el manual sea una herramientita». En Manual el botón lleva una llave (el mango
   en diagonal y la cabeza abierta, en el mismo azul claro) en vez del chip; en Auto, el chip.
 - Sustituye al chip cuadrado del Foco automático de la entrega anterior.
