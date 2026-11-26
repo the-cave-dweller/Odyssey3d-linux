@@ -1212,7 +1212,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
 
-  /* el app_id, dicho por nosotros (rama experimental): sin esto KWin lo saca de /proc/<pid>/exe, y con
+  /* el app_id, dicho por nosotros (v1.11): sin esto KWin lo saca de /proc/<pid>/exe, y con
      `setcap` en el binario el proceso no se deja leer (no volcable). MEDIDO 26-nov: el servicio no
      encontraba la ventana del visor, no bajaba el juego y el juego quedaba encima del 3D. */
   glfwWindowHintString(GLFW_WAYLAND_APP_ID, "odysseyvk");
@@ -1468,7 +1468,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      cuadros que pierden un refresco */
   double medLeeMs = 0.0, medSubeMs = 0.0, medUltimo = 0.0;
   long long medLeeN = 0, medSubeN = 0, medLentos = 0;
-  /* Los tirones (v1.10, rama experimental), cada 5 s en la linea [fps]: si el que se atasca es el
+  /* Los tirones (v1.11), cada 5 s en la linea [fps]: si el que se atasca es el
      juego (huecos entre sus cuadros) o el visor (vueltas cuyo trabajo no cabe en un refresco,
      presentaciones que esperan a la tarjeta, leer la copia chica o subir el mapa). */
   double medLeeMax = 0.0, medSubeMax = 0.0;

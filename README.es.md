@@ -173,6 +173,7 @@ pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D
 | `profundidad_conv = 75` / `salida_conv = 50` | Profundidad y Salida con que arranca el vídeo normal (`_suave` el dividido suavizado, `_sbs` el dividido); se escriben al mover los deslizadores; `profundidad_conv = auto` = plano automático |
 | `hz = 165` | frecuencia del panel en 3D (120 de fábrica; el G90XF también va a 165) |
 | `hdr_en_3d = si` | mantener el HDR durante el 3D |
+| `vrr_en_3d = si` | dejar la frecuencia variable (VRR) durante el 3D; de fábrica se apaga mientras dura el 3D (con ella puesta, los juegos por debajo del refresco daban tirones) |
 | `atajo_3d = Ctrl+Shift+1` | un atajo (los escribe el panel): `atajo_profundidad_menos`, `atajo_profundidad_mas`, `atajo_salida_menos`, `atajo_salida_mas`, `atajo_pastilla_menos`, `atajo_pastilla_mas`, `atajo_pastilla` |
 | `barra_tareas = no` / `bandeja = no` | quitar OdysseyVK de la barra de tareas / de la bandeja |
 | `actualizaciones = no` / `actualizar_auto = si` | sin tarjeta de actualización / instalar solo |

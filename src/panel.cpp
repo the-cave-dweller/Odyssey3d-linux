@@ -245,9 +245,10 @@ bool Panel::apply(const std::string &out, int modeIndex, double scale, int rotat
      han corrido con la que tuviera el escritorio (Always en el equipo de Rodolfo), tambien las que se
      dieron por buenas. Asi que se deja como este, que es lo probado y lo que el pide; solo con
      `vrr_en_3d = no` (ODYSSEYVK_VRR_3D=0) se apaga durante la sesion, ahora con la orden que si existe. */
+  /* v1.11: de fabrica se apaga (ver main.cpp); solo ODYSSEYVK_VRR_3D=1 (`vrr_en_3d = si`) lo deja */
   {
     const char *e = entornoOdyssey("ODYSSEYVK_VRR_3D");
-    if (e && (e[0] == '0' || e[0] == 'n')) ksd("output." + out + ".vrrpolicy.never");
+    if (!(e && (e[0] == '1' || e[0] == 's'))) ksd("output." + out + ".vrrpolicy.never");
   }
   if (disableHdr) ksd("output." + out + ".hdr.disable");
   if (!r.empty() && r.find("Unable to parse") != std::string::npos) {

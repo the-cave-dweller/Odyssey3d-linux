@@ -3,6 +3,34 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Sin tirones en los juegos: el VRR se apaga durante el 3D (v1.11)
+
+- Rodolfo: «tuve tirones en Cyberpunk». Se buscó en la rama `experimental` (su CAMBIOS.md cuenta cada
+  partida) y se pasa aquí lo que quedó probado; Rodolfo, tras la partida de las 04:28: «ya va fluido».
+- **La sincronización adaptativa (VRR) se apaga de fábrica mientras dura el 3D** (al salir vuelve
+  como estaba). MEDIDO con la línea nueva de tirones, en los tramos con el juego bajo 100 cuadros:
+  con VRR, el visor esperaba su imagen libre 19,8 ms de mediana (peor 34,8) y el 25,1 % de sus
+  presentaciones salía tarde; sin VRR, 9,8 ms (peor 16,4), 0,1 % tarde, y el visor a 165 fijos. El
+  cuadro en la tarjeta tardaba ~1 ms y la valla 0: no era la tarjeta, era el refresco siguiendo al
+  juego. `vrr_en_3d = si` lo deja como en el escritorio (antes el valor por defecto era dejarlo).
+  El mensaje del registro dice ya lo que queda puesto («apagada durante el 3D (en el escritorio:
+  Always…)»); antes decía siempre lo del escritorio.
+- **Los comentarios al final de una línea de serve.conf ya no se cuelan en el valor**
+  (`vrr_en_3d = no   # prueba` se leía «no   # prueba», que no es «no»): `loadServeCfg` y
+  `ajuste::leerServeConf` cortan en un `#` tras un espacio.
+- **La medición de tirones**, cada 5 s en el registro: `[fps]` dice los cuadros nuevos del juego
+  (`fuente`) y su hueco más largo, el trabajo del visor por vuelta, lo que espera al presentar, leer
+  la copia chica y subir el mapa; `[tirones]` desglosa la espera (valla de la tarjeta, adquirir una
+  imagen, entregar) y lo que tarda nuestro cuadro en la tarjeta (marcas de tiempo).
+- **La red de profundidad**: el registro dice en qué tarjeta abre («con NVIDIA (tarjeta 1)») y el
+  servicio toma `red` de serve.conf sin reiniciarse. `red = 1` deja la RTX 4090 para el juego (la
+  red tarda lo mismo en la 5080: 12,9 ms contra 13,7).
+- **El visor aguanta ir en «modo seguro»** (un binario con `setcap`, como el que hace falta para la
+  prioridad alta de la cola, que se queda en la rama experimental): da su propio app_id
+  (`GLFW_WAYLAND_APP_ID`), así el servicio lo reconoce y baja el juego; abre el bus de sesión a mano
+  si el de siempre falla (atajos globales, pausa del vídeo, avisos, bandeja: `src/bususuario.h`); y
+  si tuvo el permiso, lo suelta en cuanto crea la cola. `ODYSSEYVK_PRIORIDAD=alta` pide la cola de
+  prioridad alta (sin permiso, se queda en la normal y el registro dice por qué).
 ## Los comentarios al final de una línea de serve.conf ya no se cuelan en el valor (rama `experimental`)
 
 - La partida de las 04:20 con los arreglos del modo seguro: el juego ya pasa por debajo del visor,
