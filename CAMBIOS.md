@@ -39,6 +39,20 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   mapa con un 35 % menos de tiempo de red y 260 MiB menos. Bajar la entrada ahorra más pero el mapa
   cambia (los bordes se ablandan). MiDaS small no compensa: en CUDA es más lenta que la fp16 y su
   mapa se parece poco (el fondo de la nave y el globo salen como manchas).
+- Y las de 8 y 4 bits (Rodolfo: «¿y existe fp8?»; no hay fp8 publicada de esta red, y fp8 de verdad
+  pediría TensorRT, que no está). Misma prueba, otra tanda (los tiempos salieron algo más altos que
+  la primera vez; la comparación vale dentro de la tanda; `../pruebas/redes-8-y-4-bits-2026-11-26.jpg`):
+
+  | Red | Archivo | Red ms | Mapa ms | Memoria | Diferencia /255 | Correlación |
+  |---|---|---|---|---|---|---|
+  | fp32 | 99 MB | 7,3–8,7 | 15,4 | 1024 MiB | 0 | 1,000 |
+  | fp16 | 50 MB | 5,0–5,5 | 12,8 | 766 MiB | 0,6 | 1,000 |
+  | int8 (`model_int8.onnx`) | 27 MB | 281–303 | 297 | 766 MiB | 4,9 | 0,998 |
+  | q4f16 (`model_q4f16.onnx`) | 19 MB | 5,0 | 10,7 | 688 MiB | 21,6 | 0,887 |
+
+  La int8 va unas 55 veces más lenta: su cuantización se hace en el procesador. La q4f16 tarda lo
+  mismo que la fp16 y solo ahorra 78 MiB, pero su mapa cambia (en el globo el fondo sale casi plano).
+  Se queda la fp16.
 - Para poder probar MiDaS: una red con la entrada de tamaño fijo se usa a ese tamaño («la red pide su
   entrada fija de 256 x 256»); antes se redondeaba a parches de 14 (252) y no abría.
 
