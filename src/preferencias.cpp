@@ -632,6 +632,8 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id == "red") {
     if (sub == 0) {
+      /* la de Samsung que estaba puesta se apunta en `samsung =`: sigue en el boton 1 del visor */
+      if (!v.modelo.empty() && v.modelo != rutaRedNuestra() && fileExists(v.modelo) && !fija("samsung", v.modelo)) return false;
       if (!fija("modelo", "~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx")) return false;
       if (aviso) *aviso = redAbiertaPresente() ? "la red abierta, desde el siguiente vídeo" : "la red abierta: falta descargarla";
       return true;
@@ -662,7 +664,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = "no se pudo leer " + ruta;
       return false;
     }
-    if (!fija("modelo", ruta)) return false;
+    if (!fija("samsung", ruta) || !fija("modelo", ruta)) return false;
     if (aviso) *aviso = "la red de Samsung, desde el siguiente vídeo";
     return true;
   }

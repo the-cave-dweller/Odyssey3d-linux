@@ -3,6 +3,20 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La red de Samsung no se pierde al elegir la abierta (v0.93)
+
+- MEDIDO en el registro de Rodolfo con la 0.92 recién instalada (23:11:54): al picar «Abierta» en el
+  panel, el servicio quedó con «botón 1 = no hay»: la de Samsung desaparecía del visor (teclas 1 y
+  2), porque solo se conocía por `modelo =` y ahora ahí va la abierta.
+- Clave nueva `samsung =` en `serve.conf`: la escribe el panel al pasar a «Abierta» (con la que
+  estaba puesta) y al elegir un `.onnx` con el navegador. El servicio arranca con la red de
+  `modelo =` y deja la otra en el otro botón; sin `modelo =`, con la abierta. MEDIDO en seco con las
+  cuatro combinaciones (abierta + samsung → arranca con la 2 y la 1 es mde_large; solo mde_large →
+  arranca con la 1; nada → abierta; solo abierta → abierta, botón 1 vacío).
+- A la configuración de Rodolfo se le añadió esa línea (respaldo
+  `serve.conf.respaldo-2026-11-25-antes-samsung`): él ya había picado «Abierta» con la 0.92.
+- A 165 Hz el visor da 164,8 cuadros por segundo con el conversor (su registro de las 22:53).
+
 ## La red abierta de fábrica, con descarga desde el panel; selector de red (v0.92)
 
 - Rodolfo: «la solapa de 2D/3D está dispareja»; «verifica que sirva el modelo abierto igual que el

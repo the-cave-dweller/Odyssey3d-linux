@@ -183,7 +183,8 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
   Windows (`C:\Program Files\Odyssey 3D Hub\Conversion\model\mde_large.fp16.onnx.bin`, que allí va
   ofuscada) se puede elegir en la pestaña Rendimiento del panel con «La de Samsung…», que abre el
   navegador de archivos y espera un `.onnx` legible; da el mismo canto que la abierta (medido) y
-  tarda 9–11 ms por mapa en vez de 13–16.
+  tarda 9–11 ms por mapa en vez de 13–16. Al volver a «Abierta» esa ruta se queda en `samsung =`, para que el
+  visor la siga teniendo en la tecla 1.
 * `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
   conviene 2; si la GPU va justa, 4 o 5.
 * `--texto-panel si|no` pega o suelta los rótulos del plano de la pantalla (por defecto pegados;

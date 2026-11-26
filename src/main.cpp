@@ -3339,6 +3339,7 @@ struct ServeCfg {
   int esperaSeg = 40;
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
   std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
+  std::string samsung;            /* la red de Samsung cuando `modelo` es la abierta: sigue en el boton 1 (v0.93) */
   std::string nuestra;            /* la otra red (.onnx), la nativa, la del boton 2 del visor */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
@@ -3470,6 +3471,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "pantalla") cfg.pantalla = v;
     else if (k == "modelo") cfg.modelo = expansionRuta(v);
     else if (k == "nuestra") cfg.nuestra = expansionRuta(v);
+    else if (k == "samsung") cfg.samsung = expansionRuta(v);
     else if (k == "rastreo") cfg.rastreo = (v == "si" || v == "on" || v == "1" || v == "track");
     else if (k == "camara") cfg.camara = v;
     else if (k == "mono") {
@@ -4557,18 +4559,17 @@ static int cmdServe(int argc, char **argv) {
      vale para el siguiente visor. Sin `modelo =`, o con la abierta en el, se arranca con la abierta
      (Depth Anything V2): es la de fabrica. Con la de Samsung puesta ahi, con esa. */
   auto elegirRedes = [&] {
-    std::string rSamsung = cfg.modelo, rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
-    if (!rSamsung.empty() && slotRed(rSamsung) == 2) {
-      if (rSamsung == rNuestra || !disponible(rNuestra)) {
-        rNuestra = rSamsung;
-        rSamsung.clear();
-      } else
-        std::swap(rSamsung, rNuestra);
-    }
+    /* `modelo =` dice con cual se arranca; la otra va al otro boton. La abierta se reconoce por el
+       nombre del archivo (slotRed); la de Samsung, cuando `modelo` es la abierta, viene de
+       `samsung =` (v0.93: en la 0.92, al elegir «Abierta» en el panel, la de Samsung desaparecia). */
+    const bool abiertaPrimero = cfg.modelo.empty() || slotRed(cfg.modelo) == 2;
+    const std::string rNuestra = abiertaPrimero && !cfg.modelo.empty() ? cfg.modelo : (cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra);
+    const std::string rSamsung = abiertaPrimero ? cfg.samsung : cfg.modelo;
     const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
     const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
-    redElegida = ruta1.empty() ? 2 : 1;
+    redElegida = abiertaPrimero ? 2 : 1;
     if (redElegida == 2 && ruta2.empty()) redElegida = 1;
+    if (redElegida == 1 && ruta1.empty()) redElegida = 2;
     redActiva = redElegida == 1 ? ruta1 : ruta2;
     redOtra = redElegida == 1 ? ruta2 : ruta1;
     std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
@@ -5335,9 +5336,10 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
                               nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
                               nuevo.divididoAuto != cfg.divididoAuto ||
-                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo;
-          if (nuevo.modelo != cfg.modelo) {
+                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo || nuevo.samsung != cfg.samsung;
+          if (nuevo.modelo != cfg.modelo || nuevo.samsung != cfg.samsung) {
             cfg.modelo = nuevo.modelo;
+            cfg.samsung = nuevo.samsung;
             elegirRedes();
           }
           cfg.modo = nuevo.modo;
