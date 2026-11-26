@@ -1048,7 +1048,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const bool manual = !st_.focoAuto;
       std::vector<std::string> nota;
       if (!manual)
-        nota = renglones(idioma::tr("La saliencia elige el plano de la pantalla en cada escena; el alcance se ajusta a la distancia de tus ojos (medio grado de paralaje) y la salida se calcula para el mayor relieve sin aplastar la imagen contra él."),
+        nota = renglones(idioma::tr("La saliencia elige el plano de la pantalla en cada escena; el alcance se ajusta a la distancia de tus ojos (0,4° de paralaje) y la salida se calcula para el mayor relieve sin aplastar la imagen contra él."),
                          tam, mw - 2.0f * pad);
       float alto = 78.0f + (manual ? 2.0f * filaAlto : 18.0f * (float)nota.size() + 30.0f);
       if (st_.modoVisible) alto += 46.0f;
@@ -1070,7 +1070,7 @@ void Hud::begin(int w, int h, float altoLogico) {
         textoCabe(opc[k], btnAM_[k].x + bw * 0.5f, btnAM_[k].y + 7.0f, 12.5f, bw - 12.0f, puesto ? 0.06f : ink[0],
                   puesto ? 0.10f : ink[1], puesto ? 0.16f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
         if (hov) {
-          ayuda = idioma::tr(k == 0 ? "Auto: en cada escena la saliencia busca lo que más llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, nítido. El alcance se ajusta a la distancia de tus ojos para no pasar de medio grado de paralaje y la salida se calcula para el mayor relieve que cabe sin aplastar la imagen. Sigue al contenido y salta en los cortes de escena."
+          ayuda = idioma::tr(k == 0 ? "Auto: en cada escena la saliencia busca lo que más llama la atención (una cara, un objeto) y lo deja en el plano de la pantalla, nítido. El alcance se ajusta a la distancia de tus ojos para no pasar de 0,4° de paralaje y la salida se calcula para el mayor relieve que cabe sin aplastar la imagen. Sigue al contenido y salta en los cortes de escena."
                                     : "Manual: tú eliges el plano que queda en la pantalla (Profundidad) y cuánto sale y se hunde la imagen (Salida). Al pasar de Auto a Manual se quedan los valores que se estaban calculando.");
           ayudaY = btnAM_[k].y;
         }

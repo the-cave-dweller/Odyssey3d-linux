@@ -12,7 +12,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   mismo mapa, 35 % menos de tiempo y 260 MB menos en la tarjeta). Las bandas negras de las películas,
   en el plano de la pantalla. El HDR del escritorio siempre.
 - **Relieve**: la pastilla azul con **Auto | Manual**. Auto: la saliencia pone el sujeto en la
-  pantalla, el alcance sigue la distancia de los ojos (medio grado de paralaje: x1,44 a 65 cm) y la
+  pantalla, el alcance sigue la distancia de los ojos (0,4° de paralaje: x1,15 a 65 cm) y la
   Salida se calcula para el mayor relieve sin aplastar (0,9 % del cuadro en los topes en vez del 61 %).
   Cantos con el alcance grande sin dientes ni franjas grises; subtítulos de una pieza en la pantalla
   (letras a 0–1 px entre los ojos). Mezcla entre las vistas de fábrica al 10 % de Samsung, con
@@ -31,13 +31,27 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   tarjeta, a *Ajustes → Fluidez*, junto al VRR y al tope de arrastre (que ahora solo topa donde la
   imagen se mueve); la red a su proporción (`exp_red`) y el mapa más grande (`exp_mapa`) se quedan solo
   como claves de serve.conf. El alcance del relieve deja de tener deslizador: Manual usa el mismo
-  automático de medio grado que Auto (el `exp_topes_red` guardado ya no se pasa al visor; el suyo
+  automático que Auto (el `exp_topes_red` guardado ya no se pasa al visor; el suyo
   valía x3,05, apuntado al pasar de Auto a Manual cuando el automático iba a un grado, y al cambiar de
   modo ya no se apunta). `ODYSSEYVK_TOPES_RED` lo fija a mano para el taller. Doce textos sin uso,
   fuera de las traducciones. La rama `experimental` se cierra: todo queda en `main`.
 - Arranque del visor sin caché de sombreadores: 4,1 s (8,0 en la 1.11).
-- **Probado en su panel**: el alcance a medio grado y la mezcla al 10 % («este último sirvió súper
-  bien», «sí bajó»). **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
+- **El alcance, otra vez más bajo: 0,4°.** Con medio grado aún veía los trastes de una guitarra
+  partidos y dobles («creo que sigue siendo por el alcance, ¿se puede bajar más tu rango?»): x1,15 a
+  65 cm (+14,6 / −11,5 px por ojo), x1 a 50 cm (el de fábrica, el mínimo), x1,42 a 80 cm; MEDIDO en
+  Auto en el visor aparte: x1,15. Y el mástil de esa guitarra (`mzHAeJhpdYc`, cámara quieta, el mástil
+  cruzando la banda de abajo) se tomaba por subtítulo: el detector de rótulos de siempre ve las cuerdas
+  y los trastes como letras, y el renglón de una pieza lo rellenaba a trozos. Ahora el renglón se
+  rellena solo si es horizontal (el centro de la racha de cada fila se corre menos de una celda por
+  fila; el mástil, 2,2–3) y está centrado (a menos del 15 % del centro; los subtítulos medidos, a
+  menos del 10 %; el trozo de mástil a la derecha de la mano, al 35 %); un bloque inclinado pierde el
+  apoyo. MEDIDO en cinco cuadros del vídeo: mástil de una pieza 7,5 % → 0 % del mapa apoyado; partido
+  por la mano, 9 % → 8 % (lo que queda es el detector de siempre, celda por celda, como antes de la
+  1.12); los tres subtítulos y los dos cuadros sin texto, igual. Probé también a contar cuerdas (rayas
+  rectas largas sin cortes): en el mapa de 518 salen demasiado finas y no las encuentra, así que no
+  entra.
+- **Probado en su panel**: la mezcla al 10 % («sí bajó»); el alcance a medio grado sirvió («este último
+  sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
 ## Fondo negro translúcido y el interruptor «Neural» (rama `experimental`)

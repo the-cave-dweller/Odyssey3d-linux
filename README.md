@@ -199,8 +199,8 @@ In normal video with the network the pill turns light blue: next to the switch, 
 says **Auto** or **Manual** and opens its menu.
 
 - **Auto**: in each scene a saliency map finds what draws the eye (a face, an object) and puts it on
-  the screen plane. The depth reach follows the distance of your eyes (half a degree of parallax
-  between the eyes: 1.44 times the factory limits at 65 cm), and the pop-out is worked out for the most
+  the screen plane. The depth reach follows the distance of your eyes (0.4° of parallax
+  between the eyes: 1.15 times the factory limits at 65 cm, never below them), and the pop-out is worked out for the most
   relief that fits without flattening the image against those limits (measured: 0.9 % of the frame on
   the limits instead of 61 % with a fixed pop-out).
 - **Manual**: Depth and Pop-out by hand, with the same automatic reach.

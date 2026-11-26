@@ -3647,9 +3647,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       const float exRel = red.sinRed() ? exGanancia : 1.0f;
       /* El alcance del relieve con la red, en Auto y en Manual (v1.12), con la distancia de los ojos (la
          del rastreo; sin camara, la pose nominal de 65,1 cm) y el paso de este panel (598 mm / 3840 px):
-         el tope de fuera queda en medio grado de paralaje entre los ojos, alcance = d * tan(0,5 grados) /
-         (2 * 12,67 px * 0,156 mm). A 65 cm sale x1,44 (+18,2 / -14,3 px por ojo); a 50 cm, x1,1; a 80 cm,
-         x1,77. Primero fue el grado entero (la «regla del grado», la zona comoda de la vista: x2,88 a 65 cm)
+         el tope de fuera queda en 0,4 grados de paralaje entre los ojos, alcance = d * tan(0,4 grados) /
+         (2 * 12,67 px * 0,156 mm). A 65 cm sale x1,15 (+14,6 / -11,5 px por ojo); a 50 cm, x1 (el de
+         fabrica: no baja de ahi); a 80 cm, x1,41. Antes fue medio grado (x1,44 a 65 cm: con eso aun se veian
+         los trastes de una guitarra partidos, «creo que sigue siendo por el alcance, se puede bajar mas tu
+         rango?», Rodolfo, 26-nov), y primero el grado entero (la «regla del grado», la zona comoda de la vista: x2,88 a 65 cm)
          y era demasiado («alcance de relieve is the issue, you might be too aggressive with it», Rodolfo,
          26-nov): todo error del mapa salia 2,88 veces mas grande y el fantasma de la lente 2,88 veces mas
          lejos, y se veian cantos torcidos, subtitulos doblados y rectas que bailaban. El grado es lo que
@@ -3663,7 +3665,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           tAlcance = exTopesRed;
         } else {
           const double distMm = std::max(300.0, std::min(1500.0, wv.eye().z * 10.0));
-          const float tComodo = (float)std::max(1.0, std::min(4.0, distMm * std::tan(0.5 * M_PI / 180.0) /
+          const float tComodo = (float)std::max(1.0, std::min(4.0, distMm * std::tan(0.4 * M_PI / 180.0) /
                                                                          (2.0 * 12.67 * (598.0 / 3840.0))));
           if (tAlcance < 0.0f) tAlcance = tComodo;
           else tAlcance += (tComodo - tAlcance) * (float)std::min(1.0, (tAlcanceT < 0.0 ? 1.0 : now - tAlcanceT) / 1.0);

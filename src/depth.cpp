@@ -1692,9 +1692,42 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
       /* un renglon de una sola fila de celdas tiene que ser muy largo: los sueltos de 12 que salian en
          cuadros sin texto (un tambor, el mastil de un violin) eran eso, sueltos */
       const bool vale = y1 - cy + 1 <= kAltoMax && (y1 > cy || x1 - x0 + 1 >= 18);
-      if (vale)
+      /* Inclinado no es texto (v1.12). El mastil de una guitarra que cruza la parte de abajo del cuadro
+         (cuerdas y trastes: rayas finas, claras y quietas sobre madera oscura) pasa celda por celda por
+         letras, y se apoyaba a trozos en la pantalla: el traste que cruzaba el canto de un trozo salia
+         partido en dos («Y») en el panel de Rodolfo. Un renglon de subtitulo es horizontal: el centro de
+         la racha de cada fila no se mueve (MEDIDO en tres subtitulos: pendiente casi cero aunque la
+         deteccion salga a parches); el mastil va en diagonal (MEDIDO: la racha se corre 2,2 celdas por
+         fila). Si el centro se corre mas de una celda por fila, el bloque no es texto: se le quita el
+         apoyo, con dos celdas de margen (las marcas sueltas de su orilla son del mismo mastil). */
+      float sy = 0.0f, sc = 0.0f, syy = 0.0f, syc = 0.0f;
+      int filas = 0;
+      for (int y = cy; y <= y1; y++)
+        if (ini[(size_t)y] >= 0) {
+          const float c = 0.5f * (float)(ini[(size_t)y] + fin[(size_t)y]);
+          sy += (float)y, sc += c, syy += (float)y * (float)y, syc += (float)y * c;
+          filas++;
+        }
+      const float den = (float)filas * syy - sy * sy;
+      const float pendiente = (filas >= 3 && den > 0.0f) ? ((float)filas * syc - sy * sc) / den : 0.0f;
+      const bool inclinado = std::fabs(pendiente) > 1.0f;
+      /* Y centrado: un subtitulo va centrado en el cuadro. El mastil puede salir partido en dos bloques
+         (a cada lado de la mano) y cada uno, por su cuenta, es horizontal; el de un lado queda lejos del
+         centro (MEDIDO en el video de Rodolfo: el bloque de la derecha, a un 35 % del centro; los tres
+         subtitulos, a menos del 10 %). El que no esta centrado no se rellena: se queda como lo dejo el
+         detector, celda por celda, igual que antes de la 1.12. */
+      const bool centrado = std::fabs(0.5f * (float)(x0 + x1) - 0.5f * (float)(cw - 1)) <= 0.15f * (float)cw;
+      static const bool kDepura = std::getenv("ODYSSEYVK_DEPURA_RENGLON") != nullptr;   /* taller */
+      if (kDepura)
+        std::fprintf(stderr, "[renglon] filas %d..%d columnas %d..%d pendiente %.2f%s\n", cy, y1, x0, x1, pendiente,
+                     inclinado ? " (inclinado: fuera)" : (!centrado ? " (sin centrar)" : (vale ? "" : " (no vale)")));
+      if (inclinado) {
+        for (int fy = std::max(0, cy - 2); fy <= std::min(ch - 1, y1 + 2); fy++)
+          for (int fx = std::max(0, x0 - 2); fx <= std::min(cw - 1, x1 + 2); fx++) lleno[(size_t)fy * cw + fx] = 0.0f;
+      } else if (vale && centrado) {
         for (int fy = std::max(0, cy - 1); fy <= std::min(ch - 1, y1 + 1); fy++)
           for (int fx = std::max(0, x0 - 1); fx <= std::min(cw - 1, x1 + 1); fx++) lleno[(size_t)fy * cw + fx] = 1.0f;
+      }
       cy = y1 + 1;
     }
     peso.swap(lleno);
