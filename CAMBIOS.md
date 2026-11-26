@@ -3,6 +3,20 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los juegos arrancan en paz: el 3D espera a que la ventana se asiente (v0.98)
+
+- Rodolfo: Cyberpunk «tuvo un crash… creo que es por una ventana de error que se abre y ya el
+  juego se lanza luego». MEDIDO en su registro (26-nov 00:11): la ventana del juego se pone a
+  pantalla completa, el servicio lanza el 3D al segundo, la ventana se minimiza al segundo
+  siguiente (el juego arrancando), la sesión se cierra; vuelve a pantalla completa, otra vez lo
+  mismo; y al final el servicio **le quitó la pantalla completa al juego** («el vídeo se fue y la
+  ventana del navegador sigue a pantalla completa: se la quitamos»), que es lo pensado para los
+  navegadores. Por nuestro lado nada se cayó, pero al juego le tocamos la ventana mientras arrancaba.
+- Para `steam_app_*`: el 3D se lanza solo cuando la ventana lleva 4 s seguidos a pantalla completa;
+  una minimización de menos de 6 s no cierra la sesión (el visor deja de trazar mientras tanto); y
+  nunca se le quita la pantalla completa a un juego.
+- **No probado**: con el juego de verdad.
+
 ## install.sh arranca el servicio (v0.97)
 
 - MEDIDO en el registro de Rodolfo: tras desinstalar (23:54, el servicio queda desactivado) y

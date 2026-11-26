@@ -4611,6 +4611,16 @@ static int cmdServe(int argc, char **argv) {
   /* el visor que se reabre tras una actualizacion: `odysseyvk actualizar` deja aqui la ventana y el
      modo de la sesion que corto al reiniciar el servicio; vale tres minutos */
   std::string reabrirUuid, reabrirModo;
+  /* Los juegos (steam_app_*) al arrancar pasan por su lanzador, una ventana de error o de aviso, y la
+     suya propia, que se pone a pantalla completa, se minimiza y vuelve en un par de segundos (MEDIDO
+     con Cyberpunk, 26-nov 00:11: pantalla completa, 3D lanzado al segundo, minimizada al segundo
+     siguiente, sesion cerrada, y otra vez; y al final el servicio le quito la pantalla completa al
+     juego como si fuera un navegador). Desde v0.98: a un juego solo se le lanza el 3D cuando lleva
+     4 s seguidos a pantalla completa, una minimizacion de menos de 6 s no cierra la sesion, y nunca
+     se le quita la pantalla completa. */
+  auto esJuego = [](const std::string &appId) { return strLower(appId).rfind("steam_app_", 0) == 0; };
+  std::map<std::string, double> fullVisto;   /* desde cuando lleva cada ventana a pantalla completa */
+  double videoMinimizadaDesde = 0.0;
   {
     std::string txt;
     if (readSmallFile(rutaEstadoOdyssey("reabrir"), txt)) {
@@ -5056,6 +5066,10 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
         }
         seFueUuid.clear();
+      } else if (WindowInfo vj{}; wm.find(seFueUuid, vj) && esJuego(vj.appId)) {
+        std::printf("[ventana] %s es un juego: no se le toca la pantalla completa\n", vj.appId.c_str());
+        std::fflush(stdout);
+        seFueUuid.clear();
       } else if (now - fullDesde >= 1.2) {
         fullDesde = now;
         ++fullQuitadas;
@@ -5266,8 +5280,11 @@ static int cmdServe(int argc, char **argv) {
           fullAvisado = false;
         }
         if (!wm.find(hijoUuid, video) || !video.mapped) motivo = "la ventana del video ya no esta";
-        else if (video.minimized()) motivo = "la ventana del video esta minimizada";
-        else {
+        else if (video.minimized()) {
+          if (videoMinimizadaDesde == 0.0) videoMinimizadaDesde = now;
+          if (!esJuego(video.appId) || now - videoMinimizadaDesde >= 6.0) motivo = "la ventana del video esta minimizada";
+        } else {
+          videoMinimizadaDesde = 0.0;
           const std::string firma = WindowInfo::stateList(video.states) + " " +
                                     std::to_string((int)video.x) + "," + std::to_string((int)video.y) +
                                     " " + std::to_string((int)video.w) + "x" + std::to_string((int)video.h);
@@ -5725,6 +5742,17 @@ static int cmdServe(int argc, char **argv) {
       avisoUuid.clear();
     }
 
+    /* desde cuando lleva cada ventana a pantalla completa (para no lanzar el 3D a un juego que aun se esta abriendo) */
+    {
+      std::set<std::string> aun;
+      for (const WindowInfo &w : wm.windows())
+        if (w.usable()) {
+          aun.insert(w.uuid);
+          if (!fullVisto.count(w.uuid)) fullVisto[w.uuid] = now;
+        }
+      for (auto it = fullVisto.begin(); it != fullVisto.end();)
+        it = aun.count(it->first) ? std::next(it) : fullVisto.erase(it);
+    }
     /* podar: si la ventana dejó de estar a pantalla completa o se cerró, se olvida */
     if (!preguntadas.empty()) {
       std::set<std::string> vivas;
@@ -5739,7 +5767,7 @@ static int cmdServe(int argc, char **argv) {
     if (hijo < 0 && avisoId.empty()) {
       WindowInfo w{};
       if (wm.fullscreenCandidate(w, {}) && !ignoredApp(w, cfg.ignore) && !preguntadas.count(w.uuid) &&
-          now >= enfriadoHasta) {
+          now >= enfriadoHasta && (!esJuego(w.appId) || (fullVisto.count(w.uuid) && now - fullVisto[w.uuid] >= 4.0))) {
         preguntadas.insert(w.uuid);
         const std::string app = strLower(w.appId);
         if (tarjetaActualizacion) {   /* la pregunta del video manda sobre el aviso de la version */
