@@ -1710,17 +1710,61 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
         }
       const float den = (float)filas * syy - sy * sy;
       const float pendiente = (filas >= 3 && den > 0.0f) ? ((float)filas * syc - sy * sc) / den : 0.0f;
-      const bool inclinado = std::fabs(pendiente) > 1.0f;
+      bool inclinado = std::fabs(pendiente) > 1.0f;
       /* Y centrado: un subtitulo va centrado en el cuadro. El mastil puede salir partido en dos bloques
          (a cada lado de la mano) y cada uno, por su cuenta, es horizontal; el de un lado queda lejos del
          centro (MEDIDO en el video de Rodolfo: el bloque de la derecha, a un 35 % del centro; los tres
          subtitulos, a menos del 10 %). El que no esta centrado no se rellena: se queda como lo dejo el
          detector, celda por celda, igual que antes de la 1.12. */
       const bool centrado = std::fabs(0.5f * (float)(x0 + x1) - 0.5f * (float)(cw - 1)) <= 0.15f * (float)cw;
+      /* Y sin cuerdas. Con el mastil partido por la mano, el trozo de un lado sale horizontal y centrado,
+         y el apoyo de rotulos entraba y salia del mastil de un segundo a otro (0..10 % del cuadro en su
+         registro): los trastes cambiaban de separacion. Lo que lo delata son las cuerdas: en la imagen
+         chica (518) cada una es una cresta clara de 1-2 puntos sobre la madera (de 10 a 50 niveles por
+         encima), recta y casi horizontal, que cruza el bloque sin cortarse. En un renglon de texto los
+         trazos horizontales se cortan en cada letra. Se buscan rectas de -12 a +12 grados donde el punto
+         es mas claro que los de dos filas arriba y abajo (cresta >= 12 niveles, con una fila de margen)
+         que corran sin cortes de mas de 3 puntos a lo largo del 60 % del bloque (y de 60 puntos); con 3
+         o mas, son cuerdas y el bloque no es texto. */
+      int cuerdas = 0;
+      if (!inclinado) {
+        const int xa = x0 * celda, xb = std::min(w, (x1 + 1) * celda);
+        const int ya = std::max(2, cy * celda - celda), yb = std::min(h - 2, (y1 + 1) * celda + celda);
+        const int largo = std::max(60, (int)(0.6f * (float)(xb - xa)));
+        auto cresta = [&](int x, int y) {
+          if (y < 2 || y >= h - 2) return 0.0f;
+          const float c = lum[(size_t)y * w + x];
+          return c - 0.5f * (lum[(size_t)(y - 2) * w + x] + lum[(size_t)(y + 2) * w + x]);
+        };
+        if (xb - xa >= largo) {
+          for (int ang = -12; ang <= 12; ang += 2) {
+            const float t = std::tan((float)ang * 3.14159265f / 180.0f);
+            int cuenta = 0, ultima = -100;
+            const int sube = (int)std::ceil(std::fabs(t) * (float)(xb - xa));
+            for (int y0 = ya - sube; y0 < yb + sube; y0++) {
+              int corrida = 0, mejor = 0, hueco = 0;
+              for (int x = xa; x < xb; x++) {
+                const int y = y0 + (int)std::lround(t * (float)(x - xa));
+                const bool hay = std::max(cresta(x, y), std::max(cresta(x, y - 1), cresta(x, y + 1))) >= 12.0f;
+                if (hay) { corrida += 1 + hueco; hueco = 0; }
+                else if (corrida > 0 && ++hueco <= 3) {}
+                else { corrida = 0; hueco = 0; }
+                mejor = std::max(mejor, corrida);
+              }
+              if (mejor >= largo) {
+                if (y0 - ultima > 3) cuenta++;
+                ultima = y0;
+              }
+            }
+            cuerdas = std::max(cuerdas, cuenta);
+          }
+        }
+        if (cuerdas >= 3) inclinado = true;
+      }
       static const bool kDepura = std::getenv("ODYSSEYVK_DEPURA_RENGLON") != nullptr;   /* taller */
       if (kDepura)
-        std::fprintf(stderr, "[renglon] filas %d..%d columnas %d..%d pendiente %.2f%s\n", cy, y1, x0, x1, pendiente,
-                     inclinado ? " (inclinado: fuera)" : (!centrado ? " (sin centrar)" : (vale ? "" : " (no vale)")));
+        std::fprintf(stderr, "[renglon] filas %d..%d columnas %d..%d pendiente %.2f cuerdas %d%s\n", cy, y1, x0, x1, pendiente,
+                     cuerdas, inclinado ? " (no es texto: fuera)" : (!centrado ? " (sin centrar)" : (vale ? "" : " (no vale)")));
       if (inclinado) {
         for (int fy = std::max(0, cy - 2); fy <= std::min(ch - 1, y1 + 2); fy++)
           for (int fx = std::max(0, x0 - 2); fx <= std::min(cw - 1, x1 + 2); fx++) lleno[(size_t)fy * cw + fx] = 0.0f;

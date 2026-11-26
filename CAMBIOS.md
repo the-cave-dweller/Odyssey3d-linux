@@ -12,7 +12,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   mismo mapa, 35 % menos de tiempo y 260 MB menos en la tarjeta). Las bandas negras de las películas,
   en el plano de la pantalla. El HDR del escritorio siempre.
 - **Relieve**: la pastilla azul con **Auto | Manual**. Auto: la saliencia pone el sujeto en la
-  pantalla, el alcance sigue la distancia de los ojos (0,4° de paralaje: x1,15 a 65 cm) y la
+  pantalla, el alcance sigue la distancia de los ojos (0,3° de paralaje, nunca menos que los topes de
+  fábrica: x1 hasta 75 cm) y la
   Salida se calcula para el mayor relieve sin aplastar (0,9 % del cuadro en los topes en vez del 61 %).
   Cantos con el alcance grande sin dientes ni franjas grises; subtítulos de una pieza en la pantalla
   (letras a 0–1 px entre los ojos). Mezcla entre las vistas de fábrica al 10 % de Samsung, con
@@ -36,20 +37,28 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   modo ya no se apunta). `ODYSSEYVK_TOPES_RED` lo fija a mano para el taller. Doce textos sin uso,
   fuera de las traducciones. La rama `experimental` se cierra: todo queda en `main`.
 - Arranque del visor sin caché de sombreadores: 4,1 s (8,0 en la 1.11).
-- **El alcance, otra vez más bajo: 0,4°.** Con medio grado aún veía los trastes de una guitarra
-  partidos y dobles («creo que sigue siendo por el alcance, ¿se puede bajar más tu rango?»): x1,15 a
-  65 cm (+14,6 / −11,5 px por ojo), x1 a 50 cm (el de fábrica, el mínimo), x1,42 a 80 cm; MEDIDO en
-  Auto en el visor aparte: x1,15. Y el mástil de esa guitarra (`mzHAeJhpdYc`, cámara quieta, el mástil
-  cruzando la banda de abajo) se tomaba por subtítulo: el detector de rótulos de siempre ve las cuerdas
-  y los trastes como letras, y el renglón de una pieza lo rellenaba a trozos. Ahora el renglón se
-  rellena solo si es horizontal (el centro de la racha de cada fila se corre menos de una celda por
-  fila; el mástil, 2,2–3) y está centrado (a menos del 15 % del centro; los subtítulos medidos, a
-  menos del 10 %; el trozo de mástil a la derecha de la mano, al 35 %); un bloque inclinado pierde el
-  apoyo. MEDIDO en cinco cuadros del vídeo: mástil de una pieza 7,5 % → 0 % del mapa apoyado; partido
-  por la mano, 9 % → 8 % (lo que queda es el detector de siempre, celda por celda, como antes de la
-  1.12); los tres subtítulos y los dos cuadros sin texto, igual. Probé también a contar cuerdas (rayas
-  rectas largas sin cortes): en el mapa de 518 salen demasiado finas y no las encuentra, así que no
-  entra.
+- **El alcance, más bajo: 0,4° y después 0,3°.** Con medio grado aún veía los trastes de una guitarra
+  partidos y dobles, y rayas junto a los cantos («creo que sigue siendo por el alcance, ¿se puede bajar
+  más tu rango?», «¿le bajas más al rango de alcance?»). Primero 0,4° (x1,15 a 65 cm) y luego **0,3°**,
+  nunca por debajo de los topes de fábrica: x1 hasta 75 cm (su distancia: 61–76 cm), x1,06 a 80 cm,
+  x1,33 a 1 m. MEDIDO en Auto en el visor aparte: x1,00 a 65 cm.
+- Las rayas junto a los cantos que veía a simple vista (una bola de mimbre, un cuadro, el marco de una
+  puerta) no salen del relieve: la vista de cada ojo antes de tejer está limpia. Son los armónicos de la
+  trama (v0.41), que salen donde las dos vistas difieren; crecen con el alcance. El temblor de fase
+  (`fase_temblor = 0,1`, medido sobre la fórmula en la v0.41) no se pudo medir en su cuadro (la textura
+  tapa los picos) y queda para probarlo en marcha con `odysseyvk ctl ajuste fase_temblor 0,1`.
+- **El mástil de una guitarra se tomaba por subtítulo** (`mzHAeJhpdYc`, cámara quieta, el mástil
+  cruzando la banda de abajo): el detector de rótulos de siempre ve las cuerdas y los trastes como
+  letras, y el apoyo entraba y salía del mástil de un segundo a otro (0–10 % del cuadro en su registro),
+  con los trastes cambiando de separación. Ahora un bloque de la banda solo es texto si: es horizontal
+  (el centro de la racha de cada fila se corre menos de una celda por fila; el mástil, 2,2–3), y no tiene
+  cuerdas (en la imagen chica de 518 cada cuerda es una cresta clara de 1–2 puntos, 10–50 niveles sobre
+  la madera, recta; se buscan rectas de −12 a +12° con cresta ≥ 12 niveles que crucen el 60 % del bloque
+  sin cortes de más de 3 puntos: con 3 o más, son cuerdas). El que no lo cumple pierde el apoyo; el
+  renglón entero solo se rellena si además está centrado (a menos del 15 % del centro). MEDIDO en cinco
+  cuadros del vídeo: apoyado 7,5–9,4 % → 0 % en cuatro y 5,4 % en el otro (un trozo con solo dos cuerdas
+  a la vista); los tres subtítulos (0 cuerdas en sus renglones) y los cuadros sin texto, igual. (Contar
+  bordes en vez de crestas no encontraba las cuerdas: con la inclinación se escapaban de la fila.)
 - **Probado en su panel**: la mezcla al 10 % («sí bajó»); el alcance a medio grado sirvió («este último
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).

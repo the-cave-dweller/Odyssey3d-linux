@@ -203,8 +203,8 @@ En el vídeo normal con la red la pastilla se vuelve azul claro: junto al interr
 chip dice **Auto** o **Manual** y abre su menú.
 
 - **Auto**: en cada escena un mapa de saliencia busca lo que llama la atención (una cara, un objeto) y
-  lo deja en el plano de la pantalla. El alcance del relieve sigue la distancia de tus ojos (0,4° de
-  paralaje entre los ojos: 1,15 veces los topes de fábrica a 65 cm, nunca menos que ellos), y la salida se calcula
+  lo deja en el plano de la pantalla. El alcance del relieve sigue la distancia de tus ojos (0,3° de
+  paralaje entre los ojos, nunca menos que los topes de fábrica: esos hasta 75 cm, 1,33 veces ellos a 1 m), y la salida se calcula
   para el mayor relieve que cabe sin aplastar la imagen contra esos topes (medido: un 0,9 % del cuadro
   en los topes en vez del 61 % con una salida fija).
 - **Manual**: Profundidad y Salida a mano, con el mismo alcance automático.
