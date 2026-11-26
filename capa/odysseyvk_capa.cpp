@@ -22,6 +22,13 @@
    toca. Solo mientras el visor diga que la lee (su latido, de menos de 2 s): sin el 3D puesto, el
    juego no paga nada. ODYSSEYVK_COMPARTIR=0 lo apaga.
 
+   Fase 3 (sonda, ODYSSEYVK_CAPA_SONDA=1): al volcar, tambien las imagenes de color de DLSS y el cuadro
+   presentado (con el HUD). Fase 3b, con la misma sonda: los destinos de dibujo (vkCmdBeginRendering) de
+   cada vkCmdDraw*, para encontrar la imagen donde el juego dibuja el HUD. Al volcar se abre una «ventana»
+   hasta la presentacion siguiente: cada dibujo con destino se apunta en el registro ([destinos]) y los
+   de la resolucion de salida se copian (destino-<pid>-<n>.raw + .json con su orden, dibujos y limpiado).
+   ODYSSEYVK_CAPA_DESTINOS_TRAS=<n> (taller, sin DLSS) la abre en la presentacion n.
+
    Se enciende por juego, como MangoHud o Neural Forge: con `ODYSSEYVK=1` en las opciones de
    lanzamiento (el manifiesto la declara capa implicita con esa variable; ODYSSEYVK_DISABLE=1 la quita).
    Sin ella no se carga.
@@ -127,6 +134,22 @@ struct Pendiente {
   VkFormat formato;
   bool color = false;          /* fase 3 (sonda): una imagen de color de DLSS, no la profundidad */
   uint32_t bpp = 4, uso = 0, descriptores = 0;
+  const char *tipo = nullptr;  /* "destino": un destino de dibujo (fase 3b); nullptr = color de DLSS */
+  std::string extra;           /* mas campos para su .json (ya con su coma delante) */
+};
+
+/* fase 3b (sonda): cada dibujo con destino (de vkCmdBeginRendering a vkCmdEndRendering) */
+struct Ambito {
+  std::vector<VkImage> colores;
+  std::vector<int> cargas;                /* VkAttachmentLoadOp de cada uno */
+  std::vector<VkClearColorValue> limpia;
+  bool conProf = false, reanuda = false;
+  uint32_t w = 0, h = 0;
+  long dibujos = 0;
+};
+struct CbSonda {
+  bool trasDlss = false;   /* en este buffer de comandos ya se grabo un lanzamiento de DLSS */
+  Ambito actual;
 };
 
 struct Dispositivo {
@@ -219,7 +242,32 @@ struct Dispositivo {
   long presentes = 0;
   PFN_vkSetDeviceLoaderData setLoaderData = nullptr;
   long extrasVistos = 0;
+  /* fase 3b (sonda): los destinos de dibujo, para encontrar la imagen donde el juego dibuja el HUD.
+     MEDIDO (fase 3): la salida 4K de DLSS, copiada al volcar, ya tenia trozos del HUD: el juego lo dibuja en
+     una imagen propia que comparte memoria con ella. Su alfa seria la mascara exacta. */
+  PFN_vkCmdBeginRendering beginRendering = nullptr, beginRenderingKHR = nullptr;
+  PFN_vkCmdEndRendering endRendering = nullptr, endRenderingKHR = nullptr;
+  PFN_vkCmdBeginRenderPass beginRenderPass = nullptr;
+  PFN_vkCmdBeginRenderPass2 beginRenderPass2 = nullptr, beginRenderPass2KHR = nullptr;
+  PFN_vkCmdDraw draw = nullptr;
+  PFN_vkCmdDrawIndexed drawIndexed = nullptr;
+  PFN_vkCmdDrawIndirect drawIndirect = nullptr;
+  PFN_vkCmdDrawIndexedIndirect drawIndexedIndirect = nullptr;
+  PFN_vkCmdDrawIndirectCount drawIndirectCount = nullptr, drawIndirectCountKHR = nullptr;
+  PFN_vkCmdDrawIndexedIndirectCount drawIndexedIndirectCount = nullptr, drawIndexedIndirectCountKHR = nullptr;
+  std::unordered_map<VkCommandBuffer, CbSonda> cbs;   /* los nodos no se borran: los punteros a ellos valen */
+  /* la ventana: desde el lanzamiento de DLSS de un volcado hasta la presentacion siguiente se apunta cada
+     destino de dibujo y se copian los de la resolucion de salida */
+  bool ventana = false, ventanaTaller = false;
+  long ventanaPresente = 0;
+  double ventanaDesde = 0.0;
+  int ventanaAmbitos = 0, ventanaCopias = 0;
+  std::unordered_map<VkImage, int> ventanaCopiadas;
+  int volcadosDestino = 0;
+  long pasadasClasicas = 0;
 };
+/* sube al destruir un dispositivo: la cache por hilo de los ganchos de dibujo deja de valer */
+std::atomic<uint64_t> g_generacion{1};
 std::unordered_map<void *, Dispositivo *> g_dev;
 
 Dispositivo *dispositivo(const void *h) {
@@ -249,8 +297,13 @@ const char *nombreFormato(VkFormat f) {
     case VK_FORMAT_R16G16B16A16_SFLOAT: return "R16G16B16A16_SFLOAT";
     case VK_FORMAT_B10G11R11_UFLOAT_PACK32: return "B10G11R11_UFLOAT";
     case VK_FORMAT_R8G8B8A8_UNORM: return "R8G8B8A8_UNORM";
+    case VK_FORMAT_R8G8B8A8_SRGB: return "R8G8B8A8_SRGB";
     case VK_FORMAT_B8G8R8A8_UNORM: return "B8G8R8A8_UNORM";
+    case VK_FORMAT_B8G8R8A8_SRGB: return "B8G8R8A8_SRGB";
     case VK_FORMAT_A2B10G10R10_UNORM_PACK32: return "A2B10G10R10_UNORM";
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32: return "A2R10G10B10_UNORM";
+    case VK_FORMAT_R16G16B16A16_UNORM: return "R16G16B16A16_UNORM";
+    case VK_FORMAT_R8_UNORM: return "R8_UNORM";
     default: return nullptr;
   }
 }
@@ -262,10 +315,12 @@ std::string formato(VkFormat f) {
 /* fase 3 (sonda): los formatos de color que se guardan, con sus bytes por punto (0 = no se guarda) */
 uint32_t bytesColor(VkFormat f) {
   switch (f) {
-    case VK_FORMAT_R16G16B16A16_SFLOAT: return 8;
+    case VK_FORMAT_R16G16B16A16_SFLOAT: case VK_FORMAT_R16G16B16A16_UNORM: return 8;
     case VK_FORMAT_B10G11R11_UFLOAT_PACK32: case VK_FORMAT_R8G8B8A8_UNORM: case VK_FORMAT_R8G8B8A8_SRGB:
     case VK_FORMAT_B8G8R8A8_UNORM: case VK_FORMAT_B8G8R8A8_SRGB: case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
       return 4;
+    case VK_FORMAT_R8_UNORM: return 1;   /* fase 3b: una mascara de un canal */
     default:
       return 0;
   }
@@ -336,7 +391,8 @@ void mirarPeticion(Dispositivo *d) {
   }
 }
 
-bool grabarCopiaImagen(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, bool color, uint32_t descriptores) {
+bool grabarCopiaImagen(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, bool color, uint32_t descriptores,
+                       const char *tipo = nullptr, const std::string &extra = std::string()) {
   if (im.muestras != VK_SAMPLE_COUNT_1_BIT) {
     anota("[volcar] la imagen tiene %d muestras (MSAA): no se puede copiar asi", (int)im.muestras);
     return false;
@@ -376,9 +432,28 @@ bool grabarCopiaImagen(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Im
              nullptr, 0, nullptr);
   Pendiente p{cb, buf, mem, im.w, im.h, im.formato};
   p.color = color, p.bpp = bpp, p.uso = (uint32_t)im.uso, p.descriptores = descriptores;
+  p.tipo = tipo, p.extra = extra;
   d->pendientes.push_back(p);
-  anota("[volcar] copia grabada: %ux%u %s%s", im.w, im.h, formato(im.formato).c_str(), color ? " (color de DLSS)" : "");
+  anota("[volcar] copia grabada: %ux%u %s%s", im.w, im.h, formato(im.formato).c_str(),
+        tipo ? " (destino de dibujo)" : color ? " (color de DLSS)" : "");
   return true;
+}
+
+/* ---------- fase 3b (sonda): la ventana de los destinos de dibujo ---------- */
+void abrirVentana(Dispositivo *d, bool taller) {
+  d->ventana = true;
+  d->ventanaTaller = taller;
+  d->ventanaPresente = d->presentes;
+  d->ventanaDesde = ahora();
+  d->ventanaAmbitos = d->ventanaCopias = 0;
+  d->ventanaCopiadas.clear();
+  anota("[destinos] ventana abierta%s: cada dibujo con destino hasta la presentacion siguiente (pasadas clasicas "
+        "hasta ahora: %ld)", taller ? " (ODYSSEYVK_CAPA_DESTINOS_TRAS)" : "", d->pasadasClasicas);
+}
+void cerrarVentana(Dispositivo *d, const char *por) {
+  if (!d->ventana) return;
+  d->ventana = false;
+  anota("[destinos] ventana cerrada (%s): %d dibujos con destino, %d copiados", por, d->ventanaAmbitos, d->ventanaCopias);
 }
 
 /* el volcado: la profundidad y, con la sonda (fase 3), cada imagen de color de DLSS que se pueda copiar */
@@ -394,6 +469,7 @@ void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &
     }
     anota("[volcar] sonda: %d imagenes de color de DLSS de %zu conocidas", n, d->colorDlss.size());
     d->capturarPresente = true;   /* y el cuadro que se presente ahora, con el HUD */
+    abrirVentana(d, false);       /* y los destinos de dibujo de aqui a esa presentacion (fase 3b) */
   }
   d->armado = false;
 }
@@ -413,16 +489,18 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
     if (!este) { quedan.push_back(p); continue; }
     void *ptr = nullptr;
     if (p.color && d->map(d->dev, p.mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
-      const int k = ++d->volcadosColor;
-      const std::string base = carpetaVolcados() + "/color-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
+      const int k = p.tipo ? ++d->volcadosDestino : ++d->volcadosColor;
+      const std::string base = carpetaVolcados() + "/" + (p.tipo ? p.tipo : "color") + "-" + std::to_string((long)getpid()) +
+                               "-" + std::to_string(k);
       if (FILE *o = std::fopen((base + ".raw").c_str(), "wb")) {
         std::fwrite(ptr, 1, (size_t)p.w * p.h * p.bpp, o);
         std::fclose(o);
       }
       if (FILE *o = std::fopen((base + ".json").c_str(), "w")) {
         std::fprintf(o, "{\"width\": %u, \"height\": %u, \"format\": \"%s\", \"vkformat\": %d, \"bpp\": %u, "
-                        "\"usage\": %u, \"descriptors\": %u, \"pid\": %ld}\n",
-                     p.w, p.h, formato(p.formato).c_str(), (int)p.formato, p.bpp, p.uso, p.descriptores, (long)getpid());
+                        "\"usage\": %u, \"descriptors\": %u, \"pid\": %ld%s}\n",
+                     p.w, p.h, formato(p.formato).c_str(), (int)p.formato, p.bpp, p.uso, p.descriptores, (long)getpid(),
+                     p.extra.c_str());
         std::fclose(o);
       }
       d->unmap(d->dev, p.mem);
@@ -689,8 +767,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateI
   VkImageCreateInfo c = *ci;
   if (esProfundidad(c.format)) c.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   /* para poder copiarla */
   /* fase 3 (sonda): tambien las de color grandes de los formatos que se guardan, que DLSS puede usar */
+  /* (fase 3b) y los destinos de dibujo de color: entre ellos esta donde se dibuja el HUD */
   if (sonda() && bytesColor(c.format) && c.extent.width >= 1280 && c.samples == VK_SAMPLE_COUNT_1_BIT &&
-      (c.usage & (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)))
+      (c.usage & (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)))
     c.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   const VkResult r = d->createImage(device, &c, a, img);
   if (r == VK_SUCCESS) {
@@ -812,6 +891,7 @@ VKAPI_ATTR void VKAPI_CALL CmdCuLaunchKernelNVX(VkCommandBuffer cb, const VkCuLa
       anota("[lanzar] primer lanzamiento de nucleo (DLSS u otro NGX)");
     }
     mirarPeticion(d);
+    if (sonda()) d->cbs[cb].trasDlss = true;   /* fase 3b: lo que se dibuje despues en este buffer va tras DLSS */
     std::vector<VkImageView> vistas;
     /* los parametros: cada uno es un puntero a su valor (tamanos que no sabemos: se leen 4 bytes) */
     for (size_t i = 0; li && i < li->paramCount; i++)
@@ -1089,9 +1169,245 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR
       return e ? std::atol(e) : -1L;
     }();
     if (kTras > 0 && d->presentes == kTras) d->capturarPresente = true;
+    /* fase 3b: la ventana de los destinos acaba en la presentacion siguiente a su apertura; con la de taller
+       (ODYSSEYVK_CAPA_DESTINOS_TRAS=<n>, sin DLSS) se abre en la presentacion n y se copia la n+1 */
+    if (d->ventana && d->presentes > d->ventanaPresente) {
+      if (d->ventanaTaller) d->capturarPresente = true;
+      cerrarVentana(d, "presentacion");
+    }
+    static const long kDestinos = [] {
+      const char *e = std::getenv("ODYSSEYVK_CAPA_DESTINOS_TRAS");
+      return e ? std::atol(e) : -1L;
+    }();
+    if (kDestinos > 0 && d->presentes == kDestinos) abrirVentana(d, true);
     if (d->capturarPresente && pi && pi->swapchainCount >= 1) return presentarCapturando(d, q, pi);
   }
   return d->present(q, pi);
+}
+
+/* ---------- fase 3b (sonda): los destinos de dibujo ---------- */
+/* Los ganchos de dibujo van en cada vkCmdDraw* del juego (miles por cuadro): el dispositivo y el contador del
+   dibujo con destino abierto se guardan por hilo, para no tomar el candado en cada uno (un buffer de comandos
+   se graba en un hilo a la vez). Solo con la sonda: sin ella ni se enganchan. */
+struct CacheCb {
+  VkCommandBuffer cb = VK_NULL_HANDLE;
+  Dispositivo *d = nullptr;
+  long *dibujos = nullptr;
+  uint64_t gen = 0;
+};
+thread_local CacheCb tl_cb;
+/* con g_mx tomado */
+void cachear(Dispositivo *d, VkCommandBuffer cb) {
+  tl_cb.cb = cb;
+  tl_cb.d = d;
+  tl_cb.dibujos = &d->cbs[cb].actual.dibujos;
+  tl_cb.gen = g_generacion.load(std::memory_order_relaxed);
+}
+inline Dispositivo *dispositivoDibujo(VkCommandBuffer cb) {
+  if (tl_cb.cb == cb && tl_cb.gen == g_generacion.load(std::memory_order_relaxed)) {
+    ++*tl_cb.dibujos;
+    return tl_cb.d;
+  }
+  std::lock_guard<std::mutex> g(g_mx);
+  Dispositivo *d = dispositivo(cb);
+  cachear(d, cb);
+  ++*tl_cb.dibujos;
+  return d;
+}
+VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cb, uint32_t a, uint32_t b, uint32_t c, uint32_t e) {
+  dispositivoDibujo(cb)->draw(cb, a, b, c, e);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cb, uint32_t a, uint32_t b, uint32_t c, int32_t o, uint32_t e) {
+  dispositivoDibujo(cb)->drawIndexed(cb, a, b, c, o, e);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, uint32_t n, uint32_t s) {
+  dispositivoDibujo(cb)->drawIndirect(cb, b, o, n, s);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, uint32_t n, uint32_t s) {
+  dispositivoDibujo(cb)->drawIndexedIndirect(cb, b, o, n, s);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, VkBuffer cbuf, VkDeviceSize co,
+                                                uint32_t m, uint32_t s) {
+  dispositivoDibujo(cb)->drawIndirectCount(cb, b, o, cbuf, co, m, s);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCountKHR(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, VkBuffer cbuf, VkDeviceSize co,
+                                                   uint32_t m, uint32_t s) {
+  dispositivoDibujo(cb)->drawIndirectCountKHR(cb, b, o, cbuf, co, m, s);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, VkBuffer cbuf,
+                                                       VkDeviceSize co, uint32_t m, uint32_t s) {
+  dispositivoDibujo(cb)->drawIndexedIndirectCount(cb, b, o, cbuf, co, m, s);
+}
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCountKHR(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, VkBuffer cbuf,
+                                                          VkDeviceSize co, uint32_t m, uint32_t s) {
+  dispositivoDibujo(cb)->drawIndexedIndirectCountKHR(cb, b, o, cbuf, co, m, s);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cb, const VkCommandBufferBeginInfo *bi) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+    d->cbs[cb] = CbSonda{};   /* se graba de nuevo: lo de antes ya no cuenta */
+  }
+  return d->beginCb(cb, bi);
+}
+
+void empezarAmbito(Dispositivo *d, VkCommandBuffer cb, const VkRenderingInfo *ri) {
+  std::lock_guard<std::mutex> g(g_mx);
+  CbSonda &c = d->cbs[cb];
+  c.actual = Ambito{};
+  Ambito &a = c.actual;
+  a.w = ri->renderArea.extent.width, a.h = ri->renderArea.extent.height;
+  a.reanuda = (ri->flags & VK_RENDERING_RESUMING_BIT) != 0;
+  for (uint32_t i = 0; i < ri->colorAttachmentCount; i++) {
+    const VkRenderingAttachmentInfo &at = ri->pColorAttachments[i];
+    auto v = d->vistas.find(at.imageView);
+    if (at.imageView == VK_NULL_HANDLE || v == d->vistas.end()) continue;
+    a.colores.push_back(v->second.img);
+    a.cargas.push_back((int)at.loadOp);
+    a.limpia.push_back(at.clearValue.color);
+  }
+  a.conProf = ri->pDepthAttachment && ri->pDepthAttachment->imageView != VK_NULL_HANDLE;
+  cachear(d, cb);
+}
+
+bool esDeLaCadena(Dispositivo *d, VkImage img) {
+  for (const auto &s : d->swaps)
+    for (VkImage i : s.second.imgs)
+      if (i == img) return true;
+  return false;
+}
+
+/* con g_mx tomado, despues del vkCmdEndRendering de abajo (ya fuera del dibujo: se puede copiar) */
+void acabarAmbito(Dispositivo *d, VkCommandBuffer cb) {
+  if (!d->ventana) return;
+  if (ahora() - d->ventanaDesde > 1.0) {
+    cerrarVentana(d, "un segundo sin presentar");
+    return;
+  }
+  CbSonda &c = d->cbs[cb];
+  const Ambito &a = c.actual;
+  const int k = ++d->ventanaAmbitos;
+  /* el tamano de render de DLSS (el de su profundidad): lo que se dibuja a ese tamano es de ANTES de DLSS (la
+     escena del cuadro siguiente, que ya se graba); el HUD va despues, a la resolucion de salida */
+  uint32_t renderW = 0, renderH = 0;
+  if (d->ultimaPedida != VK_NULL_HANDLE) {
+    auto it = d->imagenes.find(d->ultimaPedida);
+    if (it != d->imagenes.end()) renderW = it->second.w, renderH = it->second.h;
+  }
+  std::string lista;
+  char tmp[192];
+  for (size_t i = 0; i < a.colores.size(); i++) {
+    const VkImage img = a.colores[i];
+    auto it = d->imagenes.find(img);
+    const VkClearColorValue &l = a.limpia[i];
+    const char *carga = a.cargas[i] == VK_ATTACHMENT_LOAD_OP_CLEAR ? "limpia" : a.cargas[i] == VK_ATTACHMENT_LOAD_OP_LOAD ? "carga" : "da igual";
+    if (it == d->imagenes.end()) {
+      std::snprintf(tmp, sizeof tmp, " [%p %s %s]", (void *)img, esDeLaCadena(d, img) ? "de la cadena de presentacion" : "desconocida", carga);
+      lista += tmp;
+      continue;
+    }
+    const Imagen &im = it->second;
+    std::snprintf(tmp, sizeof tmp, " [%p %ux%u %s %s%s]", (void *)img, im.w, im.h, formato(im.formato).c_str(), carga,
+                  a.cargas[i] == VK_ATTACHMENT_LOAD_OP_CLEAR
+                      ? (" a (" + std::to_string(l.float32[0]) + "," + std::to_string(l.float32[1]) + "," +
+                         std::to_string(l.float32[2]) + "," + std::to_string(l.float32[3]) + ")").c_str()
+                      : "");
+    lista += tmp;
+    /* se copian los de la resolucion de salida, cada imagen hasta 3 veces (el HUD puede ir en varias
+       pasadas), 16 copias por ventana como mucho (66 MB cada una en RGBA16F 4K) */
+    const bool copiable = (im.uso & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) && bytesColor(im.formato) && im.w >= 1280 &&
+                          im.muestras == VK_SAMPLE_COUNT_1_BIT && !(im.w == renderW && im.h == renderH);
+    int &veces = d->ventanaCopiadas[img];
+    if (copiable && veces < 3 && d->ventanaCopias < 16) {
+      std::snprintf(tmp, sizeof tmp,
+                    ", \"orden\": %d, \"dibujos\": %ld, \"carga\": %d, \"limpia\": [%g, %g, %g, %g], \"tras_dlss\": %s, "
+                    "\"imagen\": \"%p\", \"vez\": %d",
+                    k, a.dibujos, a.cargas[i], l.float32[0], l.float32[1], l.float32[2], l.float32[3],
+                    c.trasDlss ? "true" : "false", (void *)img, veces + 1);
+      if (grabarCopiaImagen(d, cb, img, im, true, 0, "destino", tmp)) {
+        veces++;
+        d->ventanaCopias++;
+      }
+    }
+  }
+  if (k <= 300)
+    anota("[destinos] %d · %ux%u · %ld dibujos · %s%s%s · color:%s", k, a.w, a.h, a.dibujos,
+          c.trasDlss ? "tras DLSS en su buffer" : "otro buffer", a.conProf ? " · con profundidad" : "",
+          a.reanuda ? " · reanuda" : "", lista.empty() ? " ninguno" : lista.c_str());
+}
+
+VKAPI_ATTR void VKAPI_CALL CmdBeginRendering(VkCommandBuffer cb, const VkRenderingInfo *ri) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  if (ri) empezarAmbito(d, cb, ri);
+  d->beginRendering(cb, ri);
+}
+VKAPI_ATTR void VKAPI_CALL CmdBeginRenderingKHR(VkCommandBuffer cb, const VkRenderingInfo *ri) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  if (ri) empezarAmbito(d, cb, ri);
+  d->beginRenderingKHR(cb, ri);
+}
+VKAPI_ATTR void VKAPI_CALL CmdEndRendering(VkCommandBuffer cb) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  d->endRendering(cb);
+  std::lock_guard<std::mutex> g(g_mx);
+  acabarAmbito(d, cb);
+}
+VKAPI_ATTR void VKAPI_CALL CmdEndRenderingKHR(VkCommandBuffer cb) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  d->endRenderingKHR(cb);
+  std::lock_guard<std::mutex> g(g_mx);
+  acabarAmbito(d, cb);
+}
+/* las pasadas clasicas (vkCmdBeginRenderPass) solo se cuentan: vkd3d-proton dibuja con vkCmdBeginRendering. Si
+   el registro dice que hay muchas, el HUD podria ir por ahi y habria que seguirlas tambien */
+void contarClasica(Dispositivo *d) {
+  std::lock_guard<std::mutex> g(g_mx);
+  if (++d->pasadasClasicas == 1) anota("[destinos] el juego usa tambien pasadas clasicas (vkCmdBeginRenderPass)");
+}
+VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer cb, const VkRenderPassBeginInfo *bi, VkSubpassContents c) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  contarClasica(d);
+  d->beginRenderPass(cb, bi, c);
+}
+VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer cb, const VkRenderPassBeginInfo *bi, const VkSubpassBeginInfo *si) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  contarClasica(d);
+  d->beginRenderPass2(cb, bi, si);
+}
+VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2KHR(VkCommandBuffer cb, const VkRenderPassBeginInfo *bi, const VkSubpassBeginInfo *si) {
+  Dispositivo *d;
+  {
+    std::lock_guard<std::mutex> g(g_mx);
+    d = dispositivo(cb);
+  }
+  contarClasica(d);
+  d->beginRenderPass2KHR(cb, bi, si);
 }
 
 /* ODYSSEYVK_CAPA_PRUEBA=1 (taller): sin DLSS, al acabar cada pasada de render se comparte la ultima imagen de
@@ -1167,6 +1483,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     std::lock_guard<std::mutex> g(g_mx);
     d = dispositivo(device);
     g_dev.erase(llave(device));
+    g_generacion.fetch_add(1);   /* la cache por hilo de los dibujos apuntaba a este */
     anota("[dispositivo] cerrado · numeros pedidos %ld · lanzamientos %ld · con profundidad %ld", d->pedidos,
           d->lanzamientos, d->conProfundidad);
   }
@@ -1271,6 +1588,21 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice fisico, const VkDev
   CARGA(createSem, "vkCreateSemaphore");
   CARGA(destroySem, "vkDestroySemaphore");
   CARGA(devWaitIdle, "vkDeviceWaitIdle");
+  CARGA(beginRendering, "vkCmdBeginRendering");
+  CARGA(beginRenderingKHR, "vkCmdBeginRenderingKHR");
+  CARGA(endRendering, "vkCmdEndRendering");
+  CARGA(endRenderingKHR, "vkCmdEndRenderingKHR");
+  CARGA(beginRenderPass, "vkCmdBeginRenderPass");
+  CARGA(beginRenderPass2, "vkCmdBeginRenderPass2");
+  CARGA(beginRenderPass2KHR, "vkCmdBeginRenderPass2KHR");
+  CARGA(draw, "vkCmdDraw");
+  CARGA(drawIndexed, "vkCmdDrawIndexed");
+  CARGA(drawIndirect, "vkCmdDrawIndirect");
+  CARGA(drawIndexedIndirect, "vkCmdDrawIndexedIndirect");
+  CARGA(drawIndirectCount, "vkCmdDrawIndirectCount");
+  CARGA(drawIndirectCountKHR, "vkCmdDrawIndirectCountKHR");
+  CARGA(drawIndexedIndirectCount, "vkCmdDrawIndexedIndirectCount");
+  CARGA(drawIndexedIndirectCountKHR, "vkCmdDrawIndexedIndirectCountKHR");
   if (conHost) CARGA(hostPtrProps, "vkGetMemoryHostPointerPropertiesEXT");
 #undef CARGA
   if (conHost && inst->props2) {
@@ -1348,6 +1680,23 @@ PFN_vkVoidFunction gancho(const char *n) {
     G("vkCreateSwapchainKHR", CreateSwapchainKHR);
     G("vkGetSwapchainImagesKHR", GetSwapchainImagesKHR);
     G("vkQueuePresentKHR", QueuePresentKHR);
+    /* fase 3b: los destinos de dibujo */
+    G("vkBeginCommandBuffer", BeginCommandBuffer);
+    G("vkCmdBeginRendering", CmdBeginRendering);
+    G("vkCmdBeginRenderingKHR", CmdBeginRenderingKHR);
+    G("vkCmdEndRendering", CmdEndRendering);
+    G("vkCmdEndRenderingKHR", CmdEndRenderingKHR);
+    G("vkCmdBeginRenderPass", CmdBeginRenderPass);
+    G("vkCmdBeginRenderPass2", CmdBeginRenderPass2);
+    G("vkCmdBeginRenderPass2KHR", CmdBeginRenderPass2KHR);
+    G("vkCmdDraw", CmdDraw);
+    G("vkCmdDrawIndexed", CmdDrawIndexed);
+    G("vkCmdDrawIndirect", CmdDrawIndirect);
+    G("vkCmdDrawIndexedIndirect", CmdDrawIndexedIndirect);
+    G("vkCmdDrawIndirectCount", CmdDrawIndirectCount);
+    G("vkCmdDrawIndirectCountKHR", CmdDrawIndirectCountKHR);
+    G("vkCmdDrawIndexedIndirectCount", CmdDrawIndexedIndirectCount);
+    G("vkCmdDrawIndexedIndirectCountKHR", CmdDrawIndexedIndirectCountKHR);
   }
 #undef G
   return nullptr;

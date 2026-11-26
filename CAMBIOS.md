@@ -3,6 +3,25 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Fase 3b, el HUD: la sonda de los destinos de dibujo (v1.13)
+
+- Rodolfo: «Sí, prepárala» (buscar la imagen donde el juego dibuja el HUD: su alfa sería la máscara exacta).
+- Con la misma sonda (`ODYSSEYVK_CAPA_SONDA=1`) la capa sigue también **cada dibujo con destino**
+  (`vkCmdBeginRendering` / `vkCmdEndRendering`, lo que usa vkd3d-proton) y cuenta sus `vkCmdDraw*`. Al volcar
+  se abre una «ventana» desde el lanzamiento de DLSS hasta la presentación siguiente: cada dibujo con destino
+  va al registro (`[destinos]`: tamaño, dibujos, si limpia y a qué color, si va tras DLSS en su buffer, si es
+  la cadena de presentación) y los de la resolución de salida se copian al acabar ese dibujo
+  (`destino-<pid>-<n>.raw` + `.json` con orden, dibujos, limpiado y la imagen; cada imagen hasta 3 veces y 16
+  copias por ventana). Lo que va al tamaño de render de DLSS no se copia: es la escena del cuadro siguiente.
+  Las pasadas clásicas (`vkCmdBeginRenderPass`) solo se cuentan.
+- Los ganchos de dibujo van en miles de llamadas por cuadro: el dispositivo y el contador se guardan por hilo
+  (sin candado en cada dibujo), y sin la sonda ni se enganchan.
+- Probado con el visor aparte (dibuja con `vkCmdBeginRendering`, como el juego) y
+  `ODYSSEYVK_CAPA_DESTINOS_TRAS=300` (de taller, abre la ventana sin DLSS), con `ODYSSEYVK_AFINAR_SIEMPRE=1`
+  para que tenga un destino propio en cada cuadro: el pase de afinado (3840 × 2160) copiado al acabar con su
+  contenido de verdad, el dibujo siguiente reconocido como la cadena de presentación, el cuadro presentado
+  escrito, sin caídas y a 60 fps.
+
 ## Fase 3, el HUD: lo que dijo la sonda en Cyberpunk (v1.13)
 
 - Vuelta de Rodolfo con `ODYSSEYVK_CAPA_VOLCAR_CADA=45`: tres volcados (16:07 a 16:09), dos con juego y el
