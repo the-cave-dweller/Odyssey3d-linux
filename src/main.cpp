@@ -5300,14 +5300,16 @@ static int cmdServe(int argc, char **argv) {
           enfriadoHasta = now;
         } else if (porElUsuario) {
           /* (v1.12) El video salio de pantalla completa con la sesion ya asentada (fuera del cambio de
-             modo del panel, que es lo que hacia el bucle): lo hizo el usuario o la aplicacion, y la
-             ventana ya no esta a pantalla completa, asi que no hay bucle posible. Antes contaba como
-             muerte si la sesion habia durado menos de 20 s, y dos seguidas costaban un minuto sin 3D:
-             «ya arranco pero super lento», Rodolfo (su registro: dos salidas a los 11 y 12 s, y el 3D
-             volvio a los 60 s exactos). Desde la 1.12 el 3D entra solo, sin tarjeta, y entrar y salir
-             de pantalla completa es lo normal. Queda un respiro de 1,5 s. */
+             modo del panel): lo hizo el usuario o la aplicacion, no se cayo el visor. Antes contaba como
+             muerte si la sesion habia durado menos de 20 s, y dos seguidas costaban un minuto sin 3D
+             («ya arranco pero super lento», Rodolfo: dos salidas a los 11 y 12 s y el 3D volvio a los
+             60 s exactos). Ahora no cuenta como muerte, pero la espera de 8 s se queda: al salir, Firefox
+             se vuelve a poner a pantalla completa el solo un segundo despues y la vigilia de abajo se la
+             quita (hasta tres veces en ~6 s). Con 1,5 s el 3D se relanzaba justo en ese instante, la
+             vigilia le quitaba la pantalla completa y la sesion se cerraba: un bucle de cada ~6 s, cuatro
+             vueltas en su registro (10:18:53-10:19:12), con el panel parpadeando. */
           muertesSeguidas = 0;
-          enfriadoHasta = now + 1.5;
+          enfriadoHasta = now + 8.0;
         } else {
           if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
           else muertesSeguidas = 0;
