@@ -3716,6 +3716,13 @@ static void loadServeCfg(ServeCfg &cfg) {
     size_t eq = l.find('=');
     if (eq == std::string::npos) return;
     std::string k = strLower(strTrim(l.substr(0, eq))), v = strTrim(l.substr(eq + 1));
+    /* un comentario al final de la linea («vrr_en_3d = no   # prueba») no es parte del valor. Sin esto
+       el valor era «no   # prueba», que no es «no»: MEDIDO 26-nov, el VRR siguio puesto en el 3D. */
+    for (size_t h = v.find('#'); h != std::string::npos; h = v.find('#', h + 1))
+      if (h > 0 && (v[h - 1] == ' ' || v[h - 1] == '\t')) {
+        v = strTrim(v.substr(0, h));
+        break;
+      }
     if (k == "ignore") splitList(v, cfg.ignore);
     else if (k == "espera") cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
     else if (k == "red") cfg.red = std::max(0, std::atoi(v.c_str()));

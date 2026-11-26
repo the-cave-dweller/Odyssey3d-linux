@@ -3,6 +3,18 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los comentarios al final de una línea de serve.conf ya no se cuelan en el valor (rama `experimental`)
+
+- La partida de las 04:20 con los arreglos del modo seguro: el juego ya pasa por debajo del visor,
+  los atajos globales vuelven, cola alta, red en la tarjeta 1. Pero el VRR siguió puesto: la
+  línea `vrr_en_3d = no   # 2026-11-26: prueba…` se leía con el comentario dentro del valor («no   #
+  …» no es «no»). `red = 1   # …` sí valía porque es un número. Ahora `loadServeCfg` y
+  `ajuste::leerServeConf` cortan el valor en un `#` que vaya tras un espacio.
+- Lo que midió esa partida, con el VRR todavía puesto: con el juego a 57–90 cuadros, adquirir
+  15–34 ms y presentar >12 ms en 22–269 de cada ~400 presentaciones; con el juego a ~160, adquirir
+  ≤ 10 ms y 0–1 tardías. La valla siempre 0 y el cuadro en la tarjeta 0,75–1,37 ms: la tarjeta no
+  hace esperar al visor. 32 de 45 tramos de 5 s con el juego por debajo de 100 cuadros.
+
 ## El permiso de la prioridad dejaba el visor detrás del juego (rama `experimental`)
 
 - Rodolfo, tras dar `setcap cap_sys_nice+ep` al binario: «lo está mandando tras el juego». MEDIDO en
