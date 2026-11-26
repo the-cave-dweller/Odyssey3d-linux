@@ -111,6 +111,7 @@ struct Imagen {
   VkFormat formato;
   uint32_t w, h;
   VkSampleCountFlagBits muestras;
+  VkImageUsageFlags uso = 0;
 };
 struct Vista {
   VkImage img;
@@ -122,6 +123,8 @@ struct Pendiente {
   VkDeviceMemory mem;
   uint32_t w, h;
   VkFormat formato;
+  bool color = false;          /* fase 3 (sonda): una imagen de color de DLSS, no la profundidad */
+  uint32_t bpp = 4, uso = 0, descriptores = 0;
 };
 
 struct Dispositivo {
@@ -184,6 +187,10 @@ struct Dispositivo {
   /* la ultima imagen de profundidad a la que DLSS le pidio numero (MEDIDO en Cyberpunk: 1920x1080
      D32_SFLOAT, el tamano de render, varias veces al cambiar de escena) */
   VkImage ultimaPedida = VK_NULL_HANDLE;
+  /* fase 3 (sonda): las imagenes de color a las que DLSS pidio numero, con los tipos de descriptor (bit 1 =
+     para leer con muestreador, bit 3 = de almacenamiento, la que escribe) */
+  std::unordered_map<VkImage, uint32_t> colorDlss;
+  int volcadosColor = 0;
   long extrasVistos = 0;
 };
 std::unordered_map<void *, Dispositivo *> g_dev;
@@ -225,6 +232,25 @@ std::string formato(VkFormat f) {
   return n ? n : ("formato " + std::to_string((int)f));
 }
 
+/* fase 3 (sonda): los formatos de color que se guardan, con sus bytes por punto (0 = no se guarda) */
+uint32_t bytesColor(VkFormat f) {
+  switch (f) {
+    case VK_FORMAT_R16G16B16A16_SFLOAT: return 8;
+    case VK_FORMAT_B10G11R11_UFLOAT_PACK32: case VK_FORMAT_R8G8B8A8_UNORM: case VK_FORMAT_R8G8B8A8_SRGB:
+    case VK_FORMAT_B8G8R8A8_UNORM: case VK_FORMAT_B8G8R8A8_SRGB: case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+      return 4;
+    default:
+      return 0;
+  }
+}
+bool sonda() {
+  static const bool s = [] {
+    const char *e = std::getenv("ODYSSEYVK_CAPA_SONDA");
+    return e && e[0] == '1';
+  }();
+  return s;
+}
+
 uint32_t tipoMemoria(Dispositivo *d, uint32_t bits, VkMemoryPropertyFlags quiero) {
   VkPhysicalDeviceMemoryProperties mp{};
   d->inst->memProps(d->fisico, &mp);
@@ -256,19 +282,20 @@ void mirarPeticion(Dispositivo *d) {
   }
 }
 
-void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im) {
+bool grabarCopiaImagen(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im, bool color, uint32_t descriptores) {
   if (im.muestras != VK_SAMPLE_COUNT_1_BIT) {
-    anota("[volcar] la profundidad tiene %d muestras (MSAA): no se puede copiar asi en la fase 1", (int)im.muestras);
-    d->armado = false;
-    return;
+    anota("[volcar] la imagen tiene %d muestras (MSAA): no se puede copiar asi", (int)im.muestras);
+    return false;
   }
   const bool dos = im.formato == VK_FORMAT_D16_UNORM || im.formato == VK_FORMAT_D16_UNORM_S8_UINT;
-  const VkDeviceSize tam = (VkDeviceSize)im.w * im.h * (dos ? 2 : 4);
+  const uint32_t bpp = color ? bytesColor(im.formato) : (dos ? 2 : 4);
+  if (!bpp) return false;
+  const VkDeviceSize tam = (VkDeviceSize)im.w * im.h * bpp;
   VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   bi.size = tam;
   bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   VkBuffer buf = VK_NULL_HANDLE;
-  if (d->createBuffer(d->dev, &bi, nullptr, &buf) != VK_SUCCESS) { anota("[volcar] vkCreateBuffer fallo"); return; }
+  if (d->createBuffer(d->dev, &bi, nullptr, &buf) != VK_SUCCESS) { anota("[volcar] vkCreateBuffer fallo"); return false; }
   VkMemoryRequirements mr{};
   d->bufReqs(d->dev, buf, &mr);
   VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
@@ -278,7 +305,7 @@ void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &
   if (ai.memoryTypeIndex == UINT32_MAX || d->alloc(d->dev, &ai, nullptr, &mem) != VK_SUCCESS) {
     anota("[volcar] sin memoria visible para la copia");
     d->destroyBuffer(d->dev, buf, nullptr);
-    return;
+    return false;
   }
   d->bind(d->dev, buf, mem, 0);
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -286,16 +313,34 @@ void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &
   mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
   d->barrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
   VkBufferImageCopy reg{};
-  reg.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
+  reg.imageSubresource = {(VkImageAspectFlags)(color ? VK_IMAGE_ASPECT_COLOR_BIT : VK_IMAGE_ASPECT_DEPTH_BIT), 0, 0, 1};
   reg.imageExtent = {im.w, im.h, 1};
   d->copyImgBuf(cb, img, VK_IMAGE_LAYOUT_GENERAL, buf, 1, &reg);
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
   d->barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &mb, 0,
              nullptr, 0, nullptr);
-  d->pendientes.push_back({cb, buf, mem, im.w, im.h, im.formato});
+  Pendiente p{cb, buf, mem, im.w, im.h, im.formato};
+  p.color = color, p.bpp = bpp, p.uso = (uint32_t)im.uso, p.descriptores = descriptores;
+  d->pendientes.push_back(p);
+  anota("[volcar] copia grabada: %ux%u %s%s", im.w, im.h, formato(im.formato).c_str(), color ? " (color de DLSS)" : "");
+  return true;
+}
+
+/* el volcado: la profundidad y, con la sonda (fase 3), cada imagen de color de DLSS que se pueda copiar */
+void grabarCopia(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im) {
+  grabarCopiaImagen(d, cb, img, im, false, 0);
+  if (sonda()) {
+    int n = 0;
+    for (const auto &par : d->colorDlss) {
+      auto it = d->imagenes.find(par.first);
+      if (it == d->imagenes.end() || !(it->second.uso & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) || it->second.w < 1280) continue;
+      if (n >= 8) break;
+      if (grabarCopiaImagen(d, cb, par.first, it->second, true, par.second)) n++;
+    }
+    anota("[volcar] sonda: %d imagenes de color de DLSS de %zu conocidas", n, d->colorDlss.size());
+  }
   d->armado = false;
-  anota("[volcar] copia grabada: %ux%u %s", im.w, im.h, formato(im.formato).c_str());
 }
 
 void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuffer> &enviados) {
@@ -312,7 +357,23 @@ void leerPendientes(Dispositivo *d, VkQueue cola, const std::vector<VkCommandBuf
       if (cb == p.cb) este = true;
     if (!este) { quedan.push_back(p); continue; }
     void *ptr = nullptr;
-    if (d->map(d->dev, p.mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
+    if (p.color && d->map(d->dev, p.mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
+      const int k = ++d->volcadosColor;
+      const std::string base = carpeta() + "/color-" + std::to_string((long)getpid()) + "-" + std::to_string(k);
+      if (FILE *o = std::fopen((base + ".raw").c_str(), "wb")) {
+        std::fwrite(ptr, 1, (size_t)p.w * p.h * p.bpp, o);
+        std::fclose(o);
+      }
+      if (FILE *o = std::fopen((base + ".json").c_str(), "w")) {
+        std::fprintf(o, "{\"width\": %u, \"height\": %u, \"format\": \"%s\", \"vkformat\": %d, \"bpp\": %u, "
+                        "\"usage\": %u, \"descriptors\": %u, \"pid\": %ld}\n",
+                     p.w, p.h, formato(p.formato).c_str(), (int)p.formato, p.bpp, p.uso, p.descriptores, (long)getpid());
+        std::fclose(o);
+      }
+      d->unmap(d->dev, p.mem);
+      anota("[volcar] escrito %s.raw (%ux%u %s, uso 0x%x, descriptores 0x%x)", base.c_str(), p.w, p.h,
+            formato(p.formato).c_str(), p.uso, p.descriptores);
+    } else if (!p.color && d->map(d->dev, p.mem, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS) {
       const size_t n = (size_t)p.w * p.h;
       std::vector<float> f(n);
       if (p.formato == VK_FORMAT_D16_UNORM || p.formato == VK_FORMAT_D16_UNORM_S8_UINT) {
@@ -572,10 +633,14 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImageCreateI
   }
   VkImageCreateInfo c = *ci;
   if (esProfundidad(c.format)) c.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   /* para poder copiarla */
+  /* fase 3 (sonda): tambien las de color grandes de los formatos que se guardan, que DLSS puede usar */
+  if (sonda() && bytesColor(c.format) && c.extent.width >= 1280 && c.samples == VK_SAMPLE_COUNT_1_BIT &&
+      (c.usage & (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)))
+    c.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   const VkResult r = d->createImage(device, &c, a, img);
   if (r == VK_SUCCESS) {
     std::lock_guard<std::mutex> g(g_mx);
-    d->imagenes[*img] = {c.format, c.extent.width, c.extent.height, c.samples};
+    d->imagenes[*img] = {c.format, c.extent.width, c.extent.height, c.samples, c.usage};
     if (esProfundidad(c.format)) d->ultimaCreada = *img;
   }
   return r;
@@ -587,6 +652,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAl
     d = dispositivo(device);
     d->imagenes.erase(img);
     d->vistasDeProfundidad.erase(img);
+    d->colorDlss.erase(img);
     if (d->ultimaPedida == img) d->ultimaPedida = VK_NULL_HANDLE;
     if (d->ultimaCreada == img) d->ultimaCreada = VK_NULL_HANDLE;
   }
@@ -624,6 +690,7 @@ void apuntarNumero(Dispositivo *d, const VkImageViewHandleInfoNVX *info, uint64_
     if (v != d->vistas.end()) {
       auto im = d->imagenes.find(v->second.img);
       if (im != d->imagenes.end() && esProfundidad(im->second.formato)) d->ultimaPedida = v->second.img;
+      else if (im != d->imagenes.end()) d->colorDlss[v->second.img] |= 1u << (uint32_t)info->descriptorType;
     }
   }
   if (d->pedidos <= 300) {

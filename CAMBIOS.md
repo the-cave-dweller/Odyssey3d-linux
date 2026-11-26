@@ -3,6 +3,22 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Fase 3, el HUD: la sonda de las imágenes de color de DLSS (v1.13)
+
+- Rodolfo: «Yes, start phase 3» (la «capa de DLSS» para el HUD: el HUD no tiene profundidad y toma la de lo
+  que tiene detrás; DLSS trabaja con la escena ANTES de que el juego dibuje el HUD, así que comparar sus
+  imágenes con el cuadro final dice qué puntos son HUD).
+- Primero hay que saber cuál es la escena limpia: en el registro de la fase 1 DLSS pidió números para varias
+  imágenes de color (1920 × 1080 y 3840 × 2160 en RGBA16F, unas para leer y otras de almacenamiento) y cómo se
+  separa del cuadro final con el etalonaje y los efectos de Cyberpunk. **La sonda** (`ODYSSEYVK_CAPA_SONDA=1`,
+  aparte del uso normal): la capa apunta cada imagen de color a la que DLSS pide número y con qué tipo de
+  descriptor, las deja copiables al crearlas (las grandes de los formatos que sabe guardar) y, al volcar,
+  guarda cada una entera (`color-<pid>-<n>.raw` con su `.json`: medidas, formato, uso y descriptores) junto a
+  la profundidad. Con una captura de Steam (F12) del mismo momento, con el HUD a la vista, se diseña la
+  máscara del HUD con datos de verdad.
+- Probado sin juego: el visor con la capa y la sonda puestas sale igual que sin capa (0,002 de diferencia
+  media de 255).
+
 ## Profundidad de DLSS: su propio plano de la pantalla, más rápida, y los modos de DLSS (v1.13)
 
 - Rodolfo, con una captura de la vista de profundidad en Cyberpunk (el piloto en naranja y el plano de la
