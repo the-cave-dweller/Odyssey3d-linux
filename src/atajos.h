@@ -42,7 +42,7 @@ std::string normaliza(const std::string &combo);
 bool tieneModificador(const std::string &combo);
 /* el renglon de las teclas de la pastilla cuando alguna no es la de fabrica (vacio si todas lo son) */
 /* `rendimiento` (rama experimental): el renglon de la pastilla del modo rendimiento, sin Profundidad ni Salida */
-std::string renglonPastilla(bool legado, bool rendimiento = false);
+std::string renglonPastilla(bool legado, bool rendimiento = false, bool foco = false);
 
 }  // namespace atajos
 

@@ -234,6 +234,31 @@ bool Hud::buildAtlas(std::string *err) {
     /* el pin del panel: cabeza, collar y aguja */
     static const float kPin[][2] = {{22, 6}, {42, 6}, {42, 30}, {50, 30}, {50, 37}, {35, 37}, {32, 60}, {29, 37}, {14, 37}, {14, 30}, {22, 30}};
     cupo = poligono(kPin, 11, &icoPin_) && cupo;
+    /* el chip «AI» del Foco automatico (rama experimental): minimalista, de trazos redondos */
+    {
+      std::vector<uint8_t> chip((size_t)n * n);
+      for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+          const float x = (float)i + 0.5f, y = (float)j + 0.5f;
+          /* el contorno: un cuadrado redondeado de 12 a 52 */
+          const float qx = std::fabs(x - 32.0f) - (20.0f - 9.0f), qy = std::fabs(y - 32.0f) - (20.0f - 9.0f);
+          const float caja = std::hypot(std::max(qx, 0.0f), std::max(qy, 0.0f)) + std::min(std::max(qx, qy), 0.0f) - 9.0f;
+          float d = std::fabs(caja) - 2.6f;
+          for (float k : {22.0f, 32.0f, 42.0f}) {   /* las patitas */
+            d = std::min(d, distSegmento(x, y, k, 11.0f, k, 4.5f) - 2.4f);
+            d = std::min(d, distSegmento(x, y, k, 53.0f, k, 59.5f) - 2.4f);
+            d = std::min(d, distSegmento(x, y, 11.0f, k, 4.5f, k) - 2.4f);
+            d = std::min(d, distSegmento(x, y, 53.0f, k, 59.5f, k) - 2.4f);
+          }
+          /* la A y la I */
+          d = std::min(d, distSegmento(x, y, 22.5f, 42.0f, 28.0f, 22.5f) - 2.4f);
+          d = std::min(d, distSegmento(x, y, 28.0f, 22.5f, 33.5f, 42.0f) - 2.4f);
+          d = std::min(d, distSegmento(x, y, 24.8f, 35.0f, 31.2f, 35.0f) - 2.2f);
+          d = std::min(d, distSegmento(x, y, 40.5f, 22.5f, 40.5f, 42.0f) - 2.4f);
+          chip[(size_t)j * n + i] = cubre(d);
+        }
+      cupo = subir(n, n, chip, &icoChip_) && cupo;
+    }
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -695,7 +720,8 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnEngranaje_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnNormal_ = btnDividido_ = btnSuave_ = {-10.0f, -10.0f, 0.0f, 0.0f};
   for (Rect &b : btnPre_) b = {-10.0f, -10.0f, 0.0f, 0.0f};
-  btnRayo_ = menuRend_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  btnRayo_ = menuRend_ = btnFoco_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  bool ayudaFoco = false;   /* el raton sobre el chip: su ayuda se pinta al final, por encima de todo */
   for (int k = 0; k < 4; k++) rendTrack_[k] = rendFila_[k] = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
@@ -714,8 +740,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* v1.07: en chino o japones la casilla es corta y los dos botones no cabian: el bloque mide al menos 128 */
     const float anchoBloque = st_.rendimiento ? anchoRendimiento
                               : (st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f));
+    /* el Foco automatico (modo normal con la red): el chip va junto al interruptor y, puesto, se lleva la
+       Profundidad (el plano lo elige la saliencia; tocarla lo fijaba a mano) */
+    const bool hayFoco = st_.focoVisible && !leg && !st_.rendimiento;
+    const bool sinProfundidad = hayFoco && st_.focoAuto;
+    const float anchoFoco = hayFoco ? 18.0f + 32.0f : 0.0f;
     /* en el modo rendimiento no hay Profundidad ni Salida: el boton del rayo va junto al interruptor */
-    float pw = st_.rendimiento ? aire + anchoSw + aire : aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
+    float pw = st_.rendimiento ? aire + anchoSw + aire
+                               : aire + anchoSw + anchoFoco + 26.0f + (sinProfundidad ? 0.0f : anchoDes + 24.0f) + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
     pw = std::min(pw, (float)vw - 48.0f);
@@ -761,11 +793,28 @@ void Hud::begin(int w, int h, float altoLogico) {
     };
     /* En modo de legado el de la izquierda es el plano que se queda quieto en la pantalla (lo que la
        ventana de ajustes llama `apoyo`); con el conversor es cuanta profundidad saca la red. */
+    if (hayFoco) {
+      btnFoco_ = {sw3D_.x + anchoSw + 18.0f, y0 + 17.0f, 32.0f, 32.0f};
+      const bool hov = btnFoco_.inside(mx_, my_);
+      if (st_.focoAuto) mask9(btnFoco_, 0, 9.0f, accent[0], accent[1], accent[2], 0.95f);
+      else mask9(btnFoco_, 0, 9.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+      if (st_.focoAuto)
+        icono({btnFoco_.x + 4.0f, btnFoco_.y + 4.0f, 24.0f, 24.0f}, icoChip_, 0.98f, 0.98f, 1.0f, 1.0f);
+      else
+        icono({btnFoco_.x + 4.0f, btnFoco_.y + 4.0f, 24.0f, 24.0f}, icoChip_, ink[0], ink[1], ink[2], hov ? 0.95f : 0.62f);
+      ayudaFoco = hov;
+    }
     if (!st_.rendimiento) {
-      depTrack_ = {sw3D_.x + anchoSw + 26.0f, y0 + 41.0f, anchoDes, 4.0f};
-      popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
-      slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
-             std::to_string(st_.depth));
+      const float xDes = sw3D_.x + anchoSw + anchoFoco + 26.0f;
+      if (sinProfundidad) {
+        depTrack_ = depKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+        popTrack_ = {xDes, y0 + 41.0f, anchoDes, 4.0f};
+      } else {
+        depTrack_ = {xDes, y0 + 41.0f, anchoDes, 4.0f};
+        popTrack_ = {depTrack_.x + anchoDes + 24.0f, y0 + 41.0f, anchoDes, 4.0f};
+        slider(&depTrack_, &depKnob_, leg ? idioma::tr("Plano de apoyo") : idioma::tr("Profundidad"), (float)st_.depth / 100.0f,
+               std::to_string(st_.depth));
+      }
       slider(&popTrack_, &popKnob_, idioma::tr("Salida"), (float)(st_.popout + 50) / 100.0f, std::to_string(st_.popout));
     } else {
       depTrack_ = popTrack_ = depKnob_ = popKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
@@ -866,6 +915,8 @@ void Hud::begin(int w, int h, float altoLogico) {
     const std::string teclas =
         st_.rendimiento ? (!st_.teclasRendimiento.empty() ? st_.teclasRendimiento
                                                           : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · F1 oculta · Esc sale")))
+        : sinProfundidad ? (!st_.teclasFoco.empty() ? st_.teclasFoco
+                                                    : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · 5/6 salida · F1 oculta · Esc sale")))
         : !st_.teclas.empty() ? st_.teclas
                               : idioma::trf("Ctrl+Shift+  1 el 3D · 3/4 {} · 5/6 salida · F1 oculta · Esc sale",
                                             {idioma::tr(leg ? "plano" : "profundidad")});
@@ -1146,6 +1197,19 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float arriba = menuRend_.w > 0.0f ? menuRend_.y + menuRend_.h + 6.0f : pillPanel_.y + pillPanel_.h + 6.0f;
     solid(der - tw - 20.0f, arriba, tw + 20.0f, 24.0f, 0.115f, 0.12f, 0.135f, 0.90f);
     text(info_, der - tw - 10.0f, arriba + 5.0f, tam, ink[0], ink[1], ink[2], 0.92f);
+  }
+  /* la ayuda del chip del Foco automatico, bajo la pastilla y por encima de todo (rama experimental) */
+  if (ayudaFoco && btnFoco_.w > 0.0f) {
+    const float tam = 12.5f;
+    const std::vector<std::string> lineas = renglones(
+        idioma::tr(st_.focoAuto ? "Foco automático, puesto: en cada escena busca lo que más llama la atención (una cara, un objeto) con un mapa de saliencia y lo deja en el plano de la pantalla, nítido; el fondo se hunde detrás y lo cercano sale. Sigue al contenido solo, por eso la Profundidad se esconde. Pica para quitarlo."
+                                : "Foco automático: en cada escena busca lo que más llama la atención (una cara, un objeto) con un mapa de saliencia y lo deja en el plano de la pantalla, nítido; el fondo se hunde detrás y lo cercano sale. Sigue al contenido solo, así que la Profundidad se esconde mientras está puesto. Pica para ponerlo."),
+        tam, 380.0f);
+    float w = 0.0f;
+    for (const std::string &l : lineas) w = std::max(w, textWidth(l, tam));
+    w += 24.0f;
+    const float x = std::max(12.0f, std::min(btnFoco_.x - 12.0f, (float)vw - 12.0f - w));
+    cajaAyuda(lineas, x, pillPanel_.y + pillPanel_.h + 8.0f, tam);
   }
 }
 
@@ -1804,9 +1868,10 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
       return HitRendFondo;
     }
   } else {
+    if (btnFoco_.inside(mx, my)) return HitFocoAuto;
     Rect dt = {depTrack_.x - pad, depTrack_.y - pad, depTrack_.w + 2.0f * pad, depTrack_.h + 2.0f * pad};
     Rect pt = {popTrack_.x - pad, popTrack_.y - pad, popTrack_.w + 2.0f * pad, popTrack_.h + 2.0f * pad};
-    if (dt.inside(mx, my)) return HitDepth;
+    if (depTrack_.w > 0.0f && dt.inside(mx, my)) return HitDepth;
     if (pt.inside(mx, my)) return HitPopout;
   }
   if (btnNormal_.inside(mx, my)) return HitModoNormal;

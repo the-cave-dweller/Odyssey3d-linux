@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -105,6 +106,10 @@ public:
   int sinRed() const { return sinRed_; }
   float mezcla() const { return mezcla_.load(); }
   void setMezcla(float m) { mezcla_.store(m < 0.0f ? 0.0f : (m > 1.0f ? 1.0f : m)); }
+  /* la saliencia elige el sujeto del plano automatico; el Foco automatico de la pastilla la pone en
+     marcha (rama experimental). De fabrica, lo que diga ODYSSEYVK_SALIENCIA (si no esta: puesta). */
+  bool saliencia() const { return saliencia_.load(); }
+  void setSaliencia(bool s) { saliencia_.store(s); }
   int size() const { return sz_; }                    /* el mapa que sale es de sz_ x sz_ */
   /* la entrada de la red (rama experimental): de fabrica 518 x 518 (la imagen 16:9 aplastada a un
      cuadrado); con ODYSSEYVK_RED_ENTRADA=WxH la red ve el cuadro a esa medida (su proporcion, y mas
@@ -199,6 +204,11 @@ private:
   /* la mezcla sin red: 0 = solo la altura (suelo), 1 = solo las pistas de la imagen (nitidez, color,
      centro); ODYSSEYVK_SIN_RED_MEZCLA. Sin ella: suelo = 0, imagen = 0,35 (lo mas perceptible). */
   std::atomic<float> mezcla_{0.35f};   /* se cambia en marcha (los preajustes de la pastilla) */
+  std::atomic<bool> saliencia_{[] {
+    const char *e = std::getenv("ODYSSEYVK_SALIENCIA");
+    if (!e) e = std::getenv("ODYSSEY3D_SALIENCIA");
+    return !e || !(e[0] == '0' || e[0] == 'n');
+  }()};
   void profundidadSinRed(std::vector<float> &d);
   bool topeArrastre_ = false;           /* rama experimental: tope de 1/16 al arrastre del suavizado */
   int gpu_ = 0;

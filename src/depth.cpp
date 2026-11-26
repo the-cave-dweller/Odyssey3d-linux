@@ -1094,10 +1094,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     /* La saliencia del Hub elige el sujeto. PUESTA por defecto desde v0.66: Rodolfo comparo en el
        panel `saliencia = no` contra `si` (25-nov) y se quedo con `si`. ODYSSEYVK_SALIENCIA=0 (o
        `saliencia = no` en serve.conf) vuelve al peso de antes (bordes y un escalon al centro). */
-    static const bool kSaliencia = [] {
-      const char *e = entornoOdyssey("ODYSSEYVK_SALIENCIA");
-      return !e || !(e[0] == '0' || e[0] == 'n');
-    }();
+    const bool kSaliencia = saliencia_.load();   /* en marcha: el Foco automatico la pone (rama experimental) */
     if (kSaliencia) {
       /* rejilla de cada 8 puntos del mapa (64 x 64): el nivel 3 de la piramide ya mide 65, asi que mas
          fino no aporta, y con cada 4 la saliencia costaba ~6 ms por estimacion */

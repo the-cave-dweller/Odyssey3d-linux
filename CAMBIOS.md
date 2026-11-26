@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Foco automático: el chip «AI» de la pastilla (rama `experimental`)
+
+- Rodolfo: «quiero que hagas un toggle de saliencia, describiendo qué es al poner el mouse encima, y
+  que activarlo la ponga en auto y haga lo que tenga que hacer; si amerita que mientras la actives se
+  esconda profundidad hazlo, y si hay un mejor nombre tómalo; quiero que el logo del modo normal,
+  contrario al de rendimiento, sea algo así, minimalista» (un chip con «AI»).
+- **Nombre**: «Foco automático» (en: Auto focus). Es lo que hace: busca el sujeto de cada escena con
+  la saliencia y lo deja en el plano de la pantalla; la saliencia es el cómo.
+- **El chip**: en la pastilla del modo normal (conversor con la red; vídeo normal y dividido
+  suavizado), junto al interruptor. Dibujado como máscara (contorno redondeado, tres patitas por lado y
+  «AI», de trazos redondos). Gris quitado, morado puesto; al pasar el ratón, debajo de la pastilla, su
+  ayuda dice qué hace y en qué estado está.
+- **Puesto**: el plano es el automático con la saliencia (si estaba `saliencia = no`, se pone en
+  marcha y se guarda `si`) y se guarda `profundidad_<modo> = auto`. La Profundidad se esconde: tocarla
+  fijaba un número y quitaba el automático; Ctrl+Shift+3/4 no hacen nada (lo dice el registro) y el
+  renglón de las teclas pierde la profundidad. **Quitado**: la Profundidad vuelve con el valor donde
+  estaba el sujeto en ese momento (la imagen no salta) y se guarda ese número.
+- La saliencia se puede encender en marcha (`DepthNet::setSaliencia`); antes se leía una vez.
+- En el visor aparte (con `profundidad_conv = 100` y `saliencia = no`): picar el chip deja «[foco] Foco
+  automatico puesto … profundidad_conv = auto» y `saliencia = si`; picarlo otra vez, «quitado … la
+  Profundidad vuelve donde estaba el sujeto · profundidad_conv = 60». `ODYSSEYVK_HUD_FOCO=0|1` lo pinta
+  en la prueba de la interfaz.
+
 ## El pin del panel: fijarlo encima del juego (rama `experimental`)
 
 - Rodolfo: «pon un pequeño pin a la izquierda del nombre, para always on top, que cuando lo pique el

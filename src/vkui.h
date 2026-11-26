@@ -122,6 +122,13 @@ public:
     bool rendimiento = false;
     int preajuste = -1;
     bool menuRendimiento = false;
+    /* el Foco automatico del modo normal (rama experimental): el boton del chip «AI» de la pastilla.
+       `focoVisible` lo ensena (conversor con la red); `focoAuto` = puesto: el plano de la pantalla lo
+       elige la saliencia en cada escena y la Profundidad se esconde. `teclasFoco` es el renglon de las
+       teclas con atajos cambiados mientras esta puesto (vacio = el de fabrica). */
+    bool focoVisible = false;
+    bool focoAuto = false;
+    std::string teclasFoco;
     float rendValor[4] = {0.35f, 1.0f, 2.75f, 2.0f};
     std::string teclasRendimiento;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
@@ -168,6 +175,7 @@ public:
     HitPreajuste2,
     HitPreajuste3,
     HitRendimientoMenu,   /* el boton del rayo: abre y cierra su menu */
+    HitFocoAuto,          /* el chip «AI» del modo normal: Foco automatico puesto o quitado */
     HitRendMezcla,        /* los cuatro deslizadores del menu del rayo */
     HitRendFuerza,
     HitRendAlcance,
@@ -327,7 +335,7 @@ private:
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
-      icoRayo_, icoBajar_, icoDerecha_, icoPin_;
+      icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -364,6 +372,7 @@ private:
   Rect btnPre_[3];   /* los preajustes del menu del rayo */
   /* el boton del rayo de la pastilla, su menu desplegado y las pistas de sus cuatro deslizadores */
   Rect btnRayo_, menuRend_, rendTrack_[4], rendFila_[4];
+  Rect btnFoco_;   /* el chip «AI» del Foco automatico */
   /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
   struct ZonaItem {
     Rect caja;

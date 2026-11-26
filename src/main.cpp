@@ -3403,6 +3403,12 @@ static int cmdHudSelfTest(int argc, char **argv) {
   /* la pastilla con los atajos de serve.conf (v1.09), como la pone el visor */
   hud.state().teclas = atajos::renglonPastilla(o.legado);
   hud.state().teclasRendimiento = atajos::renglonPastilla(o.legado, true);
+  hud.state().teclasFoco = atajos::renglonPastilla(o.legado, false, true);
+  /* ODYSSEYVK_HUD_FOCO=0|1 (rama experimental): la pastilla con el chip del Foco automatico, quitado o puesto */
+  if (const char *fo = std::getenv("ODYSSEYVK_HUD_FOCO")) {
+    hud.state().focoVisible = true;
+    hud.state().focoAuto = fo[0] == '1';
+  }
   {
   }
   /* ODYSSEYVK_HUD_ACTUALIZACION=0.99 (taller, v0.95): la tarjeta de la orilla avisando de esa version */

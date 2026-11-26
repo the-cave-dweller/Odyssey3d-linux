@@ -125,6 +125,7 @@ struct VkUi {
   bool convFuera = false;    /* el boton de video dividido de la pastilla: apagar, no alternar */
   int modoPedido = 0;        /* los botones de icono: 1 normal · 2 dividido · 3 dividido suavizado (0 = nada) */
   int preajustePedido = -1;  /* un preajuste del modo rendimiento (pastilla u orden `preajuste`): 0..2 */
+  bool focoPedido = false;   /* el chip «AI»: poner o quitar el Foco automatico (lo atiende el bucle) */
   /* el cursor de los juegos (rama experimental). Con un juego debajo, la pastilla puesta a mano le quita
      el cursor (`robando`): el visor se queda con todo el raton y se hace la ventana activa, que es lo que
      suelta el cursor encerrado del juego (KWin solo lo deja encerrado mientras el juego es la activa). Al
@@ -609,6 +610,9 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
     case Hud::HitPreajuste3:
       ui.preajustePedido = (int)hit - (int)Hud::HitPreajuste1;   /* lo aplica el bucle: tiene la red y la trama */
       break;
+    case Hud::HitFocoAuto:
+      ui.focoPedido = true;   /* lo atiende el bucle: tiene la red y los valores por modo */
+      break;
     case Hud::HitRendimientoMenu:
       /* el boton del rayo: abre y cierra el menu del modo rendimiento */
       st.menuRendimiento = !st.menuRendimiento;
@@ -731,6 +735,13 @@ static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
     std::fflush(stdout);
     return;
   }
+  /* con el Foco automatico puesto la Profundidad no esta: el plano lo elige la saliencia */
+  else if (ui.hud.state().focoVisible && ui.hud.state().focoAuto && (accion == "prof-" || accion == "prof+")) {
+    std::printf("[foco] %s no hace nada con el Foco automatico puesto (%s): el plano lo elige la saliencia\n",
+                accion.c_str(), origen);
+    std::fflush(stdout);
+    return;
+  }
   else if (accion == "prof-") { ui.hud.nudgeDepth(-5); tag = "profundidad -"; }
   else if (accion == "prof+") { ui.hud.nudgeDepth(+5); tag = "profundidad +"; }
   else if (accion == "relieve-") { ui.hud.nudgePopout(-5); tag = "relieve -"; }
@@ -757,6 +768,7 @@ static void cargaAtajos(VkUi &ui) {
   if (!ui.atajosPuestos.count("Ctrl+Shift+2")) ui.atajosPuestos["Ctrl+Shift+2"] = "capa2";
   ui.hud.state().teclas = atajos::renglonPastilla(ui.hud.state().legado);
   ui.hud.state().teclasRendimiento = atajos::renglonPastilla(ui.hud.state().legado, true);
+  ui.hud.state().teclasFoco = atajos::renglonPastilla(ui.hud.state().legado, false, true);
 }
 
 /* la tecla de GLFW escrita como los atajos ("Ctrl+Shift+K"); vacia si no es de las que valen */
@@ -3646,6 +3658,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        vuelve al plano automatico (la saliencia elige el plano de cada escena). No se toca con los
        valores forzados por la linea de mando ni en el modo de legado. */
     static const bool valoresEnTaller = entornoOdyssey("ODYSSEYVK_VALORES") != nullptr;   /* para probarlo sin video */
+    ui.hud.state().focoVisible = false;
+    ui.hud.state().focoAuto = apoyoAuto;
     if (opts.apoyo < 0.0 && opts.relieve < 0 && !ui.hud.state().legado &&
         (kind == SourceKind::Capture || valoresEnTaller)) {
       static int modoValores = -1;
@@ -3701,6 +3715,43 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         vigila(hs.depth, baseDepth, cambioDepth, "profundidad");
         vigila(hs.popout, basePop, cambioPop, "salida");
       }
+      /* el Foco automatico (rama experimental): el chip «AI» de la pastilla, con el conversor y la red.
+         Puesto, el plano de la pantalla es el automatico con la saliencia y se guarda
+         `profundidad_<modo> = auto`; quitado, la Profundidad vuelve con el valor donde estaba el sujeto en
+         ese momento (la imagen no salta) y se guarda ese numero. */
+      const bool conConv = modo == 1 || modo == 3;
+      hs.focoVisible = !suf.empty() && conConv && convActivo && !red.sinRed();
+      if (ui.focoPedido) {
+        ui.focoPedido = false;
+        if (hs.focoVisible) {
+          const std::string k = "profundidad_" + suf;
+          std::string e, valor;
+          if (!apoyoAuto) {
+            apoyoAuto = true;
+            hs.depth = 55;
+            valor = "auto";
+            if (!red.saliencia()) {
+              red.setSaliencia(true);
+              ajuste::fijarEnServeConf("saliencia", "si", &e);
+            }
+          } else {
+            apoyoAuto = false;
+            hs.depth = std::max(0, std::min(100, (int)std::lround(red.focusPlane() * 100.0f)));
+            valor = std::to_string(hs.depth);
+          }
+          profundidadVista = hs.depth;
+          baseDepth = hs.depth;
+          cambioDepth = -1.0;
+          const bool guardado = ajuste::fijarEnServeConf(k, valor, &e);
+          if (guardado) conf[k] = valor;
+          std::printf("[foco] Foco automatico %s · %s = %s%s%s\n", apoyoAuto ? "puesto: el plano lo elige la saliencia"
+                                                                          : "quitado: la Profundidad vuelve donde estaba el sujeto",
+                      k.c_str(), valor.c_str(), guardado ? "" : " (no se guardo: ", guardado ? "" : (e + ")").c_str());
+          std::fflush(stdout);
+          ui.inputChanged = true;
+        }
+      }
+      hs.focoAuto = apoyoAuto;
     }
     ui.hud.state().controlOjo = opts.track;   /* desde v0.78 solo dice si se PIDIO rastreo: la fila ya no se pinta */
 #ifdef HAVE_OPENCV
