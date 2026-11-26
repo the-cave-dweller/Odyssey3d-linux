@@ -5,6 +5,13 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 
 ## Lo que la tarjeta lee por nosotros ya no se suelta antes de leerlo; el ajuste del HUD apaga también la copia en el juego (v1.13)
 
+- **Confirmado en Cyberpunk** (Rodolfo: «arreglado, gracias»; partida de 17:47 a 17:49, Ultra Performance,
+  entrando y saliendo del menú): 32 apartadas. El juego destruyó imágenes de profundidad, y soltó su memoria, que
+  la tarjeta había leído por nosotros **2 a 6 presentaciones antes** (`[aplazar] el juego destruye … hace 2
+  presentaciones`), justo en las vueltas del menú (DLSS pidió 145 números). Antes cada una de esas era una caída;
+  ni un Xid desde las 17:35. Las imágenes de profundidad del juego llevan las banderas 0x400400
+  (`VK_IMAGE_CREATE_ALIAS_BIT` entre ellas): comparten memoria con otras, y el juego la reutiliza en cuanto termina.
+
 - Rodolfo: «sirvió sin ODYSSEYVK=1, pero creo que es lo de HUD». Con DLSS en Ultra Performance y sin la capa,
   entrando y saliendo del menú, no se cae: la capa está metida. Los tres `gpucrash` de `TXAA_Blurs` señalan la
   lista donde corre DLSS y donde grabamos la copia de la profundidad; el trabajo del HUD va al final del cuadro,
