@@ -183,7 +183,7 @@ in 3D. The **Settings** tab (Program up to 1.11) also has "Update automatically"
 | `relieve = 1,00` | strength of the converter's relief (0,5 … 2) |
 | `dividido_suavizado = si \| auto \| no` | smooth split videos: always / when needed / never |
 | `crosstalk_base = 0,013` | how much of the other eye's image to subtract (ghosting) |
-| `filtro = 4` | slope of the weave filter between the two views: the change from one view to the other takes 1/slope of the cycle (Samsung's 10 is almost a step; the panel's "Smooth between the views" writes it) |
+| `filtro = 10` | slope of the weave filter between the two views: the change from one view to the other takes 1/slope of the cycle (Samsung's 10 is almost a step; the panel's "Smooth between the views" writes it) |
 | `profundidad_conv = 75` / `salida_conv = 50` | starting Depth and Pop-out for normal video (`_suave` smoothed split, `_sbs` split); written when you move the sliders; `profundidad_conv = auto` = automatic screen plane |
 | `hz = 165` | panel refresh rate in 3D (default 120; the G90XF also runs at 165) |
 | `vrr_en_3d = si` | keep variable refresh (VRR) during 3D; by default it is switched off while the 3D runs (with it on, games below the refresh rate stuttered) |

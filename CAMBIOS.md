@@ -78,6 +78,10 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   46–115 % pero ya entra algo del otro ojo con la cabeza quieta si la lente reparte ancho. Deslizador
   **«Suavizar entre las vistas»** en la pestaña principal (PANTALLA), junto a «Reducir el fantasma»: de
   10 % (Samsung) a 100 %, se ve al momento mientras se arrastra; escribe `filtro` en serve.conf.
+  - **Y de fábrica vuelve a 10.** Con el 25 % Rodolfo vio las cuerdas de una guitarra dobles
+    («duplica cuerdas»): la mezcla deja pasar algo del otro ojo también con la cabeza quieta, que el
+    modelo de la lente no daba. Probando en marcha con el deslizador (su registro: 10, 45, 90, 100,
+    60 %… y vuelta) se quedó con el **10 %**, y con eso «sí bajó». Se queda el deslizador.
 - **Subtítulos de una pieza.** Rodolfo, con una captura: unos subtítulos amarillos con contorno «no
   solo salen con fantasma, los tuerce». Reproducido con un subtítulo así (DejaVu Sans Condensed
   Bold, 112 px, contorno negro de 7) sobre dos cuadros reales, en Auto, midiendo la separación entre

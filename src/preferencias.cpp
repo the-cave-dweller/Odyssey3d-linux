@@ -255,7 +255,7 @@ Valores leer() {
   v.rastreo = si(de("rastreo"), false);
   v.atajos = si(de("atajos_globales"), true);
   v.fantasma = std::max(0.0, std::min(0.10, numero(de("crosstalk_base"), 0.0128535)));
-  v.mezclaVistas = std::max(0.10, std::min(1.0, 1.0 / std::max(1.0, numero(de("filtro"), 4.0))));
+  v.mezclaVistas = std::max(0.10, std::min(1.0, 1.0 / std::max(1.0, numero(de("filtro"), 10.0))));
   v.relieve = std::max(0.5, std::min(2.0, numero(de("relieve"), 1.0)));
   v.modelo = de("modelo");
   v.avisarActualizaciones = si(de("actualizaciones"), true);

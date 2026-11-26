@@ -82,7 +82,7 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 | `relieve` | 1,00 | converter relief strength |
 | `dividido_suavizado` | `si` | smooth split videos: `si` / `auto` / `no` |
 | `crosstalk_base` | 0,0129 | ghosting compensation (0–0,25) |
-| `filtro` | 4 | weave filter slope between the views (Samsung's is 10); the panel's "Smooth between the views" shows it as 1/slope (10–100 %) |
+| `filtro` | 10 | weave filter slope between the views (Samsung's); the panel's "Smooth between the views" shows it as 1/slope (10–100 %) |
 | `hz` | 120 | panel refresh in 3D |
 | `vrr_en_3d` | `no` | `si` keeps variable refresh (VRR) during 3D; off by default since 1.11 |
 | `profundidad_conv` / `salida_conv` | 75 / 50 | starting Depth (fixed screen plane; `auto` = saliency) and Pop-out for normal video; `_suave` 75/50, `_sbs` 50/0; written when the sliders move |

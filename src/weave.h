@@ -17,13 +17,11 @@ struct EyePose {
 
 struct WeaveTuning {
   /* pendiente del filtro triangular entre vistas: el paso de una vista a la otra ocupa 1/pendiente del
-     ciclo. La de Samsung es 10 (casi un escalon); desde el 26-nov, 4 de fabrica (rama experimental): con el
-     rastreo un poco atrasado al mover la cabeza, una franja de la pantalla saltaba de golpe a la imagen del
-     otro ojo («debe haber suavizado entre los fantasmas», Rodolfo). Calculado con un modelo de la lente
-     (franja vista ±0,02..0,10 ciclos, subpixeles rojo y azul a ±0,04): el paso de un 5 a un 50 % de
-     fuga se ensancha un 12-38 % y con la cabeza quieta sigue sin fuga. En el panel: «Suavizar entre las
-     vistas» (`filtro` en serve.conf). */
-  float filterSlope = 4.0f;
+     ciclo. La de Samsung es 10 (casi un escalon). El 26-nov se probo 4 de fabrica para que al mover la
+     cabeza la imagen del otro ojo entrara poco a poco, y Rodolfo vio las cuerdas de una guitarra
+     dobles («duplica cuerdas»); probando en marcha entre el 10 y el 100 % se quedo con el 10. En el panel:
+     «Suavizar entre las vistas» (`filtro` en serve.conf). */
+  float filterSlope = 10.0f;
   float xtalkFac = 0.0128535f; /* crosstalk estático (pre-distorsión) */
   float xtalkDyn = 0.0f;       /* crosstalk dependiente de la posición de la pupila */
   float contrast = 1.0f;

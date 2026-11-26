@@ -77,7 +77,7 @@ struct ViewerOpts {
   double eyeZ = 65.11128998; /* cm de distancia */
   double align = 0.0;      /* desfase de fase inicial (ciclos) */
   double pitch = 1.0;      /* escala de la rampa de fase */
-  double filtro = 4.0;     /* pendiente del filtro de la trama (weave.h); la de Samsung es 10 (ver weave.h) */
+  double filtro = 10.0;    /* pendiente del filtro de la trama (weave.h): la de Samsung */
   /* Dureza con la que el mapa de profundidad se aplasta hacia los dos unicos valores que hay en el
      cuadro (fondo y primeros planos): la imagen queda en dos laminas con su propio desplazamiento,
      como en el Nintendo 3DS. 0 = el relieve continuo de siempre, y es lo que arranca. */
