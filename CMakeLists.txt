@@ -277,6 +277,18 @@ if(ODYSSEYVK_UI)
   endif()
 endif()
 
+# --- la capa de Vulkan que encuentra la profundidad que el juego le da a DLSS (v1.13, prueba) ----------
+# Una biblioteca aparte que se carga DENTRO del juego cuando lleva ODYSSEYVK_CAPA=1 (ver capa/). Va con
+# la libreria de C++ dentro: los juegos de Proton corren en el contenedor de Steam, con la suya.
+add_library(VkLayer_odysseyvk_capa SHARED capa/odysseyvk_capa.cpp)
+set_target_properties(VkLayer_odysseyvk_capa PROPERTIES CXX_VISIBILITY_PRESET hidden PREFIX ""
+                      LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/capa)
+target_include_directories(VkLayer_odysseyvk_capa PRIVATE ${VULKAN_INCLUDE_DIRS})
+target_compile_options(VkLayer_odysseyvk_capa PRIVATE -Wno-missing-field-initializers)
+target_link_options(VkLayer_odysseyvk_capa PRIVATE -static-libstdc++ -static-libgcc -Wl,--no-undefined)
+set(CAPA_RUTA ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_capa.so)
+configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_capa.json @ONLY)
+
 install(TARGETS odysseyvk RUNTIME DESTINATION bin)
 install(FILES udev/70-odysseyvk.rules DESTINATION /etc/udev/rules.d)
 install(FILES calib/3DStackCorrection_A.png calib/3DStackCorrection_B.png DESTINATION share/odysseyvk/calib)

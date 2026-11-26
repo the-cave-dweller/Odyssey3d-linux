@@ -3,6 +3,34 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La profundidad de DLSS sin Neural Forge: la capa de Vulkan de OdysseyVK, fase 1 (prueba) (v1.13)
+
+- Rodolfo: «I actually want my users to be able to use this without neural forge, just with the game
+  dlss itself».
+- **Cómo se encuentra** (`capa/odysseyvk_capa.cpp`): con Proton, DLSS corre como núcleos de CUDA lanzados
+  por Vulkan (`vkCmdCuLaunchKernelNVX`, VK_NVX_binary_import) y a cada imagen que esos núcleos leen le
+  pide antes un número al controlador (`vkGetImageViewHandleNVX`, VK_NVX_image_view_handle). La capa
+  apunta esos números y busca en los parámetros de cada lanzamiento (y en su búfer «extra» de CUDA)
+  cuáles aparecen: la imagen de formato de profundidad entre ellas es la del juego, la única de ese
+  formato que DLSS recibe. Neural Forge empezó así y luego pasó a un `_nvngx.dll` propio dentro de
+  Proton porque necesitaba TODAS las entradas de DLSS con su papel; para la profundidad sola basta el
+  formato. El controlador de Rodolfo (620.73) tiene las dos extensiones.
+- **Fase 1, esta**: un registro (`/tmp/odysseyvk-capa-<uid>/capa-<pid>.log`: dispositivos, los números
+  pedidos con su tamaño y formato, los primeros lanzamientos con las imágenes que leen, un resumen cada
+  10 s) y, a petición (`touch /tmp/odysseyvk-capa-<uid>/volcar` u `ODYSSEYVK_CAPA_VOLCAR_TRAS=<s>`), un
+  cuadro de esa profundidad en `profundidad-<pid>-<n>.r32f` con su `.json`. Capa implícita que solo se
+  carga con `ODYSSEYVK_CAPA=1` (por juego, en sus opciones de lanzamiento, como MangoHud o Neural Forge);
+  con la librería de C++ dentro y nada más que libc y libm (el contenedor de Steam). Atajos de prueba,
+  anotados para la fase 2: la copia va en diseño GENERAL con barreras anchas (el controlador de NVIDIA no
+  mira los diseños), TRANSFER_SRC añadido a las imágenes de profundidad, y el volcado espera a la cola una
+  vez.
+- **Probado** sin juego: `vulkaninfo` con la capa (instancia y un dispositivo por tarjeta, sin fallos) y
+  el visor de OdysseyVK en el compositor aparte con la capa puesta: la misma imagen que sin ella (0,004 de
+  diferencia media de 255, como entre dos pasadas sin capa). Falta lo que importa: un juego con DLSS.
+- Fases que siguen: (2) compartir la profundidad en vivo con el visor (mismo GPU, sin copias por la CPU) y
+  usarla en vez de la red en ese juego; (3) el HUD (no tiene profundidad: la salida de DLSS, sin HUD,
+  dejaría separarlo), la instalación y un interruptor por juego en la pestaña Juegos.
+
 ## Los rótulos ya no aplanan el mundo: renglones en medio, y en los juegos solo frases (v1.13)
 
 - Rodolfo: «Yes, fix it» (el detector de rótulos que el volcado de Cyberpunk dejó a la vista: apoyaba en
