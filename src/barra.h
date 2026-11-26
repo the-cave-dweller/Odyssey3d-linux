@@ -13,9 +13,15 @@
    donde se ve es donde se pica. El resto de la pantalla sigue en 3D.
 
    El detector trabaja sobre la copia chica del cuadro que ya saca la trama para el conversor
-   (518 x 518): por fila, la diferencia media entre las dos mitades despues de buscar el corrimiento
-   que mejor las casa. El umbral se pone contra lo que miden las filas del centro, que son video
-   seguro: si ahi tampoco casan, el video no viene dividido y no se toca nada. */
+   (518 x 518): por fila, la diferencia media entre las dos mitades despues de buscar, trozo a trozo,
+   el corrimiento que mejor las casa (hasta un 12 % del ancho de cada mitad desde la v0.90: los
+   videos con mucho relieve separan sus dos imagenes hasta 6 cm, y con el 3 % de antes un objeto muy
+   cercano se tomaba por barra y la franja se quedaba puesta). El umbral se pone contra lo que miden
+   las filas del centro, que son video seguro: si ahi tampoco casan, el video no viene dividido y no
+   se toca nada.
+
+   Lo que se ve en esas filas lo pone el sombreador (franjaBarra en weave.frag, v0.90): el video
+   sigue, en 2D, suave y atenuado, y encima van los mandos del reproductor recortados del cuadro. */
 #ifndef ODYSSEY_BARRA_H
 #define ODYSSEY_BARRA_H
 

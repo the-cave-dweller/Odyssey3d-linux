@@ -24,8 +24,9 @@
    gris (los numeros de la trama y del contraste se pisaban). Los desfases de cada campo
    estan en kOff... dentro del .cpp, con un static_assert que avisa si crece mas. */
 /* v0.62: noveno vec4 (tun8, el agrandado guiado del mapa): 320 -> 336.
-   v0.67: decimo vec4 (tun9, el paralaje de movimiento): 336 -> 352. */
-constexpr size_t kUboBytes = 368;
+   v0.67: decimo vec4 (tun9, el paralaje de movimiento): 336 -> 352.
+   v0.83: tun10 (video dividido suavizado): 352 -> 368. v0.90: tun11 (la franja de la barra): 368 -> 384. */
+constexpr size_t kUboBytes = 384;
 
 class VkWeave {
 public:
@@ -61,6 +62,8 @@ public:
   /* Video dividido: las filas de arriba y de abajo (fraccion del alto) que se tejen en 2D con el
      cuadro entero, porque ahi el reproductor pinto su barra a lo ancho (ver barra.h). 0 = ninguna. */
   void setFilas2D(float arriba, float abajo) { filasArriba_ = arriba, filasAbajo_ = abajo; }
+  /* `barra_2d = entera`: esas filas, enteras y tal cual (la franja de la v0.81), sin la limpieza de la v0.90 */
+  void setFranjaEntera(bool e) { franjaEntera_ = e; }
   /* Video dividido suavizado (v0.83): la fuente trae dos imagenes lado a lado y el conversor trabaja
      solo con la izquierda, estirada al ancho entero. Al cambiarlo hay que tirar el mapa de
      profundidad que hubiera (`dropDepthMap`): era de otra imagen. */
@@ -273,6 +276,7 @@ private:
   float paralaje_ = 0.0f;
   float sujeto_ = -1.0f;
   float filasArriba_ = 0.0f, filasAbajo_ = 0.0f;
+  bool franjaEntera_ = false;
   bool mediaFuente_ = false;
   bool cantosFinos_ = false;
   bool srcFlipY_ = false;

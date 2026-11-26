@@ -633,8 +633,15 @@ por el relieve); donde el reproductor pintó su barra, no. Esas filas —arriba 
 se tejen en 2D con el cuadro entero: la barra sale de una pieza y se pica donde se ve; el resto sigue
 en 3D. Para ponerla hacen falta dos análisis que la vean en medio segundo; para mantenerla basta con
 mucho menos, y se quita 0,6 s después de que el reproductor esconde sus mandos (v0.82: antes
-parpadeaba). En esa franja el vídeo de debajo se ve como viene (las dos mitades, una al lado
-de la otra) mientras dura. Se apaga con `barra_2d = no` en `serve.conf`. Para probar el detector con
+parpadeaba). Desde la v0.90, en esa franja **sigue el vídeo** (la imagen izquierda sola, en 2D,
+suave y atenuada como detrás de un cristal esmerilado, a la que la imagen en 3D llega fundiéndose) y
+encima van solo los **mandos** del reproductor, nítidos y donde están de verdad: se recortan del
+cuadro por ser claros, destacar de lo que tienen alrededor y no estar repetidos en la otra mitad.
+Antes se veían detrás de la barra las dos mitades del vídeo, una al lado de la otra. Y la franja ya
+no se queda puesta con los vídeos de mucho relieve: el detector casa las dos mitades hasta un 12 %
+del ancho (antes un 3 %, y un objeto muy cercano se tomaba por barra). `barra_2d = entera` en
+`serve.conf` vuelve a la franja de antes (por si a un reproductor le faltara algún mando) y
+`barra_2d = no` la apaga del todo. Para probar el detector con
 capturas: `odysseyvk barra-detect [--filas] CUADRO.png …`. Con un vídeo dividido abierto,
 `odysseyvk ctl barra guardar [N]` le pide al visor que deje N copias chicas del cuadro (518 × 518) en
 `~/.local/state/odysseyvk/barra/`, para afinar el detector con el reproductor de verdad; el registro

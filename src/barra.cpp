@@ -53,23 +53,44 @@ void filaSuave(const uint8_t *fila, int x0, int n, std::vector<float> &sal) {
    Lo que pinta el reproductor no casa con ningun corrimiento: esta en una mitad y en la otra no. */
 float residuoFila(const uint8_t *fila, int w) {
   const int mitad = w / 2;
-  /* el relieve corre una mitad contra la otra: hasta un 3 % del ancho de la mitad */
-  const int D = std::max(3, mitad * 3 / 100);
-  const int trozo = std::max(12, mitad / 8);
+  /* El relieve corre una mitad contra la otra. Hasta la v0.89 se buscaba hasta un 3 % del ancho de
+     la mitad (18 mm en este panel). MEDIDO en las sesiones de Rodolfo del 25/11 (19:03 a 19:05): sus
+     videos separan lo mas cercano 29, 35 y 58 mm, o sea del 5 al 10 %; esos trozos no casaban con
+     ningun corrimiento, la fila daba 68 niveles de residuo y se tomaba por barra del reproductor:
+     la franja se quedaba puesta mientras el objeto cercano siguiera en pantalla («a veces se
+     quedaba el corte»). Ahora se busca hasta un 12 % (72 mm). */
+  const int D = std::max(3, mitad * 12 / 100);
+  /* Trozos de un dieciseisavo de la mitad (antes un octavo): donde acaba un objeto cercano y empieza el
+     fondo, el trozo que pilla a los dos no casa entero con ningun corrimiento, y cuanto mas corto el
+     trozo menos pesa ese resto. MEDIDO con un objeto a 30..58 mm en la zona de arriba o de abajo:
+     9..11 niveles con trozos de un octavo (el umbral es 12), ver abajo con los de un dieciseisavo. */
+  const int trozo = std::max(8, mitad / 16);
   static thread_local std::vector<float> izq, der;
   filaSuave(fila, 0, mitad, izq);
   filaSuave(fila, mitad, mitad, der);
   float total = 0.0f;
   int cuenta = 0;
-  for (int x0 = D; x0 < mitad - D; x0 += trozo) {
-    const int x1 = std::min(mitad - D, x0 + trozo);
+  auto suma = [&](int x0, int x1, int d) {
+    float s = 0.0f;
+    const float *a = izq.data() + (size_t)x0 * 3u, *q = der.data() + (size_t)(x0 + d) * 3u;
+    for (int k = 0; k < (x1 - x0) * 3; k++) s += std::fabs(a[k] - q[k]);
+    return s;
+  };
+  /* los trozos cubren la mitad entera; junto a los bordes el corrimiento se recorta por el lado que
+     se saldria (antes se dejaba sin mirar un margen igual al corrimiento maximo) */
+  for (int x0 = 0; x0 < mitad; x0 += trozo) {
+    const int x1 = std::min(mitad, x0 + trozo);
+    const int dMin = std::max(-D, -x0), dMax = std::min(D, mitad - x1);
+    /* de dos en dos y luego afinar a los lados del mejor: las filas van suavizadas con una caja de
+       once puntos, asi que el residuo cambia despacio con el corrimiento */
     float mejor = 1e9f;
-    for (int d = -D; d <= D; d++) {
-      float s = 0.0f;
-      const float *a = izq.data() + (size_t)x0 * 3u, *b = der.data() + (size_t)(x0 + d) * 3u;
-      for (int k = 0; k < (x1 - x0) * 3; k++) s += std::fabs(a[k] - b[k]);
-      mejor = std::min(mejor, s);
+    int dMejor = 0;
+    for (int d = dMin; d <= dMax; d += 2) {
+      const float s = suma(x0, x1, d);
+      if (s < mejor) mejor = s, dMejor = d;
     }
+    for (int d : {dMejor - 1, dMejor + 1})
+      if (d >= dMin && d <= dMax) mejor = std::min(mejor, suma(x0, x1, d));
     total += mejor;
     cuenta += x1 - x0;
   }

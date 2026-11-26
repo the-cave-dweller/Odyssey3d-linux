@@ -49,6 +49,8 @@ layout(set = 0, binding = 3) uniform WeaveParams {
                       por ojo) y la vista de cada ojo se BUSCA punto a punto, ver buscaVista ·
                       z = 1 la profundidad afinada ya esta hecha en uFino (ver profFuente) ·
                       w = 1 el mapa trae en .gba el color de la imagen que lo dio */
+    vec4 tun11;    /* x = 1: las filas de la barra del reproductor se ensenan enteras y tal cual, como
+                      de la v0.81 a la v0.89 (`barra_2d = entera`), en vez de la franja nueva (v0.90) */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -536,6 +538,121 @@ vec3 rellenoHueco(vec2 uv, float lado, float parte, float hFondo, float gF, floa
     return mix(nitido, tendido, borroso);
 }
 
+/* --- las franjas de la barra del reproductor (v0.90) -------------------------------------------
+   En un video dividido, la barra del reproductor (y el titulo de arriba) va pintada UNA vez a lo
+   ancho de la ventana, encima de las dos imagenes. Desde la v0.81 esas filas se ensenan enteras y
+   sin partir, para que la barra salga de una pieza y este donde se pica con el raton; pero detras
+   de la barra se veian las dos copias del video, a media anchura cada una («toman cuadros
+   congelados del video que se ven fatal», Rodolfo, 25-nov).
+
+   Ahora en la franja sigue EL VIDEO (la imagen izquierda sola, que es la que se esta viendo, en 2D
+   y atenuada con un degradado desde el borde de dentro), y encima van solo los MANDOS del
+   reproductor, recortados del cuadro entero y puestos donde estan de verdad. Mando es lo que
+   cumple tres cosas (ver `mando`): brilla, destaca de lo que tiene alrededor y NO esta tambien en
+   la otra mitad del cuadro; el video sale dos veces, una en cada mitad, y un icono o la hora, una
+   sola. Con eso mismo se limpia el fondo: donde a la imagen izquierda le cayo encima un mando, se
+   pone lo que ensena la otra mitad en ese sitio. */
+float brillo(vec3 c) { return max(c.r, max(c.g, c.b)); }
+vec3 cuadroEntero(vec2 uv) {
+    vec2 q = uv;
+    if (P.tun3.z == 1.0)
+        q.y = 1.0 - q.y;
+    return textureLod(uSrc, q, 0.0).rgb;
+}
+/* El brillo de lo que rodea a `uv` en el cuadro entero, sin mirar en su propia fila (la barra de
+   progreso es una raya larga): seis lecturas a 90 x 40 y a 64 pixeles. */
+float brilloAlrededor(vec2 uv) {
+    vec2 px = 1.0 / P.res.xy;
+    return (brillo(cuadroEntero(uv + vec2(-90.0, -40.0) * px)) + brillo(cuadroEntero(uv + vec2(90.0, -40.0) * px)) +
+            brillo(cuadroEntero(uv + vec2(-90.0, 40.0) * px)) + brillo(cuadroEntero(uv + vec2(90.0, 40.0) * px)) +
+            brillo(cuadroEntero(uv + vec2(0.0, -64.0) * px)) + brillo(cuadroEntero(uv + vec2(0.0, 64.0) * px))) / 6.0;
+}
+/* Cuanto de mando del reproductor tiene el punto `uv` del cuadro entero (0 = video, 1 = mando).
+   `alrededor` es el brillo de su vecindad (brilloAlrededor), o un numero negativo para que se mida
+   aqui: quien pregunta por varios puntos pegados lo mide una vez y lo pasa. */
+float mando(vec2 uv, float alrededor) {
+    vec3 c = cuadroEntero(uv);
+    float b = brillo(c);
+    /* 1) brilla: blanco o color vivo (el rojo de lo ya visto) */
+    float llave = smoothstep(0.55, 0.80, b);
+    if (llave <= 0.0)
+        return 0.0;
+    /* 2) destaca de lo que tiene alrededor. Una zona clara del video no destaca de si misma. */
+    if (alrededor < 0.0)
+        alrededor = brilloAlrededor(uv);
+    float destaca = smoothstep(0.08, 0.22, b - alrededor);
+    if (destaca <= 0.0)
+        return 0.0;
+    /* 3) no esta tambien en la otra mitad. Se busca a un lado y a otro hasta un 6 % del ancho del
+          cuadro, que es lo que puede separar un video sus dos imagenes (MEDIDO en los de Rodolfo:
+          hasta 58 mm, un 10 % del ancho de cada mitad). MEDIDO con un cuadro de prueba: sin esto, las
+          rayas claras de un codigo de barras del video se colaban como mandos. */
+    vec2 px = 1.0 / P.res.xy;
+    float otra = uv.x < 0.5 ? uv.x + 0.5 : uv.x - 0.5;
+    float dmin = 10.0;
+    for (int k = -38; k <= 38; k++) {
+        vec3 d = c - cuadroEntero(vec2(otra + float(k) * 6.0 * px.x, uv.y));
+        dmin = min(dmin, dot(d, d));
+    }
+    float propio = smoothstep(0.012, 0.06, dmin);
+    /* ...salvo que sea una raya larga y fina, que es la barra de progreso: esa cruza las dos mitades.
+       Larga: sigue a 70 pixeles por algun lado. Fina: 18 pixeles por encima y por debajo el color ya
+       es otro (se mira el color y no el brillo: MEDIDO, lo rojo de la barra sobre un video claro se
+       apagaba a la mitad porque el papel de debajo brillaba casi tanto como ella). */
+    float raya = 0.0;
+    if (propio < 1.0) {
+        float sigue = max(brillo(cuadroEntero(uv + vec2(-70.0, 0.0) * px)), brillo(cuadroEntero(uv + vec2(70.0, 0.0) * px)));
+        vec3 a1 = c - cuadroEntero(uv + vec2(0.0, -18.0) * px), a2 = c - cuadroEntero(uv + vec2(0.0, 18.0) * px);
+        raya = smoothstep(0.5, 0.7, sigue / b) * smoothstep(0.02, 0.08, min(dot(a1, a1), dot(a2, a2)));
+    }
+    return llave * destaca * max(propio, raya);
+}
+/* La imagen izquierda en el punto `qi` del cuadro entero, sin los mandos que le hayan caido encima:
+   si ahi, o a dos o tres pixeles, hay un mando (a la imagen izquierda le cae media barra del
+   reproductor, que al estirarla saldria deformada), se pone lo que ensena la otra mitad en ese sitio. */
+vec3 fondoLimpio(vec2 qi) {
+    const vec2 cerca[10] = vec2[10](vec2(1.5, 0.0), vec2(-1.5, 0.0), vec2(3.0, 0.0), vec2(-3.0, 0.0), vec2(0.0, 2.0),
+                                    vec2(0.0, -2.0), vec2(2.2, 2.0), vec2(-2.2, -2.0), vec2(2.2, -2.0), vec2(-2.2, 2.0));
+    vec2 px = 1.0 / P.res.xy;
+    qi.x = min(clamp(qi.x, 0.0, 0.5), 0.5 - 0.5 / float(textureSize(uSrc, 0).x));
+    vec3 c = cuadroEntero(qi);
+    if (brillo(c) < 0.30)
+        return c;          /* tan oscuro que ni el ni su borde son un mando: lo mas corriente bajo el velo */
+    float alrededor = brilloAlrededor(qi);
+    float tapado = mando(qi, alrededor);
+    for (int k = 0; k < 10 && tapado < 0.3; k++)
+        tapado = max(tapado, mando(qi + cerca[k] * px, alrededor));
+    if (tapado > 0.0) {
+        /* ...salvo que en la otra mitad tambien haya un mando en ese sitio (la barra de progreso cruza
+           las dos, y con ella su boton): entonces, el video de unas filas mas arriba */
+        vec2 qo = qi + vec2(0.5, 0.0);
+        vec3 otro = mando(qo, -1.0) > 0.2 ? cuadroEntero(qi - vec2(0.0, 12.0 * px.y)) : cuadroEntero(qo);
+        c = mix(c, otro, smoothstep(0.0, 0.3, tapado));
+    }
+    return c;
+}
+/* El color de la franja en `uv`. `fundido` va de 0 en el borde interior de la franja a 1 unos
+   pixeles mas adentro: con el el video se atenua y se desenfoca poco a poco (un cristal
+   esmerilado: asi lo que quede de los mandos estirados, o un trozo tomado del otro ojo, no se
+   reconoce) y entran los mandos, nitidos. */
+vec3 franjaBarra(vec2 uv, float fundido) {
+    /* este punto de la imagen izquierda, en el cuadro entero: media anchura */
+    vec2 qi = vec2(uv.x * 0.5, uv.y);
+    vec2 paso = vec2(0.5, 1.0) / P.res.xy;             /* un pixel de pantalla, en el cuadro entero */
+    float r = 10.0 * fundido;
+    vec3 fondo = 0.16 * fondoLimpio(qi);
+    for (int k = 0; k < 4; k++) {                       /* un anillo a media distancia y otro entero */
+        float ang = 0.7854 + 1.5708 * float(k);
+        fondo += 0.11 * fondoLimpio(qi + 0.5 * r * vec2(cos(ang), sin(ang)) * paso);
+    }
+    for (int k = 0; k < 8; k++) {
+        float ang = 0.7854 * float(k);
+        fondo += 0.05 * fondoLimpio(qi + r * vec2(cos(ang), sin(ang)) * paso);
+    }
+    fondo *= mix(1.0, 0.55, fundido);
+    return mix(fondo, cuadroEntero(uv), mando(uv, -1.0) * fundido);
+}
+
 void main()
 {
     vec2 px = gl_FragCoord.xy;                 /* en Vulkan (0,0) también está arriba a la izquierda */
@@ -577,6 +694,14 @@ void main()
        barra salga de una pieza y este donde se pica con el raton. Vale para el video dividido tal
        cual y para el suavizado. */
     bool franja = (P.tun3.y == 0.0) && (fuv.y > 1.0 - P.tun3.x || fuv.y < P.tun9.w);
+    /* Cuanto de franja es este punto: 0 en su borde interior, 1 a 24 pixeles (de 2160) mas adentro. En
+       ese tramo cada ojo pasa poco a poco de su vista en 3D a la franja, que es la misma para los dos.
+       Es corto a proposito: tiene que acabar antes del primer mando, porque en el fundido los mandos
+       se verian tambien estirados, que es como los trae la vista en 3D. MEDIDO con la barra de
+       progreso al 97 %: sus dos mitades son iguales, el detector no la ve y la franja empieza solo 27
+       pixeles por encima de ella; con un fundido de 48 se veia el boton rojo dos veces. */
+    float fundidoFranja = (!franja || P.tun11.x == 1.0) ? 0.0
+        : smoothstep(0.0, 0.0111, fuv.y > 1.0 - P.tun3.x ? fuv.y - (1.0 - P.tun3.x) : P.tun9.w - fuv.y);
 
     /* pase 2D: sin tramar (la lente y el scaler pueden seguir activos). Aqui se muestrea la
        imagen ENTERA: si se usara srcHalf se veria solo media pantalla ampliada al doble, que es
@@ -586,8 +711,12 @@ void main()
         if (P.tun3.z == 1.0)
             q2.y = 1.0 - q2.y;          /* la fuente puede venir con la primera fila abajo */
         /* con el video dividido suavizado, el 2D plano es la imagen izquierda sola (un 2D de verdad,
-           no las dos mitades), salvo en las filas de la barra del reproductor */
-        o = vec4((P.tun10.x == 1.0 && !franja) ? fuente(q2) : texture(uSrc, q2).rgb, 1.0);
+           no las dos mitades); en las filas de la barra del reproductor, la franja con sus mandos.
+           (En el 2D del video dividido tal cual se ve el cuadro entero, y ahi la barra ya sale de una pieza.) */
+        vec3 plano = P.tun10.x == 1.0 ? fuente(q2) : texture(uSrc, q2).rgb;
+        if (franja && P.tun10.x == 1.0)
+            plano = P.tun11.x == 1.0 ? cuadroEntero(fuv) : mix(plano, franjaBarra(fuv, fundidoFranja), fundidoFranja);
+        o = vec4(plano, 1.0);
         return;
     }
 
@@ -619,11 +748,8 @@ void main()
     float dep = P.tun3.w;
     float cnv = P.tun1.w;
     vec3 L, R;
-    if (franja) {
-        vec2 q5 = fuv;
-        if (P.tun3.z == 1.0)
-            q5.y = 1.0 - q5.y;
-        L = texture(uSrc, q5).rgb;
+    if (fundidoFranja >= 1.0 || (franja && P.tun11.x == 1.0)) {
+        L = vec3(0.0);        /* franja de lleno: las vistas en 3D no hacen falta, se ponen abajo */
         R = L;
     } else if (P.tun4.x == 1.0 && P.tun10.y == 1.0) {
         /* Video normal con cantos finos (v0.89): la vista de cada ojo se busca sobre la profundidad
@@ -763,6 +889,17 @@ void main()
     } else {
         L = srcHalf(fuv + vec2(cnv + dep, 0.0), lx);
         R = srcHalf(fuv + vec2(cnv - dep, 0.0), rx);
+    }
+    /* las filas de la barra del reproductor: la franja (ver franjaBarra), a la que cada ojo llega
+       fundiendose desde su vista en 3D */
+    if (franja) {
+        vec3 fb = franjaBarra(fuv, fundidoFranja);
+        L = mix(L, fb, fundidoFranja);
+        R = mix(R, fb, fundidoFranja);
+    }
+    if (franja && P.tun11.x == 1.0) {       /* la franja de antes: el cuadro entero, sin tocar */
+        L = cuadroEntero(fuv);
+        R = L;
     }
     /* Patron de un solo ojo (tecla `b`, v0.59; 12 = blanco a la vista izquierda, 13 = a la
        derecha). Se pisan las dos vistas DESPUES de elegirlas y ANTES del contraste, el crosstalk y

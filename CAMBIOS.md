@@ -3,6 +3,49 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Vídeo dividido: la franja de la barra, limpia y sin quedarse puesta (v0.90)
+
+- Rodolfo: «sobre el reproductor lado a lado, implementa estas mejoras y lo que haga falta… la barra
+  de navegación y el tope toman cuadros congelados del video que se ven fatal, ¿puedes blurearlos
+  con fondo degradado o poner un fondo negro?» y «asegúrate de que al volver al video sí
+  desaparezcan, a veces se quedaba el corte».
+- **Las mejoras de la 0.89 en el vídeo dividido**: el dividido suavizado usa el mismo conversor, así
+  que ya lleva los cantos finos. MEDIDO sin panel: la sesión arranca con `[conversor] cantos: finos`
+  y la franja de la barra convive con el pase de afinado. El dividido tal cual no tiene mapa de
+  profundidad: ahí no hay cantos que afinar.
+- **Por qué se quedaba el corte** (MEDIDO en su registro, 25/11 19:04–19:05): franja puesta el 99 y
+  el 100 % del tiempo con el vídeo en marcha, residuo 67–68 arriba, y el vídeo separando lo más
+  cercano 29 y 35 mm (58 mm en otra sesión). El detector casaba las dos mitades solo hasta un 3 %
+  del ancho (18 mm): un objeto más cercano que eso no casaba, y sus filas se tomaban por barra
+  mientras siguiera en pantalla. REPRODUCIDO con un objeto a 30, 45 y 58 mm en la zona de arriba y
+  de abajo: el detector instalado pone una franja del 12,8 al 16,5 %; el nuevo, ninguna (residuo de
+  1 a 8, umbral 12).
+- **Detector** (`src/barra.cpp`): corrimiento hasta un 12 % (72 mm), trozos de un dieciseisavo de la
+  mitad en vez de un octavo (el trozo que pilla el borde de un objeto pesa la mitad) y sin dejar
+  márgenes sin mirar. Con los 100 cuadros de prueba da lo mismo que antes en todos los grupos (22
+  limpios sin franja, 30 con barra con franja, las rayas finas igual); tarda 1,7 ms por análisis
+  (antes 1,1), cinco veces por segundo.
+- **La franja** (`franjaBarra` en `shaders/weave.frag`): en vez del cuadro entero (las dos mitades
+  del vídeo detrás de la barra), sigue el vídeo: la imagen izquierda sola, en 2D, desenfocada y
+  atenuada al 55 %, a la que cada ojo llega con un fundido de 24 píxeles desde su vista en 3D. Encima,
+  solo los mandos del reproductor, recortados del cuadro: lo que brilla, destaca de su vecindad y
+  no está también en la otra mitad (o es una raya larga y fina: la barra de progreso). Con ese mismo
+  criterio se limpia el fondo de los mandos que le caen a la imagen izquierda.
+- Visto por el camino con los cuadros de prueba: sin la comprobación de la otra mitad se colaban
+  como mandos las rayas claras de un código de barras del vídeo; con un fundido de 48 píxeles y la
+  barra al 97 % (el detector no la ve y la franja empieza 27 píxeles por encima) el botón rojo salía
+  dos veces; lo rojo de la barra se apagaba a la mitad sobre un vídeo claro mientras «fina» se
+  medía por brillo y no por color.
+- Coste (RTX 4090, 3840 × 2160, sin freno): 0,75 a 0,9 ms más por cuadro mientras la barra está a
+  la vista (suavizado 1,55 → 2,31 ms; tal cual 0,53 → 1,41 ms); sin barra, nada. Capa de validación
+  de Vulkan sin avisos nuevos (el bloque de parámetros pasa de 368 a 384 bytes).
+- `barra_2d = entera` vuelve a la franja de antes (MEDIDO: sale idéntica a la de la 0.89);
+  `barra_2d = no` la apaga.
+- **No probado**: nada en el panel, y nada con el reproductor de verdad (YouTube en Firefox): la
+  barra de las pruebas es una dibujada aquí. HIPÓTESIS: unos mandos grises o medio transparentes
+  pueden no pasar por «claros» y no salir; si falta alguno, `barra_2d = entera`. Tampoco subtítulos
+  ni menús del reproductor.
+
 ## Cantos finos: el borde de cada objeto en su sitio (v0.89)
 
 - Rodolfo, de vuelta al conversor: «percibo un pequeño ghost de 1-1.5mm junto a algunos planos de la

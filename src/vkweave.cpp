@@ -26,11 +26,11 @@ constexpr size_t kMaxHudVerts = 65536;
    y el octavo las capas por profundidad (cuanto se estira el fondo y cuanto el frente). */
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
                  kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304,
-                 kOffTun8 = 320, kOffTun9 = 336, kOffTun10 = 352;
+                 kOffTun8 = 320, kOffTun9 = 336, kOffTun10 = 352, kOffTun11 = 368;
 /* kUboBytes esta declarado en vkweave.h para que el almacen en CPU use el mismo numero. Si se
    anade otro vec4 al sombreador, hay que subir kUboBytes de 16 en 16 Y anadir su kOff... aqui:
    este aviso salta en la compilacion si los desfases se salen del bloque. */
-static_assert(kOffTun10 + 16 == kUboBytes, "el ultimo bloque del UBO no cuadra con kUboBytes");
+static_assert(kOffTun11 + 16 == kUboBytes, "el ultimo bloque del UBO no cuadra con kUboBytes");
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -908,6 +908,9 @@ void VkWeave::fillUbo(uint8_t *dst) {
   ((float *)(dst + kOffTun10))[1] = cantosFinos_ ? 1.0f : 0.0f;
   ((float *)(dst + kOffTun10))[2] = finoEnUso_ ? 1.0f : 0.0f;                 /* la profundidad afinada esta en uFino */
   ((float *)(dst + kOffTun10))[3] = (cantosFinos_ && depthCanales_ == 4) ? 1.0f : 0.0f;   /* el mapa trae el color de su imagen */
+  float *t11 = (float *)(dst + kOffTun11);
+  t11[0] = franjaEntera_ ? 1.0f : 0.0f;
+  t11[1] = t11[2] = t11[3] = 0.0f;
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro

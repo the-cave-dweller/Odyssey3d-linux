@@ -2789,12 +2789,18 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        Cada seis cuadros nuevos (o cada 0,2 s si el video esta quieto) se baja la copia chica del
        cuadro (la misma del conversor) y se buscan las filas donde las dos mitades no casan: ahi el
        reproductor pinto su barra a lo ancho y esas filas se tejen en 2D con el cuadro entero.
-       `barra_2d = no` en serve.conf lo apaga. */
+       `barra_2d = no` en serve.conf lo apaga; `barra_2d = entera` deja esas filas tal cual vienen (la
+       franja de la v0.81 a la v0.89, con las dos mitades del video detras de la barra). */
     {
       static const bool kBarra = [] {
         const char *e = entornoOdyssey("ODYSSEYVK_BARRA_2D");
         return !(e && (e[0] == '0' || e[0] == 'n' || e[0] == 'N'));
       }();
+      static const bool kFranjaEntera = [] {
+        const char *e = entornoOdyssey("ODYSSEYVK_BARRA_2D");
+        return e && (e[0] == 'e' || e[0] == 'E');
+      }();
+      wv.setFranjaEntera(kFranjaEntera);
       static DetectorBarra detector;
       static std::vector<uint8_t> chica;
       static int cuentaBarra = 0, guardados = 0;

@@ -3367,7 +3367,8 @@ struct ServeCfg {
   double mapasSeg = -1.0;   /* tope de mapas de profundidad por segundo, 2..60; -1 = el de fabrica (6) (v0.70) */
   std::string hdrEn3d;      /* si = no apagar el HDR del panel al entrar en 3D (v0.71) */
   std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
-  std::string barra2d;      /* no = en el video dividido no tejer en 2D las filas de la barra del reproductor (v0.81) */
+  std::string barra2d;      /* no = en el video dividido no tejer en 2D las filas de la barra del reproductor (v0.81);
+                               entera = tejerlas tal cual vienen, sin la limpieza de la v0.90 */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
@@ -3826,7 +3827,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (!pila->vrrEn3d.empty())
       ::setenv("ODYSSEYVK_VRR_3D", (pila->vrrEn3d == "no" || pila->vrrEn3d == "0") ? "0" : "1", 1);
     if (!pila->barra2d.empty())
-      ::setenv("ODYSSEYVK_BARRA_2D", (pila->barra2d == "no" || pila->barra2d == "0") ? "0" : "1", 1);
+      ::setenv("ODYSSEYVK_BARRA_2D",
+               (pila->barra2d == "no" || pila->barra2d == "0") ? "0" : (pila->barra2d == "entera" ? "entera" : "1"), 1);
     if (!pila->rastreoFino.empty())
       ::setenv("ODYSSEYVK_RASTREO_FINO", (pila->rastreoFino == "no" || pila->rastreoFino == "0") ? "0" : "1", 1);
     if (!pila->escala3d.empty())
