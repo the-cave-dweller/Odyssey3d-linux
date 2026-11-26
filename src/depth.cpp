@@ -572,10 +572,19 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
       return false;
     }
   }
-  auto abrir = [](OrtImpl *q, const std::string &ruta, int iw, int ih) {
+  auto abrir = [](OrtImpl *q, const std::string &ruta, int &iw, int &ih) {
     q->ses = new Ort::Session(q->env, ruta.c_str(), q->so);
     q->inN = q->ses->GetInputNameAllocated(0, q->alloc).get();
     q->outN = q->ses->GetOutputNameAllocated(0, q->alloc).get();
+    /* una red con la entrada de tamano fijo (MiDaS small: 256 x 256) se usa a ese tamano: los
+       parches de 14 son cosa de Depth Anything, que la trae libre */
+    {
+      const std::vector<int64_t> dims = q->ses->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
+      if (dims.size() == 4 && dims[2] > 0 && dims[3] > 0 && (dims[2] != ih || dims[3] != iw)) {
+        std::printf("[conversor] la red pide su entrada fija de %lld x %lld\n", (long long)dims[3], (long long)dims[2]);
+        iw = (int)dims[3], ih = (int)dims[2];
+      }
+    }
     q->in.assign((size_t)3 * (size_t)iw * (size_t)ih, 0.0f);
     std::vector<int64_t> shape{1, 3, ih, iw};
     Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);

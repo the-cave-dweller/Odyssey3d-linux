@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Redes de profundidad más ligeras: medidas (rama `experimental`)
+
+- Rodolfo: «¿hay modelos de profundidad más ligeros? quiero que se prueben algunos y su consumo de GPU».
+- MEDIDO con `odysseyvk mapa` en la RTX 5080 (libre; la 4090 tenía el escritorio), 61 cuadros
+  seguidos, con `nvidia-smi` cada 100 ms. «Red» = la inferencia sola (`ODYSSEYVK_MEDIR`), «mapa» =
+  con la limpieza en la CPU; la memoria incluye el contexto de CUDA. La diferencia es contra el mapa de
+  la red actual, en tres cuadros (persona, nave, globo; `../pruebas/redes-ligeras-2026-11-26.jpg`):
+
+  | Red | Entrada | Red ms | Mapa ms | Memoria | Uso de la tarjeta | Diferencia /255 | Correlación |
+  |---|---|---|---|---|---|---|---|
+  | Depth Anything V2 Small fp32 (la actual) | 518 | 7,3 | 13,2 | 1012 MiB | 29 % | 0 | 1,000 |
+  | Depth Anything V2 Small fp16 | 518 | 4,7 | 10,5 | 754 MiB | 15 % | 0,5 | 1,000 |
+  | Depth Anything V2 Small fp32 | 364 | 3,8 | 10,8 | 754 MiB | 12 % | 14,4 | 0,981 |
+  | Depth Anything V2 Small fp16 | 364 | 2,7 | 9,8 | 626 MiB | 8 % | 14,5 | 0,980 |
+  | MiDaS v2.1 small | 256 fija | 6,3 | 13,2 | 632 MiB | 22 % | 58,6 | 0,520 |
+
+  La fp16 (`onnx-community/depth-anything-v2-small`, `onnx/model_fp16.onnx`, 49,6 MB) da el mismo
+  mapa con un 35 % menos de tiempo de red y 260 MiB menos. Bajar la entrada ahorra más pero el mapa
+  cambia (los bordes se ablandan). MiDaS small no compensa: en CUDA es más lenta que la fp16 y su
+  mapa se parece poco (el fondo de la nave y el globo salen como manchas).
+- Para poder probar MiDaS: una red con la entrada de tamaño fijo se usa a ese tamaño («la red pide su
+  entrada fija de 256 x 256»); antes se redondeaba a parches de 14 (252) y no abría.
+
 ## El HDR del escritorio siempre, secciones plegables y Juegos fuera del panel en 3D (rama `experimental`)
 
 - Rodolfo: «quita la opción de HDR, que se respete siempre el escritorio», «en atajos de teclado pon
