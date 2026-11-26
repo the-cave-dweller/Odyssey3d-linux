@@ -3,6 +3,27 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Juegos: el aviso de por qué el 3D queda detrás y el detector de caídas (v1.00)
+
+- Rodolfo, con Cyberpunk (también bajo gamescope): «it can't see the content of the game and it
+  sends the overlay to the background no matter gamescope; create a crash detector… suggest
+  opening it in borderless fullscreen; verify why it still got sent to the background».
+- **Por qué va detrás** (MEDIDO en su registro, 26-nov 00:22, dos sesiones con gamescope): el
+  juego pone su ventana a pantalla completa y activa; KWin coloca la ventana activa a pantalla
+  completa en su capa de arriba, por encima de las que llevan «encima fijo» como el visor, y el
+  visor no puede activarse sin quitarle el teclado y el ratón al juego. El servicio lo devolvía
+  («el gestor de ventanas minimizó el visor: la devolvemos») y el juego volvía a taparlo. La
+  captura sí recibía los cuadros (3.542 en 25 s): lo que no se veía era el visor. La salida es que
+  el juego vaya en ventana sin bordes, que no entra en esa capa.
+- **La tarjeta de aviso** (la de la orilla, con «Entendido»): a la segunda vez que un juego manda
+  el visor detrás en una sesión, «El juego tapa el 3D» con la explicación y la sugerencia de ventana
+  sin bordes. Y el **detector de caídas**: si la ventana de un juego desaparece antes de cinco
+  minutos de entrar en 3D, «El juego se cerró a los N s de entrar en 3D» con la misma sugerencia.
+  `gamescope` cuenta como juego. Las tarjetas se retiran solas al minuto; la pregunta de un vídeo
+  nuevo manda sobre ellas.
+- **No probado** con el juego de verdad. HIPÓTESIS: con el juego en ventana sin bordes el visor se
+  queda encima y la captura es la misma.
+
 ## Mirar GitHub cada tanto, configurable, y al abrir el panel (v0.99)
 
 - Rodolfo: «check for updates from time to time». El servicio ya miraba medio minuto después de

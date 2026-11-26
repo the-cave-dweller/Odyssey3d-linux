@@ -60,6 +60,10 @@ public:
     /* con esto puesto, la tarjeta de la orilla no pregunta por el video: avisa de que hay esta
        version nueva en GitHub, con Actualizar, Luego y «no avisar» (v0.95) */
     std::string askActualizacion;
+    /* con esto puesto, la tarjeta es un aviso de texto con un boton «Entendido» (v1.00): el titulo
+       y hasta tres renglones */
+    std::string askAviso;
+    std::vector<std::string> askAvisoLineas;
     bool remember = false;
     /* la misma casilla, pero dentro del video (en la pastilla): `recordarVisible` la ensena y
        `recordar` dice si esta aplicacion pasa directa al 3D sin preguntar. La pone el visor cuando

@@ -3225,6 +3225,15 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.state().askActualizacion = av;
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
   }
+  /* ODYSSEYVK_HUD_AVISO=1 (taller, v1.00): la tarjeta de aviso, con el texto del detector de caidas */
+  if (std::getenv("ODYSSEYVK_HUD_AVISO")) {
+    hud.state().ask = true;
+    hud.state().panel = false;
+    hud.state().askAviso = "El juego se cerró a los 48 s de entrar en 3D";
+    hud.state().askAvisoLineas = {"Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar.",
+                                  "A pantalla completa exclusiva choca con el visor al cambiar de modo.",
+                                  "Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos."};
+  }
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
   if (const char *raton = std::getenv("ODYSSEYVK_HUD_RATON")) {
     float rx = -1.0f, ry = -1.0f;
@@ -4629,7 +4638,26 @@ static int cmdServe(int argc, char **argv) {
      juego como si fuera un navegador). Desde v0.98: a un juego solo se le lanza el 3D cuando lleva
      4 s seguidos a pantalla completa, una minimizacion de menos de 6 s no cierra la sesion, y nunca
      se le quita la pantalla completa. */
-  auto esJuego = [](const std::string &appId) { return strLower(appId).rfind("steam_app_", 0) == 0; };
+  auto esJuego = [](const std::string &appId) {
+    const std::string a = strLower(appId);
+    return a.rfind("steam_app_", 0) == 0 || a == "gamescope";
+  };
+  /* El aviso de la tarjeta (v1.00): un titulo, renglones y «Entendido». Lo usan el detector de
+     caidas de un juego y el del visor que un juego a pantalla completa manda detras. */
+  bool tarjetaAviso = false;
+  double tarjetaAvisoT = 0.0;
+  std::string hijoApp;          /* la aplicacion de la sesion en curso */
+  int visorEscondidas = 0;      /* cuantas veces un juego mando el visor detras en esta sesion */
+  auto mostrarAviso = [&](const std::string &titulo, const std::vector<std::string> &lineas, double ahora) {
+    if (!hayTarjeta || !ov || ov->askVisible()) return;
+    ov->hud().state().askAviso = titulo;
+    ov->hud().state().askAvisoLineas = lineas;
+    ov->showAsk(std::string(), std::string());
+    tarjetaAviso = true;
+    tarjetaAvisoT = ahora;
+    std::printf("[serve] tarjeta de aviso: %s\n", titulo.c_str());
+    std::fflush(stdout);
+  };
   std::map<std::string, double> fullVisto;   /* desde cuando lleva cada ventana a pantalla completa */
   double videoMinimizadaDesde = 0.0;
   {
@@ -5134,6 +5162,16 @@ static int cmdServe(int argc, char **argv) {
               avisoEncimaHecho = true;
               std::printf("[ventana] %s\n", e3.c_str());
             }
+            /* Con un juego a pantalla completa EXCLUSIVA esto pasa una y otra vez: KWin pone la
+               ventana activa a pantalla completa en su capa de arriba, por encima incluso de las que
+               llevan «encima fijo», y el visor no puede activarse (le quitaria el teclado y el raton
+               al juego). MEDIDO con Cyberpunk y con gamescope (26-nov 00:22): el visor devuelto dos
+               veces por sesion y el juego siempre delante. La salida es que el juego vaya en ventana
+               sin bordes: se avisa con la tarjeta a la segunda vez. */
+            if (esJuego(hijoApp) && ++visorEscondidas == 2)
+              mostrarAviso("El juego tapa el 3D", {"A pantalla completa exclusiva el escritorio pone al juego sobre el visor.",
+                                                   "Ponlo en ventana sin bordes (borderless): así el 3D se ve encima.",
+                                                   "Con gamescope igual: también tiene que ir sin bordes."}, now);
             if (!avisoAparecerHecho) {
               avisoAparecerHecho = true;
               std::printf("[ventana] %s\n", pudo
@@ -5410,6 +5448,15 @@ static int cmdServe(int argc, char **argv) {
             std::printf("[ventana] %s (%s): cerramos la sesion 3D y devolvemos el panel a 2D\n",
                         motivo, hijoUuid.c_str());
             std::fflush(stdout);
+            /* un juego cuya ventana desaparece a los pocos minutos de entrar en 3D: lo mas probable es
+               que se haya caido (v1.00). Se avisa con lo que suele arreglarlo. */
+            if (esJuego(hijoApp) && std::string(motivo) == "la ventana del video ya no esta" && hijoDesde > 0.0 && now - hijoDesde < 300.0) {
+              char t[128];
+              std::snprintf(t, sizeof t, "El juego se cerró a los %.0f s de entrar en 3D", now - hijoDesde);
+              mostrarAviso(t, {"Si se cayó, ábrelo en ventana sin bordes (borderless) y vuelve a probar.",
+                               "A pantalla completa exclusiva choca con el visor al cambiar de modo.",
+                               "Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos."}, now);
+            }
             /* KWin guarda, para cada configuracion de pantallas, como estaba cada ventana, y al
                volver a esa configuracion se lo repone (v0.75). Medido el 25-nov: a las 11:25:32,
                en el mismo segundo en que el visor devolvio el monitor a su escala, la ventana del
@@ -5561,6 +5608,16 @@ static int cmdServe(int argc, char **argv) {
         std::fflush(stdout);
       }
     }
+    if (tarjetaAviso) {
+      std::string acto = ov->takeAction();
+      if (acto.empty() && now - tarjetaAvisoT > 60.0) acto = "luego";
+      if (!acto.empty()) {
+        ov->hideAsk();
+        ov->hud().state().askAviso.clear();
+        ov->hud().state().askAvisoLineas.clear();
+        tarjetaAviso = false;
+      }
+    }
     if (tarjetaActualizacion) {
       std::string acto = ov->takeAction();
       if (acto.empty() && now - tarjetaActT > 180.0) acto = "luego";
@@ -5685,7 +5742,7 @@ static int cmdServe(int argc, char **argv) {
       tarjetaUuid.clear();
     }
 
-    if (hayTarjeta && !tarjetaActualizacion) {
+    if (hayTarjeta && !tarjetaActualizacion && !tarjetaAviso) {
       if (std::string acto = ov->takeAction(); !acto.empty()) {
         ov->hideAsk();
         if (acto == "close") {
@@ -5749,6 +5806,8 @@ static int cmdServe(int argc, char **argv) {
           accionGuardada = false;
           hijoDesde = now;
           hijoUuid = avisoUuid;
+          hijoApp = accionApp;
+          visorEscondidas = 0;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
           if (hijo > 0 && unaVez) break;
@@ -5785,10 +5844,12 @@ static int cmdServe(int argc, char **argv) {
           now >= enfriadoHasta && (!esJuego(w.appId) || (fullVisto.count(w.uuid) && now - fullVisto[w.uuid] >= 4.0))) {
         preguntadas.insert(w.uuid);
         const std::string app = strLower(w.appId);
-        if (tarjetaActualizacion) {   /* la pregunta del video manda sobre el aviso de la version */
+        if (tarjetaActualizacion || tarjetaAviso) {   /* la pregunta del video manda sobre los avisos */
           ov->hideAsk();
           ov->hud().state().askActualizacion.clear();
+          ov->hud().state().askAviso.clear();
           tarjetaActualizacion = false;
+          tarjetaAviso = false;
         }
         auto fija = cfg.porApp.find(app);
         if (!reabrirUuid.empty() && w.uuid == reabrirUuid && !dry) {
@@ -5796,6 +5857,8 @@ static int cmdServe(int argc, char **argv) {
           hijo = spawnViewer(exe, w.uuid, reabrirModo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
           hijoDesde = now;
           hijoUuid = w.uuid;
+          hijoApp = strLower(w.appId);
+          visorEscondidas = 0;
           std::printf("[serve] reabierto en %s tras la actualizacion (%s)\n", reabrirModo.c_str(), app.c_str());
           std::fflush(stdout);
           reabrirUuid.clear();
@@ -5812,6 +5875,10 @@ static int cmdServe(int argc, char **argv) {
                                false, app + ":" + fija->second, true);
             hijoDesde = now;
             hijoUuid = w.uuid;
+            hijoApp = strLower(w.appId);
+            visorEscondidas = 0;
+          hijoApp = strLower(w.appId);
+          visorEscondidas = 0;
             std::printf("[serve] lanzando 3D (%s) sin preguntar por %s\n", fija->second.c_str(), app.c_str());
             std::fflush(stdout);
             if (hijo > 0 && unaVez) break;
@@ -5862,6 +5929,8 @@ static int cmdServe(int argc, char **argv) {
           hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
           hijoDesde = now;
           hijoUuid = w.uuid;
+          hijoApp = strLower(w.appId);
+          visorEscondidas = 0;
           std::printf("[serve] lanzando 3D (%s) por %s | %s\n", cfg.modo.c_str(), w.appId.c_str(), w.title.c_str());
           std::fflush(stdout);
           if (hijo > 0 && unaVez) break;

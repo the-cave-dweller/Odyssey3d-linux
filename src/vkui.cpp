@@ -719,6 +719,32 @@ void Hud::begin(int w, int h, float altoLogico) {
     const bool hN = askNoAvisar_.inside(mx_, my_);
     if (hN) mask9(askNoAvisar_, 0, 11.0f, 1.0f, 1.0f, 1.0f, 0.10f);
     text(noAvisar, ax + borde, ay + ah - 31.0f, 11.5f, dim[0], dim[1], dim[2], hN ? 1.0f : 0.70f);
+  } else if (st_.ask && !st_.askAviso.empty()) {
+    /* un aviso (v1.00): titulo con el anillo de informacion, renglones y «Entendido» */
+    askConv_ = askSbs_ = askDont_ = askAyuda_ = askActualizar_ = askNoAvisar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+    const float aw = std::min(520.0f, (float)vw - 48.0f);
+    const float ah = 118.0f + 20.0f * (float)st_.askAvisoLineas.size();
+    const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
+    askPanel_ = {ax, ay, aw, ah};
+    mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
+    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.115f, 0.12f, 0.135f, 0.98f);
+    const float borde = 26.0f;
+    askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
+    const bool hc = askClose_.inside(mx_, my_);
+    if (hc) mask9(askClose_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
+    icono({ax + borde, ay + 22.0f, 24.0f, 24.0f}, icoAnillo_, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
+    text("i", ax + borde + 12.0f, ay + 26.0f, 14.0f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f, true);
+    text(st_.askAviso, ax + borde + 34.0f, ay + 24.0f, 16.0f, ink[0], ink[1], ink[2], 1.0f);
+    float ly = ay + 58.0f;
+    for (const std::string &l : st_.askAvisoLineas) {
+      text(l, ax + borde, ly, 12.5f, ink[0], ink[1], ink[2], 0.90f);
+      ly += 20.0f;
+    }
+    askLuego_ = {ax + borde, ay + ah - 48.0f, 120.0f, 32.0f};
+    const bool hL = askLuego_.inside(mx_, my_);
+    mask9(askLuego_, 0, 16.0f, accent[0], accent[1], accent[2], hL ? 1.0f : 0.92f);
+    text("Entendido", askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
   } else if (st_.ask) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
