@@ -25,11 +25,16 @@ def main():
     p.add_argument("ancho", type=int)
     p.add_argument("alto", type=int)
     p.add_argument("--segundos", type=float, default=60.0)
+    p.add_argument("--otra", help="otra profundidad del mismo tamano, que se turna con la primera")
+    p.add_argument("--cada", type=float, default=3.0, help="segundos de cada una al turnarse (con --otra)")
     a = p.parse_args()
     nombre = os.environ.get("ODYSSEYVK_PROFUNDIDAD_SHM", f"/odysseyvk-profundidad-{os.getuid()}")
-    datos = open(a.profundidad, "rb").read()
-    if len(datos) != a.ancho * a.alto * 4:
-        sys.exit(f"{a.profundidad} no mide {a.ancho}x{a.alto} en float32")
+    lista = [a.profundidad] + ([a.otra] if a.otra else [])
+    todas = [open(f, "rb").read() for f in lista]
+    for f, d in zip(lista, todas):
+        if len(d) != a.ancho * a.alto * 4:
+            sys.exit(f"{f} no mide {a.ancho}x{a.alto} en float32")
+    datos = todas[0]
     redondea = lambda v: (v + 4095) // 4096 * 4096
     hueco = redondea(DATOS + len(datos) + 8)
     total = CABECERA + HUECOS * hueco
@@ -42,10 +47,16 @@ def main():
     struct.pack_into("<IIiIIIIIQ", m, 0, 0, VERSION, os.getpid(), a.ancho, a.alto, D32, 4, HUECOS, hueco)
     struct.pack_into("<I", m, 0, MAGIA)
     print(f"[simula] {ruta}: {a.ancho}x{a.alto} D32_SFLOAT, {HUECOS} huecos de {hueco} bytes", flush=True)
-    seq, fin, lector = 0, time.time() + a.segundos, False
+    t0 = time.time()
+    seq, fin, lector, cual = 0, t0 + a.segundos, False, 0
     try:
         while time.time() < fin:
             seq += 1
+            ahora_c = int((time.time() - t0) / a.cada) % len(todas)
+            if ahora_c != cual:
+                cual = ahora_c
+                print(f"[simula] ahora {lista[cual]} (cuadro {seq})", flush=True)
+            datos = todas[cual]
             h = CABECERA + (seq % HUECOS) * hueco
             struct.pack_into("<Q", m, h, seq)                       # 1. seqAntes
             m[h + DATOS:h + DATOS + len(datos)] = datos             # 2. los datos

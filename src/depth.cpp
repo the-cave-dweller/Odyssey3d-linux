@@ -8,6 +8,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1027,20 +1028,25 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
 
   /* el modelo dice cuanto de cerca esta cada punto, en unidades suyas: lo llevamos a 0..1 con el
      minimo y el maximo, mirando solo una muestra de puntos para que un pixel raro no mande. */
-  float lo = d[0], hi = d[0];
+  /* (v1.13) solo los valores finitos: un NaN o un infinito en la escala la deja en NaN PARA SIEMPRE (loS_
+     se sigue con su propio valor) y de ahi pasa al mapa. MEDIDO: el visor se cayo asi con una profundidad
+     del juego a medio escribir (ver ProfundidadJuego::leer, que ya las tira); esto es por si acaso. */
+  float lo = std::numeric_limits<float>::max(), hi = -std::numeric_limits<float>::max();
   size_t taken = 0;
   for (size_t i = 0; i < n; i += 17) {
+    if (!std::isfinite(d[i])) continue;
     if (d[i] < lo) lo = d[i];
     if (d[i] > hi) hi = d[i];
     taken++;
   }
   if (taken < 8) {
-    lo = hi = d[0];
-    for (size_t i = 1; i < n; i++) {
+    for (size_t i = 0; i < n; i++) {
+      if (!std::isfinite(d[i])) continue;
       if (d[i] < lo) lo = d[i];
       if (d[i] > hi) hi = d[i];
     }
   }
+  if (!(hi >= lo)) lo = 0.0f, hi = 1.0f;   /* ni un valor finito */
   if (hi - lo < 1e-4f) hi = lo + 1e-4f;
   const float invCrudo = 1.0f / (hi - lo);
 
@@ -1101,7 +1107,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   std::vector<float> mapa(plane), limpio(plane), salida(plane), trabajo((size_t)9 * plane);
   for (size_t i = 0; i < plane; i++) {
     float v = (d[i] - loS_) * inv;
-    mapa[i] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    mapa[i] = !(v > 0.0f) ? 0.0f : (v > 1.0f ? 1.0f : v);   /* NaN al fondo, no adentro */
   }
 
   /* en el tiempo: el mapa nuevo entra con el peso que pide el usuario, salvo en un cambio de plano,

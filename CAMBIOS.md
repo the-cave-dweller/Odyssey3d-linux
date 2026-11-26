@@ -3,6 +3,21 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El visor ya no se cae con una profundidad del juego a medio escribir (v1.13)
+
+- Rodolfo: «no cargo el layer». La capa sí cargó (la sonda dejó dos volcados), lo que se cayó fue **el visor**:
+  SIGSEGV en `DepthNet::estimate` a las 15:54:10, justo cuando pasó a «Z normal». MEDIDO en el volcado de ese
+  mismo segundo: DLSS acababa de rehacer sus imágenes (números 32 a 39 nuevos) y la profundidad que copió la
+  capa era memoria sin escribir: 10 595 NaN, valores de ±3,4e38 y 1,7 millones de puntos fuera de 0..1. Un NaN
+  pasa por los recortes (`v < 0 ? 0 : …` lo deja pasar) y además deja la escala del mapa en NaN para siempre.
+- `ProfundidadJuego::leer`: en float solo vale 0..1 (una profundidad de verdad no sale de ahí). Un cuadro con
+  más de 1 de cada 1000 puntos fuera se tira entero (para ese mapa vuelve la red, con aviso en el registro
+  como mucho cada 5 s) y los pocos puntos raros de uno bueno van al fondo. `DepthNet::estimate`, por si acaso:
+  la escala solo con valores finitos y el recorte del mapa manda el NaN al fondo.
+- Probado con el visor aparte y `tools/simula-capa.py` (nuevo `--otra` / `--cada`: dos profundidades que se
+  turnan): con el cuadro malo antes se caía igual (SIGSEGV en `estimate`, reproducido); ahora, turnando el
+  malo y uno bueno salpicado de NaN cada 3 s durante 25 s, 9 cambios red ↔ juego, sin caída y a 60 fps.
+
 ## Fase 3, el HUD: la sonda de las imágenes de color de DLSS (v1.13)
 
 - Rodolfo: «Yes, start phase 3» (la «capa de DLSS» para el HUD: el HUD no tiene profundidad y toma la de lo

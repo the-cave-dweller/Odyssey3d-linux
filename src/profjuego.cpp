@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cerrno>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -133,7 +134,32 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
     const uint32_t *s = (const uint32_t *)crudo_.data();
     for (size_t i = 0; i < n; i++) dep[i] = (s[i] & 0xFFFFFFu) / 16777215.0f;
   } else {
-    std::memcpy(dep.data(), crudo_.data(), n * 4);
+    /* (v1.13) en float, solo vale lo que esta en 0..1: una profundidad de verdad no sale de ahi (D3D12 y
+       Vulkan la recortan al escribirla). MEDIDO en Cyberpunk, 26-nov 15:54: en el cuadro en que DLSS rehizo
+       sus imagenes (numeros 32 a 39 nuevos), la de profundidad que copio la capa era memoria sin escribir:
+       10 595 NaN, valores de +-3,4e38 y 1,7 millones de puntos fuera de 0..1. El visor la tomo («Z normal»)
+       y se cayo en DepthNet::estimate (SIGSEGV): un NaN que pasa por los recortes. Un cuadro asi se tira
+       entero (para ese mapa vuelve la red) y los pocos puntos raros de uno bueno van al fondo. */
+    const float *s = (const float *)crudo_.data();
+    size_t malos = 0;
+    for (size_t i = 0; i < n; i++) {
+      const float v = s[i];
+      const bool bueno = v >= 0.0f && v <= 1.0f;   /* falso tambien para NaN */
+      malos += !bueno;
+      dep[i] = bueno ? v : 0.0f;
+    }
+    if (malos > n / 1000) {
+      descartados_++;
+      const double ahora = segundos();
+      if (ahora - avisoDescarte_ > 5.0) {
+        avisoDescarte_ = ahora;
+        std::printf("[red] profundidad del juego descartada: %zu de %zu puntos fuera de 0..1 (una imagen a medio "
+                    "hacer de DLSS; %llu cuadros asi hasta ahora)\n",
+                    malos, n, (unsigned long long)descartados_);
+        std::fflush(stdout);
+      }
+      return false;
+    }
   }
   /* Z invertida o normal: el cielo se limpia a lo lejano (0 con Z invertida, 1 con la normal); sin
      cielo, el suelo (abajo) suele estar mas cerca que lo de arriba. Las dos son lineales en

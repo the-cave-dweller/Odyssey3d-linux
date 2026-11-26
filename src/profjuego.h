@@ -35,7 +35,8 @@ private:
   size_t tam_ = 0;
   uint64_t inodo_ = 0;
   uint64_t ultimoSeq_ = 0;
-  double cuandoCambio_ = 0.0, ultimoIntento_ = -10.0;
+  double cuandoCambio_ = 0.0, ultimoIntento_ = -10.0, avisoDescarte_ = -10.0;
+  uint64_t descartados_ = 0;   /* cuadros tirados por no ser una profundidad (ver leer) */
   std::vector<uint8_t> crudo_;
   std::vector<float> fila_;
   std::string desc_;
