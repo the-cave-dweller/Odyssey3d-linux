@@ -3,6 +3,36 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Tirones en Cyberpunk: la red a la 5080 y la medición de tirones (rama `experimental`)
+
+- Rodolfo: «tuve tirones en Cyberpunk, checa si ves un posible motivo». MEDIDO en el registro de
+  las dos partidas (26-nov, 02:59–03:07 con la red a 770 y el mapa a 770, 03:07–03:10 de fábrica):
+  - Todo en la RTX 4090: el juego, KWin, el visor 4K a 165 Hz y la red de profundidad. La 5080, sin
+    uso. Comprobado con `nvidia-smi` mientras corría `odysseyvk mapa`: `--red 0` cae en la 4090 (bus
+    01) y `--red 1` en la 5080 (bus 05; deja además un contexto de ~390 MB en la 4090). La misma red
+    tarda lo mismo en las dos (13,7 y 12,9 ms por mapa, sin juego).
+  - Dentro del juego la red tardó 20–25 ms por mapa de fábrica (14 fuera) y 38–51 con 770: el juego
+    y la red se estorban. La red hace como mucho 6 mapas por segundo (`mapas_por_segundo`), o sea
+    un 12–15 % del tiempo de la tarjeta de fábrica y un 25–30 % a 770.
+  - Cuadros por segundo: de 127 lecturas, 59 bajo 100 (66–86) y 44 a 160 o más, en las dos
+    partidas y también con la red de fábrica; en esos tramos llegaban igual de pocos cuadros del
+    juego, así que la caída es del juego.
+  - 7 veces el escritorio minimizó el visor y salieron 2 tarjetas de «El juego tapa el 3D»
+    (pantalla completa exclusiva: tiene que ir sin bordes).
+  - 57 «cambios de plano» en unos 10 minutos (al principio uno cada 3 s): cada uno reinicia de
+    golpe la escala y el plano; en un juego, un giro rápido de cámara cuenta como cambio de escena.
+- `red = 1` en el serve.conf de Rodolfo (respaldo `serve.conf.respaldo-2026-11-26-antes-red1`): la
+  red en la 5080 y la 4090 para el juego. El servicio toma ahora `red` de serve.conf sin reiniciarse
+  (vale desde el siguiente vídeo).
+- La línea `[fps]` (cada 5 s) dice ahora quién tira: `fuente` = cuadros nuevos del juego por
+  segundo y su hueco más largo (y cuántos de más de 50 ms); `vuelta` = el trabajo del visor antes de
+  presentar (y cuántas veces no cupo en un refresco); `presentar` = lo que espera a la tarjeta y al
+  refresco (y cuántas veces más de dos refrescos), con el hueco más largo entre presentaciones;
+  `leer`/`subir` = media/máximo de bajar la copia chica para la red y de subir el mapa (las dos
+  esperan a la tarjeta); `red` = ms por mapa. Probado en el visor aparte con la red en cada
+  tarjeta: 60 cuadros, vuelta máx. 2,6–3,0 ms, leer 1,4–1,6 / subir 1,3–1,6 ms, red 13–14 ms, sin
+  turnos perdidos. Falta la partida de verdad.
+
 ## Rama `experimental`: la pestaña Experimental (sobre la v1.10)
 
 - Rodolfo, tras leer Any2Odyssey (github.com/jlobue10/Any2Odyssey, 1.0.7, GPL-3: visor en Rust para

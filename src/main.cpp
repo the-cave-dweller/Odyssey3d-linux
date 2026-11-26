@@ -5870,6 +5870,11 @@ static int cmdServe(int argc, char **argv) {
           cfg.rastreo = nuevo.rastreo;
           cfg.hdrEn3d = nuevo.hdrEn3d;
           cfg.atajosGlobales = nuevo.atajosGlobales;
+          /* la tarjeta de la red (`red = 1`): vale desde el siguiente visor, sin reiniciar el servicio */
+          if (nuevo.red != cfg.red) {
+            std::printf("[serve] la red de profundidad pasa a la tarjeta %d desde el siguiente video\n", nuevo.red);
+            cfg.red = nuevo.red;
+          }
           cfg.expRed = nuevo.expRed, cfg.expMapa = nuevo.expMapa, cfg.expTope = nuevo.expTope;
           cfg.expAnticipacion = nuevo.expAnticipacion;
           cfg.crosstalkBase = nuevo.crosstalkBase;
