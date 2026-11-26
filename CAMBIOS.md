@@ -44,6 +44,14 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   ahora lee el mapa bilineal: **4,1 s**. Con el pase de afinado en uso (lo normal) la imagen no
   cambia: dos volcados con el mismo binario difieren más entre sí (el mapa varía de una ejecución a
   otra) que uno de antes y uno de ahora.
+- **El alcance automático, a la mitad.** Rodolfo, después de todo lo de arriba: «alcance de relieve is
+  the issue, you might be too aggressive with it». Todos los defectos crecen con el alcance (cada
+  error del mapa sale T veces más grande, el fantasma de la lente queda T veces más lejos, los huecos
+  son T veces más anchos), y el grado de paralaje entre los ojos es lo que la vista aguanta, no lo que
+  esta lente y una red de una sola imagen dan limpio. Ahora el tope de fuera queda en **medio grado**:
+  x1,44 a 65 cm (+18,2 / −14,3 px por ojo), x1,1 a 50 cm, x1,77 a 80 cm. MEDIDO en el visor aparte en
+  Auto: x1,44 y una Salida equivalente de 66–76 (con el grado llegaba a 225). Los textos de Auto dicen
+  «medio grado de paralaje».
 - Visto en una captura suya y **pendiente**: unos subtítulos amarillos con contorno salen dobles (no
   los ve como texto, así que no se quedan en el plano de la pantalla).
 - Sin probar en el panel.
