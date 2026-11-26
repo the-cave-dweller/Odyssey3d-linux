@@ -832,6 +832,9 @@ struct Overlay::Impl {
       case Hud::HitAskFlat: s->accion = "flat"; break;
       case Hud::HitAskConv: s->accion = "conv"; break;
       case Hud::HitAskClose: s->accion = "close"; break;
+      case Hud::HitAskActualizar: s->accion = "actualizar"; break;   /* la tarjeta de la actualizacion (v0.95) */
+      case Hud::HitAskLuego: s->accion = "luego"; break;
+      case Hud::HitAskNoAvisar: s->accion = "noavisar"; break;
       case Hud::HitAskDont:
         s->hud.state().remember = !s->hud.state().remember;
         s->pintar();

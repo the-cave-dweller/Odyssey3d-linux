@@ -52,6 +52,8 @@ struct Valores {
   double fantasma = 0.0128535;    /* crosstalk_base: 0 .. 0,10 en el panel */
   double relieve = 1.0;           /* fuerza del relieve del conversor: 0,5 .. 2 */
   std::string modelo;             /* `modelo =` de serve.conf, ya expandido; vacio = la red abierta de siempre */
+  bool avisarActualizaciones = true;   /* `actualizaciones = no` apaga la tarjeta de version nueva (v0.95) */
+  bool actualizarAuto = false;         /* `actualizar_auto = si`: con una version nueva se instala sola (v0.95) */
   std::vector<std::pair<std::string, std::string>> recordadas;   /* aplicacion -> modo */
 };
 Valores leer();
@@ -68,6 +70,29 @@ bool descargar(std::string *err);
 bool vigilarDescarga();
 bool descargaEnMarcha();
 std::string textoDescarga();
+
+/* ---- la actualizacion (v0.95) ------------------------------------------------------------------
+   La version nueva se mira en el VERSION de la rama main del repositorio de GitHub. La comprobacion
+   es un `curl` aparte (como la descarga): `comprobarActualizacion` la arranca, `vigilarComprobacion`
+   se llama de vez en cuando y devuelve true cuando acabo (deja el resultado en el archivo de estado
+   `actualizacion`: `remota = 0.95` y `hora = ...`), y `estadoActualizacion` lo lee. */
+extern const char *const kRepoGitHub;
+extern const char *const kUrlVersionRemota;
+struct Actualizacion {
+  std::string remota;     /* la version que hay en GitHub (vacia = nunca se ha mirado o no se pudo) */
+  bool pendiente = false; /* remota es mas nueva que la instalada */
+  bool alDia = false;     /* se miro y la instalada es la ultima */
+  long hora = 0;          /* cuando se miro (segundos desde 1970) */
+};
+bool versionMasNueva(const std::string &a, const std::string &b);   /* a > b, comparando numero a numero */
+bool comprobarActualizacion(std::string *err);
+bool vigilarComprobacion();
+bool comprobacionEnMarcha();
+Actualizacion estadoActualizacion();
+/* `odysseyvk actualizar` / `odysseyvk desinstalar` en una unidad transitoria de systemd (fuera del
+   servicio, que se va a reiniciar o a quitar) */
+bool lanzarActualizacion(std::string *err);
+bool lanzarDesinstalacion(std::string *err);
 
 /* Lo que ensena el panel: rellena pestanas y filas a partir de los valores y de la biblioteca.
    `ids` sale alineado con las filas y dice que es cada una ("modo", "rastreo", "auto:zen",

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <map>
 #include <system_error>
@@ -244,6 +245,8 @@ Valores leer() {
   v.fantasma = std::max(0.0, std::min(0.10, numero(de("crosstalk_base"), 0.0128535)));
   v.relieve = std::max(0.5, std::min(2.0, numero(de("relieve"), 1.0)));
   v.modelo = de("modelo");
+  v.avisarActualizaciones = si(de("actualizaciones"), true);
+  v.actualizarAuto = si(de("actualizar_auto"), false);
   if (!v.modelo.empty() && v.modelo[0] == '~') {
     const char *home = std::getenv("HOME");
     v.modelo = std::string(home ? home : "") + v.modelo.substr(1);
@@ -361,6 +364,130 @@ bool vigilarDescarga() {
   return true;
 }
 
+/* ---- la actualizacion (v0.95) ---------------------------------------------------------------- */
+const char *const kRepoGitHub = "https://github.com/the-cave-dweller/Odyssey3d-linux";
+const char *const kUrlVersionRemota = "https://raw.githubusercontent.com/the-cave-dweller/Odyssey3d-linux/main/VERSION";
+
+bool versionMasNueva(const std::string &a, const std::string &b) {
+  size_t i = 0, j = 0;
+  while (i < a.size() || j < b.size()) {
+    long na = 0, nb = 0;
+    while (i < a.size() && a[i] >= '0' && a[i] <= '9') na = na * 10 + (a[i++] - '0');
+    while (j < b.size() && b[j] >= '0' && b[j] <= '9') nb = nb * 10 + (b[j++] - '0');
+    if (na != nb) return na > nb;
+    if (i < a.size()) i++;
+    if (j < b.size()) j++;
+  }
+  return false;
+}
+
+namespace {
+long g_confirmarDesinstalar = 0;   /* el desinstalador pide dos clics seguidos: hasta cuando vale el primero */
+struct Comprobacion {
+  pid_t pid = 0;
+  std::string parte;
+} g_comprobacion;
+std::string rutaActualizacion() { return rutaEstadoOdyssey("actualizacion"); }
+}  // namespace
+
+bool comprobacionEnMarcha() { return g_comprobacion.pid > 0; }
+
+bool comprobarActualizacion(std::string *err) {
+  if (g_comprobacion.pid > 0) return true;
+  g_comprobacion.parte = rutaActualizacion() + ".parte";
+  ::unlink(g_comprobacion.parte.c_str());
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    if (err) *err = std::string("no se pudo arrancar la comprobacion: ") + std::strerror(errno);
+    return false;
+  }
+  if (pid == 0) {
+    const int nulo = ::open("/dev/null", O_RDWR);
+    if (nulo >= 0) { ::dup2(nulo, 0); ::dup2(nulo, 1); ::dup2(nulo, 2); }
+    const char *url = std::getenv("ODYSSEYVK_URL_VERSION");   /* taller: otra direccion (vale file://) */
+    ::execlp("curl", "curl", "-fsSL", "--max-time", "25", "-o", g_comprobacion.parte.c_str(), url ? url : kUrlVersionRemota, (char *)nullptr);
+    ::_exit(127);
+  }
+  g_comprobacion.pid = pid;
+  return true;
+}
+
+bool vigilarComprobacion() {
+  if (g_comprobacion.pid <= 0) return false;
+  int estado = 0;
+  if (::waitpid(g_comprobacion.pid, &estado, WNOHANG) == 0) return false;
+  g_comprobacion.pid = 0;
+  std::string txt;
+  const bool bien = WIFEXITED(estado) && WEXITSTATUS(estado) == 0 && leeTexto(g_comprobacion.parte, txt);
+  ::unlink(g_comprobacion.parte.c_str());
+  std::string remota;
+  for (char ch : txt)
+    if ((ch >= '0' && ch <= '9') || ch == '.') remota += ch;
+    else if (!remota.empty()) break;
+  if (bien && !remota.empty() && remota.size() < 16) {
+    if (FILE *f = std::fopen(rutaActualizacion().c_str(), "we")) {
+      std::fprintf(f, "remota = %s\nhora = %ld\n", remota.c_str(), (long)::time(nullptr));
+      std::fclose(f);
+    }
+  }
+  return true;
+}
+
+Actualizacion estadoActualizacion() {
+  Actualizacion a;
+  std::string txt;
+  if (!leeTexto(rutaActualizacion(), txt)) return a;
+  size_t ini = 0;
+  while (ini < txt.size()) {
+    size_t fin = txt.find('\n', ini);
+    if (fin == std::string::npos) fin = txt.size();
+    const std::string l = strTrim(txt.substr(ini, fin - ini));
+    ini = fin + 1;
+    const size_t eq = l.find('=');
+    if (eq == std::string::npos) continue;
+    const std::string k = strTrim(l.substr(0, eq)), val = strTrim(l.substr(eq + 1));
+    if (k == "remota") a.remota = val;
+    else if (k == "hora") a.hora = std::atol(val.c_str());
+  }
+  if (!a.remota.empty()) {
+    a.pendiente = versionMasNueva(a.remota, ODYSSEYVK_VERSION);
+    a.alDia = !a.pendiente;
+  }
+  return a;
+}
+
+namespace {
+/* una orden nuestra en una unidad transitoria de systemd, fuera del servicio: `systemd-run --user` */
+bool lanzarAparte(const char *orden, std::string *err) {
+  char propio[512] = {0};
+  const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
+  const std::string exe = n > 0 ? std::string(propio, (size_t)n) : std::string("odysseyvk");
+  const std::string unidad = std::string("odysseyvk-") + orden + "-" + std::to_string((long)::time(nullptr));
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    if (err) *err = std::string("no se pudo arrancar: ") + std::strerror(errno);
+    return false;
+  }
+  if (pid == 0) {
+    const int nulo = ::open("/dev/null", O_RDWR);
+    if (nulo >= 0) { ::dup2(nulo, 0); ::dup2(nulo, 1); ::dup2(nulo, 2); }
+    ::execlp("systemd-run", "systemd-run", "--user", "--collect", "--quiet", ("--unit=" + unidad).c_str(),
+             exe.c_str(), orden, (char *)nullptr);
+    ::_exit(127);
+  }
+  int estado = 0;
+  ::waitpid(pid, &estado, 0);
+  if (!(WIFEXITED(estado) && WEXITSTATUS(estado) == 0)) {
+    if (err) *err = std::string("systemd-run no pudo arrancar `odysseyvk ") + orden + "`";
+    return false;
+  }
+  return true;
+}
+}  // namespace
+
+bool lanzarActualizacion(std::string *err) { return lanzarAparte("actualizar", err); }
+bool lanzarDesinstalacion(std::string *err) { return lanzarAparte("desinstalar", err); }
+
 namespace {
 /* Cuando falta la red de profundidad (o se esta bajando): que hace falta, para que, de donde se
    baja y el boton que lo hace. Con la red en su sitio no pone nada. */
@@ -393,13 +520,64 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
 }  // namespace
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  st.pestanas = {"Ajustes", "Juegos", "Rendimiento"};
+  st.pestanas = {"Ajustes", "Juegos", "Rendimiento", "Programa"};
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
+  /* el boton junto al aspa: lo que se sabe de la version de GitHub */
+  const Actualizacion act = estadoActualizacion();
+  st.actualizacion = act.pendiente ? act.remota : std::string();
+  st.alDia = act.alDia;
+  if (st.pestana == 3) {
+    /* Programa (v0.95): la version, la actualizacion y el desinstalador */
+    Hud::ItemPanel s;
+    s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "VERSIÓN";
+    pon(s, "");
+    Hud::ItemPanel f;
+    f.tipo = Hud::ItemPanel::Fila, f.rotulo = "Instalada", f.valorTexto = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+    pon(f, "");
+    Hud::ItemPanel g;
+    g.tipo = Hud::ItemPanel::Fila, g.rotulo = "En GitHub";
+    if (comprobacionEnMarcha()) g.valorTexto = "comprobando…";
+    else if (act.remota.empty()) g.valorTexto = "sin comprobar todavía";
+    else {
+      char cuando[64] = {0};
+      const time_t t = (time_t)act.hora;
+      std::strftime(cuando, sizeof cuando, "%H:%M", std::localtime(&t));
+      g.valorTexto = "OdysseyVK " + act.remota + (act.pendiente ? " · hay una versión nueva" : " · estás al día") + " (visto a las " + cuando + ")";
+    }
+    pon(g, "");
+    Hud::ItemPanel b;
+    b.tipo = Hud::ItemPanel::Boton;
+    b.rotulo = act.pendiente ? "Actualizar a OdysseyVK " + act.remota : "Buscar actualizaciones";
+    b.nota = act.pendiente ? "Se baja de GitHub, se compila, se instala (pide tu clave) y el servicio se reinicia; el vídeo o juego en 3D se reabre."
+                           : "Mira el repositorio " + std::string(kRepoGitHub).substr(8);
+    b.valorTexto = comprobacionEnMarcha() ? "Comprobando…" : (act.pendiente ? "Actualizar" : "Buscar");
+    b.valor = !comprobacionEnMarcha();
+    pon(b, act.pendiente ? "actualizar" : "buscar_actualizacion");
+    Hud::ItemPanel a;
+    a.tipo = Hud::ItemPanel::Interruptor, a.rotulo = "Avisar cuando haya una versión nueva";
+    a.nota = "Una tarjeta en la orilla de la pantalla con el botón de actualizar; sin esto, solo el botón junto al aspa";
+    a.valor = v.avisarActualizaciones;
+    pon(a, "actualizaciones");
+    Hud::ItemPanel au;
+    au.tipo = Hud::ItemPanel::Interruptor, au.rotulo = "Actualizar automáticamente";
+    au.nota = "En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)";
+    au.valor = v.actualizarAuto;
+    pon(au, "actualizar_auto");
+    s.rotulo = "DESINSTALAR";
+    pon(s, "");
+    Hud::ItemPanel d;
+    d.tipo = Hud::ItemPanel::Boton, d.rotulo = "Desinstalar OdysseyVK";
+    d.nota = "Quita el programa, el servicio y la red de profundidad (pide tu clave); tu configuración se queda.";
+    d.valorTexto = g_confirmarDesinstalar > ::time(nullptr) ? "¿Seguro? Pica otra vez" : "Desinstalar";
+    d.valor = true;
+    pon(d, "desinstalar");
+    return;
+  }
   if (st.pestana == 0) {
     /* sin ninguna red de profundidad no hay video normal a 3D: lo primero que se ve es como bajarla */
     filasDeLaRed(st, v, ids);
@@ -597,6 +775,50 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     const double val = std::round((0.5 + std::max(0.0f, std::min(1.0f, frac)) * 1.5) / 0.05) * 0.05;
     if (!fija(id, conComa(val, 2))) return false;
     if (aviso) *aviso = "fuerza del relieve " + conComa(val, 2) + " · desde el siguiente vídeo";
+    return true;
+  }
+  if (id == "actualizaciones") {
+    if (!fija("actualizaciones", v.avisarActualizaciones ? "no" : "si")) return false;
+    if (aviso) *aviso = v.avisarActualizaciones ? "no se avisará de versiones nuevas; el botón junto al aspa las sigue marcando"
+                                                : "se avisará con un aviso del escritorio";
+    return true;
+  }
+  if (id == "actualizar_auto") {
+    if (!fija("actualizar_auto", v.actualizarAuto ? "no" : "si")) return false;
+    if (aviso) *aviso = v.actualizarAuto ? "las versiones nuevas ya no se instalan solas" : "las versiones nuevas se instalarán solas";
+    return true;
+  }
+  if (id == "buscar_actualizacion") {
+    if (!comprobarActualizacion(&e)) {
+      if (aviso) *aviso = e;
+      return false;
+    }
+    if (aviso) *aviso = "mirando la versión de GitHub…";
+    return true;
+  }
+  if (id == "actualizar") {
+    if (!lanzarActualizacion(&e)) {
+      if (aviso) *aviso = e;
+      return false;
+    }
+    if (aviso) *aviso = "actualizando: se compila, se pide tu clave para instalar y el servicio se reinicia";
+    if (cerrar) *cerrar = true;
+    return true;
+  }
+  if (id == "desinstalar") {
+    const long ahora = (long)::time(nullptr);
+    if (g_confirmarDesinstalar <= ahora) {
+      g_confirmarDesinstalar = ahora + 12;
+      if (aviso) *aviso = "¿seguro? pica otra vez en los próximos 12 segundos para desinstalar";
+      return true;
+    }
+    g_confirmarDesinstalar = 0;
+    if (!lanzarDesinstalacion(&e)) {
+      if (aviso) *aviso = e;
+      return false;
+    }
+    if (aviso) *aviso = "desinstalando OdysseyVK…";
+    if (cerrar) *cerrar = true;
     return true;
   }
   if (id == "descargar_red") {

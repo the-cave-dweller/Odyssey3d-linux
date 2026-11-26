@@ -3,6 +3,43 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Actualizaciones desde GitHub con tarjeta, botón junto al aspa y pestaña Programa con desinstalar (v0.95)
+
+- Rodolfo: un popup cuando el programa detecte una actualización en su GitHub
+  (the-cave-dweller/Odyssey3d-linux), que la instale sola y recargue; si había un vídeo o un juego,
+  que se reabra y se reinicie el servicio; un botón pequeño de «no notificar»; el botón de actualizar
+  junto al de cierre, amarillo si hay una pendiente (con rótulo al pasar por encima) o flecha verde
+  si está al día; una pestaña final con desinstalar (red, programa y servicio). Después: la
+  notificación desde el overlay, no de KDE («una ventanita encima»); si hace falta root, pedirlo
+  también desde el GUI; y un interruptor de actualizar automáticamente, apagado de fábrica.
+- **Cómo se detecta**: el servicio lee el `VERSION` de la rama main con `curl` aparte (medio minuto
+  tras arrancar y cada seis horas) y deja el resultado en `~/.local/state/odysseyvk/actualizacion`;
+  `versionMasNueva` compara número a número. MEDIDO en seco con una dirección de taller
+  (`ODYSSEYVK_URL_VERSION=file://…`): «version en GitHub: 0.88 (instalada 0.94)».
+- **La tarjeta**: la misma de la orilla (layer-shell), con el círculo amarillo y la flecha, el
+  título, las dos versiones, «Actualizar», «Luego» y, chico, «No avisar de actualizaciones»
+  (escribe `actualizaciones = no`). Una vez por versión (`actualizacion-avisada`); se retira sola a
+  los 3 min; si llega un vídeo a pantalla completa, la pregunta del vídeo manda.
+- **El botón junto al aspa** (en el panel): amarillo con flecha = pendiente, pica e instala; flecha
+  verde = al día, pica y vuelve a mirar; gris = sin mirar. Con el ratón encima, el rótulo que lo dice.
+- **`odysseyvk actualizar`**: clona (o trae) la rama main en `~/.local/share/odysseyvk/fuente`,
+  corre el `install.sh` de siempre con `ODYSSEYVK_SUDO=pkexec` (la clave de root la pide polkit en
+  una ventana: es lo único que no puede hacer solo), apunta en `reabrir` la ventana y el modo de la
+  sesión 3D que haya (el hub ahora publica `sesion_modo`), reinicia el servicio y avisa con
+  `notify-send`. Corre en una unidad transitoria (`systemd-run --user`) para que el reinicio no se
+  lo lleve. El servicio nuevo, si esa ventana sigue a pantalla completa, la reabre en el mismo modo
+  sin preguntar. Todo queda en `~/.local/state/odysseyvk/actualizar.log`. MEDIDO en una carpeta
+  aparte con `--solo-bajar`: clona el repositorio de GitHub y compila (el binario bajado dice 0.94).
+- **Pestaña Programa**: versión instalada, la de GitHub, Buscar/Actualizar, «Avisar cuando haya una
+  versión nueva», «Actualizar automáticamente» (apagado; con él se instala sola en cuanto se
+  detecta) y «Desinstalar OdysseyVK», que pide un segundo clic en 12 s. `odysseyvk desinstalar`
+  quita el servicio, el lanzador, el icono, la red y la fuente, y por pkexec el binario, la regla
+  udev y los datos; `~/.config/odysseyvk` se queda.
+- **No probado**: picar Actualizar de verdad (instala y reinicia el servicio), el pkexec, la
+  reapertura del vídeo y el desinstalador: todo lo que toca el sistema. HIPÓTESIS: la unidad
+  transitoria hereda el entorno gráfico del panel para que pkexec y notify-send encuentren el
+  escritorio.
+
 ## Nada de Samsung en el panel: la red se detecta sola; sin red, el panel se abre y la descarga carga (v0.94)
 
 - Rodolfo: «quita ya cualquier cosa del modelo de Samsung, rinde igual, ¿no?; solo deja intrínseco

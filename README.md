@@ -551,6 +551,21 @@ Tres cosas que conviene saber:
 Sin Qt instalado la ventana simplemente no se compila (`cmake -DODYSSEYVK_UI=OFF` o sin `Qt6Widgets`) y
 todo lo demás —visor, hub, verbos `ctl`— queda igual.
 
+## Actualizarse y desinstalarse (v0.95)
+
+El servicio mira cada seis horas el `VERSION` de
+<https://github.com/the-cave-dweller/Odyssey3d-linux>. Con una versión nueva sale una tarjeta en
+la orilla con **Actualizar**, **Luego** y un «No avisar de actualizaciones» chico; y en el panel de
+ajustes, junto al aspa, el botón se pone amarillo (pícalo para instalar; verde = al día, gris = sin
+mirar; con el ratón encima lo dice). La pestaña **Programa** tiene lo mismo más «Actualizar
+automáticamente» (apagado de fábrica) y **Desinstalar**.
+
+Actualizar baja la rama main a `~/.local/share/odysseyvk/fuente`, compila, instala (polkit pide tu
+clave en una ventana: es lo único que no puede hacer solo) y reinicia el servicio; el vídeo o juego
+que estuviera en 3D se reabre. Desde la terminal: `odysseyvk actualizar` (registro en
+`~/.local/state/odysseyvk/actualizar.log`) y `odysseyvk desinstalar`. En `serve.conf`:
+`actualizaciones = no` apaga la tarjeta, `actualizar_auto = si` instala sin preguntar.
+
 ## Cuál es el indicador de la esquina
 
 **No hay ninguno.** El cuadro de color de arriba a la izquierda del vídeo (verde con lente y scaler,

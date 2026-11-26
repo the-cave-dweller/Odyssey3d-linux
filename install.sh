@@ -29,11 +29,11 @@ cmake --build "$here/build" -j"$(nproc)"
 
 # --- instalar ---------------------------------------------------------------
 echo
-echo "se va a pedir sudo para instalar el binario, la regla udev y los datos de calibración"
-sudo cmake --install "$here/build"
-
-# --- permisos ---------------------------------------------------------------
-sudo udevadm control --reload-rules
+# ODYSSEYVK_SUDO=pkexec lo usa `odysseyvk actualizar` (v0.95): pide la clave en una ventana del
+# escritorio en vez de en la terminal. Una sola peticion para el binario, la regla udev y los datos.
+su=${ODYSSEYVK_SUDO:-sudo}
+echo "se va a pedir la clave ($su) para instalar el binario, la regla udev y los datos de calibración"
+$su sh -c "cmake --install '$here/build' && udevadm control --reload-rules"
 
 # --- servicio en segundo plano (por usuario, sin sudo) ----------------------
 prefix=$(sed -n 's/^CMAKE_INSTALL_PREFIX:INTERNAL=//p' "$here/build/CMakeCache.txt")

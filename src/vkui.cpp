@@ -135,18 +135,23 @@ bool Hud::buildAtlas(std::string *err) {
      FUERA de un circulo: cada cuarto sirve para redondear una esquina de un dibujo ya pintado). */
   {
     const int n = 64;
-    std::vector<uint8_t> cerrar((size_t)n * n), palomita((size_t)n * n), anillo((size_t)n * n), hueco((size_t)n * n);
+    std::vector<uint8_t> cerrar((size_t)n * n), palomita((size_t)n * n), anillo((size_t)n * n), hueco((size_t)n * n),
+        flecha((size_t)n * n);
     for (int j = 0; j < n; j++)
       for (int i = 0; i < n; i++) {
         const float x = (float)i + 0.5f, y = (float)j + 0.5f;
         const size_t p = (size_t)j * (size_t)n + (size_t)i;
         cerrar[p] = cubre(std::min(distSegmento(x, y, 17, 17, 47, 47), distSegmento(x, y, 17, 47, 47, 17)) - 3.4f);
+        /* la flecha hacia arriba del boton de actualizar (v0.95): el palo y las dos alas */
+        flecha[p] = cubre(std::min(distSegmento(x, y, 32, 14, 32, 50),
+                                   std::min(distSegmento(x, y, 32, 14, 15, 31), distSegmento(x, y, 32, 14, 49, 31))) - 3.6f);
         palomita[p] = cubre(std::min(distSegmento(x, y, 13, 34, 26, 47), distSegmento(x, y, 26, 47, 51, 19)) - 4.4f);
         const float rc = std::hypot(x - 32.0f, y - 32.0f);
         anillo[p] = cubre(std::fabs(rc - 27.0f) - 2.6f);
         hueco[p] = cubre(32.0f - rc);
       }
     cupo = subir(n, n, cerrar, &icoCerrar_) && cupo;
+    cupo = subir(n, n, flecha, &icoFlecha_) && cupo;
     cupo = subir(n, n, palomita, &icoPalomita_) && cupo;
     cupo = subir(n, n, anillo, &icoAnillo_) && cupo;
     cupo = subir(n, n, hueco, &hueco_) && cupo;
@@ -678,7 +683,43 @@ void Hud::begin(int w, int h, float altoLogico) {
      plano» ya no es una tesela: cerrar la tarjeta deja el video como esta, que es lo mismo. */
   askTop_ = {-10.0f, -10.0f, 0.0f, 0.0f};    /* arriba y abajo: solo por linea de orden (--tb) */
   askFlat_ = {-10.0f, -10.0f, 0.0f, 0.0f};
-  if (st_.ask) {
+  askActualizar_ = askLuego_ = askNoAvisar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  if (st_.ask && !st_.askActualizacion.empty()) {
+    /* la tarjeta de la actualizacion (v0.95): la misma tarjeta de la orilla, con otro contenido */
+    askConv_ = askSbs_ = askDont_ = askAyuda_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+    const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 186.0f;
+    const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
+    askPanel_ = {ax, ay, aw, ah};
+    mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
+    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.115f, 0.12f, 0.135f, 0.98f);
+    const float borde = 26.0f;
+    askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
+    const bool hc = askClose_.inside(mx_, my_);
+    if (hc) mask9(askClose_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
+    /* el circulo amarillo con la flecha, como el boton del panel, y el titulo a su lado */
+    mask9({ax + borde, ay + 20.0f, 28.0f, 28.0f}, 0, 14.0f, 0.98f, 0.76f, 0.18f, 1.0f);
+    icono({ax + borde + 6.0f, ay + 26.0f, 16.0f, 16.0f}, icoFlecha_, 0.16f, 0.12f, 0.04f, 1.0f);
+    text("Hay una versión nueva de OdysseyVK", ax + borde + 38.0f, ay + 24.0f, 17.0f, ink[0], ink[1], ink[2], 1.0f);
+    text("OdysseyVK " + st_.askActualizacion + " en GitHub · tienes la " + st_.version.substr(st_.version.rfind(' ') + 1),
+         ax + borde, ay + 60.0f, 13.0f, ink[0], ink[1], ink[2], 0.92f);
+    text("Se instala sola (pide tu clave) y el vídeo o juego que haya en 3D se reabre.",
+         ax + borde, ay + 80.0f, 11.5f, dim[0], dim[1], dim[2], 0.85f);
+    /* Actualizar y Luego, dos pildoras; y abajo, chico, «No avisar de actualizaciones» */
+    const float by = ay + 108.0f;
+    askActualizar_ = {ax + borde, by, 150.0f, 34.0f};
+    askLuego_ = {ax + borde + 162.0f, by, 92.0f, 34.0f};
+    const bool hA = askActualizar_.inside(mx_, my_), hL = askLuego_.inside(mx_, my_);
+    mask9(askActualizar_, 0, 17.0f, accent[0], accent[1], accent[2], hA ? 1.0f : 0.92f);
+    text("Actualizar", askActualizar_.x + askActualizar_.w * 0.5f, by + 8.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
+    mask9(askLuego_, 0, 17.0f, 1.0f, 1.0f, 1.0f, hL ? 0.18f : 0.10f);
+    text("Luego", askLuego_.x + askLuego_.w * 0.5f, by + 8.0f, 14.0f, ink[0], ink[1], ink[2], hL ? 1.0f : 0.85f, true);
+    const char *noAvisar = "No avisar de actualizaciones";
+    askNoAvisar_ = {ax + borde - 4.0f, ay + ah - 36.0f, textWidth(noAvisar, 11.5f) + 8.0f, 22.0f};
+    const bool hN = askNoAvisar_.inside(mx_, my_);
+    if (hN) mask9(askNoAvisar_, 0, 11.0f, 1.0f, 1.0f, 1.0f, 0.10f);
+    text(noAvisar, ax + borde, ay + ah - 31.0f, 11.5f, dim[0], dim[1], dim[2], hN ? 1.0f : 0.70f);
+  } else if (st_.ask) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
     const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
     askPanel_ = {ax, ay, aw, ah};
@@ -830,6 +871,26 @@ void Hud::dibujaPanel(int vw, int vh) {
   if (hc) mask9(panelCerrar_, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.14f);
   icono({panelCerrar_.x + 6.0f, panelCerrar_.y + 6.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2],
         hc ? 1.0f : 0.78f);
+  /* junto al aspa, el boton de la actualizacion (v0.95): un circulo amarillo con la flecha si hay una
+     version nueva en GitHub; la flecha verde si esta al dia; gris si no se ha mirado. Al pasar por
+     encima, un rotulo lo dice (se pinta al final, por encima de las filas). */
+  panelActualizar_ = {panelCerrar_.x - 40.0f, py + 20.0f, 32.0f, 32.0f};
+  const bool ha = panelActualizar_.inside(mx_, my_);
+  std::string rotuloActualizar;
+  if (!st_.actualizacion.empty()) {
+    mask9(panelActualizar_, 0, 16.0f, 0.98f, 0.76f, 0.18f, ha ? 1.0f : 0.92f);
+    icono({panelActualizar_.x + 7.0f, panelActualizar_.y + 7.0f, 18.0f, 18.0f}, icoFlecha_, 0.16f, 0.12f, 0.04f, 1.0f);
+    rotuloActualizar = "Hay una actualización pendiente: OdysseyVK " + st_.actualizacion + ". Pica para instalarla.";
+  } else {
+    if (ha) mask9(panelActualizar_, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    if (st_.alDia) {
+      icono({panelActualizar_.x + 7.0f, panelActualizar_.y + 7.0f, 18.0f, 18.0f}, icoFlecha_, 0.36f, 0.86f, 0.46f, ha ? 1.0f : 0.9f);
+      rotuloActualizar = "OdysseyVK está al día. Pica para volver a comprobarlo.";
+    } else {
+      icono({panelActualizar_.x + 7.0f, panelActualizar_.y + 7.0f, 18.0f, 18.0f}, icoFlecha_, ink[0], ink[1], ink[2], ha ? 0.8f : 0.4f);
+      rotuloActualizar = "Aún no se ha buscado ninguna actualización. Pica para buscarla.";
+    }
+  }
   solid(px + 20.0f, py + 68.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
 
   /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */
@@ -1043,6 +1104,13 @@ void Hud::dibujaPanel(int vw, int vh) {
   if (!st_.version.empty())
     text(st_.version, px + pw - 28.0f - textWidth(st_.version, 12.0f), py + ph - 30.0f, 12.0f, dim[0], dim[1], dim[2],
          0.75f);
+  /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
+  if (ha && !rotuloActualizar.empty()) {
+    const float w = textWidth(rotuloActualizar, 12.5f) + 24.0f;
+    const Rect r{panelCerrar_.x + panelCerrar_.w - w, panelActualizar_.y + panelActualizar_.h + 8.0f, w, 30.0f};
+    mask9(r, 0, 10.0f, 0.10f, 0.10f, 0.13f, 0.97f);
+    text(rotuloActualizar, r.x + 12.0f, r.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
+  }
 }
 
 bool Hud::panelBounds(float *x, float *y, float *w, float *h) const {
@@ -1062,6 +1130,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   const float mx = mxa / sc_, my = mya / sc_;
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
+  if (panelActualizar_.inside(mx, my)) return HitPanelActualizar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)
     if (panelPestanas_[i].inside(mx, my)) {
       if (sub) *sub = (int)i;
@@ -1163,6 +1232,9 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (st_.panel) return hitDetalle(mxa, mya, nullptr, nullptr, nullptr);
   if (st_.ask) {
     if (askClose_.inside(mx, my)) return HitAskClose;
+    if (askActualizar_.inside(mx, my)) return HitAskActualizar;
+    if (askLuego_.inside(mx, my)) return HitAskLuego;
+    if (askNoAvisar_.inside(mx, my)) return HitAskNoAvisar;
     if (askAyuda_.inside(mx, my)) return HitAskAyuda;
     if (askConv_.inside(mx, my)) return HitAskConv;
     if (askSbs_.inside(mx, my)) return HitAskSbs;

@@ -2145,6 +2145,121 @@ static int cmdPlanos(int argc, char **argv) {
 /* Leida en glutil.h; se vuelve a declarar aqui para no arrastrar las cabeceras de OpenGL a este
    archivo. Sin libpng devuelve false y ya esta. */
 bool pngLoadRGBA(const std::string &path, int &w, int &h, std::vector<uint8_t> &rgba);
+/* ---- `odysseyvk actualizar` (v0.95) ------------------------------------------------------------
+   Baja la rama main del repositorio a ~/.local/share/odysseyvk/fuente (git), la compila e instala
+   con el mismo install.sh de siempre (la parte de root va por pkexec, que pide la clave en una
+   ventana), deja apuntada la sesion 3D que haya para que el servicio nuevo la reabra, y reinicia el
+   servicio. Corre en su propia unidad de systemd (lo lanza el panel o la tarjeta con systemd-run), asi
+   que el reinicio no se lo lleva. Todo lo que dice queda en ~/.local/state/odysseyvk/actualizar.log. */
+static void avisoEscritorio(const std::string &titulo, const std::string &cuerpo) {
+  const pid_t p = ::fork();
+  if (p == 0) {
+    ::execlp("notify-send", "notify-send", "-a", "OdysseyVK", "-i", "odysseyvk", titulo.c_str(), cuerpo.c_str(), (char *)nullptr);
+    ::_exit(127);
+  }
+  if (p > 0) {
+    int st = 0;
+    ::waitpid(p, &st, 0);
+  }
+}
+static std::string comilla(const std::string &s) {
+  std::string o = "'";
+  for (char c : s) o += (c == '\'') ? std::string("'\\''") : std::string(1, c);
+  return o + "'";
+}
+static int cmdActualizar(int argc, char **argv) {
+  bool soloBajar = false;   /* --solo-bajar (taller): bajar y compilar, sin instalar ni reiniciar nada */
+  for (int i = 0; i < argc; i++)
+    if (std::string(argv[i]) == "--solo-bajar") soloBajar = true;
+  const std::string registro = rutaEstadoOdyssey("actualizar.log");
+  std::printf("lo que pase queda en %s\n", registro.c_str());
+  std::fflush(stdout);
+  if (!std::freopen(registro.c_str(), "w", stdout)) return 1;
+  ::dup2(1, 2);
+  setvbuf(stdout, nullptr, _IOLBF, 0);
+  const char *home = std::getenv("HOME");
+  const std::string fuente = std::string(home ? home : "/tmp") + "/.local/share/odysseyvk/fuente";
+  std::printf("[actualizar] OdysseyVK %s · fuente en %s\n", ODYSSEYVK_VERSION, fuente.c_str());
+  avisoEscritorio("Actualizando OdysseyVK", "Se baja de GitHub y se compila; luego se pide tu clave para instalar.");
+  std::string orden;
+  if (fileExists(fuente + "/.git/HEAD"))
+    orden = "git -C " + comilla(fuente) + " fetch -q origin main && git -C " + comilla(fuente) + " reset -q --hard origin/main";
+  else
+    orden = "git clone -q --depth 1 " + std::string(prefs::kRepoGitHub) + " " + comilla(fuente);
+  std::printf("[actualizar] %s\n", orden.c_str());
+  if (std::system(orden.c_str()) != 0) {
+    avisoEscritorio("OdysseyVK: la actualización falló", "No se pudo bajar el repositorio (¿hay conexión y git?). Detalle en " + registro);
+    return 1;
+  }
+  std::string nueva;
+  readSmallFile(fuente + "/VERSION", nueva);
+  nueva = strTrim(nueva);
+  std::printf("[actualizar] version bajada: %s\n", nueva.c_str());
+  /* la instalacion: compila con todos los nucleos; la parte de root (binario, regla udev, datos) la
+     pide pkexec en una ventana del escritorio */
+  orden = "cd " + comilla(fuente) + " && ODYSSEYVK_SUDO=pkexec bash ./install.sh";
+  if (soloBajar) {
+    orden = "cmake -S " + comilla(fuente) + " -B " + comilla(fuente + "/build") + " -DCMAKE_BUILD_TYPE=Release > /dev/null && cmake --build " +
+            comilla(fuente + "/build") + " -j";
+    std::printf("[actualizar] (solo bajar y compilar) %s\n", orden.c_str());
+    const int rc = std::system(orden.c_str());
+    std::printf("[actualizar] hecho (%d)\n", rc);
+    return rc == 0 ? 0 : 1;
+  }
+  std::printf("[actualizar] %s\n", orden.c_str());
+  if (std::system(orden.c_str()) != 0) {
+    avisoEscritorio("OdysseyVK: la actualización falló", "No se pudo compilar o instalar. Detalle en " + registro);
+    return 1;
+  }
+  /* la sesion 3D que haya ahora mismo, para que el servicio nuevo la reabra */
+  {
+    const std::map<std::string, std::string> hub = ajuste::leerEstadoHub();
+    const auto ses = hub.find("sesion"), ven = hub.find("ventana"), md = hub.find("sesion_modo");
+    if (ses != hub.end() && ses->second == "video" && ven != hub.end() && md != hub.end() && md->second != "-") {
+      if (FILE *f = std::fopen(rutaEstadoOdyssey("reabrir").c_str(), "we")) {
+        std::fprintf(f, "%s\n%s\n%ld\n", ven->second.c_str(), md->second.c_str(), (long)std::time(nullptr));
+        std::fclose(f);
+        std::printf("[actualizar] se reabrira %s en %s\n", ven->second.c_str(), md->second.c_str());
+      }
+    }
+  }
+  std::printf("[actualizar] reiniciando el servicio\n");
+  const int rc = std::system("systemctl --user daemon-reload; systemctl --user restart odysseyvk-serve.service");
+  avisoEscritorio("OdysseyVK " + nueva + " instalado", rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no se pudo reiniciar: systemctl --user restart odysseyvk-serve");
+  std::printf("[actualizar] hecho (%d)\n", rc);
+  return rc == 0 ? 0 : 1;
+}
+
+/* ---- `odysseyvk desinstalar` (v0.95) ----------------------------------------------------------
+   Quita el servicio, el lanzador del menu y el icono, la red de profundidad y la fuente bajada, y por
+   pkexec el binario, la regla udev y los datos del sistema. La configuracion y la calibracion de
+   ~/.config/odysseyvk se quedan, por si vuelve a instalarse. */
+static int cmdDesinstalar(int argc, char **argv) {
+  (void)argc, (void)argv;
+  const char *home = std::getenv("HOME");
+  const std::string casa = home ? home : "/tmp";
+  char propio[512] = {0};
+  const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
+  std::string bin = n > 0 ? std::string(propio, (size_t)n) : std::string("/usr/local/bin/odysseyvk");
+  const std::string bindir = bin.substr(0, bin.rfind('/'));
+  const std::string prefijo = bindir.substr(0, bindir.rfind('/'));
+  avisoEscritorio("Desinstalando OdysseyVK", "Se pide tu clave para quitar el programa del sistema.");
+  std::system("systemctl --user disable --now odysseyvk-serve.service 2>/dev/null");
+  const std::string conf = std::string(std::getenv("XDG_CONFIG_HOME") ? std::getenv("XDG_CONFIG_HOME") : (casa + "/.config"));
+  const std::string datos = std::string(std::getenv("XDG_DATA_HOME") ? std::getenv("XDG_DATA_HOME") : (casa + "/.local/share"));
+  std::system(("rm -f " + comilla(conf + "/systemd/user/odysseyvk-serve.service") + " " +
+               comilla(datos + "/applications/odysseyvk.desktop") + " " + comilla(datos + "/applications/odysseyvk-play.desktop") +
+               "; rm -f " + comilla(datos) + "/icons/hicolor/*/apps/odysseyvk.png; systemctl --user daemon-reload").c_str());
+  std::system(("rm -rf " + comilla(datos + "/odysseyvk/modelos") + " " + comilla(datos + "/odysseyvk/fuente")).c_str());
+  const std::string raiz = "pkexec sh -c " + comilla("rm -f " + comilla(bindir + "/odysseyvk") + " " + comilla(bindir + "/odysseyvk-ajustes") +
+                                                      " /etc/udev/rules.d/70-odysseyvk.rules; rm -rf " + comilla(prefijo + "/share/odysseyvk"));
+  const int rc = std::system(raiz.c_str());
+  std::system(("rm -rf " + comilla(std::string(std::getenv("XDG_STATE_HOME") ? std::getenv("XDG_STATE_HOME") : (casa + "/.local/state")) + "/odysseyvk")).c_str());
+  avisoEscritorio(rc == 0 ? "OdysseyVK desinstalado" : "OdysseyVK: quedó el programa del sistema",
+                  rc == 0 ? "Tu configuración sigue en " + conf + "/odysseyvk." : "No se dio la clave: queda " + bin + " y la regla udev.");
+  return rc == 0 ? 0 : 1;
+}
+
 static int cmdMapa(int argc, char **argv) {
   std::string modelo;
   int gpu = 0;
@@ -2947,8 +3062,18 @@ static int cmdAjustes(int argc, char **argv) {
     while (ov.takeGolpe(g)) {
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelActualizar) {
+        /* el boton junto al aspa (v0.95): con una version nueva, se instala; si no, se vuelve a mirar */
+        std::string e;
+        if (!st.actualizacion.empty()) {
+          st.pie = prefs::lanzarActualizacion(&e) ? "actualizando a OdysseyVK " + st.actualizacion + ": se compila, se pide tu clave y el servicio se reinicia" : e;
+          if (e.empty()) cerrarEn = reloj() + 2.5;
+        } else {
+          st.pie = prefs::comprobarActualizacion(&e) ? "mirando la versión de GitHub…" : e;
+        }
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
-        st.pestana = (g.sub >= 0 && g.sub <= 2) ? g.sub : 0;
+        st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
         st.corrida = 0.0f;
         st.pie.clear();
         rellenar();
@@ -2971,6 +3096,14 @@ static int cmdAjustes(int argc, char **argv) {
     /* la pestana de rendimiento se refresca sola, una vez por segundo */
     if (st.pestana == 2 && reloj() - miradaRend >= 1.0) {
       miradaRend = reloj();
+      rellenar();
+      repintar = true;
+    }
+    /* la comprobacion de la version (v0.95): al acabar se repinta con lo que haya dicho GitHub */
+    if (prefs::comprobacionEnMarcha() && prefs::vigilarComprobacion()) {
+      const prefs::Actualizacion a = prefs::estadoActualizacion();
+      st.pie = a.remota.empty() ? "no se pudo mirar GitHub (¿hay conexión?)"
+                                : (a.pendiente ? "hay una versión nueva: OdysseyVK " + a.remota : "estás al día (OdysseyVK " + a.remota + ")");
       rellenar();
       repintar = true;
     }
@@ -3075,12 +3208,19 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;
-    hud.state().pestana = std::max(0, std::min(2, std::atoi(pn)));
+    hud.state().pestana = std::max(0, std::min(3, std::atoi(pn)));
     std::vector<std::string> ids;
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
     hud.state().pie = "se aplica desde el siguiente vídeo";
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
+  }
+  /* ODYSSEYVK_HUD_ACTUALIZACION=0.99 (taller, v0.95): la tarjeta de la orilla avisando de esa version */
+  if (const char *av = std::getenv("ODYSSEYVK_HUD_ACTUALIZACION")) {
+    hud.state().ask = true;
+    hud.state().panel = false;
+    hud.state().askActualizacion = av;
+    hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
   }
   /* ODYSSEYVK_HUD_RATON=x,y deja el puntero quieto en ese punto: se ve el realce de lo que tenga debajo */
   if (const char *raton = std::getenv("ODYSSEYVK_HUD_RATON")) {
@@ -3386,6 +3526,8 @@ struct ServeCfg {
   std::string rastreoFino;  /* no = el rastreo de antes de la v0.74 (los ojos de YuNet restados) */
   std::string barra2d;      /* no = en el video dividido no tejer en 2D las filas de la barra del reproductor (v0.81);
                                entera = tejerlas tal cual vienen, sin la limpieza de la v0.90 */
+  std::string actualizaciones;  /* no = no avisar con la tarjeta cuando hay una version nueva en GitHub (v0.95) */
+  std::string actualizarAuto;   /* si = con una version nueva, `odysseyvk actualizar` sin preguntar (v0.95) */
   std::string atajosGlobales; /* no = no registrar los atajos del hub como globales del escritorio (v0.75) */
   std::string escala3d;       /* 1 = pasar el panel a escala 1 al entrar en 3D, como antes de la v0.76 */
   std::string vrrEn3d;      /* no = apagar la sincronizacion adaptativa durante el 3D (v0.72); si no, se deja */
@@ -3523,6 +3665,8 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "hdr_en_3d") cfg.hdrEn3d = v;
     else if (k == "rastreo_fino") cfg.rastreoFino = v;
     else if (k == "barra_2d") cfg.barra2d = v;
+    else if (k == "actualizaciones") cfg.actualizaciones = v;
+    else if (k == "actualizar_auto") cfg.actualizarAuto = v;
     else if (k == "atajos_globales") cfg.atajosGlobales = v;
     else if (k == "escala_3d") cfg.escala3d = v;
     else if (k == "vrr_en_3d") cfg.vrrEn3d = v;
@@ -3642,6 +3786,7 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
   return false;
 }
 
+static std::string g_modoVisor;   /* el modo del ultimo visor lanzado (sbs, conv...), para reabrirlo tras actualizar (v0.95) */
 static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const std::string &modoPedido, int red = 0,
                         int cada = 3, const std::string &modelo = std::string(),
                         const std::string &pantalla = std::string(),
@@ -3653,6 +3798,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
      visor, para que el modo que se ve marcado en la ventana sea el que sale en pantalla. Solo se
      refresca este valor; los demas siguen con los de arranque (y con las banderas de la linea de
      orden), que es lo que dice el README: esos numeros piden reiniciar el servicio. */
+  g_modoVisor = modoPedido;
   if (pila) {
     const std::map<std::string, std::string> conf = ajuste::leerServeConf();
     if (const auto it = conf.find("legado"); it != conf.end()) {
@@ -4454,6 +4600,37 @@ static int cmdServe(int argc, char **argv) {
   double avisoT = 0.0;
   std::string tarjetaUuid, tarjetaApp;         /* ventana a la que le pusimos la tarjeta */
   double tarjetaT = 0.0;
+  /* la actualizacion (v0.95): se mira la version de GitHub medio minuto despues de arrancar y luego
+     cada seis horas; con una mas nueva, la tarjeta de la orilla lo avisa (una vez por version) */
+  double proximaComprobacion = 0.0;
+  bool tarjetaActualizacion = false;
+  double tarjetaActT = 0.0;
+  std::string versionAvisada;
+  readSmallFile(rutaEstadoOdyssey("actualizacion-avisada"), versionAvisada);
+  versionAvisada = strTrim(versionAvisada);
+  /* el visor que se reabre tras una actualizacion: `odysseyvk actualizar` deja aqui la ventana y el
+     modo de la sesion que corto al reiniciar el servicio; vale tres minutos */
+  std::string reabrirUuid, reabrirModo;
+  {
+    std::string txt;
+    if (readSmallFile(rutaEstadoOdyssey("reabrir"), txt)) {
+      ::unlink(rutaEstadoOdyssey("reabrir").c_str());
+      std::vector<std::string> l;
+      size_t ini = 0;
+      while (ini <= txt.size()) {
+        size_t fin = txt.find('\n', ini);
+        if (fin == std::string::npos) fin = txt.size();
+        l.push_back(strTrim(txt.substr(ini, fin - ini)));
+        ini = fin + 1;
+      }
+      if (l.size() >= 3 && std::time(nullptr) - std::atol(l[2].c_str()) < 180 && !l[0].empty() && l[0] != "-") {
+        reabrirUuid = l[0];
+        reabrirModo = l[1];
+        std::printf("[serve] tras la actualizacion: si %s sigue a pantalla completa se reabre en %s\n", reabrirUuid.c_str(),
+                    reabrirModo.c_str());
+      }
+    }
+  }
   pid_t hijo = -1;
   std::string hijoUuid;
   double intentoAparecer = 0.0;   /* cuando intentamos por ultima vez devolver la ventana minimizada */
@@ -5318,6 +5495,65 @@ static int cmdServe(int argc, char **argv) {
       }
     }
 
+    /* La actualizacion (v0.95): mirar GitHub de vez en cuando y, con una version nueva, la tarjeta */
+    if (proximaComprobacion == 0.0) proximaComprobacion = now + 30.0;
+    if (cfg.actualizaciones != "no" && now >= proximaComprobacion && !prefs::comprobacionEnMarcha()) {
+      proximaComprobacion = now + 6.0 * 3600.0;
+      prefs::comprobarActualizacion(nullptr);
+    }
+    if (prefs::comprobacionEnMarcha() && prefs::vigilarComprobacion()) {
+      const prefs::Actualizacion a = prefs::estadoActualizacion();
+      std::printf("[serve] version en GitHub: %s (instalada %s)%s\n", a.remota.empty() ? "no se pudo mirar" : a.remota.c_str(),
+                  ODYSSEYVK_VERSION, a.pendiente ? " · hay una actualizacion" : "");
+      std::fflush(stdout);
+      const bool sola = a.pendiente && !dry && (cfg.actualizarAuto == "si" || cfg.actualizarAuto == "1") && versionAvisada != a.remota;
+      if (sola) {
+        /* actualizar_auto: sin tarjeta, se instala ya (la clave la pide pkexec en una ventana) */
+        versionAvisada = a.remota;
+        if (FILE *f = std::fopen(rutaEstadoOdyssey("actualizacion-avisada").c_str(), "we")) {
+          std::fprintf(f, "%s\n", a.remota.c_str());
+          std::fclose(f);
+        }
+        std::string e;
+        std::printf("[serve] actualizacion automatica a %s: %s\n", a.remota.c_str(),
+                    prefs::lanzarActualizacion(&e) ? "arrancada aparte" : e.c_str());
+        std::fflush(stdout);
+      } else if (a.pendiente && !dry && cfg.actualizaciones != "no" && hayTarjeta && !ov->askVisible() && versionAvisada != a.remota) {
+        versionAvisada = a.remota;
+        if (FILE *f = std::fopen(rutaEstadoOdyssey("actualizacion-avisada").c_str(), "we")) {
+          std::fprintf(f, "%s\n", a.remota.c_str());
+          std::fclose(f);
+        }
+        ov->hud().state().askActualizacion = a.remota;
+        ov->hud().state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+        ov->showAsk(std::string(), std::string());
+        tarjetaActualizacion = true;
+        tarjetaActT = now;
+        std::printf("[serve] tarjeta de actualizacion puesta (%s)\n", a.remota.c_str());
+        std::fflush(stdout);
+      }
+    }
+    if (tarjetaActualizacion) {
+      std::string acto = ov->takeAction();
+      if (acto.empty() && now - tarjetaActT > 180.0) acto = "luego";
+      if (!acto.empty()) {
+        ov->hideAsk();
+        ov->hud().state().askActualizacion.clear();
+        tarjetaActualizacion = false;
+        std::string e;
+        if (acto == "actualizar") {
+          std::printf("[serve] tarjeta -> actualizar: %s\n", prefs::lanzarActualizacion(&e) ? "arrancada aparte" : e.c_str());
+        } else if (acto == "noavisar") {
+          cfg.actualizaciones = "no";
+          if (!ajuste::fijarEnServeConf("actualizaciones", "no", &e)) std::fprintf(stderr, "[serve] %s\n", e.c_str());
+          std::printf("[serve] tarjeta -> no avisar mas de actualizaciones (el boton junto al aspa las sigue marcando)\n");
+        } else {
+          std::printf("[serve] tarjeta de actualizacion cerrada (%s)\n", acto.c_str());
+        }
+        std::fflush(stdout);
+      }
+    }
+
     /* Los ajustes del panel (`odysseyvk ajustes`) se escriben en serve.conf. Antes hacia falta
        reiniciar el servicio para que valieran; ahora, cuando el fichero cambia, se releen los que el
        panel toca. Los demas (camara, pantalla, numeros de la trama) siguen siendo de arranque. */
@@ -5342,7 +5578,10 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
                               nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
                               nuevo.divididoAuto != cfg.divididoAuto ||
-                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo;
+                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo ||
+                              nuevo.actualizaciones != cfg.actualizaciones || nuevo.actualizarAuto != cfg.actualizarAuto;
+          cfg.actualizaciones = nuevo.actualizaciones;
+          cfg.actualizarAuto = nuevo.actualizarAuto;
           if (nuevo.modelo != cfg.modelo) {
             cfg.modelo = nuevo.modelo;
             elegirRedes();
@@ -5414,7 +5653,7 @@ static int cmdServe(int argc, char **argv) {
       tarjetaUuid.clear();
     }
 
-    if (hayTarjeta) {
+    if (hayTarjeta && !tarjetaActualizacion) {
       if (std::string acto = ov->takeAction(); !acto.empty()) {
         ov->hideAsk();
         if (acto == "close") {
@@ -5503,8 +5742,21 @@ static int cmdServe(int argc, char **argv) {
           now >= enfriadoHasta) {
         preguntadas.insert(w.uuid);
         const std::string app = strLower(w.appId);
+        if (tarjetaActualizacion) {   /* la pregunta del video manda sobre el aviso de la version */
+          ov->hideAsk();
+          ov->hud().state().askActualizacion.clear();
+          tarjetaActualizacion = false;
+        }
         auto fija = cfg.porApp.find(app);
-        if (fija != cfg.porApp.end() && fija->second == "flat") {
+        if (!reabrirUuid.empty() && w.uuid == reabrirUuid && !dry) {
+          /* la sesion que corto la actualizacion: se reabre tal cual estaba, sin preguntar */
+          hijo = spawnViewer(exe, w.uuid, reabrirModo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
+          hijoDesde = now;
+          hijoUuid = w.uuid;
+          std::printf("[serve] reabierto en %s tras la actualizacion (%s)\n", reabrirModo.c_str(), app.c_str());
+          std::fflush(stdout);
+          reabrirUuid.clear();
+        } else if (fija != cfg.porApp.end() && fija->second == "flat") {
           std::printf("[serve] %s esta marcada como 2D plano: no se hace nada\n", app.c_str());
           std::fflush(stdout);
         } else if (fija != cfg.porApp.end()) {
@@ -5589,6 +5841,7 @@ static int cmdServe(int argc, char **argv) {
       txt += "servicio = corriendo\n";
       txt += std::string("sesion = ") + (hijo > 0 ? (forzado ? "escritorio" : "video") : "ninguna") + "\n";
       txt += "ventana = " + (hijoUuid.empty() ? std::string("-") : hijoUuid) + "\n";
+      txt += "sesion_modo = " + (hijo > 0 && !g_modoVisor.empty() ? g_modoVisor : std::string("-")) + "\n";
       txt += "pantalla = " + (cfg.pantalla.empty() ? std::string("(la del panel)") : cfg.pantalla) + "\n";
       txt += "modo = " + cfg.modo + "\n";
       txt += "red = " + std::to_string(redElegida) + "\n";   /* 1 o 2, las mismas palabras que la pastilla y que el visor */
@@ -5754,6 +6007,8 @@ int main(int argc, char **argv) {
     return cmdPlanos(argc - 2, argv + 2);
   if (cmd == "mapa")
     return cmdMapa(argc - 2, argv + 2);
+  if (cmd == "actualizar") return cmdActualizar(argc - 2, argv + 2);
+  if (cmd == "desinstalar") return cmdDesinstalar(argc - 2, argv + 2);
   if (cmd == "attrs") {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;

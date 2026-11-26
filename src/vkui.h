@@ -57,6 +57,9 @@ public:
     int depth = 50;    /* "3D Depth" oficial: 0..100 · 50 = sin cambio */
     int popout = 0;    /* "3D Popout" oficial: -50..+50 */
     bool ask = false;  /* aviso de conversión (abajo a la derecha) */
+    /* con esto puesto, la tarjeta de la orilla no pregunta por el video: avisa de que hay esta
+       version nueva en GitHub, con Actualizar, Luego y «no avisar» (v0.95) */
+    std::string askActualizacion;
     bool remember = false;
     /* la misma casilla, pero dentro del video (en la pastilla): `recordarVisible` la ensena y
        `recordar` dice si esta aplicacion pasa directa al 3D sin preguntar. La pone el visor cuando
@@ -83,6 +86,11 @@ public:
     float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
     std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
     std::string version;             /* "OdysseyVK 0.84", abajo a la derecha */
+    /* la actualizacion (v0.95): `actualizacion` = version nueva que hay en GitHub (vacia = ninguna);
+       `alDia` = ya se comprobo y es la ultima. Pintan el boton junto al aspa: amarillo con la
+       flecha si hay una pendiente, flecha verde si esta al dia, gris si no se ha mirado. */
+    std::string actualizacion;
+    bool alDia = false;
     int hud = 0;       /* 3 = lente y scaler listos · 0 = ninguno */
     int red = 2;       /* que red de profundidad esta puesta: 1 = la de Samsung, 2 = la nativa */
     bool ratonLibre = false;  /* el raton atraviesa la ventana fuera de la pastilla */
@@ -115,6 +123,9 @@ public:
     HitAskDont,
     HitAskClose,
     HitAskAyuda,       /* el "?" de la tarjeta: no manda nada, solo cambia el texto al pasar por encima */
+    HitAskActualizar,  /* la tarjeta de la actualizacion (v0.95): instalar, luego, no avisar mas */
+    HitAskLuego,
+    HitAskNoAvisar,
     HitRecordar,       /* la casilla de «no volver a preguntar» de la pastilla */
     HitModoNormal,     /* los dos botones de icono de la pastilla: video normal ... */
     HitModoDividido,   /* ... video dividido ... */
@@ -122,6 +133,7 @@ public:
     HitEngranaje,      /* el engranaje de la pastilla: abre el panel de ajustes */
     HitPanel,          /* dentro del panel de ajustes, sobre nada que se pique */
     HitPanelCerrar,
+    HitPanelActualizar,   /* el boton de la actualizacion, junto al aspa (v0.95) */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
@@ -260,7 +272,7 @@ private:
   Rect white_, pill_, card_;
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
-  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_;
+  Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -292,6 +304,7 @@ private:
   Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
+  Rect askActualizar_, askLuego_, askNoAvisar_;
   Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_, btnEngranaje_;
   /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
   struct ZonaItem {
@@ -299,7 +312,7 @@ private:
     std::vector<Rect> subs;   /* las opciones de un segmentado, o el aspa de una fila */
     Rect pista;               /* la pista de un deslizador */
   };
-  Rect panelCaja_, panelCerrar_, panelCuerpo_;
+  Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_;
   std::vector<Rect> panelPestanas_;
   std::vector<ZonaItem> zonas_;
   float contenidoAlto_ = 0.0f;
