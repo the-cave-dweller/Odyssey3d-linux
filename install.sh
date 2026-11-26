@@ -86,16 +86,17 @@ if [ -f "$unit_dir/odyssey3d-serve.service" ]; then
 fi
 rm -f "$datos/applications/odyssey3d.desktop"
 if [ -e "$prefix/bin/odyssey3d" ] || [ -e "$prefix/bin/odyssey3d-ajustes" ]; then
-  sudo mkdir -p "$prefix/bin/viejo-odyssey3d"
+  # (v1.13) por $su como el resto: con `odysseyvk actualizar` no hay terminal y `sudo` no puede pedir la clave
+  $su mkdir -p "$prefix/bin/viejo-odyssey3d"
   for b in odyssey3d odyssey3d-ajustes; do
     if [ -e "$prefix/bin/$b" ]; then
-      sudo mv "$prefix/bin/$b" "$prefix/bin/viejo-odyssey3d/$b"
+      $su mv "$prefix/bin/$b" "$prefix/bin/viejo-odyssey3d/$b"
     fi
   done
   echo "los binarios del nombre viejo se guardaron en $prefix/bin/viejo-odyssey3d"
 fi
 if [ -f /etc/udev/rules.d/70-odyssey-3d.rules ]; then
-  sudo rm -f /etc/udev/rules.d/70-odyssey-3d.rules
+  $su rm -f /etc/udev/rules.d/70-odyssey-3d.rules
   echo "regla udev del nombre viejo quitada (la nueva es 70-odysseyvk.rules)"
 fi
 

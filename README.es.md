@@ -87,9 +87,9 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 Cada atajo se cambia en la página principal del panel → **Atajos de teclado** (la sección se pliega con la flechita de su
 cabecera, como *Aplicaciones que no preguntan*; las dos empiezan plegadas): pícalo y pulsa la combinación nueva
 o una tecla sola (Esc cancela y la flecha circular vuelve a la de fábrica). Una tecla sola, o con
-Mayús nada más, vale desde la 1.12 (hasta la 1.11 hacía falta Ctrl, Alt o Meta): mientras haya 3D,
+Mayús nada más, vale desde la 1.13 (hasta la 1.12 hacía falta Ctrl, Alt o Meta): mientras haya 3D,
 esa tecla ya no llega al vídeo ni al juego, y el panel lo avisa al ponerla. Vale cualquier letra,
-número o signo, F1–F24, las flechas y las de moverse por la página, Espacio y, desde la 1.12, también
+número o signo, F1–F24, las flechas y las de moverse por la página, Espacio y, desde la 1.13, también
 Pausa/Inter, Impr Pant, Bloq Despl y Menú. Mientras el
 panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
 teclas; Esc lo cierra.
@@ -100,7 +100,7 @@ El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyV
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
 La cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
 abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); el
-interruptor **Neural | Rendimiento** vive en la pastilla (en las primeras compilaciones de la 1.12
+interruptor **Neural | Rendimiento** vive en la pastilla (en la 1.12
 también estaba aquí). En la segunda, centradas: **Juegos** y **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
 variable durante el 3D, el tope de arrastre y la prioridad del visor en la tarjeta; *Seguimiento de la
@@ -116,7 +116,7 @@ sin reiniciarse.
 
 ### Idioma
 
-**Ajustes → Programa → Idioma** (Otros en las primeras compilaciones de la 1.12, la pestaña Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
+**Ajustes → Programa → Idioma** (Otros en la 1.12, la pestaña Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
 rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
 (`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel.)
 

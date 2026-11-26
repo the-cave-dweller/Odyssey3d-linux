@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Versión 1.13: lo que llegó después de la primera 1.12 (v1.13)
+
+- Rodolfo: «Check the update system, it works?» y, con lo que salió, «Yes, bump to 1.13». El
+  actualizador solo compara el número de `VERSION` (`versionMasNueva`), y desde la primera subida de la
+  1.12 (`fec602d`, 26-nov 10:05) se subieron quince cambios más con el mismo número: a quien tenía esa
+  1.12 el panel le decía «estás al día». Con 1.13 se los ofrece.
+- **Lo que trae** (cada cosa en su entrada, abajo o dentro de la 1.12): el veto de las cuerdas con
+  memoria; salir de pantalla completa sin el minuto de espera y sin la vigilia que no dejaba volver a
+  entrar; la línea `[arranque]` y el arranque del 3D en paralelo; la pastilla con el botón de
+  encendido y Neural | Rendimiento en marcha (y fuera de la cabecera del panel); los ajustes más
+  compactos (Programa en una fila); las imágenes del README rehechas; la vista de depuración de la
+  profundidad (Ctrl+Mayús+9); atajos de una tecla sola, la PB (Pausa/Inter), Impr Pant, Bloq Despl,
+  Menú y F13–F24; «El juego tapa el 3D» con cuenta atrás de 4 s.
+- **El actualizador, revisado**: la mirada a GitHub funciona (la del servicio de Rodolfo, a las 13:51,
+  leyó 1.12 de la API; la API y raw contestan en menos de 0,3 s) y una copia limpia de `main` compila
+  los dos binarios (10 s). Sin probar todavía de punta a punta: picar Actualizar de verdad, que pide la
+  clave por pkexec desde la unidad transitoria, instala y reinicia el servicio.
+- **`install.sh`**: la limpieza de lo del nombre viejo (`odyssey3d`) pedía root con `sudo` suelto; con
+  `odysseyvk actualizar` no hay terminal donde pedir la clave y la actualización acababa «fallida»
+  aunque ya estuviera instalada. Ahora va por `$su` como el resto (pkexec en el actualizador). En este
+  equipo no hay nada del nombre viejo, así que aquí no se notaba.
+- README y guía: «desde la 1.12» pasa a «desde la 1.13» en lo que llegó después (la tecla sola, la PB).
+
 ## Versión estable 1.12: lo de la rama `experimental` pasa a la normal (v1.12)
 
 - Rodolfo: «déjalo en 10, ya quiero subir un estable». Todo lo de abajo hasta la 1.11 entra en la
@@ -103,7 +126,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
-## «El juego tapa el 3D» se cierra sola a los 4 s (v1.12)
+## «El juego tapa el 3D» se cierra sola a los 4 s (v1.13)
 
 - Rodolfo: «autoclose this game covers the 3d warning, 4 second countdown». La tarjeta salía a la
   segunda vez que un juego a pantalla completa exclusiva mandaba el visor detrás y se quedaba hasta
@@ -118,7 +141,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   en inglés y en español, con 4 y con 1. La cuenta en marcha con un juego de verdad, sin probar: hace
   falta un juego a pantalla completa exclusiva que tape el visor dos veces.
 
-## Atajos de una tecla sola (v1.12)
+## Atajos de una tecla sola (v1.13)
 
 - Rodolfo: «allow one key being assigned too, on the keyboard shortcuts».
 - **Panel** (`src/preferencias.cpp`): al esperar la combinación nueva, una tecla sola (o con Mayús nada
@@ -146,7 +169,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Pause`: `tecla:pause` pone y quita la vista de profundidad y el panel enseña «Pause»; en KDE la
   Pausa no la tenía ningún otro atajo.
 
-## Vista de depuración de la profundidad: Ctrl+Mayús+9 (v1.12)
+## Vista de depuración de la profundidad: Ctrl+Mayús+9 (v1.13)
 
 - Rodolfo: «is there a chance to create a depth mode, for debugging, that shows both the depth
   elements and marks the saliency ones with other color».
@@ -177,7 +200,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   nave y el plano de la pantalla (0,92 del rango) le recorre el casco. La imagen sin rótulos está en
   `docs/img/fuente/` y `tools/capturas-readme.py` le pone los de cada idioma.
 
-## Los ajustes, más compactos (v1.12)
+## Los ajustes, más compactos (v1.13)
 
 - Rodolfo: «en settings reacomoda las opciones que quedan para ser compactas y útiles»; «los juegos
   están bien así» (Juegos no se toca).
@@ -202,7 +225,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   vez, `modelo` apunta a un archivo vacío del HOME aparte para que no salga el aviso de la red; los
   atajos con su cabecera a la vista. Fuera `language.png`, que el README ya no usaba.
 
-## El arranque del 3D, en paralelo (v1.12)
+## El arranque del 3D, en paralelo (v1.13)
 
 - Rodolfo: «acelera el arranque». MEDIDO en su panel con la línea `[arranque]` (cinco arranques, ms de
   cada paso, uno detrás de otro): hasta el visor 52–57 · panel 80–98 · lente 215 · scaler 167–186 ·
@@ -226,7 +249,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   (~0,7–1 s): de ~2,2 s a algo más de 1 s. **No probado en el panel** (la captura de KWin no existe en el
   compositor de prueba).
 
-## La pastilla: botón de encendido y Neural | Rendimiento en marcha (v1.12)
+## La pastilla: botón de encendido y Neural | Rendimiento en marcha (v1.13)
 
 - Rodolfo: «en el hub, en vez de on y off, mueve el botón pill de Neural y performance que está en las
   settings, quiero que esté ahí y a la izquierda haya un botón redondo de apagado, quiero que se pueda

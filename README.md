@@ -87,9 +87,9 @@ Keys (they also work while the video or game has the keyboard):
 Every shortcut can be changed in the panel's main page → **Keyboard shortcuts** (the section folds with the arrow
 on its header, like *Apps that don't ask*; both start folded): click it and press the new
 combination or a single key (Esc cancels, the circular arrow puts the factory one back). A single
-key, or one with only Shift, works too since 1.12 (up to 1.11 it needed Ctrl, Alt or Meta): while
+key, or one with only Shift, works too since 1.13 (up to 1.12 it needed Ctrl, Alt or Meta): while
 the 3D is on, that key no longer reaches the video or the game, and the panel says so when you set
-it. Any letter, digit or sign, F1–F24, the arrows and navigation keys, Space, and since 1.12 also
+it. Any letter, digit or sign, F1–F24, the arrows and navigation keys, Space, and since 1.13 also
 Pause/Break, Print Screen, Scroll Lock and Menu. While the settings panel is open it keeps the whole keyboard, so the game underneath gets
 no keys; Esc closes it.
 
@@ -99,7 +99,7 @@ The settings panel opens from the gear on the pill, the OdysseyVK entry in the a
 taskbar icon or the system-tray icon (click: settings, middle click: games). The header has two
 rows. On the first, the OdysseyVK logo and name open the
 main page (video, screen, keyboard shortcuts, apps that don't ask); the **Neural | Performance** switch
-lives on the pill (up to the first 1.12 builds it was here too). On the second, centred: **Games** and **Settings** (the
+lives on the pill (in 1.12 it was here too). On the second, centred: **Games** and **Settings** (the
 performance figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D,
 the drag cap and the viewer's GPU priority; *Head tracking*: following your head with the camera and
 head anticipation in milliseconds; *App*: the installed version, what GitHub has and the check/update
@@ -111,7 +111,7 @@ and its menus), resizes from its bottom-right corner and reopens where and how b
 
 ### Language
 
-**Settings → App → Language** (Other in the first 1.12 builds, the Program tab up to 1.11) switches the language at once: the panel, the pill, the cards and
+**Settings → App → Language** (Other in 1.12, the Program tab up to 1.11) switches the language at once: the panel, the pill, the cards and
 the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
 (`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header.)
 
