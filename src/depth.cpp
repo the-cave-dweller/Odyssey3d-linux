@@ -736,6 +736,15 @@ float enNivel(const Piramide &p, int l, float u, float v) {
          (q[(size_t)y1 * t + x0] * (1.0f - ax) + q[(size_t)y1 * t + x1] * ax) * ay;
 }
 
+/* (v1.13) lo mismo con signo: positivo si el centro esta MAS CERCA que su entorno (el objeto), negativo
+   si esta mas lejos (lo que hay detras de el). El de arriba vale lo mismo a los dos lados de un canto. */
+float centroEntornoSigno(const Piramide &p, float u, float v) {
+  static const int pares[6][2] = {{3, 6}, {4, 6}, {4, 7}, {5, 7}, {5, 8}, {6, 8}};
+  float s = 0.0f;
+  for (const auto &cs : pares) s += enNivel(p, cs[0], u, v) - enNivel(p, cs[1], u, v);
+  return s / 6.0f;
+}
+
 float centroEntorno(const Piramide &p, float u, float v) {
   static const int pares[6][2] = {{3, 6}, {4, 6}, {4, 7}, {5, 7}, {5, 8}, {6, 8}};
   float s = 0.0f;
@@ -1216,7 +1225,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       hacerPiramide(opRG_.data(), sz_, 9, pA);
       hacerPiramide(opBY_.data(), sz_, 9, pB);
       const int paso = 8, g = (sz_ - 2) / paso + 1;
-      std::vector<float> vD, vCS, vE, vLab, vW;
+      std::vector<float> vD, vCS, vE, vLab, vW, vDelante;
       vD.reserve((size_t)g * g); vCS.reserve((size_t)g * g); vE.reserve((size_t)g * g);
       vLab.reserve((size_t)g * g); vW.reserve((size_t)g * g);
       std::vector<int> vBin, vCelda;   /* vCelda: donde cae cada punto en la rejilla de la depuracion */
@@ -1230,6 +1239,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
           const float u = ((float)x + 0.5f) / (float)sz_, v = ((float)y + 0.5f) / (float)sz_;
           vD.push_back(salida[o]);
           vCS.push_back(centroEntorno(pD, u, v));
+          if (delJuego) vDelante.push_back(centroEntornoSigno(pD, u, v));
           vE.push_back(std::fabs(guia_[o + 1] - guia_[o - 1]) + std::fabs(guia_[o + sz_] - guia_[o - sz_]));
           vLab.push_back(centroEntorno(pL, u, v) + centroEntorno(pA, u, v) + centroEntorno(pB, u, v));
           float t = 1.0f - std::sqrt(((float)x - cx) * ((float)x - cx) + ((float)y - cy) * ((float)y - cy)) / rmax;
@@ -1244,7 +1254,16 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       for (size_t i = 0; i < vD.size(); i++) {
         const float s = (0.2f * vD[i] + 0.6f * std::min(vCS[i] / nCS, 1.0f) + 0.1f * std::min(vE[i] / nE, 1.0f) +
                          0.1f * std::min(vLab[i] / nLab, 1.0f)) * vW[i];
-        const float wgt = 0.02f + s;   /* un piso: que el histograma nunca quede vacio */
+        /* (v1.13) con la profundidad del juego: el fondo fuera (el cielo y lo lejano valen 0 justo y se
+           amontonaban en una sola casilla: con su piso de 0,02 ganaban al sujeto, que con la profundidad
+           exacta se reparte en una docena), y el peso al cuadrado de la saliencia, para que mande el
+           sujeto. MEDIDO en Cyberpunk: el plano caia en el asfalto lejano (10 % del rango) con el piloto,
+           marcado de naranja por la saliencia, saliendo entero de la pantalla. */
+        /* y solo lo que esta DELANTE de su entorno: la saliencia mide el contraste de profundidad, que es
+           alto a los dos lados de un canto, y el fondo pegado al piloto (mas lejos que el) seguia tirando
+           del plano hacia atras (MEDIDO: 17 % del rango, en el asfalto detras de el) */
+        const float wgt = delJuego ? ((vD[i] < 0.02f || vDelante[i] <= 0.0f) ? 0.0f : 0.002f + s * s)
+                                   : 0.02f + s;   /* un piso: que el histograma nunca quede vacio */
         hist[vBin[i]] += wgt;
         total += wgt;
         rejilla[(size_t)vCelda[i]] = s;
@@ -1284,6 +1303,9 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
       }
     }
     float nuevo = ((float)(mejor > mediana ? mejor : mediana) + 0.5f) / 32.0f;
+    /* con la del juego, la mediana pesada por la saliencia: la profundidad del cuerpo del sujeto (el
+       pico de una sola casilla se iria a la parte del sujeto que mas ocupa en el mapa, no a su centro) */
+    if (delJuego && kSaliencia && total > 0.0f) nuevo = ((float)mediana + 0.5f) / 32.0f;
     /* 0,06 por estimacion (el focus.iir.weight del Hub es 0,02: mas lento). ODYSSEYVK_FOCO_IIR o
        `foco_iir` en serve.conf lo cambian (v0.65). */
     static const float kFocoIir = [] {

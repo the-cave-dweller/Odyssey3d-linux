@@ -3,6 +3,31 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Profundidad de DLSS: su propio plano de la pantalla, más rápida, y los modos de DLSS (v1.13)
+
+- Rodolfo, con una captura de la vista de profundidad en Cyberpunk (el piloto en naranja y el plano de la
+  pantalla en el asfalto, detrás de él): «performance is better?, also notice that you will need to retrain
+  saliencia exclusively for DLSS, maybe separately?»; y «each dlss mode has its own depth, I hope that is not
+  an issue».
+- **Rendimiento, MEDIDO** (las líneas `[fps]` del visor en su sesión): la mediana del paso de profundidad,
+  23,0 ms con la red y 15,0 ms con la del juego; la 5080 ya no corre la red, y leer y subir bajan de 4,3–4,4
+  a 3,3 ms. Lo que quedaba era mío: pasar los 2 millones de puntos a cercanía y luego achicarlos. Ahora se
+  achica primero (por áreas, en paralelo) y la escala se hace en la rejilla de 518 (es lineal: da lo mismo):
+  **6–7 ms** por mapa.
+- **El plano, aparte para la del juego** (`DepthNet::estimate`): el histograma pesado por la saliencia daba
+  a cada celda un piso de 0,02, y con la profundidad exacta el fondo (el cielo y lo lejano, 0 justo) se
+  amontonaba en una casilla y ganaba al sujeto, que se reparte en una docena: el plano caía en el asfalto
+  lejano (10 %). Con la del juego: fuera el fondo, peso = saliencia al cuadrado y la mediana pesada en vez
+  del pico (17 %: aún detrás, porque la saliencia mide el contraste de profundidad y es alta a los dos lados
+  del canto). Y solo cuenta lo que está DELANTE de su entorno (el centro-entorno con signo,
+  `centroEntornoSigno`): **64 %, el plano en el piloto** (el contorno cian en su cabeza y sus brazos), la moto
+  sale un poco y la calle, el coche y la ciudad quedan detrás. La red sigue con su regla de siempre.
+- **Los modos de DLSS**: cada uno renderiza a otro tamaño y su profundidad cambia de medidas; DLSS pide número
+  para la imagen nueva, la capa rehace la memoria compartida a su tamaño y el visor ve que el archivo cambió y
+  lo vuelve a abrir. PROBADO con el simulador pasando de 1920 × 1080 a 1280 × 720 con el visor en marcha:
+  tomó la nueva sola (un segundo con la red en medio). Sin probar: la resolución dinámica, donde el juego
+  dibuja en una parte de la imagen y la capa copia la imagen entera.
+
 ## La profundidad de DLSS en vivo en el 3D: fase 2, y la capa con `ODYSSEYVK=1` (v1.13)
 
 - Rodolfo: «Change the parameter to ODYSSEYVK=1, and then start phase 2».

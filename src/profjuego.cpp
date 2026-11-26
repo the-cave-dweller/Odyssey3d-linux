@@ -151,12 +151,50 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
     for (uint32_t x = 0; x < w; x += 4) ab += dep[(size_t)(h - 1 - h / 8) * w + x], ar += dep[(size_t)(h / 8) * w + x];
     invertida = ab > ar;
   }
+  /* (v1.13) primero a la rejilla del mapa, por areas (cada punto, la media de lo que cae dentro: una cosa
+     fina no desaparece entre dos muestras), y despues la cercania y su escala en la rejilla chica: la
+     escala es lineal, asi que da lo mismo, y son 268 000 puntos en vez de 2 millones. MEDIDO en Cyberpunk
+     haciendolo al reves: 15 ms por mapa, la mayor parte aqui. */
+  const size_t L = (size_t)lado;
+  fila_.assign((size_t)h * L, 0.0f);
+#pragma omp parallel for schedule(static)
+  for (long yy = 0; yy < (long)h; yy++) {
+    const float *src = &dep[(size_t)yy * w];
+    for (size_t x = 0; x < L; x++) {
+      const double a = (double)x * w / L, b = (double)(x + 1) * w / L;
+      const size_t i0 = (size_t)a, i1 = std::min((size_t)std::ceil(b), (size_t)w);
+      double sum = 0.0, peso = 0.0;
+      for (size_t k = i0; k < i1; k++) {
+        const double p = std::min(b, (double)k + 1) - std::max(a, (double)k);
+        sum += src[k] * p;
+        peso += p;
+      }
+      fila_[(size_t)yy * L + x] = peso > 0.0 ? (float)(sum / peso) : 0.0f;
+    }
+  }
+  cercania.assign(L * L, 0.0f);
+#pragma omp parallel for schedule(static)
+  for (long yy = 0; yy < (long)L; yy++) {
+    const size_t y = (size_t)yy;
+    const double a = (double)y * h / L, b = (double)(y + 1) * h / L;
+    const size_t j0 = (size_t)a, j1 = std::min((size_t)std::ceil(b), (size_t)h);
+    for (size_t x = 0; x < L; x++) {
+      double sum = 0.0, peso = 0.0;
+      for (size_t k = j0; k < j1; k++) {
+        const double p = std::min(b, (double)k + 1) - std::max(a, (double)k);
+        sum += fila_[k * L + x] * p;
+        peso += p;
+      }
+      cercania[y * L + x] = peso > 0.0 ? (float)(sum / peso) : 0.0f;
+    }
+  }
+  /* la cercania (1 = cerca) y su escala, con los percentiles 1 y 99 de lo que no es fondo */
+  const size_t m = L * L;
   std::vector<float> muestra;
-  muestra.reserve(n / 37 + 1);
-  for (size_t i = 0; i < n; i += 37) {
-    const float v = dep[i];
-    const bool lejos = invertida ? v <= 0.0f : v >= 1.0f;
-    if (!lejos) muestra.push_back(invertida ? v : 1.0f - v);
+  muestra.reserve(m / 3 + 1);
+  for (size_t k = 0; k < m; k += 3) {
+    const float v = invertida ? cercania[k] : 1.0f - cercania[k];
+    if (v > 0.0f) muestra.push_back(v);
   }
   if (muestra.size() < 64) return false;   /* todo cielo: una pantalla de carga */
   const size_t k1 = muestra.size() / 100, k99 = muestra.size() - 1 - muestra.size() / 100;
@@ -165,43 +203,10 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
   std::nth_element(muestra.begin(), muestra.begin() + (long)k99, muestra.end());
   const float hi = std::max(muestra[k99], lo + 1e-9f);
   const float inv = 1.0f / (hi - lo);
-  for (size_t i = 0; i < n; i++) {
-    const float v = dep[i];
-    const bool lejos = invertida ? v <= 0.0f : v >= 1.0f;
-    const float m = ((invertida ? v : 1.0f - v) - lo) * inv;
-    dep[i] = lejos ? 0.0f : (m < 0.0f ? 0.0f : (m > 1.0f ? 1.0f : m));
-  }
-  /* a la rejilla del mapa, por areas (cada punto, la media de lo que cae dentro: una cosa fina no
-     desaparece entre dos muestras): primero en horizontal, despues en vertical */
-  const size_t L = (size_t)lado;
-  fila_.assign((size_t)h * L, 0.0f);
-  for (uint32_t y = 0; y < h; y++) {
-    const float *src = &dep[(size_t)y * w];
-    for (size_t x = 0; x < L; x++) {
-      const double a = (double)x * w / L, b = (double)(x + 1) * w / L;
-      size_t i0 = (size_t)a, i1 = std::min((size_t)std::ceil(b), (size_t)w);
-      double s = 0.0, peso = 0.0;
-      for (size_t i = i0; i < i1; i++) {
-        const double p = std::min(b, (double)i + 1) - std::max(a, (double)i);
-        s += src[i] * p;
-        peso += p;
-      }
-      fila_[(size_t)y * L + x] = peso > 0.0 ? (float)(s / peso) : 0.0f;
-    }
-  }
-  cercania.assign(L * L, 0.0f);
-  for (size_t y = 0; y < L; y++) {
-    const double a = (double)y * h / L, b = (double)(y + 1) * h / L;
-    const size_t j0 = (size_t)a, j1 = std::min((size_t)std::ceil(b), (size_t)h);
-    for (size_t x = 0; x < L; x++) {
-      double s = 0.0, peso = 0.0;
-      for (size_t j = j0; j < j1; j++) {
-        const double p = std::min(b, (double)j + 1) - std::max(a, (double)j);
-        s += fila_[j * L + x] * p;
-        peso += p;
-      }
-      cercania[y * L + x] = peso > 0.0 ? (float)(s / peso) : 0.0f;
-    }
+  for (size_t k = 0; k < m; k++) {
+    const float v = invertida ? cercania[k] : 1.0f - cercania[k];
+    const float q = (v - lo) * inv;
+    cercania[k] = v <= 0.0f ? 0.0f : (q < 0.0f ? 0.0f : (q > 1.0f ? 1.0f : q));
   }
   desc_ = std::to_string(w) + "x" + std::to_string(h) + " " + nombreFormato(formato) + ", Z " +
           (invertida ? "invertida" : "normal");
