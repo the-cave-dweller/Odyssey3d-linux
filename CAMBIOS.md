@@ -42,6 +42,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   28)», y al volver a Manual `profundidad_conv = 68`, `salida_conv = 29`.
 - **Arreglo de paso (viene de main)**: arrastrar la Salida con el ratón daba 50 a mitad del recorrido
   (se tomaba de 0 a 100 en vez de −50 a +50): la bola saltaba al final y lo negativo no se alcanzaba.
+- Rodolfo, después: «que el manual sea una herramientita». En Manual el botón lleva una llave (el mango
+  en diagonal y la cabeza abierta, en el mismo azul claro) en vez del chip; en Auto, el chip.
 - Sustituye al chip cuadrado del Foco automático de la entrega anterior.
 
 ## Foco automático: el chip «AI» de la pastilla (rama `experimental`)

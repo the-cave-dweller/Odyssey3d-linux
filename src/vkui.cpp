@@ -259,6 +259,23 @@ bool Hud::buildAtlas(std::string *err) {
         }
       cupo = subir(n, n, chip, &icoChip_) && cupo;
     }
+    /* la llave del Manual (rama experimental): el mango en diagonal y la cabeza abierta arriba a la derecha */
+    {
+      std::vector<uint8_t> llave((size_t)n * n);
+      const float cx = 42.0f, cy = 22.0f, ux = 0.7071f, uy = -0.7071f;
+      for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+          const float x = (float)i + 0.5f, y = (float)j + 0.5f;
+          const float mango = distSegmento(x, y, 15.0f, 49.0f, 35.0f, 29.0f) - 5.0f;
+          const float qx = x - cx, qy = y - cy;
+          const float disco = std::hypot(qx, qy) - 13.0f;
+          const float largo = qx * ux + qy * uy, ancho = std::fabs(qx * -uy + qy * ux);
+          const float ranura = std::max(-largo - 2.0f, ancho - 4.8f);   /* negativa dentro de la boca */
+          const float cabeza = std::max(disco, -ranura);
+          llave[(size_t)j * n + i] = cubre(std::min(mango, cabeza));
+        }
+      cupo = subir(n, n, llave, &icoLlave_) && cupo;
+    }
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -902,7 +919,8 @@ void Hud::begin(int w, int h, float altoLogico) {
       const bool abierto = st_.menuNormal, hov = btnFoco_.inside(mx_, my_);
       if (abierto) mask9(btnFoco_, 0, 15.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
       else mask9(btnFoco_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
-      icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, icoChip_, 0.62f, 0.85f, 1.0f, 1.0f);
+      /* Auto lleva el chip; Manual, una llave */
+      icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, st_.focoAuto ? icoChip_ : icoLlave_, 0.62f, 0.85f, 1.0f, 1.0f);
       text(nombreFoco, bloqueX + 42.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnFoco_.x + btnFoco_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.80f);
     }
