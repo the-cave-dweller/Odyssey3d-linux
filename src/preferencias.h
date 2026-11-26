@@ -54,6 +54,8 @@ struct Valores {
   std::string modelo;             /* `modelo =` de serve.conf, ya expandido; vacio = la red abierta de siempre */
   bool avisarActualizaciones = true;   /* `actualizaciones = no` apaga la tarjeta de version nueva (v0.95) */
   bool actualizarAuto = false;         /* `actualizar_auto = si`: con una version nueva se instala sola (v0.95) */
+  bool enBarraTareas = true;           /* `barra_tareas = no`: el visor 3D no sale en la barra de tareas (v1.02) */
+  bool enSelector = true;              /* `selector_ventanas = no`: ni en Alt+Tab (v1.02) */
   std::vector<std::pair<std::string, std::string>> recordadas;   /* aplicacion -> modo */
 };
 Valores leer();

@@ -3,6 +3,17 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Otros: el visor en la barra de tareas y en Alt+Tab, a elegir (v1.02)
+
+- Rodolfo: «añade en otros una sección que ofrezca apagar y encender el mostrar en el administrador
+  de tareas, o el mostrar en el panel».
+- Pestaña Programa, sección OTROS: «Mostrar el visor 3D en la barra de tareas» y «Mostrarlo en el
+  selector de ventanas (Alt+Tab)», los dos encendidos de fábrica (`barra_tareas`,
+  `selector_ventanas` en `serve.conf`). El servicio se lo pone a la ventana del visor con los
+  estados `skiptaskbar` y `skipswitcher` del protocolo de ventanas de KWin, y lo repasa en cada
+  vuelta: el cambio vale al momento, también con un 3D ya abierto.
+- **No probado** en el panel de verdad.
+
 ## La versión nueva se ve al momento (v1.01)
 
 - Rodolfo: «la 0.98 no detecta la 1.0 en GitHub». MEDIDO a las 00:31: la rama main ya era la 1.00

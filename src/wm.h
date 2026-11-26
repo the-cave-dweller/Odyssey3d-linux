@@ -32,6 +32,7 @@ struct WindowInfo {
     OnAllDesktops = 0x40,
     DemandsAttention = 0x80,
     SkipTaskbar = 0x1000,
+    SkipSwitcher = 0x40000,
     ExcludeFromCapture = 0x200000
   };
 

@@ -247,6 +247,8 @@ Valores leer() {
   v.modelo = de("modelo");
   v.avisarActualizaciones = si(de("actualizaciones"), true);
   v.actualizarAuto = si(de("actualizar_auto"), false);
+  v.enBarraTareas = si(de("barra_tareas"), true);
+  v.enSelector = si(de("selector_ventanas"), true);
   if (!v.modelo.empty() && v.modelo[0] == '~') {
     const char *home = std::getenv("HOME");
     v.modelo = std::string(home ? home : "") + v.modelo.substr(1);
@@ -579,6 +581,19 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     au.nota = "En cuanto haya una versión nueva se instala sola (igual pide tu clave para instalar)";
     au.valor = v.actualizarAuto;
     pon(au, "actualizar_auto");
+    /* Otros (v1.02): si la ventana del visor 3D sale en la barra de tareas del panel y en Alt+Tab */
+    s.rotulo = "OTROS";
+    pon(s, "");
+    Hud::ItemPanel bt;
+    bt.tipo = Hud::ItemPanel::Interruptor, bt.rotulo = "Mostrar el visor 3D en la barra de tareas";
+    bt.nota = "El administrador de tareas del panel de KDE; se aplica al momento";
+    bt.valor = v.enBarraTareas;
+    pon(bt, "barra_tareas");
+    Hud::ItemPanel sw;
+    sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = "Mostrarlo en el selector de ventanas (Alt+Tab)";
+    sw.nota = "Apagado, Alt+Tab salta del vídeo o el juego a lo siguiente sin pasar por el visor";
+    sw.valor = v.enSelector;
+    pon(sw, "selector_ventanas");
     s.rotulo = "DESINSTALAR";
     pon(s, "");
     Hud::ItemPanel d;
@@ -792,6 +807,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (!fija("actualizaciones", v.avisarActualizaciones ? "no" : "si")) return false;
     if (aviso) *aviso = v.avisarActualizaciones ? "no se avisará de versiones nuevas; el botón junto al aspa las sigue marcando"
                                                 : "se avisará con un aviso del escritorio";
+    return true;
+  }
+  if (id == "barra_tareas" || id == "selector_ventanas") {
+    const bool ahora = id == "barra_tareas" ? v.enBarraTareas : v.enSelector;
+    if (!fija(id, ahora ? "no" : "si")) return false;
+    if (aviso) *aviso = std::string(ahora ? "el visor 3D ya no sale " : "el visor 3D vuelve a salir ") +
+                        (id == "barra_tareas" ? "en la barra de tareas" : "en Alt+Tab");
     return true;
   }
   if (id == "actualizar_auto") {
