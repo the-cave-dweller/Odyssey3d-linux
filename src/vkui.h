@@ -204,6 +204,7 @@ public:
     HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
     HitPanelRedimensionar, /* la esquina de abajo a la derecha: cambiar el tamano del panel (rama experimental) */
     HitPanelModoRed,      /* el interruptor AI | Rendimiento: `sub` 0 = AI (con la red), 1 = Rendimiento (sin red) */
+    HitModoRed,           /* (v1.12) el mismo interruptor, en la pastilla del video: pasa al otro extremo en marcha */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
@@ -352,7 +353,7 @@ private:
   /* los dibujos de la tarjeta: aspa, palomita, anillo del "?", el `hueco` que redondea esquinas y
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
-      icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_, icoLlave_, icoLogo_;
+      icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_, icoLlave_, icoLogo_, icoEncender_;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -379,9 +380,10 @@ private:
   float sc_ = 1.0f;      /* escala de la interfaz: 1 en 1080, hasta 2 en 2160 */
   float scUser_ = 0.0f;  /* tamano fijado a mano (--ui-escala, Ctrl+Shift+7/8); 0 = automatico */
 
-  /* sw3D_ es la pista del interruptor ON/OFF y swKnob_ la bola blanca de dentro (la bola es lo unico
-     redondo de la pastilla: asi lo queria Rodolfo). btnOv_ ya no esta: ocultar la pastilla es tecla. */
-  Rect pillPanel_, sw3D_, swKnob_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
+  /* sw3D_ es el boton redondo de encendido del 3D (v1.12; antes la pista del interruptor ON/OFF y
+     swKnob_ su bola) y pillModo_ el interruptor Neural | Rendimiento de la pastilla del video normal.
+     btnOv_ ya no esta: ocultar la pastilla es tecla. */
+  Rect pillPanel_, sw3D_, swKnob_, pillModo_, btnRed_, depTrack_, popTrack_, depKnob_, popKnob_;
   float panelW_ = 0.0f, panelH_ = 0.0f;   /* de cuanto salio la pastilla en el ultimo begin */
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
   Rect askActualizar_, askLuego_, askNoAvisar_;

@@ -95,7 +95,9 @@ public:
   /* Cambiar de red con el visor en marcha: primero se suelta la sesion vieja (que es lo que
      devuelve la memoria de la grafica) y despues se abre la nueva. Si la nueva no abre, se
      vuelve a abrir la vieja y el conversor sigue como estaba. */
-  bool cambiar(const std::string &model, std::string *err);
+  /* forzar (v1.12): reabrir aunque sea la misma ruta, para pasar de la red al modo sin red y al reves
+     (`ODYSSEYVK_SIN_RED` se lee en init) */
+  bool cambiar(const std::string &model, std::string *err, bool forzar = false);
 
   /* Cierta si ONNX Runtime ya revinto una sesion dentro de este proceso (un .onnx que no abrio con
      CUDA). Despues de eso no se puede volver a abrir ninguna red sin arriesgarse a un abort: hay que

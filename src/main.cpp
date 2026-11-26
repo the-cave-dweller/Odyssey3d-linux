@@ -3429,10 +3429,11 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().teclas = atajos::renglonPastilla(o.legado);
   hud.state().teclasRendimiento = atajos::renglonPastilla(o.legado, true);
   /* ODYSSEYVK_HUD_FOCO=0|1 (rama experimental): la pastilla con el chip del Foco automatico, quitado o puesto */
+  /* el menu del boton Auto/Manual abierto (tambien sin conversor, v1.12) */
+  hud.state().menuNormal = std::getenv("ODYSSEYVK_HUD_MENU_NORMAL") != nullptr;
   if (const char *fo = std::getenv("ODYSSEYVK_HUD_FOCO")) {
     hud.state().focoVisible = true;
     hud.state().focoAuto = fo[0] == '1';
-    hud.state().menuNormal = std::getenv("ODYSSEYVK_HUD_MENU_NORMAL") != nullptr;
     hud.state().focoPlano = 70, hud.state().focoSalida = 32, hud.state().focoAlcance = 144;   /* lo medido */
     hud.state().focoRelieve = 81;
   }

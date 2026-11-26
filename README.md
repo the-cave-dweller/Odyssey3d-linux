@@ -66,9 +66,12 @@ fine detail — and was measured on three side-by-side 3D videos and three norma
 three-second windows right on each). Apps marked as 2D and games keep their own way. (Up to 1.11 a
 card in the corner asked which kind of video it was.)
 
-The pill in the top-right corner stays while the 3D is on: the ON/OFF switch, the relief button
-(**Auto** or **Manual**, see below; its menu also has the two video-type buttons to switch by hand)
-and the gear that opens the settings panel.
+The pill in the top-right corner stays while the 3D is on: a round power button (3D on/off), the
+**Neural | Performance** switch (depth with the network or from the image on the CPU, switched on the
+spot), the relief button (**Auto** or **Manual**, see below; its menu also has Depth and Pop-out in
+Manual and the two video-type buttons to switch by hand) and the gear that opens the settings panel.
+Without the converter (a split video shown as it is, or no depth network) the relief button is
+Manual only.
 
 Keys (they also work while the video or game has the keyboard):
 
@@ -211,8 +214,8 @@ background next to it.
 
 ## Performance mode
 
-Depth without the network (`exp_sin_red = si`, the **Neural | Performance** switch in the panel
-header), worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's
+Depth without the network (`exp_sin_red = si`, the **Neural | Performance** switch on the pill or in
+the panel header, switched on the spot), worked out from the image itself on the CPU (~9 ms per map, no CUDA, and without the network's
 ~1.1 GB on the GPU). It is rougher than the network but steadier. The pill turns amber and carries a
 lightning-bolt button: its drop-down menu has three measured presets (**Gentle · Medium · Intense**)
 and four fine sliders (mix, strength, reach, head parallax), all applied at once; hover over each to

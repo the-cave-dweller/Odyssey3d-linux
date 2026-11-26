@@ -66,9 +66,12 @@ midió con tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s
 aplicaciones marcadas como 2D y los juegos siguen su camino. (Hasta la 1.11 una tarjeta en la esquina
 preguntaba qué vídeo era.)
 
-La pastilla de arriba a la derecha se queda mientras dura el 3D: el interruptor ON/OFF, el botón del
-relieve (**Auto** o **Manual**, ver abajo; su menú trae también los dos botones del tipo de vídeo para
-cambiarlo a mano) y el engranaje que abre el panel de ajustes.
+La pastilla de arriba a la derecha se queda mientras dura el 3D: un botón redondo de encendido (el 3D
+sí o no), el interruptor **Neural | Rendimiento** (la profundidad con la red o sacada de la imagen en
+el procesador, y se cambia ahí mismo, en marcha), el botón del relieve (**Auto** o **Manual**, ver
+abajo; su menú trae también Profundidad y Salida en Manual y los dos botones del tipo de vídeo para
+cambiarlo a mano) y el engranaje que abre el panel de ajustes. Sin conversor (un vídeo dividido tal
+cual, o sin red de profundidad) el botón del relieve es solo Manual.
 
 Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 
@@ -215,8 +218,8 @@ se rellena con el fondo de al lado.
 
 ## Modo rendimiento
 
-Profundidad sin la red (`exp_sin_red = si`, el interruptor **Neural | Rendimiento** de la cabecera del
-panel), sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que
+Profundidad sin la red (`exp_sin_red = si`, el interruptor **Neural | Rendimiento** de la pastilla o de
+la cabecera del panel, en marcha), sacada de la propia imagen en el procesador (~9 ms por mapa, sin CUDA y sin el ~1,1 GB que
 ocupa la red en la tarjeta). Es más basta que la de la red, pero más estable. La pastilla se vuelve
 ámbar y lleva un botón con un rayo: su menú desplegable tiene tres preajustes medidos (**Suave · Medio ·
 Intenso**) y cuatro deslizadores finos (mezcla, fuerza, alcance y paralaje de la cabeza), que se

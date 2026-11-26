@@ -638,9 +638,9 @@ void DepthNet::cierra() {
 
 DepthNet::~DepthNet() { cierra(); }
 
-bool DepthNet::cambiar(const std::string &model, std::string *err) {
+bool DepthNet::cambiar(const std::string &model, std::string *err, bool forzar) {
   const std::string nueva = model.empty() ? defaultModelPath() : model;
-  if (!ruta_.empty() && nueva == ruta_) return true;   /* ya esta abierta esa red */
+  if (!forzar && !ruta_.empty() && nueva == ruta_) return true;   /* ya esta abierta esa red */
   const std::string vieja = ruta_;
   const int gpu = gpu_;
   const float sm = smooth_;

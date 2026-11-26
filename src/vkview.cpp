@@ -147,6 +147,9 @@ struct VkUi {
      (Depth Anything). redPedida es un encargo pendiente que el bucle atiende con la red parada. */
   bool textoToggle = false;  /* la tecla R: rotulos apoyados en la pantalla o no */
   int redPedida = 0;
+  /* (v1.12) el interruptor Neural | Rendimiento de la pastilla: 1 = pasar al modo sin red, 2 = a la red.
+     Lo atiende el bucle con el hilo de la red parado, como redPedida. */
+  int modoRedPedido = 0;
   std::string rutaRed[3];    /* [1] y [2]: ruta .onnx de cada red; vacia = esa red no esta disponible */
   double extraHasta = 0.0;   /* la frase extra se quita sola a los pocos segundos */
   /* La ventana de ajustes (un proceso APARTE) y `odysseyvk ctl ajuste` escriben numeros y una ruta
@@ -672,6 +675,9 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
     case Hud::HitDepth:
     case Hud::HitPopout:
       ui.dragging = hit;
+      break;
+    case Hud::HitModoRed:
+      ui.modoRedPedido = st.rendimiento ? 2 : 1;   /* el interruptor Neural | Rendimiento pasa al otro extremo */
       break;
     case Hud::HitRed:
       ui.redPedida = (st.red == 1) ? 2 : 1;   /* el boton pasa de una red a la otra */
@@ -2300,6 +2306,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (tok == "dividido") hit = Hud::HitModoDividido, tiene = true;
         if (tok == "suave") hit = Hud::HitModoSuave, tiene = true;
         if (tok == "rayo") hit = Hud::HitRendimientoMenu, tiene = true;   /* el boton del rayo (rama experimental) */
+        if (tok == "modo") hit = Hud::HitModoRed, tiene = true;   /* (v1.12) el interruptor Neural | Rendimiento */
         float ax = 0, ay = 0, aw = 0, ah = 0;
         ui.hud.pillBounds(&ax, &ay, &aw, &ah);
         std::printf("[golpe] %s -> lienzo (%.0f,%.0f) -> golpe %d · pastilla %.0f,%.0f %.0fx%.0f escala %.2f\n",
@@ -2605,6 +2612,49 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        de ONNX mientras ese hilo trabaja reventaria el cuadro en curso. La red nueva se abre antes
        de soltar la vieja? No: DepthNet::cambiar suelta la vieja primero para devolver la memoria a
        la tarjeta, y si la nueva no abre vuelve a cargar la anterior. */
+    /* (v1.12) Neural | Rendimiento desde la pastilla, en marcha: el conversor se reabre con la misma ruta
+       y `ODYSSEYVK_SIN_RED` puesto o quitado (lo lee DepthNet::init). Se apunta en serve.conf
+       (`exp_sin_red`), para que el panel y la proxima sesion digan lo mismo. Si la red no abre, se
+       vuelve a como estaba. */
+    if (ui.modoRedPedido && !hiloRed.ocupado) {
+      const bool aSinRed = ui.modoRedPedido == 1;
+      ui.modoRedPedido = 0;
+      std::string e2;
+      if (!red.ready()) {
+        ajuste::fijarEnServeConf("exp_sin_red", aSinRed ? "si" : "no", &e2);
+        ui.extraInfo = idioma::tr("se aplica desde el siguiente vídeo");
+        ui.extraHasta = glfwGetTime() + 6.0;
+      } else if ((red.sinRed() != 0) != aSinRed) {
+        hiloRed.esperar();
+        const char *antesE = std::getenv("ODYSSEYVK_SIN_RED");
+        const std::string antes = antesE ? antesE : "";
+        if (aSinRed) ::setenv("ODYSSEYVK_SIN_RED", "imagen", 1);
+        else ::unsetenv("ODYSSEYVK_SIN_RED");
+        std::string ruta = red.modelPath();
+        if (!aSinRed && (ruta.empty() || !fileExists(ruta))) ruta = ui.rutaRed[2];
+        std::string cerr1;
+        const auto t0 = std::chrono::steady_clock::now();
+        if (red.cambiar(ruta, &cerr1, true)) {
+          if (wv.converterSize() != red.size() && !wv.prepareConverter(red.size(), &cerr1))
+            std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());
+          ajuste::fijarEnServeConf("exp_sin_red", aSinRed ? "si" : "no", &e2);
+          std::printf("[conversor] desde la pastilla: %s en %.0f ms (%s)\n",
+                      aSinRed ? "modo rendimiento, sin red" : "Neural, con la red",
+                      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(),
+                      red.device().c_str());
+          std::fflush(stdout);
+        } else {
+          if (antes.empty()) ::unsetenv("ODYSSEYVK_SIN_RED");
+          else ::setenv("ODYSSEYVK_SIN_RED", antes.c_str(), 1);
+          std::string cerr2;
+          red.cambiar(red.modelPath().empty() ? ruta : red.modelPath(), &cerr2, true);
+          std::fprintf(stderr, "[conversor] no se pudo cambiar de modo: %s\n", cerr1.c_str());
+          std::fflush(stderr);
+          ui.extraInfo = idioma::tr("no se pudo cambiar de modo: seguimos como estábamos");
+          ui.extraHasta = glfwGetTime() + 9.0;
+        }
+      }
+    }
     if (ui.redPedida) {
       const int quiero = ui.redPedida;
       const int ahora = slotRed(red.modelPath());
@@ -3913,7 +3963,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          ese momento (la imagen no salta) y se guarda ese numero. */
       const bool conConv = modo == 1 || modo == 3;
       hs.focoVisible = !suf.empty() && conConv && convActivo && !red.sinRed();
-      if (!hs.focoVisible) hs.menuNormal = false;
+      /* (v1.12) el menu del boton Auto/Manual vale tambien sin conversor (solo Manual): se cierra en Rendimiento, que tiene el suyo */
+      if (convActivo && red.sinRed()) hs.menuNormal = false;
       if (ui.focoPedido) {
         const bool quiereAuto = ui.focoPedido == 1;
         ui.focoPedido = 0;

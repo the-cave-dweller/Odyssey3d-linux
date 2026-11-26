@@ -282,6 +282,22 @@ bool Hud::buildAtlas(std::string *err) {
         }
       cupo = subir(n, n, llave, &icoLlave_) && cupo;
     }
+    /* el encendido del 3D (v1.12): el aro abierto por arriba y su raya, el simbolo de siempre */
+    {
+      std::vector<uint8_t> enc((size_t)n * n);
+      for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++) {
+          const float x = (float)i + 0.5f, y = (float)j + 0.5f;
+          const float dx = x - 32.0f, dy = y - 34.0f;
+          float d = std::fabs(std::hypot(dx, dy) - 19.0f) - 3.2f;
+          /* la abertura de arriba: fuera del aro lo que cae a menos de ~40 grados de la vertical */
+          const float ang = std::atan2(dx, -dy);   /* 0 arriba */
+          if (std::fabs(ang) < 0.70f) d = std::max(d, 3.0f);
+          d = std::min(d, distSegmento(x, y, 32.0f, 8.0f, 32.0f, 30.0f) - 3.2f);
+          enc[(size_t)j * n + i] = cubre(d);
+        }
+      cupo = subir(n, n, enc, &icoEncender_) && cupo;
+    }
   }
   /* 2c) el paisaje de las dos teselas: dos siluetas (la sierra del fondo, de picos, y las lomas de
      delante, redondas). Cada mascara cubre el dibujo entero, asi que se pinta encima del cielo con
@@ -749,7 +765,7 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
     const bool leg = st_.legado;
-    const float aire = 16.0f, anchoSw = 100.0f, anchoDes = 140.0f;
+    const float aire = 16.0f, anchoDes = 140.0f;
     const char *rotRec = idioma::tr("No volver a preguntar");
     const float anchoRec = 18.0f + 8.0f + textWidth(rotRec, 12.5f);
     /* el bloque de la derecha: arriba los dos botones de icono (que tipo de 3D), debajo la casilla.
@@ -757,8 +773,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* el hub del modo normal (rama experimental): conversor con la red. Como el de rendimiento: el
        interruptor, un boton con el chip «AI» que dice Auto o Manual y su menu, y el engranaje. Los
        deslizadores, el tipo de video y la casilla pasan al menu. */
-    const bool hubNormal = st_.focoVisible && !leg && !st_.rendimiento;
-    const std::string nombreFoco = idioma::tr(st_.focoAuto ? "Auto" : "Manual");
+    /* (v1.12) la pastilla de Profundidad y Salida se fue («el tercero ya no», Rodolfo: los deslizadores
+       ya estan en el menu de Manual): fuera del modo de legado, la pastilla es siempre esta. Sin conversor
+       (video dividido tal cual, o sin red) no hay Auto que valga: el boton dice Manual y su menu va directo
+       a los deslizadores. */
+    const bool hubNormal = !leg && !st_.rendimiento;
+    const bool conAuto = st_.focoVisible;
+    const bool autoPuesto = st_.focoAuto && conAuto;
+    const std::string nombreFoco = idioma::tr(autoPuesto ? "Auto" : "Manual");
     const bool hayModo = st_.modoVisible && !leg && !st_.rendimiento && !hubNormal;
     /* el modo rendimiento: un boton con el rayo, el preajuste puesto y la flechita de su menu */
     const char *nombrePre[3] = {idioma::tr("Suave"), idioma::tr("Medio"), idioma::tr("Intenso")};
@@ -769,6 +791,15 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float anchoBloque = st_.rendimiento ? anchoRendimiento
                               : hubNormal ? 12.0f + 22.0f + 8.0f + textWidth(nombreFoco, 13.0f) + 10.0f + 12.0f + 12.0f
                               : (st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f));
+    /* (v1.12) a la izquierda, el boton redondo de encendido (antes el interruptor ON/OFF) y, en la pastilla
+       del video normal (con la red o en rendimiento), el interruptor Neural | Rendimiento del panel: el
+       modo se cambia ahi mismo, en marcha. Mide lo mismo en los dos extremos, como en el panel. */
+    const bool hubConv = (hubNormal || st_.rendimiento) && !leg;
+    const float anchoEnc = 32.0f;
+    const char *nNeural = idioma::tr("Neural"), *nRendModo = idioma::tr("Rendimiento");
+    const float wModo = std::max(28.0f, std::max(textWidth(nNeural, 13.0f), textWidth(nRendModo, 13.0f)));
+    const float anchoModo = hubConv ? 4.0f + 26.0f + 10.0f + wModo + 14.0f : 0.0f;
+    const float anchoSw = anchoEnc + (hubConv ? 12.0f + anchoModo : 0.0f);
     /* en el modo rendimiento y en el hub normal no hay deslizadores en la pastilla: el boton va junto al
        interruptor */
     float pw = (st_.rendimiento || hubNormal) ? aire + anchoSw + aire
@@ -778,7 +809,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
     /* en el modo rendimiento las teclas de Profundidad y Salida no hacen nada: no salen */
     const std::string teclas =
-        (st_.rendimiento || (hubNormal && st_.focoAuto))
+        (st_.rendimiento || (hubNormal && autoPuesto))
             ? (!st_.teclasRendimiento.empty() ? st_.teclasRendimiento
                                               : std::string(idioma::tr("Ctrl+Shift+  1 el 3D · F1 oculta · Esc sale")))
         : !st_.teclas.empty() ? st_.teclas
@@ -796,27 +827,43 @@ void Hud::begin(int w, int h, float altoLogico) {
     pillPanel_ = {x0, y0, pw, ph};
     solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov) */
 
-    /* ---- el interruptor del 3D ----
-       ON con la bola a la izquierda y la letra a su derecha; OFF con la bola a la derecha y la letra
-       a la izquierda: el dibujo que paso Rodolfo. Se pica en cualquier parte de la pista. */
-    sw3D_ = {x0 + aire, y0 + 17.0f, anchoSw, 32.0f};
-    const bool hov3 = sw3D_.inside(mx_, my_);
-    if (st_.weaveOn) {
-      const float t = hov3 ? 1.12f : 1.0f;   /* al pasar el raton por encima, un poco mas viva */
-      mask9(sw3D_, 0, 16.0f, accent[0] * t, accent[1] * t, accent[2] * t, 0.95f);
-    } else {
-      const float g = hov3 ? 0.32f : 0.24f;
-      mask9(sw3D_, 0, 16.0f, g, g + 0.02f, g + 0.05f, 0.95f);
+    /* ---- el encendido del 3D (v1.12) ----
+       Un boton redondo (antes el interruptor ON/OFF, «en vez de on y off un boton redondo de apagado»,
+       Rodolfo): encendido, del color de la pastilla con el simbolo en blanco; apagado, gris. Manda el
+       mismo golpe que el interruptor (Hit3D). */
+    sw3D_ = {x0 + aire, y0 + 17.0f, anchoEnc, 32.0f};
+    swKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+    {
+      const bool hov3 = sw3D_.inside(mx_, my_);
+      const Rect ico{sw3D_.x + 6.0f, sw3D_.y + 6.0f, 20.0f, 20.0f};
+      if (st_.weaveOn) {
+        const float t = hov3 ? 1.12f : 1.0f;
+        mask9(sw3D_, 0, 16.0f, std::min(1.0f, accent[0] * t), std::min(1.0f, accent[1] * t), std::min(1.0f, accent[2] * t), 0.95f);
+        icono(ico, icoEncender_, 1.0f, 1.0f, 1.0f, 1.0f);
+      } else {
+        const float g = hov3 ? 0.32f : 0.24f;
+        mask9(sw3D_, 0, 16.0f, g, g + 0.02f, g + 0.05f, 0.95f);
+        icono(ico, icoEncender_, 0.80f, 0.82f, 0.86f, hov3 ? 1.0f : 0.85f);
+      }
     }
-    const float bola = 24.0f, margen = 4.0f;
-    const float bolaY = sw3D_.y + (sw3D_.h - bola) * 0.5f;
-    swKnob_ = st_.weaveOn ? Rect{sw3D_.x + margen, bolaY, bola, bola}
-                          : Rect{sw3D_.x + sw3D_.w - margen - bola, bolaY, bola, bola};
-    mask9(swKnob_, 0, bola * 0.5f, 0.96f, 0.97f, 0.99f, 1.0f);
-    const char *palabra = st_.weaveOn ? "ON" : "OFF";
-    const float anchoLetra = textWidth(palabra, 15.0f);
-    const float letraX = st_.weaveOn ? swKnob_.x + bola + 12.0f : swKnob_.x - 12.0f - anchoLetra;
-    text(palabra, letraX, sw3D_.y + 8.0f, 15.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+    /* ---- el interruptor Neural | Rendimiento (v1.12), el mismo del panel ----
+       Azul con el chip a la izquierda (con la red) o ambar con el rayo a la derecha (sin red); un clic en
+       cualquier parte lo pasa al otro extremo, en marcha (HitModoRed). */
+    pillModo_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+    if (hubConv) {
+      pillModo_ = {sw3D_.x + sw3D_.w + 12.0f, y0 + 17.0f, anchoModo, 32.0f};
+      const bool rend = st_.rendimiento, hovM = pillModo_.inside(mx_, my_);
+      const float c[3] = {rend ? 0.93f : 0.40f, rend ? 0.62f : 0.72f, rend ? 0.12f : 1.0f};
+      const float t = hovM ? 1.08f : 1.0f;
+      mask9(pillModo_, 0, 16.0f, std::min(1.0f, c[0] * t), std::min(1.0f, c[1] * t), std::min(1.0f, c[2] * t), 0.95f);
+      const Rect bolaM{rend ? pillModo_.x + pillModo_.w - 4.0f - 26.0f : pillModo_.x + 4.0f, pillModo_.y + 3.0f, 26.0f, 26.0f};
+      mask9(bolaM, 0, 13.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+      icono({bolaM.x + 4.0f, bolaM.y + 4.0f, 18.0f, 18.0f}, rend ? icoRayo_ : icoChip_, c[0] * 0.85f, c[1] * 0.85f, c[2] * 0.85f, 1.0f);
+      const char *nombreModo = rend ? nRendModo : nNeural;
+      const float huecoM = wModo - textWidth(nombreModo, 13.0f);
+      const float xtM = (rend ? pillModo_.x + 14.0f : bolaM.x + bolaM.w + 10.0f) + 0.5f * huecoM;
+      text(nombreModo, xtM, pillModo_.y + 8.0f, 13.0f, 0.08f, 0.09f, 0.11f, 1.0f);
+    }
 
     auto slider = [&](Rect *track, Rect *knob, const char *label, float frac, const std::string &value) {
       const float tx = track->x, ty = track->y;
@@ -926,7 +973,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (abierto) mask9(btnFoco_, 0, 15.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
       else mask9(btnFoco_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
       /* Auto lleva el chip; Manual, una llave */
-      icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, st_.focoAuto ? icoChip_ : icoLlave_, 0.62f, 0.85f, 1.0f, 1.0f);
+      icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, autoPuesto ? icoChip_ : icoLlave_, 0.62f, 0.85f, 1.0f, 1.0f);
       text(nombreFoco, bloqueX + 42.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnFoco_.x + btnFoco_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.80f);
     }
@@ -955,6 +1002,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     if (cabeBloque && st_.recordarVisible && !st_.rendimiento && !hubNormal) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
+    /* (v1.12) la ayuda del interruptor Neural | Rendimiento de la pastilla, como la del panel */
+    if (pillModo_.w > 0.0f && pillModo_.inside(mx_, my_) && !st_.menuNormal && !st_.menuRendimiento) {
+      const std::vector<std::string> lineas = renglones(
+          idioma::tr(st_.rendimiento ? "La profundidad sale de la propia imagen en el procesador (~9 ms por mapa), sin tocar la tarjeta: más basta, pero más estable. La pastilla lleva un rayo con su menú (los preajustes y los ajustes finos), y la frecuencia variable queda como en el escritorio."
+                                     : "La red Depth Anything: la forma de verdad de cada objeto. Ocupa la tarjeta: ~1,1 GB y 14-18 ms por mapa."),
+          12.5f, 420.0f);
+      cajaAyuda(lineas, std::min(pillModo_.x, (float)vw - 24.0f - 440.0f), pillPanel_.y + pillPanel_.h + 8.0f, 12.5f);
+    }
 
     /* ---- el menu del rayo (rama experimental) ----
        Cuelga debajo de la pastilla, pegado a su orilla derecha: los tres preajustes y los cuatro
@@ -1045,12 +1100,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     if (hubNormal && st_.menuNormal && btnFoco_.w > 0.0f) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f, tam = 12.0f;
       const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;
-      const bool manual = !st_.focoAuto;
+      const bool manual = !autoPuesto;
       std::vector<std::string> nota;
       if (!manual)
         nota = renglones(idioma::tr("La saliencia elige el plano de la pantalla en cada escena; el alcance se ajusta a la distancia de tus ojos (0,3° de paralaje) y la salida se calcula para el mayor relieve sin aplastar la imagen contra él."),
                          tam, mw - 2.0f * pad);
-      float alto = 78.0f + (manual ? 2.0f * filaAlto : 18.0f * (float)nota.size() + 30.0f);
+      /* sin conversor no sale la fila Auto | Manual: los deslizadores empiezan arriba */
+      const float filaAM = conAuto ? 42.0f : 0.0f;
+      float alto = 36.0f + filaAM + (manual ? 2.0f * filaAlto : 18.0f * (float)nota.size() + 30.0f);
       if (st_.modoVisible) alto += 46.0f;
       if (st_.recordarVisible) alto += 32.0f;
       alto += 8.0f;
@@ -1062,7 +1119,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       float ayudaY = 0.0f;
       const char *opc[2] = {idioma::tr("Auto"), idioma::tr("Manual")};
       const float bw = (mw - 2.0f * pad - 6.0f) * 0.5f;
-      for (int k = 0; k < 2; k++) {
+      for (int k = 0; k < 2 && conAuto; k++) {
         btnAM_[k] = {mx0 + pad + (float)k * (bw + 6.0f), my0 + 36.0f, bw, 30.0f};
         const bool puesto = (k == 0) == st_.focoAuto, hov = btnAM_[k].inside(mx_, my_);
         if (puesto) mask9(btnAM_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
@@ -1075,7 +1132,7 @@ void Hud::begin(int w, int h, float altoLogico) {
           ayudaY = btnAM_[k].y;
         }
       }
-      float y = my0 + 78.0f;
+      float y = my0 + 36.0f + filaAM;
       if (manual) {
         /* los dos deslizadores de siempre, ahora en el menu */
         auto fila = [&](Rect *pista, const char *rotulo, float frac, const std::string &valor) {
@@ -2020,7 +2077,8 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
     if (askDont_.inside(mx, my)) return HitAskDont;
   }
   if (!st_.overlayOn) return HitNone;
-  if (sw3D_.inside(mx, my)) return Hit3D;   /* el interruptor ON/OFF ; se pica en toda la pista */
+  if (sw3D_.inside(mx, my)) return Hit3D;   /* el boton de encendido */
+  if (pillModo_.w > 0.0f && pillModo_.inside(mx, my)) return HitModoRed;   /* Neural | Rendimiento, en marcha */
   float pad = 10.0f;
   /* el modo rendimiento: el boton del rayo y, abierto, su menu (los preajustes y cuatro deslizadores) */
   if (st_.rendimiento) {
@@ -2037,7 +2095,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   } else {
     if (btnFoco_.inside(mx, my)) return HitFocoAuto;
     /* el menu del hub normal: Auto | Manual, los deslizadores (Manual), el tipo de video y la casilla */
-    if (st_.focoVisible && st_.menuNormal && menuRend_.inside(mx, my)) {
+    if (st_.menuNormal && menuRend_.inside(mx, my)) {   /* (v1.12) tambien sin conversor: solo Manual */
       if (btnAM_[0].inside(mx, my)) return HitNormalAuto;
       if (btnAM_[1].inside(mx, my)) return HitNormalManual;
       if (depTrack_.w > 0.0f && Rect{depTrack_.x - pad, depTrack_.y - 14.0f, depTrack_.w + 2.0f * pad, 26.0f}.inside(mx, my))

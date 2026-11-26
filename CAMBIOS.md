@@ -103,6 +103,29 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   sirvió súper bien») pero pidió menos. **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el
   interruptor Neural (medidos sin panel, en el visor aparte y con `ctl hud`).
 
+## La pastilla: botón de encendido y Neural | Rendimiento en marcha (v1.12)
+
+- Rodolfo: «en el hub, en vez de on y off, mueve el botón pill de Neural y performance que está en las
+  settings, quiero que esté ahí y a la izquierda haya un botón redondo de apagado, quiero que se pueda
+  cambiar ahí»; y de la pastilla de Profundidad y Salida: «ya no me sirve, ya forma parte del otro»,
+  «el tercero ya no».
+- **Pastilla** (`src/vkui.cpp`): a la izquierda un botón redondo de encendido (el símbolo de siempre,
+  máscara nueva `icoEncender_`; encendido del color de la pastilla, apagado gris; el mismo golpe Hit3D
+  que el interruptor ON/OFF que reemplaza), y a su lado el interruptor **Neural | Rendimiento** del panel
+  (azul con el chip, ámbar con el rayo, del mismo ancho en los dos extremos, con su ayuda al pasar el
+  ratón; golpe nuevo HitModoRed). La pastilla de Profundidad y Salida se va: fuera del modo de legado la
+  pastilla es siempre esta; sin conversor (vídeo dividido tal cual, o sin red) el botón del relieve
+  dice Manual y su menú va directo a Profundidad y Salida, sin la fila Auto | Manual.
+- **En marcha** (`src/vkview.cpp`, `src/depth.*`): el interruptor pide el cambio y el bucle lo atiende
+  con el hilo de la red parado, como las teclas 1 y 2: pone o quita `ODYSSEYVK_SIN_RED` y reabre el
+  conversor con la misma ruta (`DepthNet::cambiar(..., forzar)`, que antes no reabría la misma ruta);
+  apunta `exp_sin_red` en serve.conf para que el panel y la próxima sesión digan lo mismo, y si la red no
+  abre vuelve a como estaba. La frecuencia variable no cambia hasta la próxima sesión.
+- MEDIDO en el visor aparte con golpes simulados (`ODYSSEY_GOLPE=…modo…`, ficha nueva): a Rendimiento en
+  18 ms y de vuelta a Neural en 204 ms, con el Auto recalculando al momento y `exp_sin_red` apuntado.
+  Dibujado con `ctl hud`: la pastilla de la red, la de rendimiento, la sin conversor y los dos menús.
+- No probado en el panel.
+
 ## Fondo negro translúcido y el interruptor «Neural» (rama `experimental`)
 
 - Rodolfo: «cambia el fondo gris de todos los hud por un negro ligeramente transparente» y «cambia en
