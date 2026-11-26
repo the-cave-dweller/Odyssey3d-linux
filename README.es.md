@@ -93,10 +93,12 @@ icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic 
 La cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
 abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan), y a su
 lado un interruptor **Neural | Rendimiento** (del mismo ancho en los dos extremos) elige el vídeo normal con la red de profundidad (azul, con el
-chip) o sin ella (ámbar, con el rayo). En la segunda, centradas: **Juegos**, **Ajustes** (arriba los
+chip) o sin ella (ámbar, con el rayo). En la segunda, centradas: **Juegos** y **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
-variable durante el 3D y el tope de arrastre; versión, actualizaciones, idioma, barra de tareas y
-bandeja, y **Desinstalar** plegado bajo su flechita) y **Experimental**. Sobre un vídeo o un juego en 3D no sale la de Juegos. El panel toma el color de resaltado de KDE
+variable durante el 3D, el tope de arrastre y la prioridad del visor en la tarjeta; *Seguimiento de la
+cabeza*: la anticipación de la cabeza en milisegundos; versión, actualizaciones, idioma, barra de
+tareas y bandeja, y **Desinstalar** plegado bajo su flechita). Sobre un vídeo o un juego en 3D no sale
+la de Juegos. El panel toma el color de resaltado de KDE
 sobre un fondo negro un poco transparente (como la pastilla y sus menús), se redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
 dejaste. Todo está también en
 `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
@@ -205,7 +207,7 @@ chip dice **Auto** o **Manual** y abre su menú.
   grado de paralaje entre los ojos: 1,44 veces los topes de fábrica a 65 cm), y la salida se calcula
   para el mayor relieve que cabe sin aplastar la imagen contra esos topes (medido: un 0,9 % del cuadro
   en los topes en vez del 61 % con una salida fija).
-- **Manual**: Profundidad y Salida a mano, con el alcance de la pestaña Experimental.
+- **Manual**: Profundidad y Salida a mano, con el mismo alcance automático.
 
 Los subtítulos y los rótulos se quedan en el plano de la pantalla, cada renglón de una pieza. En los
 cantos, el escalón de profundidad sigue el color de la imagen, y lo que un objeto destapa al correrse
@@ -231,16 +233,14 @@ abierto sobre un juego: un clic fuera de él lo cierra y devuelve el control, sa
 pin a la izquierda de su nombre: fijado, se queda encima y un clic en el juego solo le devuelve el
 ratón y el teclado.
 
-## Pestaña Experimental
+## La pestaña Experimental, hasta la 1.11
 
-La pestaña **Experimental** del panel trae pruebas sacadas de leer
-[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): la red de profundidad viendo el cuadro a su
-proporción 16:9 (`exp_red = cuadrado | 518 | 770`), un mapa de profundidad más grande
-(`exp_mapa = 518 | 770 | 1022`), un tope de arrastre en el suavizado en el tiempo donde la imagen se
-mueve (`exp_tope_arrastre = si`, en *Ajustes → Fluidez*) y la anticipación de la cabeza en milisegundos
-(`exp_anticipacion = 25`). Cada una vale desde el siguiente vídeo. El **alcance del relieve**
-(`exp_topes_red`, x1–x4) ensancha los topes por ojo con la red en Manual, en marcha; en Auto el alcance
-se calcula solo.
+Las pruebas que traía (sacadas de leer [Any2Odyssey](https://github.com/jlobue10/Any2Odyssey)) pasaron
+a la versión normal en la 1.12 o se quedaron como claves de `serve.conf`: la red viendo el cuadro a su
+proporción 16:9 (`exp_red = cuadrado | 518 | 770`) y un mapa de profundidad más grande
+(`exp_mapa = 518 | 770 | 1022`), solo como claves; el tope de arrastre y la prioridad del visor en la
+tarjeta, en *Ajustes → Fluidez*; la anticipación de la cabeza, en *Ajustes → Seguimiento de la cabeza*;
+el alcance del relieve se calcula solo en Auto y en Manual.
 
 ## Documentación
 

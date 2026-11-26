@@ -25,8 +25,16 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   centradas), se redimensiona y recuerda su sitio, color de resaltado de KDE sobre negro translúcido;
   Ajustes trae el rendimiento, la Fluidez (VRR y tope de arrastre) y Desinstalar plegado; secciones
   plegables; Juegos fuera del panel durante un 3D.
-- **Pestaña Experimental**: la red a su proporción, el mapa más grande, el tope de arrastre (solo donde
-  la imagen se mueve), la anticipación de la cabeza y el alcance del relieve para Manual.
+- **Sin la pestaña Experimental ni la rama** (Rodolfo: «manda anticipar la cabeza a Ajustes», «luego de
+  eso ya deshazte de experimental», «también de la pestaña experimental»): la anticipación de la
+  cabeza pasa a *Ajustes → Seguimiento de la cabeza* (con su ayuda); la prioridad del visor en la
+  tarjeta, a *Ajustes → Fluidez*, junto al VRR y al tope de arrastre (que ahora solo topa donde la
+  imagen se mueve); la red a su proporción (`exp_red`) y el mapa más grande (`exp_mapa`) se quedan solo
+  como claves de serve.conf. El alcance del relieve deja de tener deslizador: Manual usa el mismo
+  automático de medio grado que Auto (el `exp_topes_red` guardado ya no se pasa al visor; el suyo
+  valía x3,05, apuntado al pasar de Auto a Manual cuando el automático iba a un grado, y al cambiar de
+  modo ya no se apunta). `ODYSSEYVK_TOPES_RED` lo fija a mano para el taller. Doce textos sin uso,
+  fuera de las traducciones. La rama `experimental` se cierra: todo queda en `main`.
 - Arranque del visor sin caché de sombreadores: 4,1 s (8,0 en la 1.11).
 - **Probado en su panel**: el alcance a medio grado y la mezcla al 10 % («este último sirvió súper
   bien», «sí bajó»). **No probado en su panel**: los subtítulos de una pieza, el fondo negro y el

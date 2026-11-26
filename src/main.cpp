@@ -3198,7 +3198,7 @@ static int cmdAjustes(int argc, char **argv) {
         }
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
-        st.pestana = (g.sub >= 0 && g.sub <= 4) ? g.sub : 0;
+        st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
         st.corrida = 0.0f;
         st.pie.clear();
         rellenar();
@@ -3383,7 +3383,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;
-    hud.state().pestana = std::max(0, std::min(4, std::atoi(pn)));
+    hud.state().pestana = std::max(0, std::min(3, std::atoi(pn)));
     std::vector<std::string> ids;
     /* ODYSSEYVK_HUD_CAPTURA=3d (v1.09): ese atajo esperando su combinacion nueva */
     std::string pieCaptura;
@@ -4330,8 +4330,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       ::setenv("ODYSSEYVK_SIN_RED_TOPES", valor, 1);
       std::snprintf(valor, sizeof valor, "%.2f", pila->expSinRedParalaje);
       ::setenv("ODYSSEYVK_SIN_RED_PARALAJE", valor, 1);
-      std::snprintf(valor, sizeof valor, "%.2f", pila->expTopesRed);
-      ::setenv("ODYSSEYVK_TOPES_RED", valor, 1);
+      /* (`exp_topes_red` ya no se pasa: desde la 1.12 el visor calcula el alcance en Auto y en Manual) */
+      ::unsetenv("ODYSSEYVK_TOPES_RED");
       if (pila->expPrioridad == "alta" || pila->expPrioridad == "tiempo_real")
         ::setenv("ODYSSEYVK_PRIORIDAD", pila->expPrioridad.c_str(), 1);
       else

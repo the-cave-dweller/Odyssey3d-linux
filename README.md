@@ -93,11 +93,11 @@ taskbar icon or the system-tray icon (click: settings, middle click: games). The
 rows. On the first, the OdysseyVK logo and name open the
 main page (video, screen, keyboard shortcuts, apps that don't ask), and next to them a **Neural |
 Performance** switch (the same width in both positions) picks normal video with the depth network (blue, with the chip) or without it
-(amber, with the lightning bolt). On the second, centred: **Games**, **Settings** (the performance
-figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D and the
-drag cap; version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow) and
-**Experimental**. Over a video or a game in 3D the Games tab is left
-out. The panel takes KDE's highlight colour on a slightly transparent black background (like the pill
+(amber, with the lightning bolt). On the second, centred: **Games** and **Settings** (the
+performance figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D,
+the drag cap and the viewer's GPU priority; *Head tracking*: head anticipation in milliseconds;
+version, updates, language, taskbar and tray, and **Uninstall** folded under its arrow). Over a video
+or a game in 3D the Games tab is left out. The panel takes KDE's highlight colour on a slightly transparent black background (like the pill
 and its menus), resizes from its bottom-right corner and reopens where and how big you left it. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
@@ -203,7 +203,7 @@ says **Auto** or **Manual** and opens its menu.
   between the eyes: 1.44 times the factory limits at 65 cm), and the pop-out is worked out for the most
   relief that fits without flattening the image against those limits (measured: 0.9 % of the frame on
   the limits instead of 61 % with a fixed pop-out).
-- **Manual**: Depth and Pop-out by hand, with the reach of the Experimental tab.
+- **Manual**: Depth and Pop-out by hand, with the same automatic reach.
 
 Subtitles and captions stay on the screen plane, each line in one piece. On thin edges the depth
 step follows the colour of the picture, and what an object uncovers when it shifts is filled with the
@@ -228,15 +228,13 @@ the same while it is open over a game: a click outside it closes it and returns 
 pin it with the pin left of its name: pinned, it stays on top and a click on the game just gives the
 game the mouse and keyboard back.
 
-## Experimental tab
+## The Experimental tab, until 1.11
 
-The **Experimental** tab of the panel has trials taken from reading
-[Any2Odyssey](https://github.com/jlobue10/Any2Odyssey): the depth network seeing the frame at its
-16:9 proportion (`exp_red = cuadrado | 518 | 770`), a bigger depth map (`exp_mapa = 518 | 770 |
-1022`), a lag cap on the smoothing over time where the picture moves (`exp_tope_arrastre = si`, under
-*Settings → Smoothness*) and head anticipation in milliseconds (`exp_anticipacion = 25`). Each applies
-from the next video. **Depth reach** (`exp_topes_red`, x1–x4) widens the per-eye limits with the
-network in Manual, live; in Auto the reach is worked out by itself.
+The trials it had (taken from reading [Any2Odyssey](https://github.com/jlobue10/Any2Odyssey)) went to
+the normal version in 1.12 or stayed as `serve.conf` keys: the network seeing the frame at its 16:9
+proportion (`exp_red = cuadrado | 518 | 770`) and a bigger depth map (`exp_mapa = 518 | 770 | 1022`),
+keys only; the drag cap and the viewer's GPU priority, in *Settings → Smoothness*; head anticipation,
+in *Settings → Head tracking*; the depth reach is worked out by itself in Auto and Manual.
 
 ## Documentation
 

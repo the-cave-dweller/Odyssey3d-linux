@@ -964,7 +964,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     if (st_.rendimiento && st_.menuRendimiento && btnRayo_.w > 0.0f) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f;
       const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;
-      const char *nota = idioma::tr("Volver a la red: Ajustes → Experimental");
+      const char *nota = idioma::tr("Volver a la red: el interruptor Neural | Rendimiento del panel");
       const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
       menuRend_ = {mx0, my0, mw, mh};
       solid(mx0, my0, mw, mh, 0.0f, 0.0f, 0.0f, 0.88f);

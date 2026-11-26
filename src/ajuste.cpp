@@ -75,8 +75,7 @@ static bool esOrdenTexto(const std::string &nombre) {
          nombre == "cargar_red" ||   /* `cargar_red = si` (v0.94): la red de profundidad recien bajada, al visor */
          nombre == "idioma" ||        /* `idioma = fr` (v1.07): el panel cambio el idioma; la pastilla tambien */
          nombre == "atajos" ||        /* `atajos = recargar` (v1.09): se cambio un atajo en el panel */
-         nombre == "preajuste" ||     /* `preajuste = 0|1|2`: el modo rendimiento (rama experimental) */
-         nombre == "topes_red";       /* `topes_red = 2,75`: el alcance del relieve con la red (rama experimental) */
+         nombre == "preajuste";       /* `preajuste = 0|1|2`: el modo rendimiento */
 }
 
 bool esPalabra(const std::string &nombre) { return esOrdenTexto(nombre); }

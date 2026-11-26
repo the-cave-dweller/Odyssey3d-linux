@@ -675,7 +675,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
   /* rama experimental: la primera (0) no es una pildora, la abre el logo y el nombre del programa; la de
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
-  st.pestanas = {"", idioma::tr("Juegos"), "", idioma::tr("Ajustes"), idioma::tr("Experimental")};
+  st.pestanas = {"", idioma::tr("Juegos"), "", idioma::tr("Ajustes")};   /* la de Experimental se fue en la 1.12 */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
@@ -711,6 +711,30 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       t.nota = idioma::tr("Donde la imagen se mueve, ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
       t.valor = v.expTope;
       pon(t, "exp_tope_arrastre");
+      /* la prioridad del visor en la tarjeta (salio de Experimental en la 1.12): con un juego llenando la
+         tarjeta, el cuadro 3D no espera su turno */
+      Hud::ItemPanel pr;
+      pr.tipo = Hud::ItemPanel::Opciones, pr.rotulo = idioma::tr("Prioridad del visor en la tarjeta");
+      pr.opciones = {idioma::tr("Normal"), idioma::tr("Alta"), idioma::tr("Tiempo real")};
+      pr.elegido = v.expPrioridad == "alta" ? 1 : (v.expPrioridad == "tiempo_real" ? 2 : 0);
+      pon(pr, "exp_prioridad");
+      Hud::ItemPanel prn;
+      prn.tipo = Hud::ItemPanel::Nota;
+      prn.rotulo = idioma::tr("Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.");
+      pon(prn, "");
+    }
+    /* SEGUIMIENTO DE LA CABEZA (26-nov, «manda anticipar la cabeza a Ajustes»): salio de Experimental */
+    {
+      Hud::ItemPanel sc;
+      sc.tipo = Hud::ItemPanel::Seccion, sc.rotulo = idioma::tr("SEGUIMIENTO DE LA CABEZA");
+      pon(sc, "");
+      Hud::ItemPanel a;
+      a.tipo = Hud::ItemPanel::Deslizador, a.rotulo = idioma::tr("Anticipar la cabeza");
+      a.nota = idioma::tr("La trama apunta a donde estarán los ojos dentro de estos milisegundos · 0 = apagado");
+      a.ayuda = idioma::tr("Al mover la cabeza, la cámara y la trama llegan tarde unos milisegundos; con esto la trama se calcula para donde estarán los ojos, siguiendo su velocidad. Any2Odyssey usa 25 ms; de más, la trama se pasa al frenar.");
+      a.frac = (float)v.expAnticipacion / 60.0f;
+      a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
+      pon(a, "exp_anticipacion");
     }
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VERSIÓN");
@@ -779,67 +803,6 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     d.valor = true;
     d.peligro = true;
     pon(d, "desinstalar");
-    return;
-  }
-  if (st.pestana == 4) {
-    /* Experimental (rama experimental): las pruebas sacadas de leer Any2Odyssey, por categoria. Cada
-       una se compara contra lo de fabrica y se aplica desde el siguiente video. */
-    Hud::ItemPanel i;
-    i.tipo = Hud::ItemPanel::Info;
-    i.rotulo = idioma::tr("Pruebas de la rama experimental: cada una se compara contra lo de fábrica.");
-    i.nota = idioma::tr("Se aplican desde el siguiente vídeo. Lo que funcione pasará a la versión normal.");
-    pon(i, "");
-    Hud::ItemPanel s;
-    /* rama experimental: «Con la red / Sin red» es ahora el interruptor AI | Rendimiento de la cabecera, y
-       la frecuencia variable y el tope de arrastre pasaron a Ajustes → Fluidez */
-    s.tipo = Hud::ItemPanel::Seccion;
-    s.rotulo = idioma::tr("RED DE PROFUNDIDAD");
-    pon(s, "");
-    /* el alcance del relieve con la red: lo que deja meter mas profundidad (se aplica en marcha) */
-    Hud::ItemPanel tr;
-    tr.tipo = Hud::ItemPanel::Deslizador, tr.rotulo = idioma::tr("Alcance del relieve");
-    tr.nota = idioma::tr("Hasta dónde salen y se hunden las cosas con la red · x1 = los topes de Samsung · en Auto se calcula solo");
-    tr.frac = (float)((v.expTopesRed - 1.0) / 3.0);
-    tr.valorTexto = "x" + conDecimal(v.expTopesRed, 2);
-    tr.ayuda = idioma::tr("Subir la fuerza o la Profundidad no da más 3D si la imagen ya choca con el tope: se aplasta. Medido con Profundidad 100 y relieve x2: a x1 el 85 % del cuadro está pegado al tope (unos 11 px de relieve entre los ojos); a x2,75, el 58 % (47 px); a x4, el 32 % (71 px). Más de ~98 px cansa la vista.");
-    pon(tr, "exp_topes_red");
-    Hud::ItemPanel r;
-    r.tipo = Hud::ItemPanel::Opciones, r.rotulo = idioma::tr("La red ve el cuadro a su proporción");
-    r.opciones = {idioma::tr("Cuadrado"), "16:9 · 518", "16:9 · 770"};
-    r.elegido = v.expRed == "518" ? 1 : (v.expRed == "770" ? 2 : 0);
-    pon(r, "exp_red");
-    Hud::ItemPanel rn;
-    rn.tipo = Hud::ItemPanel::Nota;
-    rn.rotulo = idioma::tr("De fábrica la imagen 16:9 se aplasta a un cuadrado de 518; a su proporción la red la ve sin deformar, y más grande ve mejor lo delgado (más tiempo por mapa).");
-    pon(rn, "");
-    Hud::ItemPanel m;
-    m.tipo = Hud::ItemPanel::Opciones, m.rotulo = idioma::tr("Tamaño del mapa de profundidad");
-    m.opciones = {"518", "770", "1022"};
-    m.elegido = v.expMapa == 770 ? 1 : (v.expMapa == 1022 ? 2 : 0);
-    pon(m, "exp_mapa");
-    Hud::ItemPanel mn;
-    mn.tipo = Hud::ItemPanel::Nota;
-    mn.rotulo = idioma::tr("Puntos a lo ancho del mapa que llega a la trama: más puntos, bordes más finos y más tiempo de limpieza.");
-    pon(mn, "");
-    s.rotulo = idioma::tr("VISOR");
-    pon(s, "");
-    Hud::ItemPanel pr;
-    pr.tipo = Hud::ItemPanel::Opciones, pr.rotulo = idioma::tr("Prioridad del visor en la tarjeta");
-    pr.opciones = {idioma::tr("Normal"), idioma::tr("Alta"), idioma::tr("Tiempo real")};
-    pr.elegido = v.expPrioridad == "alta" ? 1 : (v.expPrioridad == "tiempo_real" ? 2 : 0);
-    pon(pr, "exp_prioridad");
-    Hud::ItemPanel prn;
-    prn.tipo = Hud::ItemPanel::Nota;
-    prn.rotulo = idioma::tr("Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.");
-    pon(prn, "");
-    s.rotulo = idioma::tr("SEGUIMIENTO DE LA CABEZA");
-    pon(s, "");
-    Hud::ItemPanel a;
-    a.tipo = Hud::ItemPanel::Deslizador, a.rotulo = idioma::tr("Anticipar la cabeza");
-    a.nota = idioma::tr("La trama se calcula para donde estarán los ojos dentro de estos milisegundos (0 = apagado; Any2Odyssey usa 25)");
-    a.frac = (float)v.expAnticipacion / 60.0f;
-    a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
-    pon(a, "exp_anticipacion");
     return;
   }
   if (st.pestana == 0) {
@@ -1083,18 +1046,6 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (aviso) *aviso = idioma::trf("Pulsa la combinación nueva para «{}» · Esc cancela", {idioma::tr(d->texto)});
     return true;
   }
-  if (id == "exp_red") {
-    static const char *kVal[] = {"cuadrado", "518", "770"};
-    if (sub < 0 || sub > 2 || !fija("exp_red", kVal[sub])) return false;
-    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
-    return true;
-  }
-  if (id == "exp_mapa") {
-    static const char *kVal[] = {"518", "770", "1022"};
-    if (sub < 0 || sub > 2 || !fija("exp_mapa", kVal[sub])) return false;
-    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
-    return true;
-  }
   if (id == "exp_sin_red") {
     static const char *kVal[] = {"no", "si"};
     if (sub < 0 || sub > 1 || !fija("exp_sin_red", kVal[sub])) return false;
@@ -1115,14 +1066,6 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   if (id == "exp_tope_arrastre") {
     if (!fija("exp_tope_arrastre", v.expTope ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
-    return true;
-  }
-  if (id == "exp_topes_red") {
-    if (!soltado) return false;
-    const double x = std::round((1.0 + std::max(0.0f, std::min(1.0f, frac)) * 3.0) * 20.0) / 20.0;   /* de 0,05 en 0,05 */
-    if (!fija("exp_topes_red", conComa(x, 2))) return false;
-    avisarVisor({}, {{"topes_red", conComa(x, 2)}});   /* el visor abierto lo pone al momento */
-    if (aviso) *aviso = idioma::trf("alcance x{}: el vídeo abierto lo toma al momento", {conDecimal(x, 2)});
     return true;
   }
   if (id == "exp_anticipacion") {

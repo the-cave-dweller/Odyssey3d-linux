@@ -1696,6 +1696,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      al tope de dentro y entre los ojos solo hay ~11 px de relieve; a x2,75 el 58 % y ~47 px; a x4 el
      32 % y ~71 px. Con el plano automatico, x2,75 deja un 2 % pegado y ~81 px. */
   float exTopesRed = numEntorno("ODYSSEYVK_TOPES_RED", 1.0f, 1.0f, 4.0f);
+  /* solo el taller lo fija (ver el alcance, abajo); sin la variable lo calcula el visor */
+  static const bool kTopesRedFijos = entornoOdyssey("ODYSSEYVK_TOPES_RED") != nullptr;
   double exParalaje = numEntorno("ODYSSEYVK_SIN_RED_PARALAJE", pf.paralaje, 1.0f, 4.0f);
   std::vector<uint8_t> chico, mapa;
   bool convActivo = opts.conver;
@@ -2428,14 +2430,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (const auto op = palabras.find("preajuste"); op != palabras.end()) {
             const int k = std::atoi(op->second.c_str());
             if (k >= 0 && k <= 2) ui.preajustePedido = k;
-          }
-          /* `topes_red = 2,75` (rama experimental): el alcance del relieve con la red, en marcha */
-          if (const auto op = palabras.find("topes_red"); op != palabras.end()) {
-            std::string t = op->second;
-            for (char &c : t)
-              if (c == ',') c = '.';
-            const float x = (float)std::atof(t.c_str());
-            if (x >= 1.0f && x <= 4.0f) exTopesRed = x;
           }
           const auto ordenIdioma = palabras.find("idioma");
           if (ordenIdioma != palabras.end()) {
@@ -3651,13 +3645,38 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
       }
       const float exRel = red.sinRed() ? exGanancia : 1.0f;
-      wv.setTopeEscala(red.sinRed() ? exTopes : exTopesRed);
+      /* El alcance del relieve con la red, en Auto y en Manual (v1.12), con la distancia de los ojos (la
+         del rastreo; sin camara, la pose nominal de 65,1 cm) y el paso de este panel (598 mm / 3840 px):
+         el tope de fuera queda en medio grado de paralaje entre los ojos, alcance = d * tan(0,5 grados) /
+         (2 * 12,67 px * 0,156 mm). A 65 cm sale x1,44 (+18,2 / -14,3 px por ojo); a 50 cm, x1,1; a 80 cm,
+         x1,77. Primero fue el grado entero (la «regla del grado», la zona comoda de la vista: x2,88 a 65 cm)
+         y era demasiado («alcance de relieve is the issue, you might be too aggressive with it», Rodolfo,
+         26-nov): todo error del mapa salia 2,88 veces mas grande y el fantasma de la lente 2,88 veces mas
+         lejos, y se veian cantos torcidos, subtitulos doblados y rectas que bailaban. El grado es lo que
+         la vista aguanta, no lo que esta lente y una red de una sola imagen dan limpio. Manual tenia el
+         suyo en la pestana Experimental (`exp_topes_red`), que se fue en la 1.12; ODYSSEYVK_TOPES_RED lo
+         fija a mano para el taller. */
+      static float tAlcance = -1.0f;
+      static double tAlcanceT = -1.0;
+      if (!red.sinRed()) {
+        if (kTopesRedFijos) {
+          tAlcance = exTopesRed;
+        } else {
+          const double distMm = std::max(300.0, std::min(1500.0, wv.eye().z * 10.0));
+          const float tComodo = (float)std::max(1.0, std::min(4.0, distMm * std::tan(0.5 * M_PI / 180.0) /
+                                                                         (2.0 * 12.67 * (598.0 / 3840.0))));
+          if (tAlcance < 0.0f) tAlcance = tComodo;
+          else tAlcance += (tComodo - tAlcance) * (float)std::min(1.0, (tAlcanceT < 0.0 ? 1.0 : now - tAlcanceT) / 1.0);
+          tAlcanceT = now;
+        }
+      }
+      wv.setTopeEscala(red.sinRed() ? exTopes : tAlcance);
       {
-        static float dicho = -1.0f;
-        if (!red.sinRed() && exTopesRed != dicho) {
-          dicho = exTopesRed;
-          std::printf("[conversor] alcance del relieve con la red x%.2f (topes por ojo +%.1f / -%.1f px)\n", (double)exTopesRed,
-                      12.67 * exTopesRed, 9.98 * exTopesRed);
+        static bool dicho = false;
+        if (!red.sinRed() && kTopesRedFijos && !dicho) {
+          dicho = true;
+          std::printf("[conversor] alcance del relieve fijado por ODYSSEYVK_TOPES_RED: x%.2f (topes por ojo +%.1f / -%.1f px)\n",
+                      (double)exTopesRed, 12.67 * exTopesRed, 9.98 * exTopesRed);
           std::fflush(stdout);
         }
       }
@@ -3683,26 +3702,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          Tope: lo que daria la Salida 50 con `relieve = 2,00` y el mismo alcance, para que una escena
          casi plana no infle el ruido de la red. */
       if (!red.sinRed() && st.focoVisible && apoyoAuto) {
-        static float gAuto = -1.0f, tAlcance = -1.0f;
+        static float gAuto = -1.0f;
         static double tAuto = -1.0;
-        /* el alcance automatico (rama experimental), con la distancia de los ojos (la del rastreo; sin camara,
-           la pose nominal de 65,1 cm) y el paso de este panel (598 mm / 3840 px): el tope de fuera queda en
-           medio grado de paralaje entre los ojos, alcance = d * tan(0,5 grados) / (2 * 12,67 px * 0,156 mm).
-           A 65 cm sale x1,44 (+18,2 / -14,3 px por ojo); a 50 cm, x1,1; a 80 cm, x1,77.
-           Primero fue el grado entero (la «regla del grado», la zona comoda de la vista: x2,88 a 65 cm) y
-           era demasiado («alcance de relieve is the issue, you might be too aggressive with it», Rodolfo,
-           26-nov): todo error del mapa salia 2,88 veces mas grande y el fantasma de la lente 2,88 veces mas
-           lejos, y se veian cantos torcidos, subtitulos doblados y rectas que bailaban. El grado es lo que
-           la vista aguanta, no lo que esta lente y una red de una sola imagen dan limpio. */
-        {
-          const double distMm = std::max(300.0, std::min(1500.0, wv.eye().z * 10.0));
-          const float tComodo = (float)std::max(1.0, std::min(4.0, distMm * std::tan(0.5 * M_PI / 180.0) /
-                                                                         (2.0 * 12.67 * (598.0 / 3840.0))));
-          if (tAlcance < 0.0f) tAlcance = tComodo;
-          else tAlcance += (tComodo - tAlcance) * (float)std::min(1.0, (tAuto < 0.0 ? 1.0 : now - tAuto) / 1.0);
-          wv.setTopeEscala(tAlcance);
-          ui.hud.state().focoAlcance = (int)std::lround(tAlcance * 100.0f);
-        }
+        /* el alcance (arriba): medio grado de paralaje a la distancia de los ojos */
+        ui.hud.state().focoAlcance = (int)std::lround(tAlcance * 100.0f);
         const float T = tAlcance, p = red.focusPlane();
         const float lo = red.cuantilBajo(), hi = red.cuantilAlto();
         float g = std::min(0.0033f * T / std::max(hi - p, 0.02f), 0.0026f * T / std::max(p - lo, 0.02f));
@@ -3924,13 +3927,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             cambioPop = -1.0;
             std::string e2;
             if (ajuste::fijarEnServeConf("salida_" + suf, std::to_string(hs.popout), &e2)) conf["salida_" + suf] = std::to_string(hs.popout);
-            /* y el alcance que se estaba calculando (el de la pestana Experimental) */
-            exTopesRed = std::max(1.0f, std::min(4.0f, (float)hs.focoAlcance / 100.0f));
-            char tr[16];
-            std::snprintf(tr, sizeof tr, "%.2f", (double)exTopesRed);
-            for (char *q = tr; *q; q++)
-              if (*q == '.') *q = ',';
-            ajuste::fijarEnServeConf("exp_topes_red", tr, &e2);
           }
           profundidadVista = hs.depth;
           baseDepth = hs.depth;
