@@ -29,6 +29,18 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   juego de verdad.
 - Neural Forge es AGPL y OdysseyVK MIT: de ahí se toman ideas o se le habla como otro programa, no
   se copia código.
+- **MEDIDO con Cyberpunk** (Rodolfo hizo el volcado: 2 cuadros, render 1920 × 1080, `D32_SFLOAT`,
+  Z invertida, 11 % de cielo; tercera persona en moto, ciudad detrás). La profundidad de DLSS es exacta:
+  el piloto, el manillar, el coche de detrás, las farolas, la palmera y los cantos de los edificios,
+  limpios a la resolución de render. La de la red es borrosa (el coche y las farolas casi no están) y
+  el parecido por rangos es 0,888: el orden general coincide, el detalle no. Y salió un fallo NUESTRO:
+  el detector de rótulos apoyó en la pantalla el **23,2 % del mapa** (`[rotulos] apoyados en la
+  pantalla`), y el piloto y la moto quedaron cortados en franjas horizontales planas; con
+  `ODYSSEYVK_TEXTO=0` el mismo cuadro sale de una pieza. En un juego en tercera persona, el personaje
+  centrado y los letreros de la ciudad pasan por subtítulos. En los ojos, la profundidad exacta deja el
+  canto del piloto duro y su hueco más grande (rayas en el pelo con el plano lejos); con la red el
+  canto se emborrona y no se nota. (El `-rotulos.pgm` de ese volcado salió cortado: 33 815 de 270 415
+  bytes.)
 
 ## Versión 1.13: lo que llegó después de la primera 1.12 (v1.13)
 
