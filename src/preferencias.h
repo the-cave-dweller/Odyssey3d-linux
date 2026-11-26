@@ -62,6 +62,7 @@ struct Valores {
   int expMapa = 518;                 /* `exp_mapa`: 518 | 770 | 1022 */
   bool expTope = false;              /* `exp_tope_arrastre = si` */
   int expAnticipacion = 0;           /* `exp_anticipacion`: ms, 0 = apagada */
+  std::string expPrioridad = "normal";   /* `exp_prioridad`: normal | alta | tiempo_real */
 };
 Valores leer();
 

@@ -267,6 +267,8 @@ Valores leer() {
   if (v.expMapa != 770 && v.expMapa != 1022) v.expMapa = 518;
   v.expTope = si(de("exp_tope_arrastre"), false);
   v.expAnticipacion = std::max(0, std::min(60, std::atoi(de("exp_anticipacion").c_str())));
+  v.expPrioridad = de("exp_prioridad");
+  if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
   if (!v.modelo.empty() && v.modelo[0] == '~') {
     const char *home = std::getenv("HOME");
     v.modelo = std::string(home ? home : "") + v.modelo.substr(1);
@@ -665,6 +667,17 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     t.nota = idioma::tr("Ningún punto se queda más de 1/16 de la escala por detrás del mapa nuevo: lo que se mueve no deja estela");
     t.valor = v.expTope;
     pon(t, "exp_tope_arrastre");
+    s.rotulo = idioma::tr("VISOR");
+    pon(s, "");
+    Hud::ItemPanel pr;
+    pr.tipo = Hud::ItemPanel::Opciones, pr.rotulo = idioma::tr("Prioridad del visor en la tarjeta");
+    pr.opciones = {idioma::tr("Normal"), idioma::tr("Alta"), idioma::tr("Tiempo real")};
+    pr.elegido = v.expPrioridad == "alta" ? 1 : (v.expPrioridad == "tiempo_real" ? 2 : 0);
+    pon(pr, "exp_prioridad");
+    Hud::ItemPanel prn;
+    prn.tipo = Hud::ItemPanel::Nota;
+    prn.rotulo = idioma::tr("Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.");
+    pon(prn, "");
     s.rotulo = idioma::tr("SEGUIMIENTO DE LA CABEZA");
     pon(s, "");
     Hud::ItemPanel a;
@@ -960,6 +973,12 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   if (id == "exp_mapa") {
     static const char *kVal[] = {"518", "770", "1022"};
     if (sub < 0 || sub > 2 || !fija("exp_mapa", kVal[sub])) return false;
+    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "exp_prioridad") {
+    static const char *kVal[] = {"normal", "alta", "tiempo_real"};
+    if (sub < 0 || sub > 2 || !fija("exp_prioridad", kVal[sub])) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
     return true;
   }

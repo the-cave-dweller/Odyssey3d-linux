@@ -128,6 +128,16 @@ public:
 
   /* un cuadro completo: adquirir, dibujar trama + interfaz, presentar */
   bool frame(std::string *err);
+  /* Donde se va el tiempo de presentar (rama experimental, tirones): en la CPU, esperar a que la
+     tarjeta acabe el cuadro anterior de este hueco (valla), esperar una imagen libre del
+     intercambio (adquirir) y entregar (presentar); y en la TARJETA, lo que tardo de verdad nuestro
+     cuadro (marcas de tiempo al principio y al final de su lista de mandos). Maximos y medias desde
+     la ultima llamada, en ms; la llamada los pone a cero. */
+  struct TiemposCuadro {
+    double vallaMax = 0, adquirirMax = 0, presentarMax = 0, gpuMax = 0, gpuMedia = 0;
+    long n = 0, gpuN = 0;
+  };
+  TiemposCuadro tomaTiempos();
   bool resize(int w, int h);   /* intercambio perdido (ventana cambiada o fuera de fecha) */
   bool lost() const { return lost_; }
   void waitIdle();
@@ -195,6 +205,11 @@ private:
   VkDescriptorPool pool_ = VK_NULL_HANDLE;
 
   std::vector<FrameSlot> slots_;
+  VkQueryPool marcas_ = VK_NULL_HANDLE;      /* dos marcas de tiempo por hueco */
+  std::vector<bool> marcasPuestas_;
+  double periodoMarcaNs_ = 0.0;              /* ns por tic del reloj de la tarjeta (0 = sin marcas) */
+  TiemposCuadro tiempos_{};
+  double gpuSuma_ = 0.0;
   size_t frameNo_ = 0;
   bool lost_ = false;
 

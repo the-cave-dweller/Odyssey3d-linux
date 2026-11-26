@@ -1388,7 +1388,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     glfwTerminate();
     return 1;
   }
-  std::printf("[vulkan] %s · %s\n", dev.deviceName().c_str(), dev.hasDmaBufImport() ? "dma-buf disponible" : "sin dma-buf");
+  std::printf("[vulkan] %s · %s · cola de prioridad %s%s%s\n", dev.deviceName().c_str(),
+              dev.hasDmaBufImport() ? "dma-buf disponible" : "sin dma-buf", dev.prioridad().c_str(),
+              dev.prioridadNota().empty() ? "" : " · ", dev.prioridadNota().c_str());
 
   VkWeave wv;
   if (!wv.init(dev, surface, fbW, fbH, &err)) {
@@ -3746,6 +3748,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     tirTrabajoMax * 1000.0, tirTrabajoLargos, periodoMs, tirPresentaMax * 1000.0, tirPresentaLargas,
                     2.0 * periodoMs, tirPresentaHueco * 1000.0, medLeeN ? medLeeMs / (double)medLeeN : 0.0, medLeeMax,
                     medSubeN ? medSubeMs / (double)medSubeN : 0.0, medSubeMax, tirRedN ? tirRedMs / (double)tirRedN : 0.0);
+        /* y dentro de presentar: valla = esperar a que la tarjeta acabe el cuadro anterior de ese hueco,
+           adquirir = esperar una imagen libre (el refresco), entregar; tarjeta = lo que tarda nuestro
+           cuadro en la tarjeta, de principio a fin (con el juego compartiendola, incluye esperar turno) */
+        const VkWeave::TiemposCuadro tc = wv.tomaTiempos();
+        std::printf("[tirones] valla max %.1f · adquirir max %.1f · entregar max %.1f ms · tarjeta %.2f media / %.1f max "
+                    "ms (%ld cuadros) · cola %s\n",
+                    tc.vallaMax, tc.adquirirMax, tc.presentarMax, tc.gpuMedia, tc.gpuMax, tc.gpuN,
+                    dev.prioridad().c_str());
         tirFuenteMax = tirTrabajoMax = tirPresentaMax = tirPresentaHueco = 0.0;
         tirFuenteN = tirFuenteHuecos = tirTrabajoLargos = tirPresentaLargas = 0;
         medLeeMax = medSubeMax = 0.0;

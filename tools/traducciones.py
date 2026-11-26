@@ -213,6 +213,12 @@ T = {
 "Anticipar la cabeza": ("Anticipate the head", "Anticiper la tête", "Kopf vorausberechnen", "预测头部位置", "頭の動きを先読み", ),
 "La trama se calcula para donde estarán los ojos dentro de estos milisegundos (0 = apagado; Any2Odyssey usa 25)": ("The weave is computed for where the eyes will be in this many milliseconds (0 = off; Any2Odyssey uses 25)", "La trame est calculée pour là où seront les yeux dans ce nombre de millisecondes (0 = désactivé ; Any2Odyssey utilise 25)", "Das Weben wird für die Augenposition in so vielen Millisekunden berechnet (0 = aus; Any2Odyssey nutzt 25)", "按这些毫秒后眼睛所在位置计算交织（0 = 关闭；Any2Odyssey 用 25）", "この時間後の目の位置に合わせてウィーブを計算（0 = オフ、Any2Odyssey は 25）", ),
 "anticipación {} ms · desde el siguiente vídeo": ("anticipation {} ms · from the next video", "anticipation {} ms · dès la prochaine vidéo", "Vorausberechnung {} ms · ab dem nächsten Video", "预测 {} 毫秒 · 从下一个视频起", "先読み {} ms · 次の動画から", ),
+"VISOR": ("VIEWER", "VISIONNEUSE", "VIEWER", "查看器", "ビューア", ),
+"Prioridad del visor en la tarjeta": ("Viewer priority on the GPU", "Priorité de la visionneuse sur la carte", "Priorität des Viewers auf der Grafikkarte", "查看器在显卡上的优先级", "GPU でのビューアの優先度", ),
+"Normal": ("Normal", "Normale", "Normal", "普通", "通常", ),
+"Alta": ("High", "Haute", "Hoch", "高", "高", ),
+"Tiempo real": ("Real time", "Temps réel", "Echtzeit", "实时", "リアルタイム", ),
+"Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.": ("With a game filling the GPU, the 3D frame goes ahead of the game instead of waiting its turn; the game loses a little.", "Avec un jeu qui remplit la carte, l'image 3D passe devant le jeu au lieu d'attendre son tour ; le jeu perd un peu.", "Wenn ein Spiel die Grafikkarte auslastet, kommt das 3D-Bild vor dem Spiel dran statt zu warten; das Spiel verliert etwas.", "游戏占满显卡时，3D 画面优先于游戏处理，无需排队；游戏会稍有损失。", "ゲームが GPU を占有していても、3D の画面が順番を待たずに先に処理されます。ゲームは少し遅くなります。", ),
 "el idioma cambia al momento": ("the language changes right away", "la langue change tout de suite", "die Sprache wechselt sofort", "语言立即切换", "言語はすぐに切り替わります"),
 }
 

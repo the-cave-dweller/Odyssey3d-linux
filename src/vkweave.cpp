@@ -406,6 +406,27 @@ bool VkWeave::createFrames(std::string *err) {
     }
   }
   slots_.assign(imgs_.size(), FrameSlot{});
+  /* las marcas de tiempo de la tarjeta (rama experimental): dos por hueco */
+  {
+    VkPhysicalDeviceProperties pp{};
+    vkGetPhysicalDeviceProperties(dev_->phys(), &pp);
+    uint32_t qn = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(dev_->phys(), &qn, nullptr);
+    std::vector<VkQueueFamilyProperties> qp(qn);
+    vkGetPhysicalDeviceQueueFamilyProperties(dev_->phys(), &qn, qp.data());
+    const bool validas = dev_->queueFamily() < qn && qp[dev_->queueFamily()].timestampValidBits > 0;
+    periodoMarcaNs_ = validas ? (double)pp.limits.timestampPeriod : 0.0;
+    if (marcas_ == VK_NULL_HANDLE && validas) {
+      VkQueryPoolCreateInfo qpi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+      qpi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+      qpi.queryCount = 16;   /* de sobra: el intercambio tiene 3 imagenes */
+      if (vkCreateQueryPool(dev_->device(), &qpi, nullptr, &marcas_) != VK_SUCCESS) {
+        marcas_ = VK_NULL_HANDLE;
+        periodoMarcaNs_ = 0.0;
+      }
+    }
+    marcasPuestas_.assign(slots_.size(), false);
+  }
   for (size_t i = 0; i < slots_.size(); i++) {
     FrameSlot &s = slots_[i];
     std::string e2;
@@ -476,6 +497,11 @@ void VkWeave::destroyFrames() {
     s = FrameSlot{};
   }
   slots_.clear();
+  marcasPuestas_.clear();
+  if (marcas_) {
+    vkDestroyQueryPool(dev_->device(), marcas_, nullptr);
+    marcas_ = VK_NULL_HANDLE;
+  }
   if (cmdPool_) {
     vkDestroyCommandPool(dev_->device(), cmdPool_, nullptr);
     cmdPool_ = VK_NULL_HANDLE;
@@ -973,11 +999,33 @@ bool VkWeave::frame(std::string *err) {
   FrameSlot &s = slots_[slotIdx];
   /* primero esperamos el cuadro anterior de este hueco: asi el semaforo que le pasamos a
      vkAcquireNextImageKHR esta libre (VUID-vkAcquireNextImageKHR-semaphore-01779) */
+  auto msDesde = [](std::chrono::steady_clock::time_point t0) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+  };
+  const auto tValla0 = std::chrono::steady_clock::now();
   vkWaitForFences(dev_->device(), 1, &s.fence, VK_TRUE, UINT64_MAX);
+  tiempos_.vallaMax = std::max(tiempos_.vallaMax, msDesde(tValla0));
   vkResetFences(dev_->device(), 1, &s.fence);
+  /* el cuadro anterior de este hueco ya acabo: sus dos marcas de tiempo estan listas */
+  const uint32_t marca0 = (uint32_t)(slotIdx * 2);
+  if (marcas_ && marca0 + 1 < 16 && slotIdx < marcasPuestas_.size() && marcasPuestas_[slotIdx]) {
+    uint64_t m[2] = {0, 0};
+    if (vkGetQueryPoolResults(dev_->device(), marcas_, marca0, 2, sizeof m, m, sizeof(uint64_t),
+                              VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
+        m[1] >= m[0]) {
+      const double ms = (double)(m[1] - m[0]) * periodoMarcaNs_ / 1e6;
+      if (ms < 1000.0) {
+        tiempos_.gpuMax = std::max(tiempos_.gpuMax, ms);
+        gpuSuma_ += ms;
+        tiempos_.gpuN++;
+      }
+    }
+  }
 
   uint32_t idx = 0;
+  const auto tAdq0 = std::chrono::steady_clock::now();
   VkResult r = vkAcquireNextImageKHR(dev_->device(), sc_, UINT64_MAX, s.sem, VK_NULL_HANDLE, &idx);
+  tiempos_.adquirirMax = std::max(tiempos_.adquirirMax, msDesde(tAdq0));
   if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
     lost_ = true;
     return false;
@@ -1065,6 +1113,11 @@ bool VkWeave::frame(std::string *err) {
     if (err) *err = "vkBeginCommandBuffer falló";
     return false;
   }
+  const bool conMarcas = marcas_ && marca0 + 1 < 16 && slotIdx < marcasPuestas_.size();
+  if (conMarcas) {
+    vkCmdResetQueryPool(cb, marcas_, marca0, 2);
+    vkCmdWriteTimestamp(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, marcas_, marca0);
+  }
   barrier(cb, imgs_[idx], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 
@@ -1115,6 +1168,10 @@ bool VkWeave::frame(std::string *err) {
 
   barrier(cb, imgs_[idx], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0);
+  if (conMarcas) {
+    vkCmdWriteTimestamp(cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, marcas_, marca0 + 1);
+    marcasPuestas_[slotIdx] = true;
+  }
   if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
     if (err) *err = "vkEndCommandBuffer falló";
     return false;
@@ -1136,7 +1193,10 @@ bool VkWeave::frame(std::string *err) {
   pi.swapchainCount = 1;
   pi.pSwapchains = &sc_;
   pi.pImageIndices = &idx;
+  const auto tPre0 = std::chrono::steady_clock::now();
   r = vkQueuePresentKHR(dev_->queue(), &pi);
+  tiempos_.presentarMax = std::max(tiempos_.presentarMax, msDesde(tPre0));
+  tiempos_.n++;
   if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
     lost_ = true;
     return false;
@@ -1147,6 +1207,14 @@ bool VkWeave::frame(std::string *err) {
   }
   frameNo_++;
   return true;
+}
+
+VkWeave::TiemposCuadro VkWeave::tomaTiempos() {
+  TiemposCuadro t = tiempos_;
+  t.gpuMedia = t.gpuN ? gpuSuma_ / (double)t.gpuN : 0.0;
+  tiempos_ = TiemposCuadro{};
+  gpuSuma_ = 0.0;
+  return t;
 }
 
 /* ---------------- el pase de afinado del mapa (v0.89) ----------------

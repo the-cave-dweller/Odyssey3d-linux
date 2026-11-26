@@ -46,6 +46,10 @@ public:
   uint32_t queueFamily() const { return qFamily_; }
   const std::string &deviceName() const { return devName_; }
   bool hasDmaBufImport() const { return dmaBufExt_; }
+  /* la prioridad que dio el controlador a nuestra cola (rama experimental): "normal", "alta" o
+     "tiempo real". Se pide con ODYSSEYVK_PRIORIDAD=alta|tiempo_real; si no la dan, normal. */
+  const std::string &prioridad() const { return prioridad_; }
+  const std::string &prioridadNota() const { return prioridadNota_; }
 
   /* CuatroCC DRM -> VkFormat (XR24 = B8G8R8A8, XB24 = R8G8B8A8, ...). */
   static VkFormat vkFormatFor(uint32_t fourcc);
@@ -94,6 +98,7 @@ private:
   VkDevice device_ = VK_NULL_HANDLE;
   VkQueue queue_ = VK_NULL_HANDLE;
   uint32_t qFamily_ = 0;
+  std::string prioridad_ = "normal", prioridadNota_;
   VkCommandPool cmdPool_ = VK_NULL_HANDLE;
   VkSampler sampler_ = VK_NULL_HANDLE;
   VkDescriptorPool descPool_ = VK_NULL_HANDLE;

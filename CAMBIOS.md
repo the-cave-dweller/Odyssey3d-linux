@@ -3,6 +3,28 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Prioridad del visor en la tarjeta (rama `experimental`)
+
+- La partida de las 04:03 con la medición nueva: el juego mandaba parejo (74–84 cuadros/s, huecos
+  de ~30 ms) y el trabajo del visor cabía (vuelta ≤ 6 ms), pero al presentar esperaba a la tarjeta:
+  en las escenas pesadas, 62–145 de cada ~400 presentaciones por 5 s tardaron más de 12 ms (máx.
+  15–23 ms). La 4090 al 100 % con Cyberpunk y nuestro cuadro en la fila detrás del juego. Con el
+  juego a 120–155 cuadros (más margen) casi no hubo esperas. La red en la 5080 no cambió la caída
+  del juego (17–24 ms por mapa contra 20–25). Y seguía en pantalla completa exclusiva (3 veces
+  minimizado el visor, tarjeta «El juego tapa el 3D»).
+- Experimental → VISOR → «Prioridad del visor en la tarjeta» (`exp_prioridad = normal|alta|tiempo_real`
+  → `ODYSSEYVK_PRIORIDAD`): la cola del visor se crea con `VK_KHR_global_priority` HIGH o REALTIME,
+  para que su cuadro pase por delante del juego (lo que hacen los compositores de realidad virtual).
+  Si el controlador no la da, el dispositivo se crea con la de siempre y el registro dice por qué.
+  MEDIDO: el controlador de NVIDIA la niega a un proceso normal (`VK_ERROR_NOT_PERMITTED`: hace falta
+  CAP_SYS_NICE en el binario, como gamescope).
+- `[tirones]` cada 5 s, debajo de `[fps]`: dentro de presentar, cuánto se esperó la valla (que la
+  tarjeta acabe el cuadro anterior de ese hueco), adquirir (una imagen libre: el refresco) y entregar;
+  y lo que tarda nuestro cuadro EN LA TARJETA (marcas de tiempo al principio y al final de su lista de
+  mandos), media y máximo, con la prioridad de la cola. En el visor aparte, sin juego: 0,94 ms de
+  media y 3,3 de máximo por cuadro (con la trama y el conversor).
+- El registro dice ya en qué tarjeta abre la red: «con NVIDIA (tarjeta 1)».
+
 ## Tirones en Cyberpunk: la red a la 5080 y la medición de tirones (rama `experimental`)
 
 - Rodolfo: «tuve tirones en Cyberpunk, checa si ves un posible motivo». MEDIDO en el registro de
