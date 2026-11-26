@@ -734,7 +734,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       Hud::ItemPanel fj;
       fj.tipo = Hud::ItemPanel::Interruptor, fj.rotulo = idioma::tr("Cuadro de FPS junto a la pastilla");
       fj.valor = v.fpsJuego;
-      fj.ayuda = idioma::tr("Los FPS del juego y los de la capa de DLSS (con el modelo de serie, los de la red), mientras haya 3D sobre el juego.");
+      fj.ayuda = idioma::tr("Los FPS del juego y, con DLSS, los de su capa, mientras haya 3D sobre el juego.");
       pon(fj, "fps_juego");
     }
     /* FLUIDEZ (rama experimental): lo que salio de Experimental. El VRR solo se elige con la red: en

@@ -266,9 +266,8 @@ T = {
 "HUD del juego en el plano de la pantalla": ("Game HUD on the screen plane", "HUD du jeu sur le plan de l'écran", "Spiel-HUD auf der Bildschirmebene", "游戏 HUD 位于屏幕平面", "ゲームの HUD を画面の面に"),
 "El minimapa, la munición, los textos y los menús del juego se quedan quietos en la pantalla, sin relieve.": ("The game's minimap, ammo, text and menus stay still on the screen, with no depth.", "La mini-carte, les munitions, les textes et les menus du jeu restent fixes à l'écran, sans relief.", "Minikarte, Munition, Texte und Menüs des Spiels bleiben ruhig auf dem Bildschirm, ohne Tiefe.", "游戏的小地图、弹药、文字和菜单固定在屏幕上，没有立体感。", "ゲームのミニマップ、弾数、文字、メニューは奥行きなしで画面に止まったままになります。"),
 "Cuadro de FPS junto a la pastilla": ("FPS box next to the pill", "Cadre FPS à côté de la pastille", "FPS-Kasten neben der Leiste", "控制条旁的帧率框", "ピルの横に FPS 枠"),
-"Los FPS del juego y los de la capa de DLSS (con el modelo de serie, los de la red), mientras haya 3D sobre el juego.": ("The game's FPS and the DLSS layer's (with the stock model, the network's), while 3D is on over the game.", "Les FPS du jeu et ceux de la couche DLSS (avec le modèle d'origine, ceux du réseau), tant que la 3D est active sur le jeu.", "Die FPS des Spiels und die des DLSS-Layers (beim Standardmodell die des Netzes), solange 3D über dem Spiel läuft.", "在游戏上开启 3D 时，显示游戏帧率和 DLSS 图层帧率（使用默认模型时为网络帧率）。", "ゲームで 3D 表示中、ゲームの FPS と DLSS レイヤーの FPS（標準モデルではネットワークの FPS）を表示します。"),
+"Los FPS del juego y, con DLSS, los de su capa, mientras haya 3D sobre el juego.": ("The game's FPS and, with DLSS, its layer's, while 3D is on over the game.", "Les FPS du jeu et, avec DLSS, ceux de sa couche, tant que la 3D est active sur le jeu.", "Die FPS des Spiels und, mit DLSS, die seines Layers, solange 3D über dem Spiel läuft.", "在游戏上开启 3D 时，显示游戏帧率；使用 DLSS 时也显示其图层帧率。", "ゲームで 3D 表示中、ゲームの FPS と、DLSS ではそのレイヤーの FPS を表示します。"),
 "Modelo de serie": ("Stock model", "Modèle d'origine", "Standardmodell", "默认模型", "標準モデル"),
-"Red": ("Network", "Réseau", "Netz", "网络", "ネットワーク"),
 }
 
 from traducciones_ru import RU

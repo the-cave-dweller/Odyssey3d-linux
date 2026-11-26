@@ -82,6 +82,9 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   visor (sus FPS, hasta el refresco) y los mapas de la red por segundo («Red»). Sobre un vídeo no sale. El
   registro del visor lo repite cada 5 s (`[cuadrito] …`). Probado: modelo de serie, juego 60 · red 6 (la «fuente
   60/s» del visor; 6 mapas por segundo, los mismos que en la partida de Cyberpunk); DLSS, juego 116 · capa 58.
+- Rodolfo: «en los fps que no son de dlss solo deja los del juego». Con el modelo de serie el cuadrito lleva solo
+  «Juego», en un renglón a media altura (el título y el alto, como con DLSS); se fue lo de la red (su cuenta en el
+  visor y su texto traducido). El registro: `[cuadrito] modelo de serie · juego N fps`.
 
 - Rodolfo: «puedes hacer que aparezca aqui que se está procesando con DLSS? También junto al HUB quiero que en
   un cuadro pequeño indiques los FPS del layer y los del juego. Que en los settings se puedan desactivar».
