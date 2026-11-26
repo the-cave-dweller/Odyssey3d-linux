@@ -2981,6 +2981,14 @@ static int cmdAjustes(int argc, char **argv) {
       if (!prefs::descargaEnMarcha()) {
         std::printf("[ajustes] red abierta: %s\n", prefs::textoDescarga().c_str());
         std::fflush(stdout);
+        if (prefs::redAbiertaPresente()) {
+          /* bajada y entera: el visor que haya abierto la carga ya (orden `cargar_red`), el servicio
+             la ve en su proxima mirada, y este panel se cierra solo (v0.94) */
+          std::string e;
+          ajuste::escribir(std::map<std::string, double>(), std::string(), {{"cargar_red", "si"}}, &e);
+          st.pie = "red descargada: el 3D de vídeo normal ya puede calcular la profundidad";
+          cerrarEn = reloj() + 2.5;
+        }
       }
     }
     if (repintar) ov.repaint();
@@ -3339,7 +3347,6 @@ struct ServeCfg {
   int esperaSeg = 40;
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
   std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
-  std::string samsung;            /* la red de Samsung cuando `modelo` es la abierta: sigue en el boton 1 (v0.93) */
   std::string nuestra;            /* la otra red (.onnx), la nativa, la del boton 2 del visor */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
@@ -3471,7 +3478,6 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "pantalla") cfg.pantalla = v;
     else if (k == "modelo") cfg.modelo = expansionRuta(v);
     else if (k == "nuestra") cfg.nuestra = expansionRuta(v);
-    else if (k == "samsung") cfg.samsung = expansionRuta(v);
     else if (k == "rastreo") cfg.rastreo = (v == "si" || v == "on" || v == "1" || v == "track");
     else if (k == "camara") cfg.camara = v;
     else if (k == "mono") {
@@ -4559,17 +4565,18 @@ static int cmdServe(int argc, char **argv) {
      vale para el siguiente visor. Sin `modelo =`, o con la abierta en el, se arranca con la abierta
      (Depth Anything V2): es la de fabrica. Con la de Samsung puesta ahi, con esa. */
   auto elegirRedes = [&] {
-    /* `modelo =` dice con cual se arranca; la otra va al otro boton. La abierta se reconoce por el
-       nombre del archivo (slotRed); la de Samsung, cuando `modelo` es la abierta, viene de
-       `samsung =` (v0.93: en la 0.92, al elegir «Abierta» en el panel, la de Samsung desaparecia). */
-    const bool abiertaPrimero = cfg.modelo.empty() || slotRed(cfg.modelo) == 2;
-    const std::string rNuestra = abiertaPrimero && !cfg.modelo.empty() ? cfg.modelo : (cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra);
-    const std::string rSamsung = abiertaPrimero ? cfg.samsung : cfg.modelo;
+    /* Las dos redes, sin que nadie tenga que decir nada (v0.94): la abierta es la de siempre
+       (Depth Anything V2) y, si en la misma carpeta esta la del programa de Samsung
+       (`mde_large.onnx`), se detecta sola y arranca con ella (boton 1); la abierta queda en el
+       boton 2. `modelo =` sigue valiendo para una ruta a mano: segun el nombre del archivo va a
+       un boton o al otro. */
+    const std::string carpeta = rutaRedNuestra().substr(0, rutaRedNuestra().rfind('/'));
+    std::string rSamsung = carpeta + "/mde_large.onnx";
+    std::string rNuestra = cfg.nuestra.empty() ? rutaRedNuestra() : cfg.nuestra;
+    if (!cfg.modelo.empty()) (slotRed(cfg.modelo) == 1 ? rSamsung : rNuestra) = cfg.modelo;
     const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
     const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
-    redElegida = abiertaPrimero ? 2 : 1;
-    if (redElegida == 2 && ruta2.empty()) redElegida = 1;
-    if (redElegida == 1 && ruta1.empty()) redElegida = 2;
+    redElegida = ruta1.empty() ? 2 : 1;
     redActiva = redElegida == 1 ? ruta1 : ruta2;
     redOtra = redElegida == 1 ? ruta2 : ruta1;
     std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
@@ -4578,25 +4585,21 @@ static int cmdServe(int argc, char **argv) {
       std::printf("[serve]   sin ninguna red no hay video normal a 3D (el dividido si)\n");
     else
       std::printf("[serve]   arrancamos con la %d (%s); en el visor se cambia con las teclas 1 y 2 o con el boton\n",
-                  redElegida, redElegida == 1 ? "Samsung" : "abierta");
+                  redElegida, redElegida == 1 ? "la de Samsung, encontrada en la carpeta" : "abierta");
   };
   elegirRedes();
-  /* Sin ninguna red no hay video normal a 3D. La primera vez que pasa se abre el panel de ajustes,
-     que arriba del todo dice de donde se baja la abierta y trae el boton que lo hace (v0.92). Una
-     sola vez: el aviso se apunta en la carpeta de estado. */
+  /* Sin ninguna red no hay video normal a 3D: se abre el panel de ajustes, que arriba del todo dice
+     que hace falta descargarla para tener datos de profundidad y trae el boton que lo hace (v0.92;
+     desde v0.94 cada vez que el servicio arranca sin red, no solo la primera). */
   if (redActiva.empty()) {
-    const std::string marca = rutaEstadoOdyssey("red-avisada");
-    if (!fileExists(marca)) {
-      if (FILE *f = std::fopen(marca.c_str(), "we")) std::fclose(f);
-      std::printf("[serve] no hay ninguna red de profundidad: %s el panel de ajustes para descargar la abierta "
-                  "(o `odysseyvk ctl red descargar`)\n", dry ? "(dry) se abriria" : "se abre");
-      std::fflush(stdout);
-      if (!dry) {
-        const pid_t p = ::fork();
-        if (p == 0) {
-          ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
-          ::_exit(127);
-        }
+    std::printf("[serve] no hay ninguna red de profundidad: %s el panel de ajustes para descargar la abierta "
+                "(o `odysseyvk ctl red descargar`)\n", dry ? "(dry) se abriria" : "se abre");
+    std::fflush(stdout);
+    if (!dry) {
+      const pid_t p = ::fork();
+      if (p == 0) {
+        ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
+        ::_exit(127);
       }
     }
   }
@@ -5328,6 +5331,9 @@ static int cmdServe(int argc, char **argv) {
                                     ? (long long)sb.st_mtim.tv_sec * 1000000000LL + (long long)sb.st_mtim.tv_nsec + (long long)sb.st_size
                                     : -1;
         if (marcaConf == -2) marcaConf = marca;   /* la primera vez solo se apunta */
+        /* sin ninguna red al arrancar: en cuanto la abierta aparece en su carpeta (el boton de descarga
+           del panel), se toma para el siguiente visor (v0.94) */
+        if (redActiva.empty() && fileExists(rutaRedNuestra())) elegirRedes();
         if (marca != marcaConf) {
           marcaConf = marca;
           ServeCfg nuevo;
@@ -5336,10 +5342,9 @@ static int cmdServe(int argc, char **argv) {
                               nuevo.atajosGlobales != cfg.atajosGlobales || nuevo.crosstalkBase != cfg.crosstalkBase ||
                               nuevo.relieve != cfg.relieve || nuevo.divididoSuave != cfg.divididoSuave ||
                               nuevo.divididoAuto != cfg.divididoAuto ||
-                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo || nuevo.samsung != cfg.samsung;
-          if (nuevo.modelo != cfg.modelo || nuevo.samsung != cfg.samsung) {
+                              nuevo.porApp != cfg.porApp || nuevo.modelo != cfg.modelo;
+          if (nuevo.modelo != cfg.modelo) {
             cfg.modelo = nuevo.modelo;
-            cfg.samsung = nuevo.samsung;
             elegirRedes();
           }
           cfg.modo = nuevo.modo;

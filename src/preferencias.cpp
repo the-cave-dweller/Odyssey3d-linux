@@ -362,54 +362,33 @@ bool vigilarDescarga() {
 }
 
 namespace {
-/* lo que el panel dice de la red de profundidad, y el boton de bajar la abierta si falta */
-void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &ids, bool completo) {
+/* Cuando falta la red de profundidad (o se esta bajando): que hace falta, para que, de donde se
+   baja y el boton que lo hace. Con la red en su sitio no pone nada. */
+void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &ids) {
+  const bool abierta = redAbiertaPresente();
+  const bool otra = !v.modelo.empty() && v.modelo != rutaRedNuestra() && fileExists(v.modelo);
+  if ((abierta || otra) && !descargaEnMarcha() && textoDescarga().empty()) return;
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
-  const bool abierta = redAbiertaPresente();
-  const bool samsung = !v.modelo.empty() && v.modelo != rutaRedNuestra() && fileExists(v.modelo);
   Hud::ItemPanel s;
-  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "RED DE PROFUNDIDAD";
+  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = abierta ? "RED DE PROFUNDIDAD" : "FALTA LA RED DE PROFUNDIDAD";
   pon(s, "");
-  if (completo) {
-    Hud::ItemPanel o;
-    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = "Red del conversor de vídeo normal a 3D";
-    o.opciones = {"Abierta", "La de Samsung…"};
-    o.elegido = samsung ? 1 : 0;
-    pon(o, "red");
-    Hud::ItemPanel f;
-    f.tipo = Hud::ItemPanel::Fila, f.rotulo = "Archivo";
-    std::string nombre = samsung ? v.modelo : rutaRedNuestra();
-    const size_t barra = nombre.rfind('/');
-    if (barra != std::string::npos) nombre = nombre.substr(barra + 1);
-    f.valorTexto = samsung ? nombre : (abierta ? nombre + " (Depth Anything V2, 95 MB)" : "falta: hay que descargarla");
-    pon(f, "");
+  if (!abierta) {
     Hud::ItemPanel i;
-    i.tipo = Hud::ItemPanel::Info, i.rotulo = "La de Samsung es la del Odyssey 3D Hub de Windows: C:\\Program Files\\Odyssey 3D Hub\\Conversion\\model";
-    i.nota = "Allí se llama mde_large.fp16.onnx.bin y va ofuscada; el navegador espera un .onnx ya legible.";
+    i.tipo = Hud::ItemPanel::Info;
+    i.rotulo = "Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).";
+    i.nota = "Depth Anything V2 pequeña, 95 MB, de huggingface.co/XnetShadow/depth_anything_v2_small; queda en ~/.local/share/odysseyvk/modelos.";
     pon(i, "");
   }
-  if (!abierta || descargaEnMarcha() || !textoDescarga().empty()) {
-    if (!abierta && !descargaEnMarcha() && textoDescarga().empty()) {
-      Hud::ItemPanel n;
-      n.tipo = Hud::ItemPanel::Nota;
-      n.rotulo = "Para el vídeo normal a 3D hace falta la red Depth Anything V2 pequeña (95 MB).";
-      pon(n, "");
-      Hud::ItemPanel n2;
-      n2.tipo = Hud::ItemPanel::Nota;
-      n2.rotulo = "Se baja de huggingface.co/XnetShadow/depth_anything_v2_small y se guarda en ~/.local/share/odysseyvk/modelos.";
-      pon(n2, "");
-    }
-    Hud::ItemPanel b;
-    b.tipo = Hud::ItemPanel::Boton;
-    b.rotulo = abierta ? "Red abierta" : "Descargar la red abierta";
-    b.nota = textoDescarga();
-    b.valorTexto = descargaEnMarcha() ? "Bajando…" : (abierta ? "Lista" : "Descargar");
-    b.valor = !descargaEnMarcha() && !abierta;
-    pon(b, "descargar_red");
-  }
+  Hud::ItemPanel b;
+  b.tipo = Hud::ItemPanel::Boton;
+  b.rotulo = abierta ? "Red de profundidad" : "Descargar la red para tener profundidad";
+  b.nota = textoDescarga();
+  b.valorTexto = descargaEnMarcha() ? "Bajando…" : (abierta ? "Lista" : "Descargar (95 MB)");
+  b.valor = !descargaEnMarcha() && !abierta;
+  pon(b, "descargar_red");
 }
 }  // namespace
 
@@ -423,9 +402,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
   };
   if (st.pestana == 0) {
     /* sin ninguna red de profundidad no hay video normal a 3D: lo primero que se ve es como bajarla */
-    const bool sinRed = !redAbiertaPresente() && (v.modelo.empty() || !fileExists(v.modelo));
-    if (sinRed || descargaEnMarcha() || (!textoDescarga().empty() && !redAbiertaPresente()))
-      filasDeLaRed(st, v, ids, false);
+    filasDeLaRed(st, v, ids);
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "VÍDEO";
     pon(s, "");
@@ -514,7 +491,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       if (conv) fila("Red de profundidad", modelo + " · " + de("tarjeta"));
       fila("Cámara", de("facetracking") == "abierto" ? de("camara_nota") : "sin abrir");
     }
-    filasDeLaRed(st, v, ids, true);
+    filasDeLaRed(st, v, ids);
     s.rotulo = "TARJETAS GRÁFICAS";
     pon(s, "");
     bool alguna = false;
@@ -628,44 +605,6 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       return false;
     }
     if (aviso) *aviso = "bajando la red abierta (95 MB)…";
-    return true;
-  }
-  if (id == "red") {
-    if (sub == 0) {
-      /* la de Samsung que estaba puesta se apunta en `samsung =`: sigue en el boton 1 del visor */
-      if (!v.modelo.empty() && v.modelo != rutaRedNuestra() && fileExists(v.modelo) && !fija("samsung", v.modelo)) return false;
-      if (!fija("modelo", "~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx")) return false;
-      if (aviso) *aviso = redAbiertaPresente() ? "la red abierta, desde el siguiente vídeo" : "la red abierta: falta descargarla";
-      return true;
-    }
-    /* el navegador de archivos del escritorio (kdialog en KDE; zenity si no), con el .onnx de Samsung */
-    std::string ruta;
-    const char *home = std::getenv("HOME");
-    const std::string desde = std::string(home ? home : "/") + "/";
-    for (const char *orden : {"kdialog --getopenfilename \"%s\" \"*.onnx|Red de profundidad (.onnx)\" --title \"La red de Samsung\" 2>/dev/null",
-                              "zenity --file-selection --title=\"La red de Samsung\" --filename=\"%s\" --file-filter=\"*.onnx\" 2>/dev/null"}) {
-      char cmd[1024];
-      std::snprintf(cmd, sizeof cmd, orden, desde.c_str());
-      if (FILE *f = ::popen(cmd, "r")) {
-        char linea[1024];
-        if (std::fgets(linea, sizeof linea, f)) ruta = strTrim(linea);
-        const int rc = ::pclose(f);
-        if (rc == 0 && !ruta.empty()) break;
-        ruta.clear();
-        if (rc != 0 && WIFEXITED(rc) && WEXITSTATUS(rc) == 127) continue;   /* no esta ese dialogo: el otro */
-        break;                                                             /* cancelado */
-      }
-    }
-    if (ruta.empty()) {
-      if (aviso) *aviso = "sin cambios";
-      return false;
-    }
-    if (!fileExists(ruta)) {
-      if (aviso) *aviso = "no se pudo leer " + ruta;
-      return false;
-    }
-    if (!fija("samsung", ruta) || !fija("modelo", ruta)) return false;
-    if (aviso) *aviso = "la red de Samsung, desde el siguiente vídeo";
     return true;
   }
   if (id.rfind("auto:", 0) == 0) {

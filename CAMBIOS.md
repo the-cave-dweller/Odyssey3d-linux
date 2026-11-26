@@ -3,6 +3,33 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Nada de Samsung en el panel: la red se detecta sola; sin red, el panel se abre y la descarga carga (v0.94)
+
+- Rodolfo: «quita ya cualquier cosa del modelo de Samsung, rinde igual, ¿no?; solo deja intrínseco
+  que si el programa lo detecta en la carpeta lo elija solito»; «si el programa no detecta el modelo,
+  que abra el overlay ya en el menú y deje más en claro que se debe descargar para obtener los datos
+  de profundidad»; «que una vez descargado se cierre solito settings y cargue el modelo».
+- Fuera el selector de red, la fila del archivo, la «i» de Windows y la clave `samsung =` de la
+  0.93. El servicio mira la carpeta de redes: si está `mde_large.onnx` arranca con ella (botón 1 del
+  visor) y la abierta va al botón 2; si no, la abierta. `modelo =` sigue valiendo para una ruta a
+  mano. De la configuración de Rodolfo se quitaron `modelo =` y `samsung =` (respaldo
+  `serve.conf.respaldo-2026-11-25-antes-v094`). OJO: en la carpeta solo cuenta un archivo de verdad
+  (MEDIDO: un enlace simbólico a la de Samsung no se detectó; una copia sí).
+- Sin ninguna red: el servicio abre el panel de ajustes cada vez que arranca así (ya no solo la
+  primera vez), y el visor también lo abre solo cuando se le pide el conversor y no hay red que
+  cargar. El panel lo dice arriba del todo, con la «i»: «Sin ella no hay datos de profundidad: el
+  vídeo normal no se puede pasar a 3D», qué red es, de dónde se baja y dónde queda, y el botón
+  «Descargar (95 MB)».
+- Al acabar la descarga el panel manda `cargar_red = si` al visor, que carga la red y enciende el
+  conversor (el vídeo pasa a 3D sin cerrar nada); el servicio la toma en su siguiente mirada para
+  los vídeos que vengan; y el panel se cierra solo a los 2,5 s.
+- MEDIDO en el compositor aparte con una carpeta de inicio sin red: el visor arranca plano y abre el
+  panel; `ctl red descargar` baja la red; con la orden, el visor dice «la red de profundidad ya
+  está: se carga ahora», «vídeo normal a 3D encendido» y saca mapas. En seco, el servicio toma la
+  red en cuanto aparece. El panel pintado en los tres casos.
+- **No probado**: picar el botón en el panel de verdad y verlo cerrarse solo (el camino desde la
+  terminal es el mismo código).
+
 ## La red de Samsung no se pierde al elegir la abierta (v0.93)
 
 - MEDIDO en el registro de Rodolfo con la 0.92 recién instalada (23:11:54): al picar «Abierta» en el

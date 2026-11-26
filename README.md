@@ -168,23 +168,21 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
 
 * `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
   tecla `C` o con la tesela «Vídeo normal» de la tarjeta.
-* `--modelo RUTA` cambia la red. La de fábrica es la abierta, *Depth Anything V2 Small* en ONNX
-  (95 MB), en `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx`. Hace falta
-  descargarla una vez: la primera vez que el servicio arranca sin ella abre el panel de ajustes,
-  que dice de dónde se baja y trae el botón **Descargar**, que la deja en esa carpeta. Desde la
-  terminal es lo mismo:
+* La red de profundidad es la abierta, *Depth Anything V2 Small* en ONNX (95 MB), en
+  `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx`. Hace falta descargarla una vez:
+  mientras falte, el servicio abre el panel de ajustes al arrancar (y el visor también, si se le pide
+  el 3D de vídeo normal), que explica que sin ella no hay datos de profundidad y trae el botón
+  **Descargar (95 MB)**. Al acabar, el vídeo que esté abierto pasa a 3D solo y el panel se cierra.
+  Desde la terminal es lo mismo:
 
   ```sh
   odysseyvk ctl red descargar
   ```
 
-  Se baja de <https://huggingface.co/XnetShadow/depth_anything_v2_small>. Sin ninguna red el
-  resto del 3D sigue funcionando; solo falta el vídeo normal a 3D. La red del Odyssey 3D Hub de
-  Windows (`C:\Program Files\Odyssey 3D Hub\Conversion\model\mde_large.fp16.onnx.bin`, que allí va
-  ofuscada) se puede elegir en la pestaña Rendimiento del panel con «La de Samsung…», que abre el
-  navegador de archivos y espera un `.onnx` legible; da el mismo canto que la abierta (medido) y
-  tarda 9–11 ms por mapa en vez de 13–16. Al volver a «Abierta» esa ruta se queda en `samsung =`, para que el
-  visor la siga teniendo en la tecla 1.
+  Se baja de <https://huggingface.co/XnetShadow/depth_anything_v2_small>. Si en esa misma carpeta
+  hay un `mde_large.onnx` (la red del programa de Windows, que da el mismo canto, medido, y tarda
+  9–11 ms por mapa en vez de 13–16), el servicio arranca con ella y deja la abierta en la tecla 2
+  del visor; sin tocar nada. `--modelo RUTA` (o `modelo =` en `serve.conf`) fuerza otra.
 * `--cada N` calcula la profundidad cada `N` fotogramas (por defecto 3). Con cámara en movimiento
   conviene 2; si la GPU va justa, 4 o 5.
 * `--texto-panel si|no` pega o suelta los rótulos del plano de la pantalla (por defecto pegados;

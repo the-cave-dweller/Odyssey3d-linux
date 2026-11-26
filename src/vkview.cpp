@@ -157,6 +157,26 @@ void printTuning(const VkUi &ui, const char *what) {
    con las teclas de esa ventana. La ventana de ajustes (otro proceso) y `odysseyvk ctl ajuste` los
    mueven por ficheros: ver src/ajuste.h. Aqui esta la otra mitad: la foto de lo que el visor usa de
    verdad (el fichero `estado`) y la cuenta de lo que va cambiando (`preferencias.log`). */
+/* El panel de ajustes, por encima del video. Es otro proceso (la capa superpuesta de la tarjeta de
+   la orilla); se suelta del todo para que viva por su cuenta, y pulsar el engranaje otra vez lo
+   cierra. Lo abre el engranaje de la pastilla y, desde v0.94, el propio visor cuando se le pide el
+   conversor y no hay red de profundidad que cargar. */
+static void abrirPanelDeAjustes() {
+  char propio[512] = {0};
+  const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
+  const std::string exe = n > 0 ? std::string(propio, (size_t)n) : std::string("odysseyvk");
+  const pid_t pid = ::fork();
+  if (pid == 0) {
+    ::setsid();
+    if (::fork() != 0) ::_exit(0);
+    ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
+    ::_exit(127);
+  }
+  if (pid > 0) {
+    int stHijo = 0;
+    ::waitpid(pid, &stHijo, 0);
+  }
+}
 static bool g_cantosFinos = true;   /* v0.89: el mapa va tal cual y el sombreador busca la vista de cada ojo */
 static double g_fpsVisto = 0.0, g_mapaMs = 0.0;   /* para el `estado`: lo ensena la pestana de rendimiento */
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
@@ -508,23 +528,8 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       break;
     }
     case Hud::HitEngranaje: {
-      /* el engranaje de la pastilla: el panel de ajustes, por encima del video. Es otro proceso
-         (la capa superpuesta de la tarjeta de la orilla); se suelta del todo para que viva por su
-         cuenta, y pulsarlo otra vez lo cierra. */
-      char propio[512] = {0};
-      const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
-      const std::string exe = n > 0 ? std::string(propio, (size_t)n) : std::string("odysseyvk");
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        ::setsid();
-        if (::fork() != 0) ::_exit(0);
-        ::execl(exe.c_str(), exe.c_str(), "ajustes", (char *)nullptr);
-        ::_exit(127);
-      }
-      if (pid > 0) {
-        int stHijo = 0;
-        ::waitpid(pid, &stHijo, 0);
-      }
+      /* el engranaje de la pastilla: el panel de ajustes, por encima del video */
+      abrirPanelDeAjustes();
       std::printf("[pastilla] engranaje: el panel de ajustes\n");
       std::fflush(stdout);
       break;
@@ -1624,6 +1629,15 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     return false;
   };
+  if (convActivo && (modeloActivo.empty() || !fileExists(modeloActivo)) &&
+      (ui.rutaRed[2].empty() || !fileExists(ui.rutaRed[2]))) {
+    /* se pidio el conversor y no hay ninguna red que cargar: el video se vera plano, y el panel de
+       ajustes se abre solo, en el menu, con el aviso y el boton de descarga (v0.94) */
+    std::fprintf(stderr, "[conversor] no hay ninguna red de profundidad (%s): el video se ve plano; se abre el "
+                         "panel de ajustes para descargarla\n", rutaRedNuestra().c_str());
+    std::fflush(stderr);
+    abrirPanelDeAjustes();
+  }
   if (convActivo) {
     std::string rerr;
     if (!arrancarRed(convGpu, &rerr)) {
@@ -2066,6 +2080,19 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               std::printf("[barra] se guardaran %d copias chicas del cuadro en %s\n", g_barraGuardar,
                           ajuste::rutaBarra().c_str());
               std::fflush(stdout);
+            }
+          }
+          /* `cargar_red = si` (v0.94): el panel de ajustes acaba de bajar la red abierta. Si el conversor
+             estaba pedido y sin red, se carga ahora y el video pasa a 3D sin cerrar nada. (`red = N`
+             es otra orden, la de cambiar de red con el conversor ya en marcha.) */
+          const auto ordenRed = palabras.find("cargar_red");
+          if (ordenRed != palabras.end()) {
+            if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra())) ui.rutaRed[2] = rutaRedNuestra();
+            if (modeloActivo.empty() || !fileExists(modeloActivo)) modeloActivo = ui.rutaRed[2];
+            if (!convActivo && !modeloActivo.empty() && fileExists(modeloActivo)) {
+              std::printf("[conversor] la red de profundidad ya esta (%s): se carga ahora\n", modeloActivo.c_str());
+              std::fflush(stdout);
+              ui.convWant = true;
             }
           }
           /* `dividido_suavizado = si|no`: lo mandan los ajustes del programa. Cambia lo que hace el
