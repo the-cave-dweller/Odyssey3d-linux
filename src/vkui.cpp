@@ -835,7 +835,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ph = 76.0f;
     panelW_ = pw;
     panelH_ = ph;
-    const float x0 = (float)vw - 24.0f - pw, y0 = 24.0f;
+    /* (v1.16) abajo a la derecha (Rodolfo: «quiero que el hub siga igual de estilo pero al fondo a la derecha»):
+       sus menus se abren hacia arriba */
+    const float x0 = (float)vw - 24.0f - pw, y0 = (float)vh - 24.0f - ph;
     pillPanel_ = {x0, y0, pw, ph};
     solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov) */
 
@@ -1066,9 +1068,9 @@ void Hud::begin(int w, int h, float altoLogico) {
        pastilla. */
     if (st_.rendimiento && st_.menuRendimiento && btnRayo_.w > 0.0f) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f;
-      const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;
       const char *nota = idioma::tr("Volver a la red: el interruptor Neural | Rendimiento del panel");
       const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
+      const float mx0 = x0 + pw - mw, my0 = y0 - 6.0f - mh;   /* (v1.16) encima de la pastilla */
       menuRend_ = {mx0, my0, mw, mh};
       solid(mx0, my0, mw, mh, 0.0f, 0.0f, 0.0f, 0.88f);
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
@@ -1147,7 +1149,7 @@ void Hud::begin(int w, int h, float altoLogico) {
        la imagen). Debajo, el tipo de video y la casilla de «no volver a preguntar». */
     if (hubNormal && st_.menuNormal && btnFoco_.w > 0.0f) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f, tam = 12.0f;
-      const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;
+      const float mx0 = x0 + pw - mw;
       const bool manual = !autoPuesto;
       std::vector<std::string> nota;
       if (!manual)
@@ -1159,6 +1161,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (st_.modoVisible) alto += 46.0f;
       if (st_.recordarVisible) alto += 32.0f;
       alto += 8.0f;
+      const float my0 = y0 - 6.0f - alto;   /* (v1.16) encima de la pastilla */
       menuRend_ = {mx0, my0, mw, alto};
       solid(mx0, my0, mw, alto, 0.0f, 0.0f, 0.0f, 0.88f);
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
@@ -1242,7 +1245,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* la tarjeta de la actualizacion (v0.95): la misma tarjeta de la orilla, con otro contenido */
     askConv_ = askSbs_ = askDont_ = askAyuda_ = {-10.0f, -10.0f, 0.0f, 0.0f};
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 186.0f;
-    const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
+    /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
+    const float ax = (float)vw - 24.0f - aw,
+                ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
     mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
@@ -1282,7 +1287,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     askConv_ = askSbs_ = askDont_ = askAyuda_ = askActualizar_ = askNoAvisar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
     const float aw = std::min(520.0f, (float)vw - 48.0f);
     const float ah = 118.0f + 20.0f * (float)st_.askAvisoLineas.size();
-    const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
+    /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
+    const float ax = (float)vw - 24.0f - aw,
+                ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
     mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
@@ -1309,7 +1316,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     text(entendido, askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
   } else if (st_.ask) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
-    const float ax = (float)vw - 24.0f - aw, ay = (float)vh - 24.0f - ah;
+    /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
+    const float ax = (float)vw - 24.0f - aw,
+                ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
     askPanel_ = {ax, ay, aw, ah};
     mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);   /* el filo claro */
     mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
@@ -2184,6 +2193,7 @@ bool Hud::pillBounds(float *x, float *y, float *w, float *h) const {
   if (menuRend_.w > 0.0f) {
     x0 = std::min(x0, menuRend_.x);
     x1 = std::max(x1, menuRend_.x + menuRend_.w);
+    y0 = std::min(y0, menuRend_.y);
     y1 = std::max(y1, menuRend_.y + menuRend_.h);
   }
   if (x) *x = x0 * sc_;

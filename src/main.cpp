@@ -3620,7 +3620,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
     return 1;
   }
   const int W = o.w > 0 ? o.w : 1920, H = o.h > 0 ? o.h : 1080;
-  hud.state().ask = true;
+  /* (v1.16) ODYSSEYVK_HUD_ASK=0: sin la tarjeta de la pregunta (la pastilla y sus menus solos) */
+  hud.state().ask = !(std::getenv("ODYSSEYVK_HUD_ASK") && std::getenv("ODYSSEYVK_HUD_ASK")[0] == '0');
   hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
   hud.state().hud = 3;

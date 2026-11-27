@@ -3,6 +3,18 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La pastilla, abajo a la derecha (v1.16)
+
+- Rodolfo: «quiero que el hub siga igual de estilo pero al fondo a la derecha»; y para el resto, «un estilo como el
+  de vkdaedalus», con su misma escala, en todas partes (es la primera parte: la pastilla).
+- La pastilla del visor va a 24 px de la esquina de abajo a la derecha, con el mismo estilo. Sus menús (Relieve, el
+  del rayo) se miden antes y se abren hacia arriba, pegados a su orilla derecha. La tarjeta de aviso, que ya iba
+  abajo a la derecha, sube encima de la pastilla si está a la vista. El cuadrito de FPS sigue a su izquierda, y el
+  rincón que la trae de vuelta cuando está oculta va donde esté ella.
+- `ODYSSEYVK_HUD_ASK=0` (pruebas): `ctl hud` sin la tarjeta de la pregunta, para ver la pastilla y sus menús solos.
+- Probado: pintado con `ctl hud` (la pastilla con el menú Relieve abierto, y con un aviso encima). Sin probar en el
+  visor de verdad.
+
 ## Versión 1.15: la pestaña Integraciones, el tope de FPS de la capa y las carátulas (v1.15)
 
 - Rodolfo: «Sí, prepárala». Desde la 1.14 publicada (`f980cae`) van tres cambios con el mismo número: con 1.15 el
