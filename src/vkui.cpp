@@ -973,7 +973,16 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
   /* (v1.18) con el contador de MAKO, sus tres filas en lugar de Juego y Capa, que son los mismos reales (Rodolfo: «pon reales
      generados y en pantalla») */
-  const bool cuenta = st_.fg.reales > 0.5f;
+  /* (v1.18) con el contador, lo medido; sin DLSS y con el tiempo por cuadro elegido, lo que llega a la pantalla repartido con
+     el multiplicador del perfil de MAKO del juego (sin generacion, todos reales) */
+  const bool cuentaMedida = st_.fg.reales > 0.5f;
+  const bool cuentaEstimada = !cuentaMedida && st_.fpsModo == 2 && st_.fg.tiempoCuadro && st_.fpsJuego > 0.5f;
+  const bool cuenta = cuentaMedida || cuentaEstimada;
+  float cReales = st_.fg.reales, cGenerados = st_.fg.generados;
+  if (cuentaEstimada) {
+    const int m = st_.fg.enJuego && st_.fg.puesta ? std::max(1, st_.fg.multiplicador) : 1;
+    cReales = st_.fpsJuego / (float)m, cGenerados = st_.fpsJuego - cReales;
+  }
   if (st_.fpsModo != 0 && !cuenta) {
     filas.push_back({idioma::tr("Juego"), {{nj, "fps"}}});
     if (dlss) filas.push_back({idioma::tr("Capa"), {{nc, "fps"}}});
@@ -990,14 +999,14 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
      juego y los que MAKO genera, cada segundo */
   if (cuenta) {
     char nr[16], ng[16];
-    std::snprintf(nr, sizeof nr, "%d", (int)std::lround(st_.fg.reales));
-    std::snprintf(ng, sizeof ng, "%d", (int)std::lround(st_.fg.generados));
+    std::snprintf(nr, sizeof nr, "%d", (int)std::lround(cReales));
+    std::snprintf(ng, sizeof ng, "%d", (int)std::lround(cGenerados));
     filas.push_back({idioma::tr("Reales"), {{nr, "fps"}}});
     filas.push_back({idioma::tr("Generados"), {{ng, "fps"}}});
     /* y la suma, lo que sale de MAKO (Rodolfo: «no me da la cuenta»): con x3, cada real son tres en pantalla, uno real y dos
        generados */
     char nt[16];
-    std::snprintf(nt, sizeof nt, "%d", (int)std::lround(st_.fg.reales + st_.fg.generados));
+    std::snprintf(nt, sizeof nt, "%d", (int)std::lround(cReales + cGenerados));
     filas.push_back({idioma::tr("En pantalla"), {{nt, "fps"}}});
   }
   for (const State::FilaMonitor &m : st_.monitor) {
@@ -1299,10 +1308,8 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* (v1.13) sin DLSS, con la red sobre un juego, el mismo cuadrito dice «Modelo de serie» y solo los FPS del juego
        (los cuadros nuevos que llegan; Rodolfo: «en los fps que no son de dlss solo deja los del juego»), en un
        renglon a media altura */
-    if (cuadroFps()) {
-      dibujaCuadroFps(x0 - 10.0f, ph, compacta, false, accent, ink, dim);
-      dibujaMenuFg(accent, ink, dim);
-    }
+    /* (v1.18) ya no junto a la pastilla: solo con ella oculta, en la esquina (Rodolfo: «only show fps overlay once the hub
+       pill is hidden»). Con la pastilla a la vista, ni el cuadrito ni su menu */
 
     /* ---- el encendido del 3D (v1.12) ----
        Un boton redondo (antes el interruptor ON/OFF, «en vez de on y off un boton redondo de apagado»,

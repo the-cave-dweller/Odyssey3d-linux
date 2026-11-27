@@ -31,6 +31,9 @@ const int32_t kCtrl = 0x04000000, kMayus = 0x02000000, kAlt = 0x08000000, kMeta 
 struct Accion {
   const char *nombre;
   const char *visible;
+  /* (v1.18) solo con el 3D sobre un juego: teclas sueltas (Insert, Supr, Fin, RePag, AvPag) que fuera de un juego no se le
+     quitan a nadie (el navegador, el reproductor). Se registran con AtajosGlobales::ponerJuego */
+  bool juego = false;
 };
 /* el orden es el de las teclas de siempre (1..8 y F1): el visor y `ctl atajos` lo usan asi */
 const Accion kAcciones[] = {
@@ -44,6 +47,13 @@ const Accion kAcciones[] = {
     {"pastilla+", "Agrandar la pastilla"},
     {"capa", "Ocultar o mostrar la pastilla"},
     {"verprof", "Ver la profundidad y la saliencia (depuración)"},   /* v1.12 */
+    /* (v1.18) Rodolfo: «INS will be the on and off one [...] the overlay, del changes the model between dlss and the stock
+       one you selected, end turns on and off the framegen, pg up increases the frames and down decreases them» */
+    {"capa3", "Ocultar o mostrar la pastilla (en un juego)", true},
+    {"modelo", "Profundidad: la de DLSS o el modelo elegido (en un juego)", true},
+    {"fg", "Generación de cuadros encendida o apagada (en un juego)", true},
+    {"fg+", "Más cuadros generados (en un juego)", true},
+    {"fg-", "Menos cuadros generados (en un juego)", true},
 };
 
 /* las que se pueden cambiar en el panel (v1.09). `capa2` (Ctrl+Shift+2) no: es la vieja de ocultar
@@ -60,6 +70,12 @@ const std::vector<atajos::Def> kDefs = {
     /* v1.12: la vista de depuracion (weave.frag): la profundidad en gris, la saliencia en naranja y el
        plano de la pantalla en cian */
     {"verprof", "ver_profundidad", "Ver la profundidad (depuración)", "Ctrl+Shift+9"},
+    /* (v1.18) las de un juego: solo estan mientras el 3D va sobre un juego */
+    {"capa3", "pastilla_juego", "Ocultar o mostrar la pastilla (en un juego)", "Insert"},
+    {"modelo", "modelo_profundidad", "DLSS o el modelo elegido (en un juego)", "Delete"},
+    {"fg", "generacion", "Generación de cuadros (en un juego)", "End"},
+    {"fg+", "generacion_mas", "Más cuadros generados (en un juego)", "PgUp"},
+    {"fg-", "generacion_menos", "Menos cuadros generados (en un juego)", "PgDown"},
 };
 const char *kCapa2 = "Ctrl+Shift+2";
 
@@ -373,6 +389,7 @@ bool AtajosGlobales::abrir(std::string *err) {
   std::map<std::string, std::string> fabrica;
   for (const atajos::Def &d : kDefs) fabrica[d.nombre] = d.defecto;
   for (const Accion &a : kAcciones) {
+    if (a.juego) continue;   /* (v1.18) las de un juego, con ponerJuego */
     const std::vector<int32_t> teclas = teclasDe(comboDeAccion(puestas, a));
     const std::vector<int32_t> deFabrica = teclasDe(comboDeAccion(fabrica, a));
     std::vector<int32_t> quedaron;
@@ -419,6 +436,34 @@ bool AtajosGlobales::abrir(std::string *err) {
 #else
   if (err) *err = "compilado sin libsystemd (sd-bus)";
   return false;
+#endif
+}
+
+void AtajosGlobales::ponerJuego(bool juego) {
+#ifdef HAVE_SDBUS
+  if (!bus_ || juego == juego_) return;
+  juego_ = juego;
+  const std::map<std::string, std::string> puestas = atajos::combos();
+  std::map<std::string, std::string> fabrica;
+  for (const atajos::Def &d : kDefs) fabrica[d.nombre] = d.defecto;
+  for (const Accion &a : kAcciones) {
+    if (!a.juego) continue;
+    if (!juego) {
+      llamar(bus_, "setInactive", a, nullptr, 0, nullptr);
+      continue;
+    }
+    const std::vector<int32_t> teclas = teclasDe(comboDeAccion(puestas, a));
+    const std::vector<int32_t> deFabrica = teclasDe(comboDeAccion(fabrica, a));
+    std::vector<int32_t> quedaron;
+    if (llamar(bus_, "doRegister", a, nullptr, 0, nullptr) < 0) continue;
+    llamar(bus_, "setShortcutKeys", a, &deFabrica, 8u, nullptr);
+    llamar(bus_, "setShortcutKeys", a, &teclas, 2u | 4u, &quedaron);
+    resumen_ += std::string(" · ") + a.nombre + " = ";
+    if (quedaron.empty()) resumen_ += "(sin tecla: la tiene otro programa)";
+    for (size_t i = 0; i < quedaron.size(); i++) resumen_ += (i ? ", " : "") + nombreTecla(quedaron[i]);
+  }
+#else
+  (void)juego;
 #endif
 }
 

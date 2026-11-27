@@ -136,6 +136,7 @@ struct VkUi {
   /* la vista de depuracion de la profundidad (v1.12, Ctrl+Mayus+9, ver weave.frag): la cambia el atajo
      y el bucle se la pasa a la trama. ODYSSEYVK_VER_PROFUNDIDAD=1 arranca con ella (para --dump). */
   bool verProfundidad = entornoOdyssey("ODYSSEYVK_VER_PROFUNDIDAD") != nullptr;
+  bool alternarModelo = false;   /* (v1.18) Supr en un juego: DLSS o el modelo elegido (lo atiende el bucle: tiene la red) */
   std::string extraInfo;     /* el aviso del momento, bajo la pastilla: se quita solo */
   std::string estadoVideo;   /* " · video en pausa": ya no se pinta (lo dice el propio video), queda para depurar */
   bool convInfo = false;     /* contar en la frase de estado que el conversor 2D/3D esta puesto */
@@ -154,6 +155,7 @@ struct VkUi {
 #endif
   bool wmProbado = false, wmAbierto = false;
   int esJuego = -1;
+  std::string appJuego;   /* (v1.18) el appid de Steam del juego de debajo (de su ventana steam_app_N), o vacio */
   bool robando = false;
   std::string devolverA;
   double robadoMirar = -1.0;
@@ -866,6 +868,7 @@ static bool sobreJuego(VkUi &ui) {
   if (!ui.wm.find(ui.opts->captureUuid, w) || w.appId.empty()) return false;   /* todavia sin datos */
   const std::string a = strLower(w.appId);
   ui.esJuego = (a.rfind("steam_app_", 0) == 0 || a == "gamescope") ? 1 : 0;
+  if (a.rfind("steam_app_", 0) == 0) ui.appJuego = a.substr(10);
   std::printf("[raton] la ventana del 3D es %s (%s)\n", w.appId.c_str(), ui.esJuego ? "un juego" : "no es un juego");
   std::fflush(stdout);
   return ui.esJuego == 1;
@@ -1335,7 +1338,31 @@ void borrarEntregada() {
 static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
   const char *tag = nullptr;
   if (accion == "3d") { ui.hud.toggle3D(); tag = "3D/2D"; }
-  else if (accion == "capa" || accion == "capa2") cambioCapa(ui, !ui.hud.overlayVisible(), origen);
+  else if (accion == "capa" || accion == "capa2" || accion == "capa3") cambioCapa(ui, !ui.hud.overlayVisible(), origen);
+  /* (v1.18) las de un juego: Supr cambia la profundidad (DLSS o el modelo elegido), Fin enciende o apaga la generacion de
+     MAKO y RePag/AvPag suben o bajan su multiplicador, en el perfil de MAKO del juego (como el menu del cuadrito) */
+  else if (accion == "modelo") {
+    ui.alternarModelo = true;
+    return;
+  } else if (accion == "fg" || accion == "fg+" || accion == "fg-") {
+    Hud::State::Fg &g = ui.hud.state().fg;
+    if (!g.mako || g.exe.empty()) {
+      std::printf("[fg] %s: sin MAKO o sin juego debajo (%s)\n", accion.c_str(), origen);
+      std::fflush(stdout);
+      return;
+    }
+    const bool quiere = !g.puesta;
+    const int k = std::max(0, std::min(2, g.multiplicador - 2 + (accion == "fg+" ? 1 : -1)));
+    if (accion == "fg") aplicarFg(ui, 0, quiere ? 1 : 0);
+    else aplicarFg(ui, 2, k);
+    /* lo que quedo en el perfil (aplicarFg lo vuelve a leer); si MAKO no lo acepto, su motivo */
+    const bool hecho = accion == "fg" ? g.puesta == quiere : g.multiplicador == k + 2;
+    ui.extraInfo = !hecho && !g.aviso.empty() ? g.aviso
+                   : accion == "fg"           ? std::string(idioma::tr(g.puesta ? "Generación encendida" : "Generación apagada"))
+                                              : idioma::trf("Generación x{}", {std::to_string(g.multiplicador)});
+    ui.extraHasta = glfwGetTime() + 3.0;
+    tag = "generacion";
+  }
   else if (accion == "verprof") {   /* el bucle se lo pasa a la trama y avisa bajo la pastilla */
     ui.verProfundidad = !ui.verProfundidad;
     std::printf("[depuracion] vista de profundidad %s (%s)\n", ui.verProfundidad ? "puesta" : "quitada", origen);
@@ -3240,8 +3267,32 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     glfwPollEvents();
     /* los atajos globales que haya pulsado el usuario desde el cuadro anterior */
-    if (atajos.abierto())
+    if (atajos.abierto()) {
       for (const std::string &cual : atajos.pulsados()) atajoHub(ui, cual, "atajo global");
+      /* (v1.18) las teclas de un juego, en cuanto se sabe que lo es */
+      static int juegoVisto = -1;
+      if (ui.esJuego >= 0 && ui.esJuego != juegoVisto) {
+        juegoVisto = ui.esJuego;
+        atajos.ponerJuego(ui.esJuego == 1);
+        if (ui.esJuego == 1) std::printf("[atajos] las de un juego: %s\n", atajos.resumen().c_str());
+      }
+    }
+#ifdef HAVE_ORT
+    if (ui.alternarModelo) {
+      ui.alternarModelo = false;
+      const auto sc = ajuste::leerServeConf();
+      const auto it = sc.find("profundidad_dlss");
+      const bool antes = it == sc.end() || !(it->second == "no" || it->second == "0");
+      std::string e;
+      ajuste::fijarEnServeConf("profundidad_dlss", antes ? "no" : "si", &e);
+      red.setUsarJuego(!antes);
+      ui.extraInfo = antes ? idioma::trf("Profundidad: {}", {nombreCorto(g_modeloEnUso)}) : std::string(idioma::tr("Profundidad: DLSS"));
+      ui.extraHasta = glfwGetTime() + 3.0;
+      ui.inputChanged = true;
+      std::printf("[atajos] profundidad: %s\n", antes ? "el modelo elegido" : "DLSS");
+      std::fflush(stdout);
+    }
+#endif
     /* ---- el canal de ajuste vivo: la ventana de ajustes (proceso aparte) y `ctl ajuste` ----
        Una vez cada decima de segundo se mira el fichero ~/.local/state/odysseyvk/ajuste y, solo si
        CAMBIO, se aplican los numeros pedidos. Es importante el "solo si cambio": los numeros escritos
@@ -5156,6 +5207,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (otro || ahoraA - tPerfil >= 2.0) tPerfil = ahoraA, leerFg(fg);
           if (otro) {
             ui.inputChanged = true;
+            /* (v1.18) su ejecutable, para su perfil de MAKO en las Integraciones del juego */
+            if (!e.exe.empty() && !ui.appJuego.empty()) mako::apuntarExe(ui.appJuego, e.exe);
             if (!e.exe.empty())
               std::printf("[fg] %s · MAKO %s · su perfil: generacion %s, x%d, flujo %d %%\n", e.exe.c_str(),
                           !fg.mako ? "no instalado" : (e.mako ? "cargado en el juego" : "no cargado en el juego"),
@@ -5209,6 +5262,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* (v1.18) solo sobre un juego (Rodolfo: «no quiero contador de fps en videos tampoco, que se vaya ahi»): sobre un video
          el cuadrito ya no tenia FPS y salia solo con lo vigilado */
       const bool vigilar = g_fpsCuadro && !g_monitor.empty() && sobreJuego(ui);
+      hs.fg.tiempoCuadro = g_monitor.count(monitor::kMs) > 0;   /* (v1.18) */
       muestreo.pedir(vigilar);
       const std::string elegido = monitor::aTexto(g_monitor);
       if (!vigilar) {

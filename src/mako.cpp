@@ -329,6 +329,53 @@ Instalacion leerInstalacion() {
 
 std::string biblioteca() { return bibliotecaMako(); }
 
+namespace {
+std::map<std::string, std::string> leerExes() {
+  std::map<std::string, std::string> m;
+  std::string txt;
+  if (!readSmallFile(rutaEstadoOdyssey("juegos-exe"), txt)) return m;
+  std::istringstream in(txt);
+  std::string l, c, v;
+  while (std::getline(in, l)) {
+    const size_t ig = l.find(" = ");
+    if (ig != std::string::npos) m[strTrim(l.substr(0, ig))] = strTrim(l.substr(ig + 3));
+  }
+  return m;
+}
+}  // namespace
+
+void apuntarExe(const std::string &appid, const std::string &exe) {
+  if (appid.empty() || exe.empty() || exe.find('\n') != std::string::npos) return;
+  std::map<std::string, std::string> m = leerExes();
+  if (m[appid] == exe) return;
+  m[appid] = exe;
+  const std::string ruta = rutaEstadoOdyssey("juegos-exe"), tmp = ruta + ".tmp";
+  if (FILE *f = std::fopen(tmp.c_str(), "we")) {
+    std::fprintf(f, "# el ejecutable de cada juego de Steam (appid = exe), el que nombra su perfil de MAKO: lo apunta el visor\n");
+    for (const auto &[k, x] : m) std::fprintf(f, "%s = %s\n", k.c_str(), x.c_str());
+    std::fclose(f);
+    ::rename(tmp.c_str(), ruta.c_str());
+  }
+}
+
+std::string exeDeJuego(const std::string &appid, const std::string &alternativa) {
+  const std::map<std::string, std::string> m = leerExes();
+  if (const auto it = m.find(appid); it != m.end() && !it->second.empty()) return it->second;
+  /* la lista de Neural Forge: «Stray.exe,Stray-Win64-Shipping.exe» (sin comillas) */
+  std::vector<std::string> v;
+  for (size_t i = 0; i < alternativa.size();) {
+    const size_t j = std::min(alternativa.find(',', i), alternativa.size());
+    std::string p = strTrim(alternativa.substr(i, j - i));
+    p.erase(std::remove(p.begin(), p.end(), '"'), p.end());
+    p.erase(std::remove(p.begin(), p.end(), '\''), p.end());
+    if (!p.empty()) v.push_back(p);
+    i = j + 1;
+  }
+  for (const std::string &x : v)
+    if (x.find("Shipping") != std::string::npos) return x;
+  return v.empty() ? std::string() : v.back();
+}
+
 bool lanzarInstalacion(std::string *err) {
   if (leerInstalacion().enMarcha) return true;
   return lanzarOrden("instalar", err);

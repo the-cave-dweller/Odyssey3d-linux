@@ -180,6 +180,14 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   `/dev/shm/odysseyvk-fg-<pid>`; the FPS box shows *Real* and *Generated*. Same idea as vkDaedalus's present counter.
   `install.sh` puts the counter in `~/.local/share/vulkan/explicit_layer.d` and the meta-layer next to the OdysseyVK
   layer's manifest. `ODYSSEYVK_NO_CONTAR=1` turns it off.
+- Since 1.18, Integrations puts `odysseyvk juego` before `%command%` in games with Neural Forge. It runs the game and
+  waits; if the kernel log (`journalctl -k`) shows an `NVRM: Xid` for one of the game's processes (those with its
+  `SteamAppId`) while it ran, it writes `~/.local/state/odysseyvk/nf-apagado-<appid>`, shows a notice and starts the
+  game once more with `NEURAL_FORGE_DISABLE=1`. While that file exists the game starts without Neural Forge; turning
+  Neural Forge back on in that game's Integrations deletes it. The game's exit code is passed through.
+- Game keys (registered with KDE only while the viewer is over a game): `Insert` pill, `Delete` DLSS depth or the
+  chosen model, `End` MAKO frame generation, `Page Up` / `Page Down` multiplier. `End` collides with vkDaedalus's menu
+  key; rebind one of them if you use both.
 - Only one overlay in front at a time:
   - while the vkDaedalus menu is open (End), the OdysseyVK pill steps aside and the 3D goes flat, so the menu
     reads right. Its state is read from the file vkDaedalus's input hook keeps in `$XDG_RUNTIME_DIR`, so it needs

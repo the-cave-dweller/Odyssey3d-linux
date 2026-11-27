@@ -553,6 +553,22 @@ T = {
 "¿seguro? pica otra vez en los próximos 12 segundos": ("sure? click again within 12 seconds", "sûr ? cliquez à nouveau dans les 12 secondes", "sicher? innerhalb von 12 Sekunden erneut klicken", "确定吗？请在 12 秒内再点一次", "よろしいですか？12 秒以内にもう一度クリックしてください"),
 "desinstalando MAKO: se pide tu clave": ("uninstalling MAKO: your password is needed", "désinstallation de MAKO : mot de passe demandé", "MAKO wird deinstalliert: Passwort wird abgefragt", "正在卸载 MAKO：需要你的密码", "MAKO をアンインストール中：パスワードが必要です"),
 "quitando MAKO FG…": ("removing MAKO FG…", "retrait de MAKO FG…", "MAKO FG wird entfernt…", "正在移除 MAKO FG…", "MAKO FG を削除中…"),
+# (v1.18) las teclas de un juego, la FG por juego y Neural Forge tras un cierre
+"El juego se cerró con Neural Forge": ("The game closed with Neural Forge on", "Le jeu s'est fermé avec Neural Forge", "Das Spiel wurde mit Neural Forge beendet", "游戏在启用 Neural Forge 时关闭了", "Neural Forge 使用中にゲームが終了しました"),
+"La tarjeta dio un fallo (Xid). Se vuelve a abrir sin Neural Forge; en Integraciones se puede volver a poner.": ("The GPU reported a fault (Xid). It's reopening without Neural Forge; you can turn it back on in Integrations.", "La carte graphique a signalé une erreur (Xid). Le jeu se relance sans Neural Forge ; vous pouvez le réactiver dans Intégrations.", "Die Grafikkarte meldete einen Fehler (Xid). Es startet ohne Neural Forge neu; in Integrationen lässt es sich wieder einschalten.", "显卡报告了错误（Xid）。将在不启用 Neural Forge 的情况下重新打开；可在集成中重新启用。", "GPU がエラー（Xid）を報告しました。Neural Forge なしで再起動します。連携で再び有効にできます。"),
+"Apagado aquí: el juego se cerró con él por un fallo de la tarjeta ({}). Ponlo para probar otra vez.": ("Off here: the game closed with it after a GPU fault ({}). Turn it on to try again.", "Désactivé ici : le jeu s'est fermé avec lui après une erreur de la carte ({}). Activez-le pour réessayer.", "Hier aus: Das Spiel wurde damit nach einem Grafikkartenfehler beendet ({}). Einschalten, um es erneut zu versuchen.", "此处已关闭：游戏在启用它时因显卡错误关闭（{}）。打开以再试一次。", "ここではオフ：GPU のエラーでゲームが終了しました（{}）。もう一度試すにはオンにしてください。"),
+"GENERACIÓN DE CUADROS": ("FRAME GENERATION", "GÉNÉRATION D'IMAGES", "BILDGENERIERUNG", "补帧", "フレーム生成"),
+"Ábrelo una vez con el 3D para saber su ejecutable (el perfil de MAKO va por él).": ("Open it once with 3D to learn its executable (the MAKO profile is keyed by it).", "Ouvrez-le une fois avec la 3D pour connaître son exécutable (le profil MAKO en dépend).", "Einmal mit 3D öffnen, um die ausführbare Datei zu erfahren (das MAKO-Profil hängt davon ab).", "用 3D 打开一次以获知其可执行文件（MAKO 配置按它区分）。", "3D で一度開くと実行ファイルがわかります（MAKO のプロファイルはそれで区別されます）。"),
+"ENABLE_MAKO está apagado: se guarda para cuando lo pongas": ("ENABLE_MAKO is off: it's saved for when you turn it on", "ENABLE_MAKO est désactivé : c'est gardé pour quand vous l'activerez", "ENABLE_MAKO ist aus: wird gespeichert, bis du es einschaltest", "ENABLE_MAKO 已关闭：会保存到你打开时生效", "ENABLE_MAKO はオフです：オンにしたときのために保存されます"),
+"Neural Forge vuelve a este juego desde la próxima vez que lo abras": ("Neural Forge comes back to this game from the next launch", "Neural Forge revient dans ce jeu au prochain lancement", "Neural Forge ist ab dem nächsten Start wieder in diesem Spiel", "下次打开时 Neural Forge 将重新用于此游戏", "次回の起動からこのゲームで Neural Forge が戻ります"),
+"Generación x{}": ("Generation x{}", "Génération x{}", "Generierung x{}", "补帧 x{}", "生成 x{}"),
+"Profundidad: {}": ("Depth: {}", "Profondeur : {}", "Tiefe: {}", "深度：{}", "奥行き：{}"),
+"Profundidad: DLSS": ("Depth: DLSS", "Profondeur : DLSS", "Tiefe: DLSS", "深度：DLSS", "奥行き：DLSS"),
+"Ocultar o mostrar la pastilla (en un juego)": ("Hide or show the pill (in a game)", "Masquer ou afficher la pastille (en jeu)", "Leiste aus- oder einblenden (im Spiel)", "隐藏或显示控制条（游戏中）", "ピルの表示/非表示（ゲーム中）"),
+"DLSS o el modelo elegido (en un juego)": ("DLSS or the chosen model (in a game)", "DLSS ou le modèle choisi (en jeu)", "DLSS oder das gewählte Modell (im Spiel)", "DLSS 或所选模型（游戏中）", "DLSS か選んだモデル（ゲーム中）"),
+"Generación de cuadros (en un juego)": ("Frame generation (in a game)", "Génération d'images (en jeu)", "Bildgenerierung (im Spiel)", "补帧（游戏中）", "フレーム生成（ゲーム中）"),
+"Más cuadros generados (en un juego)": ("More generated frames (in a game)", "Plus d'images générées (en jeu)", "Mehr generierte Bilder (im Spiel)", "更多生成帧（游戏中）", "生成フレームを増やす（ゲーム中）"),
+"Menos cuadros generados (en un juego)": ("Fewer generated frames (in a game)", "Moins d'images générées (en jeu)", "Weniger generierte Bilder (im Spiel)", "更少生成帧（游戏中）", "生成フレームを減らす（ゲーム中）"),
 }
 
 from traducciones_ru import RU

@@ -50,6 +50,39 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Teclas de juego, la generación de cada juego en Integraciones y Neural Forge fuera tras un fallo (v1.18)
+
+- Rodolfo: «only show fps overlay once the hub pill is hidden, remember generation preferences per game and include them in
+  their parameter list, enabling game frame time also implies that non dlss model counter show real, generated and on
+  screen», «INS will be the on and off one, hm the overlay, del changes the model between dlss and the stock one you
+  selected, end turns on and off the framegen, pg up increases the frames and down decreases them», «If a game crashes and
+  neural forge is enabled disable it and reslaunch the game».
+- **El cuadrito de los FPS solo con la pastilla oculta**: junto a la pastilla ya no sale.
+- **Sin DLSS, con «Tiempo por cuadro» marcado** en la tesela del cuadrito: «Reales», «Generados» y «En pantalla» también con
+  el modelo elegido. Sin el contador de MAKO se reparte lo que llega al visor (que ya trae los generados: MAKO va por
+  debajo de la capa) con el multiplicador del perfil del juego: x3 con 118 en pantalla son 39 reales y 79 generados.
+- **Cinco teclas que solo valen sobre un juego** (se registran en KDE cuando el visor sabe que la ventana es un juego, y se
+  sueltan al dejarlo): `Insert` oculta o muestra la pastilla; `Supr` cambia la profundidad entre DLSS y el modelo
+  elegido (lo de `profundidad_dlss` en serve.conf, al momento); `Fin` enciende o apaga la generación de cuadros de MAKO
+  del juego; `RePág` / `AvPág`, x2 → x3 → x4 y al revés. Cada una dice lo que hizo en la línea de la pastilla y se cambia
+  en Atajos de teclado como las demás. **Ojo:** `Fin` es también la tecla del menú de vkDaedalus; mientras el visor
+  está sobre un juego, KDE se la queda.
+- **La generación de cuadros de cada juego, en sus Integraciones**: una sección «Generación de cuadros» con el perfil de
+  MAKO de ese juego (encendida, modelo, multiplicador, flujo, modo rendimiento), que se guarda en el `conf.toml` de MAKO
+  por su ejecutable. El ejecutable lo apunta el visor al ver correr el juego (`~/.local/state/odysseyvk/juegos-exe`); sin
+  eso, el de «Shipping» de la lista de Neural Forge. Sin `ENABLE_MAKO` lo dice y se guarda igual.
+- **Neural Forge fuera si el juego se cae con él** (`odysseyvk juego`): con Neural Forge, Integraciones pone `odysseyvk
+  juego` delante de `%command%`. Corre el juego, lo espera y, si mientras corría la tarjeta dio un Xid en uno de sus
+  procesos (lo de Stray: Xid 13 y Neural Forge con `VK_ERROR_DEVICE_LOST`), apunta Neural Forge como apagado para ese
+  juego (`~/.local/state/odysseyvk/nf-apagado-APPID`), avisa y lo vuelve a abrir una vez sin él
+  (`NEURAL_FORGE_DISABLE=1`). Las veces siguientes sale sin Neural Forge; en las Integraciones del juego sale apagado con
+  la hora, y ponerlo otra vez quita la marca. Otros cierres (uno normal, el overlay de Steam al salir) no cuentan.
+- **Probado**: el cuadrito pintado en la CPU (con la pastilla, nada; oculta y sin DLSS, 118 / 0 / 118 y con x3 39 / 79 /
+  118); las Integraciones de un Stray de prueba (la sección de MAKO con `Stray-Win64-Shipping.exe` y Neural Forge apagado
+  con su nota); la línea de Steam de ida y vuelta; `odysseyvk juego` con un juego y un `journalctl` falsos: con Xid
+  apunta, avisa y lo abre otra vez sin Neural Forge, con la marca sale sin él, sin Xid una sola vez, y el código de
+  salida del juego pasa. Las teclas, sin probar en KDE (registrarlas cambia los atajos de verdad).
+
 ## El desinstalador de MAKO, en la pestaña FG (v1.18)
 
 - Rodolfo: «también añade desinstalador de mako».

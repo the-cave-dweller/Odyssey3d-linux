@@ -22,8 +22,7 @@ What you get:
 
 - **Monitor more than FPS.** The arrow on the *FPS box* tile opens a list, MangoHud-style: each GPU on its own row
   (usage, plus temperature, memory and power if ticked), CPU usage and temperature, system memory and the game's
-  frame time. The box stays in the top-right corner when the pill hides, and with anything ticked it also shows over
-  videos. It says «DLSS» only while the depth really comes from DLSS.
+  frame time. The box shows in the top-right corner once the pill hides, over games only. It says «DLSS» only while the depth really comes from DLSS.
 - **The 3D no longer flickers when you open or close the panel**, and the browser no longer pauses the video: the
   viewer used to minimize itself whenever it lost focus.
 - **The «game closed» card** only shows if the game closes within 20 seconds of entering 3D (a crash), not when you
@@ -52,6 +51,15 @@ What you get:
 - **Real and generated frames in the FPS box.** Like vkDaedalus, a second tiny layer counts the frames below MAKO
   while the OdysseyVK layer counts them above it, so the box shows *Real* and *Generated* fps
   (`ODYSSEYVK_CONTAR_MAKO=1`, added by Integrations next to `ODYSSEYVK=1` and `ENABLE_MAKO=1`).
+- **Game keys.** Over a game only: `Insert` hides or shows the pill, `Delete` switches the depth between DLSS and the
+  chosen model, `End` turns MAKO's frame generation on or off, `Page Up` / `Page Down` give x2 → x3 → x4 and back
+  (all changeable in Keyboard shortcuts). `End` is also vkDaedalus's menu key: KDE takes it while the viewer is over a game.
+- **Each game's frame generation in its Integrations** (its MAKO profile, by its executable), and with the frame time
+  ticked the FPS box shows *Real*, *Generated* and *On screen* without DLSS too. The box now shows only when the pill is
+  hidden.
+- **Neural Forge off after a crash.** With Neural Forge, Integrations runs the game through `odysseyvk juego`: if the GPU
+  reports an Xid in the game's processes, Neural Forge is turned off for that game and the game reopens without it; it
+  shows off in that game's Integrations until turned back on.
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the
   log.
@@ -190,6 +198,10 @@ Keys (they also work while the video or game has the keyboard):
 | `Ctrl+Shift+3` / `4` | 3D depth down / up |
 | `Ctrl+Shift+5` / `6` | 3D pop-out down / up |
 | `Ctrl+Shift+F1` | hide / show the pill |
+| `Insert` (over a game) | hide / show the pill |
+| `Delete` (over a game) | depth: DLSS or the chosen model |
+| `End` (over a game) | MAKO frame generation on / off |
+| `Page Up` / `Page Down` (over a game) | more / fewer generated frames (x2 to x4) |
 | `Ctrl+Shift+9` | depth debug view (flat, no 3D): the depth in gray (white = near), where saliency weighs in orange (it picks the screen plane in Auto) and what sits on the screen plane in cyan; again to go back |
 | `Esc` (in the viewer) | leave 3D |
 
@@ -378,11 +390,10 @@ the same frame). Ctrl+Shift+9 shows it.
 The layer also finds the image the game draws its HUD into (in Cyberpunk, a 4K layer cleared to
 transparent every frame) and hands its alpha to the viewer: the minimap, ammo, mission text and menus
 stay flat on the screen instead of taking the depth of whatever is behind them. If a game draws its HUD
-some other way nothing changes. Next to the pill a small box shows the game's FPS (frames it presents)
-and the layer's (depths it sends; with DLSS frame generation the game's are double); when the pill hides, the box
-stays in the top-right corner. The arrow on the *FPS box* tile picks more to show in it, MangoHud-style: each
+some other way nothing changes. When the pill hides, a small box in the top-right corner shows the game's FPS
+(frames it presents) and the layer's (depths it sends; with DLSS frame generation the game's are double). The arrow on the *FPS box* tile picks more to show in it, MangoHud-style: each
 GPU on its own row (usage, plus its temperature, memory and power if ticked), CPU usage and temperature, system
-memory and the game's frame time. With any of them ticked, the box also shows over videos. Settings → Games
+memory and the game's frame time (with it ticked and no DLSS, *Real*, *Generated* and *On screen*). Settings → Games
 with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box.
 Settings → Smoothness → *Layer FPS cap* limits how many depths and HUD masks per second the layer copies
 inside the game (the viewer makes 6 depth maps a second by default), so the game spends less on copies

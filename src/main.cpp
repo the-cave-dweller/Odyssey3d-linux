@@ -48,6 +48,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
@@ -2196,6 +2197,123 @@ static void avisoPropio(const std::string &titulo, const std::vector<std::string
   for (const std::string &l : lineas) cuerpo += (cuerpo.empty() ? "" : " ") + l;
   avisoEscritorio(titulo, cuerpo);
 }
+/* ---- (v1.18) `odysseyvk juego -- COMANDO`: el juego, con Neural Forge vigilado ----
+   Rodolfo: «If a game crashes and neural forge is enabled disable it and reslaunch the game». Las Integraciones lo ponen en la
+   linea de Steam de los juegos con Neural Forge (`odysseyvk juego %command%`): corre el juego y lo espera. Si mientras corria
+   la tarjeta dio un Xid en uno de sus procesos (MEDIDO el 27-nov con Stray: Xid 13 «Graphics Exception» y Neural Forge sin
+   poder construir su red, VK_ERROR_DEVICE_LOST, y el juego cerrado a los 23 s), apunta Neural Forge como apagado para ese
+   juego (~/.local/state/odysseyvk/nf-apagado-APPID), avisa y lo vuelve a abrir una vez sin el. Las siguientes veces sale sin
+   Neural Forge hasta que se vuelva a poner en las Integraciones del juego. Otros cierres (el overlay de Steam al salir, un
+   cierre normal) no cuentan: solo el fallo de la tarjeta, que es lo que puede venir de su modelo */
+namespace {
+std::string marcaNfApagado(const std::string &appid) { return rutaEstadoOdyssey(("nf-apagado-" + appid).c_str()); }
+void quitarNeuralForge() {
+  ::unsetenv("NEURAL_FORGE_ENABLE");
+  ::unsetenv("NEURAL_FORGE_TARGET_EXE");
+  ::unsetenv("NEURAL_FORGE_OFFLOAD_GPU");
+  ::setenv("NEURAL_FORGE_DISABLE", "1", 1);   /* el disable_environment de su capa */
+}
+/* los nombres (comm, 15 letras como los da el kernel) de los procesos de este juego: los que llevan su SteamAppId */
+void nombresDelJuego(const std::string &appid, std::set<std::string> &nombres) {
+  const std::string marca = "SteamAppId=" + appid;
+  DIR *d = ::opendir("/proc");
+  if (!d) return;
+  while (dirent *e = ::readdir(d)) {
+    if (e->d_name[0] < '1' || e->d_name[0] > '9') continue;
+    const std::string base = std::string("/proc/") + e->d_name;
+    std::string env;
+    {
+      std::ifstream f(base + "/environ", std::ios::binary);
+      env.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+    bool es = false;
+    for (size_t i = 0; i < env.size() && !es;) {
+      const size_t z = std::min(env.find('\0', i), env.size());
+      es = env.compare(i, z - i, marca) == 0;
+      i = z + 1;
+    }
+    if (!es) continue;
+    std::string comm;
+    if (readSmallFile(base + "/comm", comm)) {
+      comm = strTrim(comm);
+      if (!comm.empty()) nombres.insert(comm);
+    }
+  }
+  ::closedir(d);
+}
+/* el Xid de la tarjeta (registro del kernel) de uno de esos procesos desde `desde`; vacio si no hubo */
+std::string xidDelJuego(time_t desde, const std::set<std::string> &nombres) {
+  std::string hallado;
+  if (FILE *f = ::popen(("journalctl -k -q --no-pager --since @" + std::to_string((long)desde) + " 2>/dev/null").c_str(), "r")) {
+    char b[1024];
+    while (std::fgets(b, sizeof b, f)) {
+      const std::string l = b;
+      if (l.find("NVRM: Xid") == std::string::npos) continue;
+      for (const std::string &n : nombres)
+        if (l.find("name=" + n + ",") != std::string::npos) hallado = strTrim(l);
+    }
+    ::pclose(f);
+  }
+  return hallado;
+}
+}  // namespace
+
+static int cmdJuego(int argc, char **argv) {
+  int i0 = argc > 0 && std::strcmp(argv[0], "--") == 0 ? 1 : 0;
+  if (argc - i0 <= 0) {
+    std::fprintf(stderr, "uso: odysseyvk juego [--] COMANDO...   (lo pone Integraciones delante de %%command%%)\n");
+    return 2;
+  }
+  std::vector<char *> orden(argv + i0, argv + argc);
+  orden.push_back(nullptr);
+  idioma::cargar();   /* para el aviso: aqui se llega antes que el main lo cargue */
+  const char *ap = std::getenv("SteamAppId");
+  const std::string appid = ap ? ap : "";
+  if (!appid.empty() && fileExists(marcaNfApagado(appid))) {
+    quitarNeuralForge();
+    std::fprintf(stderr, "[odysseyvk] Neural Forge apagado para el juego %s: se cayo con el (%s)\n", appid.c_str(),
+                 marcaNfApagado(appid).c_str());
+  }
+  int rc = 0;
+  for (int vez = 0; vez < 2; vez++) {
+    const char *nf = std::getenv("NEURAL_FORGE_ENABLE");
+    const bool conNf = nf && std::strcmp(nf, "1") == 0 && !appid.empty();
+    const time_t desde = ::time(nullptr);
+    const pid_t p = ::fork();
+    if (p < 0) return 1;
+    if (p == 0) {
+      ::execvp(orden[0], orden.data());
+      ::_exit(127);
+    }
+    std::set<std::string> nombres;
+    double ultima = -10.0;
+    int st = 0;
+    for (;;) {
+      const pid_t r = ::waitpid(p, &st, WNOHANG);
+      if (r == p || (r < 0 && errno != EINTR)) break;
+      const double t = (double)::time(nullptr);
+      if (conNf && t - ultima >= 2.0) ultima = t, nombresDelJuego(appid, nombres);
+      ::usleep(500000);
+    }
+    rc = WIFEXITED(st) ? WEXITSTATUS(st) : 1;
+    if (!conNf || vez == 1) break;
+    const std::string xid = xidDelJuego(desde, nombres);
+    if (xid.empty()) break;
+    /* se cayo la tarjeta con Neural Forge: apagado para este juego y otra vez */
+    if (FILE *f = std::fopen(marcaNfApagado(appid).c_str(), "we")) {
+      std::fprintf(f, "# Neural Forge apagado para este juego por OdysseyVK: el juego se cayo con el (fallo de la tarjeta)\nhora = %ld\nxid = %s\n",
+                   (long)::time(nullptr), xid.c_str());
+      std::fclose(f);
+    }
+    std::fprintf(stderr, "[odysseyvk] el juego %s se cayo con Neural Forge (%s): se vuelve a abrir sin el\n", appid.c_str(), xid.c_str());
+    avisoPropio(idioma::tr("El juego se cerró con Neural Forge"),
+                {idioma::tr("La tarjeta dio un fallo (Xid). Se vuelve a abrir sin Neural Forge; en Integraciones se puede volver a poner.")}, 0);
+    quitarNeuralForge();
+    ::sleep(2);
+  }
+  return rc;
+}
+
 static std::string comilla(const std::string &s) {
   std::string o = "'";
   for (char c : s) o += (c == '\'') ? std::string("'\\''") : std::string(1, c);
@@ -3276,6 +3394,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
                            {"CPU", {{"40", "%"}, {"79", "°C"}}},
                            {"RAM", {{"38,9", "GB"}}},
                            {idioma::tr("Cuadro"), {{"8,5", "ms"}}}};
+  /* (v1.18) con la fila del tiempo por cuadro: sin DLSS, el cuadrito reparte los FPS en reales, generados y en pantalla */
+  if (std::getenv("ODYSSEYVK_HUD_MONITOR")) hud.state().fg.tiempoCuadro = true;
   /* (v1.18) ODYSSEYVK_HUD_MENU_FG=1..7: el menu de la generacion de cuadros abierto (1 = MAKO en el juego, x3 encendida con
      MAKO FG; 2 = MAKO sin cargar en el juego; 3 = sin MAKO; 4 = sin MAKO FG instalado, con LSFG, como en el equipo de Rodolfo,
      con su boton de instalar; 5 = instalandolo, al 40 %; 6 = instalado, pero el juego se abrio sin el; 7 = sin MAKO FG ni
@@ -6656,6 +6776,9 @@ int main(int argc, char **argv) {
   }
   /* Desde v0.57 el proyecto se llama OdysseyVK: si el usuario todavia tiene sus datos en la
      carpeta del nombre viejo, los copiamos antes de tocar nada (no borramos lo viejo). */
+  /* (v1.18) `juego` va antes de todo: es la envoltura del juego en la linea de Steam, y no tiene que tocar su entorno
+     (ensureWaylandEnv) ni hacer nada mas que correrlo */
+  if (argc >= 2 && std::strcmp(argv[1], "juego") == 0) return cmdJuego(argc - 2, argv + 2);
   migrarDatosDeViejoNombre();
   /* el idioma de la interfaz (v1.07): `idioma =` de serve.conf, ingles si no esta */
   idioma::cargar();

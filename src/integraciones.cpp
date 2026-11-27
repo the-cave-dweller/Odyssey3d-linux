@@ -505,6 +505,8 @@ std::string linea(const Ajustes &a, const std::string &nfExe, const std::string 
       }
   if (!val("otros").empty()) vars.push_back(val("otros"));
   std::vector<std::string> delante;
+  /* (v1.18) con Neural Forge, la envoltura que lo apaga y vuelve a abrir el juego si se cae con el (odysseyvk juego) */
+  if (si("neural_forge")) delante.push_back("odysseyvk juego");
   if (si("vkdaedalus_run")) delante.push_back("vkdaedalus-run");
   if (!val("comando").empty()) delante.push_back(val("comando"));
   const std::string opc = val("opciones");
@@ -668,6 +670,8 @@ bool leerLinea(const std::string &lin, Leida &l) {
   /* ODYSSEYVK_CONTAR_MAKO=1 sale de ODYSSEYVK=1 con ENABLE_MAKO=1: sin los dos, se queda con las demas */
   if (contar && (a["mako"] != "1" || a["odysseyvk"] != "1")) otrosVars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
   a["otros"] = unir(otrosVars);
+  /* (v1.18) la envoltura de Neural Forge: sale de NEURAL_FORGE_ENABLE=1 (linea() la pone), no es un comando propio */
+  if (r + 1 < c && nombreBase(t[r].texto) == "odysseyvk" && t[r + 1].texto == "juego") r += 2;
   if (r < c && nombreBase(t[r].texto) == "vkdaedalus-run") {
     a["vkdaedalus_run"] = "1";
     r++;

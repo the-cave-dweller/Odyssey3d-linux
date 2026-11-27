@@ -1250,6 +1250,7 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
 }  // namespace
 
 /* ---- la pestana Integraciones (v1.15) ------------------------------------------------------------------------- */
+void filasPerfilMako(Hud::State &st, std::vector<std::string> &ids, const std::string &exe, const std::string &deJuego);
 namespace {
 std::string g_integJuego;     /* el juego cuyas integraciones se ensenan (vacio = las de todos) */
 int g_pestanaPedida = -1;
@@ -1408,6 +1409,22 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
   for (const Var &v : vars) {
     const bool puesto = val(v.clave) == "1";
     const size_t k = interruptor(v.clave, std::string(v.nombre) + (puesto ? "=1" : ""), idioma::tr(v.ayuda));
+    /* (v1.18) apagado aqui porque el juego se cayo con el (odysseyvk juego): sale apagado, con la hora */
+    if (!jid.empty() && puesto && std::strcmp(v.clave, "neural_forge") == 0 &&
+        fileExists(rutaEstadoOdyssey(("nf-apagado-" + jid).c_str()))) {
+      std::string txt;
+      readSmallFile(rutaEstadoOdyssey(("nf-apagado-" + jid).c_str()), txt);
+      long hora = 0;
+      if (const size_t h = txt.find("hora = "); h != std::string::npos) hora = std::atol(txt.c_str() + h + 7);
+      char cuando[32] = "";
+      if (hora > 0) {
+        const time_t tt = (time_t)hora;
+        std::strftime(cuando, sizeof cuando, "%d/%m %H:%M", std::localtime(&tt));
+      }
+      st.items[k].valor = false;
+      st.items[k].nota = idioma::trf("Apagado aquí: el juego se cerró con él por un fallo de la tarjeta ({}). Ponlo para probar otra vez.", {cuando});
+      continue;
+    }
     /* de un juego: el ejecutable que va con Neural Forge (no se pregunta: se saca de Neural Forge) */
     if (!jid.empty() && puesto && std::strcmp(v.clave, "neural_forge") == 0) {
       const std::string exe = integ::exeDe(e, jid);
@@ -1438,6 +1455,24 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
         st.items[ko].pastilla = idioma::tr("Sin segunda tarjeta");
         st.items[ko].ayuda = idioma::tr("No hay una segunda tarjeta NVIDIA: el modelo se queda en la del juego");
       }
+    }
+  }
+  /* (v1.18) la generacion de cuadros de ESTE juego: su perfil de MAKO, por su ejecutable (el que apunto el visor al verlo, o
+     el de la lista de Neural Forge) */
+  if (!jid.empty() && mako::instalado()) {
+    Hud::ItemPanel sfg;
+    sfg.tipo = Hud::ItemPanel::Seccion, sfg.rotulo = idioma::tr("GENERACIÓN DE CUADROS");
+    pon(sfg, "");
+    const std::string exe = mako::exeDeJuego(jid, integ::exeDe(e, jid));
+    Hud::ItemPanel ne;
+    ne.tipo = Hud::ItemPanel::Nota;
+    if (exe.empty()) {
+      ne.rotulo = idioma::tr("Ábrelo una vez con el 3D para saber su ejecutable (el perfil de MAKO va por él).");
+      pon(ne, "");
+    } else {
+      ne.rotulo = exe + (val("mako") == "1" ? std::string() : " · " + std::string(idioma::tr("ENABLE_MAKO está apagado: se guarda para cuando lo pongas")));
+      pon(ne, "");
+      filasPerfilMako(st, ids, exe, jid);
     }
   }
   /* (v1.18) la tarjeta del juego, con el monitor 3D en otra (Rodolfo: «haz una opcion de offload con el monitor conectado a
@@ -1666,6 +1701,14 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
     return true;
   }
   std::string nuevo;
+  /* (v1.18) Neural Forge apagado en un juego tras caerse con el (odysseyvk juego): el interruptor sale apagado y picarlo lo
+     vuelve a poner (quita la marca) */
+  if (que == "neural_forge" && !g_integJuego.empty() && fileExists(rutaEstadoOdyssey(("nf-apagado-" + g_integJuego).c_str()))) {
+    ::unlink(rutaEstadoOdyssey(("nf-apagado-" + g_integJuego).c_str()).c_str());
+    if (aviso) *aviso = idioma::tr("Neural Forge vuelve a este juego desde la próxima vez que lo abras");
+    if (ahora != "1") return cambiarIntegracion(que, "1", juegos, aviso);
+    return true;
+  }
   if (integ::esInterruptor(que)) {
     nuevo = ahora == "1" ? "0" : "1";
     /* (v1.15) lo de gris no se enciende: lo que no esta instalado, o con su otra puesta */
@@ -1837,6 +1880,37 @@ std::string notaFg() {
   return "X" + std::to_string(p.multiplicador);
 }
 
+/* (v1.18) las filas del perfil de MAKO de un juego (por su ejecutable): las de la pestana FG (el que corre, ids «fg:que») y
+   las de las Integraciones de cada juego (Rodolfo: «remember generation preferences per game and include them in their
+   parameter list»; ids «fgj:que:exe»). El perfil es de MAKO (su conf.toml), asi que se recuerda por juego solo */
+void filasPerfilMako(Hud::State &st, std::vector<std::string> &ids, const std::string &exe, const std::string &deJuego) {
+  auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    st.items.push_back(std::move(it));
+    ids.push_back(id);
+  };
+  auto idDe = [&](const char *que) { return deJuego.empty() ? std::string("fg:") + que : std::string("fgj:") + que + ":" + exe; };
+  const mako::Perfil p = mako::leer(exe);
+  const bool generador = mako::generadorInstalado(), lsfg = !mako::dllLossless().empty();
+  const int modelo = p.existe ? (p.modelo == "lossless-scaling" ? 0 : 1) : (generador || !lsfg ? 1 : 0);
+  static const int kFlujo[4] = {50, 75, 85, 100};
+  int flujo = 0;
+  for (int k = 1; k < 4; k++)
+    if (std::abs((int)std::lround(p.flujo * 100.0) - kFlujo[k]) < std::abs((int)std::lround(p.flujo * 100.0) - kFlujo[flujo])) flujo = k;
+  auto opciones = [&](const std::string &rot, std::vector<std::string> opc, int elegido, const char *que) {
+    Hud::ItemPanel o;
+    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = rot, o.opciones = std::move(opc), o.elegido = elegido;
+    pon(o, idDe(que));
+  };
+  opciones(idioma::tr("Generación"), {idioma::tr("Apagada"), idioma::tr("Encendida")}, p.existe && p.puesta ? 1 : 0, "puesta");
+  opciones(idioma::tr("Modelo"), {"LSFG", "MAKO FG"}, modelo, "modelo");
+  opciones(idioma::tr("Multiplicador"), {"x2", "x3", "x4"}, std::max(0, std::min(2, p.multiplicador - 2)), "multiplicador");
+  opciones(idioma::tr("Flujo"), {"50 %", "75 %", "85 %", "100 %"}, flujo, "flujo");
+  opciones(idioma::tr("Modo rendimiento"), {idioma::tr("No"), idioma::tr("Sí")}, p.rendimiento ? 1 : 0, "rendimiento");
+}
+
+/* (v1.18) una fila del perfil de MAKO de `exe`: la de la pestana FG o la de las Integraciones de un juego */
+static bool aplicarPerfilMako(const std::string &exe, const std::string &que, int sub, std::string *aviso);
+
 static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
     st.items.push_back(std::move(it));
@@ -1931,23 +2005,7 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
     pon(n, "");
     return;
   }
-  const mako::Perfil p = mako::leer(j.exe);
-  const bool generador = mako::generadorInstalado(), lsfg = !mako::dllLossless().empty();
-  const int modelo = p.existe ? (p.modelo == "lossless-scaling" ? 0 : 1) : (generador || !lsfg ? 1 : 0);
-  static const int kFlujo[4] = {50, 75, 85, 100};
-  int flujo = 0;
-  for (int k = 1; k < 4; k++)
-    if (std::abs((int)std::lround(p.flujo * 100.0) - kFlujo[k]) < std::abs((int)std::lround(p.flujo * 100.0) - kFlujo[flujo])) flujo = k;
-  auto opciones = [&](const std::string &rot, std::vector<std::string> opc, int elegido, const std::string &id) {
-    Hud::ItemPanel o;
-    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = rot, o.opciones = std::move(opc), o.elegido = elegido;
-    pon(o, id);
-  };
-  opciones(idioma::tr("Generación"), {idioma::tr("Apagada"), idioma::tr("Encendida")}, p.existe && p.puesta ? 1 : 0, "fg:puesta");
-  opciones(idioma::tr("Modelo"), {"LSFG", "MAKO FG"}, modelo, "fg:modelo");
-  opciones(idioma::tr("Multiplicador"), {"x2", "x3", "x4"}, std::max(0, std::min(2, p.multiplicador - 2)), "fg:multiplicador");
-  opciones(idioma::tr("Flujo"), {"50 %", "75 %", "85 %", "100 %"}, flujo, "fg:flujo");
-  opciones(idioma::tr("Modo rendimiento"), {idioma::tr("No"), idioma::tr("Sí")}, p.rendimiento ? 1 : 0, "fg:rendimiento");
+  filasPerfilMako(st, ids, j.exe, "");
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
   n.rotulo = !j.enJuego ? idioma::tr("MAKO no está cargado en este juego: pon ENABLE_MAKO=1 en Integraciones. Lo que elijas se guarda para cuando lo esté.")
@@ -2005,7 +2063,11 @@ static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
     return true;
   }
   const JuegoFg j = juegoFg();
-  if (j.exe.empty() || !mako::instalado()) return false;
+  return aplicarPerfilMako(j.exe, que, sub, aviso);
+}
+
+static bool aplicarPerfilMako(const std::string &exe, const std::string &que, int sub, std::string *aviso) {
+  if (exe.empty() || !mako::instalado()) return false;
   static const int kFlujo[4] = {50, 75, 85, 100};
   std::map<std::string, std::string> c;
   if (que == "puesta") c["frame_generation_enabled"] = sub == 1 ? "true" : "false";
@@ -2023,7 +2085,7 @@ static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
   } else if (que == "rendimiento") c["performance_mode"] = sub == 1 ? "true" : "false";
   else return false;
   /* un perfil nuevo lleva tambien lo demas, como se ve en la pestana */
-  const mako::Perfil p = mako::leer(j.exe);
+  const mako::Perfil p = mako::leer(exe);
   if (!p.existe) {
     char b[16];
     std::snprintf(b, sizeof b, "%.2f", p.flujo);
@@ -2034,11 +2096,11 @@ static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
     c.emplace("frame_generation_model", mako::generadorInstalado() || mako::dllLossless().empty() ? "'mako-fg'" : "'lossless-scaling'");
   }
   std::string err;
-  if (!mako::fijar(j.exe, c, &err)) {
+  if (!mako::fijar(exe, c, &err)) {
     if (aviso) *aviso = idioma::trf("MAKO no lo aceptó: {}", {err});
     return true;
   }
-  if (aviso) *aviso = que == "modelo" ? idioma::tr("guardado; vale al volver a abrir el juego") : idioma::trf("guardado en el perfil de MAKO de {}", {j.exe});
+  if (aviso) *aviso = que == "modelo" ? idioma::tr("guardado; vale al volver a abrir el juego") : idioma::trf("guardado en el perfil de MAKO de {}", {exe});
   return true;
 }
 
@@ -2498,6 +2560,11 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id.rfind("integ:", 0) == 0) return aplicarIntegracion(id.substr(6), sub, juegos, aviso);
   if (id.rfind("fg:", 0) == 0) return aplicarFg(id.substr(3), sub, aviso);   /* (v1.18) la pestana FG */
+  if (id.rfind("fgj:", 0) == 0) {   /* (v1.18) el perfil de MAKO de un juego, desde sus Integraciones: «fgj:que:exe» */
+    const size_t dos = id.find(':', 4);
+    if (dos == std::string::npos) return false;
+    return aplicarPerfilMako(id.substr(dos + 1), id.substr(4, dos - 4), sub, aviso);
+  }
   /* (v1.15) el engranaje de una caratula: las Integraciones de ese juego */
   if (id.rfind("juego:", 0) == 0 && sub == 2) {
     g_integJuego = id.substr(6);

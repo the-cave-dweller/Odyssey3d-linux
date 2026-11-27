@@ -62,6 +62,9 @@ public:
   std::vector<std::string> pulsados();
   /* Deja los atajos inactivos (las teclas vuelven a las aplicaciones) y suelta el bus. */
   void cerrar();
+  /* (v1.18) las de un juego (Insert, Supr, Fin, RePag, AvPag): se registran al saberse que el 3D va sobre un juego y se
+     dejan inactivas si no; fuera de un juego esas teclas no se le quitan a nadie */
+  void ponerJuego(bool juego);
   /* Lo que quedo registrado, para el registro: «3d = Ctrl+Mayus+1, Ctrl+!» */
   const std::string &resumen() const { return resumen_; }
 
@@ -79,6 +82,7 @@ public:
 private:
   struct sd_bus *bus_ = nullptr;
   bool escucha_ = false;
+  bool juego_ = false;
   std::string ruta_;   /* la del componente en kglobalaccel */
   std::vector<std::string> cola_;
   std::string resumen_;

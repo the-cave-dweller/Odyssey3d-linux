@@ -78,6 +78,12 @@ bool lanzarInstalacion(std::string *err);
 bool lanzarOrden(const char *sub, std::string *err);
 /* la biblioteca de la capa de MAKO (la de su manifiesto), o vacio */
 std::string biblioteca();
+/* (v1.18) el ejecutable de cada juego de Steam (appid -> «Stray-Win64-Shipping.exe»), el que nombra su perfil de MAKO: lo
+   apunta el visor al verlo correr (~/.local/state/odysseyvk/juegos-exe) y lo leen las Integraciones de cada juego. Sin
+   apuntar, `alternativa` (la lista de Neural Forge del juego, «Stray.exe,Stray-Win64-Shipping.exe»): la de «Shipping»
+   o la ultima */
+void apuntarExe(const std::string &appid, const std::string &exe);
+std::string exeDeJuego(const std::string &appid, const std::string &alternativa = std::string());
 /* las dos de verdad (mako_instalar.cpp, solo en `odysseyvk`: el SHA-256 es de libcrypto): bajar cada archivo con curl a una
    carpeta aparte, comprobar su tamano y su SHA-256, y cambiarla por la de antes de una vez (a medias no queda nada puesto).
    `avance` (hecho, total), si se da, va diciendo como va */

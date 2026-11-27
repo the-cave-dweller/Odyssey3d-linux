@@ -272,6 +272,10 @@ public:
       /* (v1.18) lo que cuenta el contador, debajo de MAKO (Rodolfo: «you can see what are the generating frames»): por
          segundo, los cuadros del juego y los generados; 0 = sin contador */
       float reales = 0.0f, generados = 0.0f;
+      /* (v1.18) el tiempo por cuadro del juego elegido en lo vigilado: sin DLSS, el cuadrito dice tambien reales, generados y
+         en pantalla (Rodolfo: «enabling game frame time also implies that non dlss model counter show real, generated and on
+         screen») */
+      bool tiempoCuadro = false;
     } fg;
     /* (v1.14) en la pestana Juegos, en medio del pie del panel: el parametro de Steam para la profundidad de DLSS y
        su boton Copiar (Rodolfo: «el parametro ahi, por el centro»). `pieParametro` vacio = no sale. Recien copiado

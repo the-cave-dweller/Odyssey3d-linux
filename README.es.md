@@ -22,8 +22,8 @@ Lo que tienes:
 
 - **Vigila más que los FPS.** La flechita de la tesela *Cuadrito de FPS* abre una lista, como MangoHud: cada tarjeta
   en su fila (el uso y, si se marcan, su temperatura, memoria y consumo), el uso y la temperatura del procesador, la
-  memoria del sistema y el tiempo por cuadro del juego. El cuadro se queda en la esquina de arriba a la derecha cuando
-  la pastilla se oculta y, con algo marcado, sale también sobre los vídeos. Dice «DLSS» solo mientras la profundidad
+  memoria del sistema y el tiempo por cuadro del juego. El cuadro sale en la esquina de arriba a la derecha cuando la
+  pastilla se oculta, solo sobre los juegos. Dice «DLSS» solo mientras la profundidad
   sale de ahí de verdad.
 - **El 3D ya no parpadea al abrir o cerrar el panel**, y el navegador ya no pausa el vídeo: el visor se minimizaba
   solo cada vez que perdía el foco.
@@ -53,6 +53,16 @@ Lo que tienes:
 - **Los cuadros reales y los generados en el cuadrito.** Como vkDaedalus, una segunda capa mínima cuenta los cuadros
   debajo de MAKO y la de OdysseyVK encima, así que el cuadrito dice «Reales» y «Generados» (`ODYSSEYVK_CONTAR_MAKO=1`,
   que Integraciones pone junto a `ODYSSEYVK=1` y `ENABLE_MAKO=1`).
+- **Teclas de juego.** Solo sobre un juego: `Insert` oculta o muestra la pastilla, `Supr` cambia la profundidad entre
+  DLSS y el modelo elegido, `Fin` enciende o apaga la generación de cuadros de MAKO, `RePág` / `AvPág` dan x2 → x3 → x4 y
+  al revés (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda
+  mientras el visor está sobre un juego.
+- **La generación de cuadros de cada juego en sus Integraciones** (su perfil de MAKO, por su ejecutable), y con el tiempo
+  por cuadro marcado el cuadrito dice «Reales», «Generados» y «En pantalla» también sin DLSS. El cuadrito sale ahora
+  solo con la pastilla oculta.
+- **Neural Forge fuera tras un fallo.** Con Neural Forge, Integraciones abre el juego con `odysseyvk juego`: si la tarjeta
+  da un Xid en sus procesos, Neural Forge se apaga para ese juego y el juego se vuelve a abrir sin él; sale apagado en
+  las Integraciones del juego hasta que se vuelva a poner.
 - **Una prueba en cada cambio de capa**: otra red, la profundidad de DLSS que llega o se va, u otro preset de DLSS en
   el juego, y el registro apunta 3 segundos de lo que corre (FPS del juego, mapas por segundo, refrescos perdidos y lo
   ocupada que va cada tarjeta).
@@ -194,6 +204,10 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 | `Ctrl+Shift+3` / `4` | menos / más profundidad |
 | `Ctrl+Shift+5` / `6` | menos / más salida |
 | `Ctrl+Shift+F1` | ocultar / mostrar la pastilla |
+| `Insert` (sobre un juego) | ocultar / mostrar la pastilla |
+| `Supr` (sobre un juego) | profundidad: DLSS o el modelo elegido |
+| `Fin` (sobre un juego) | generación de cuadros de MAKO sí / no |
+| `RePág` / `AvPág` (sobre un juego) | más / menos cuadros generados (de x2 a x4) |
 | `Ctrl+Shift+9` | vista de depuración de la profundidad (plana, sin 3D): la profundidad en gris (blanco = cerca), en naranja donde pesa la saliencia (la que elige el plano de la pantalla en Auto) y en cian lo que cae en el plano de la pantalla; otra vez para volver |
 | `Esc` (en el visor) | salir del 3D |
 
@@ -390,13 +404,12 @@ Forge del mismo cuadro). Ctrl+Mayús+9 la enseña.
 La capa encuentra también la imagen donde el juego dibuja su HUD (en Cyberpunk, una capa 4K que se
 limpia a transparente en cada cuadro) y le pasa su alfa al visor: el minimapa, la munición, los textos
 de misión y los menús se quedan planos en la pantalla en vez de tomar la profundidad de lo que tienen
-detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Junto a la pastilla, un cuadro pequeño
-dice los FPS del juego (los cuadros que presenta) y los de la capa (las profundidades que manda; con la
-generación de cuadros de DLSS, los del juego son el doble); cuando la pastilla se oculta, el cuadro se queda en la
-esquina de arriba a la derecha. La flechita de la tesela *Cuadrito de FPS* elige qué más enseña, como MangoHud:
-cada tarjeta en su fila (el uso y, si se marcan, su temperatura, su memoria y su consumo), el uso y la temperatura
-del procesador, la memoria del sistema y el tiempo por cuadro del juego. Con algo marcado, el cuadro sale también
-sobre los vídeos. En Ajustes → Juegos con DLSS se apaga cada
+detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Cuando la pastilla se oculta, un cuadro
+pequeño en la esquina de arriba a la derecha dice los FPS del juego (los cuadros que presenta) y los de la capa (las
+profundidades que manda; con la generación de cuadros de DLSS, los del juego son el doble). La flechita de la
+tesela *Cuadrito de FPS* elige qué más enseña, como MangoHud: cada tarjeta en su fila (el uso y, si se marcan, su
+temperatura, su memoria y su consumo), el uso y la temperatura del procesador, la memoria del sistema y el tiempo por
+cuadro del juego (con él marcado y sin DLSS, «Reales», «Generados» y «En pantalla»). En Ajustes → Juegos con DLSS se apaga cada
 una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS. Ajustes →
 Fluidez → *Tope de FPS de la capa* limita cuántas profundidades y máscaras del HUD copia la capa por segundo
 dentro del juego (el visor hace 6 mapas de profundidad por segundo de fábrica): el juego gasta menos en
