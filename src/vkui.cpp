@@ -808,10 +808,14 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
         const float tx = fx - (float)ix;
         const uint8_t *p00 = im.px + ((size_t)iy * im.w + ix) * 4u, *p10 = p00 + 4, *p01 = p00 + (size_t)im.w * 4u, *p11 = p01 + 4;
         float *d = acum.data() + ((size_t)py * (size_t)ancho + (size_t)px) * 4u;
-        for (int c = 0; c < 3; c++) {
-          const float col = ((p00[c] * (1 - tx) + p10[c] * tx) * (1 - ty) + (p01[c] * (1 - tx) + p11[c] * tx) * ty) / 255.0f;
-          d[c] = col * a + d[c] * (1.0f - a);
+        float col[3];
+        for (int c = 0; c < 3; c++)
+          col[c] = ((p00[c] * (1 - tx) + p10[c] * tx) * (1 - ty) + (p01[c] * (1 - tx) + p11[c] * tx) * ty) / 255.0f;
+        if (im.gris) {   /* (v1.16) su luminancia, oscurecida */
+          const float l = (0.299f * col[0] + 0.587f * col[1] + 0.114f * col[2]) * 0.5f;
+          col[0] = col[1] = col[2] = l;
         }
+        for (int c = 0; c < 3; c++) d[c] = col[c] * a + d[c] * (1.0f - a);
         d[3] = a + d[3] * (1.0f - a);
       }
     }
@@ -1852,21 +1856,26 @@ void Hud::dibujaPanel(int vw, int vh) {
       const int i = vistas[(size_t)k];
       const Rect t{centroX + (float)k * (anchoT + 2.0f) * s, arriba, anchoT * s, 200.0f * s};
       panelPestanas_[(size_t)i] = t;
-      const bool puesta = i == st_.pestana, hov = t.inside(mx_, my_);
+      const bool gris = (size_t)i < st_.pestanaGris.size() && st_.pestanaGris[(size_t)i];
+      const bool puesta = i == st_.pestana, hov = t.inside(mx_, my_) && !gris;
+      const float tenueT = gris ? 0.38f : 1.0f;
       /* solo las esquinas de fuera de la fila van redondas, como en vkDaedalus: aqui todas con poco radio */
-      relleno(t, 6.0f * s, puesta ? 0x241F30u : (hov ? 0x201D29u : 0x1E1B26u), 0.97f);
+      relleno(t, 6.0f * s, gris ? 0x17151Du : (puesta ? 0x241F30u : (hov ? 0x201D29u : 0x1E1B26u)), 0.97f);
       if (puesta) relleno({t.x, t.y + t.h - 3.0f * s, t.w, 3.0f * s}, 0.0f, 0xA88FD0u, 1.0f);
       fuente_ = hayBarlow_ ? 2 : 0;
       textoCabe(nombrePest(i), t.x + t.w * 0.5f - std::min(t.w - 12.0f * s, textWidth(nombrePest(i), 18.0f * s)) * 0.5f, t.y + 16.0f * s,
-                18.0f * s, t.w - 12.0f * s, 1.0f, 1.0f, 1.0f, puesta || hov ? 1.0f : 0.92f);
+                18.0f * s, t.w - 12.0f * s, 1.0f, 1.0f, 1.0f, (puesta || hov ? 1.0f : 0.92f) * tenueT);
       fuente_ = hayBarlow_ ? 1 : 0;
       if (i < 4)
         icono({t.x + (t.w - 56.0f * s) * 0.5f, t.y + 64.0f * s, 56.0f * s, 56.0f * s}, *iconoPest[i], puesta ? accent[0] : hex(0xC9D0D7u, 0),
-              puesta ? accent[1] : hex(0xC9D0D7u, 1), puesta ? accent[2] : hex(0xC9D0D7u, 2), puesta || hov ? 1.0f : 0.85f);
-      const std::string nota = (size_t)i < st_.pestanasNota.size() ? st_.pestanasNota[(size_t)i] : std::string();
+              puesta ? accent[1] : hex(0xC9D0D7u, 1), puesta ? accent[2] : hex(0xC9D0D7u, 2), (puesta || hov ? 1.0f : 0.85f) * tenueT);
+      /* en gris, la nota dice por que: solo se abre en el escritorio */
+      const std::string nota = gris ? std::string(idioma::tr("En el escritorio"))
+                                    : ((size_t)i < st_.pestanasNota.size() ? st_.pestanasNota[(size_t)i] : std::string());
       if (!nota.empty()) {
         const float w = std::min(t.w - 12.0f * s, textWidth(nota, 13.0f * s));
-        textoCabe(nota, t.x + (t.w - w) * 0.5f, t.y + t.h - 34.0f * s, 13.0f * s, t.w - 12.0f * s, accent[0], accent[1], accent[2], 1.0f);
+        textoCabe(nota, t.x + (t.w - w) * 0.5f, t.y + t.h - 34.0f * s, 13.0f * s, t.w - 12.0f * s, gris ? dim[0] : accent[0],
+                  gris ? dim[1] : accent[1], gris ? dim[2] : accent[2], gris ? 0.7f : 1.0f);
       }
     }
     panelTeselas_.assign(st_.teselas.size(), fuera);
@@ -1943,11 +1952,12 @@ void Hud::dibujaPanel(int vw, int vh) {
       const float w = textWidth(st_.pestanas[i], tamPest) + 32.0f;
       const Rect t{tx, py + 62.0f, w, 32.0f};
       panelPestanas_.push_back(t);
-      const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_);
+      const bool grisP = i < st_.pestanaGris.size() && st_.pestanaGris[i];   /* (v1.16) en gris: tenue y sin resaltar */
+      const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_) && !grisP;
       if (puesta) mask9(t, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
       else if (hov) mask9(t, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.10f);
       text(st_.pestanas[i], t.x + t.w * 0.5f, t.y + 7.0f + (14.0f - tamPest) * 0.5f, tamPest, puesta ? tinta[0] : ink[0],
-           puesta ? tinta[1] : ink[1], puesta ? tinta[2] : ink[2], puesta || hov ? 1.0f : 0.72f,
+           puesta ? tinta[1] : ink[1], puesta ? tinta[2] : ink[2], grisP ? 0.30f : (puesta || hov ? 1.0f : 0.72f),
            true);
       tx += w + 8.0f;
     }
@@ -2048,7 +2058,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       z.caja = {-10.0f, -10.0f, 0.0f, 0.0f};
       continue;
     }
-    const bool hov = dentro && z.caja.inside(mx_, my_);
+    const bool hov = dentro && z.caja.inside(mx_, my_), hovFila = hov;
     const bool picable = (it.tipo == ItemPanel::Interruptor && !(it.apagado && !it.valor)) || it.tipo == ItemPanel::Juego ||
                          it.tipo == ItemPanel::Atajo || (it.tipo == ItemPanel::Seccion && it.plegable);
     if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador) &&
@@ -2275,12 +2285,15 @@ void Hud::dibujaPanel(int vw, int vh) {
            nombre debajo y a su derecha la pastillita 3D / 2D. Se pica la carta y arranca; la
            pastillita cambia si ese juego entra en 3D solo. */
         const Rect cara{z.caja.x, y, z.caja.w, z.caja.w * 1.5f};
+        /* (v1.16) dentro de un juego, las demas caratulas en gris y quietas: solo la de ese juego en color */
+        const bool hov = hovFila && !it.gris;
+        const float tenue = it.gris ? 0.40f : 1.0f;
         if (hov) mask9({cara.x - 3.0f, cara.y - 3.0f, cara.w + 6.0f, cara.h + 6.0f}, 1, R(13.0f), accent[0], accent[1], accent[2], 1.0f);
         if (it.img && it.imgW > 0 && it.imgH > 0) {
           /* (v1.16) con la interfaz subiendo, la caratula sube con ella */
           imagenes_.push_back({Rect{cara.x, cara.y + desplazY_, cara.w, cara.h},
                                Rect{panelCuerpo_.x, panelCuerpo_.y + desplazY_, panelCuerpo_.w, panelCuerpo_.h}, it.img->data(),
-                               it.imgW, it.imgH, R(10.0f), v_.size(), alfaGlobal_});
+                               it.imgW, it.imgH, R(10.0f), v_.size(), alfaGlobal_, it.gris});
         } else {
           unsigned semilla = 2166136261u;
           for (unsigned char ch : it.rotulo) semilla = (semilla ^ ch) * 16777619u;
@@ -2294,6 +2307,7 @@ void Hud::dibujaPanel(int vw, int vh) {
             case 4: cr = xq, cb = 1; break;
             default: cr = 1, cb = xq; break;
           }
+          if (it.gris) cr = cg = cb = 0.15f;
           mask9(cara, 1, R(10.0f), 0.22f + 0.38f * cr, 0.20f + 0.34f * cg, 0.30f + 0.42f * cb, 1.0f);
           size_t n = 0;
           nextCp(it.rotulo, n);
@@ -2316,16 +2330,16 @@ void Hud::dibujaPanel(int vw, int vh) {
           }
           nombre = corto + "..";
         }
-        text(nombre, cara.x + 2.0f, cara.y + cara.h + 13.0f, 13.0f, ink[0], ink[1], ink[2], hov ? 1.0f : 0.90f);
-        const bool hc2 = dentro && chip.inside(mx_, my_);
-        if (it.valor) mask9(chip, 0, R(12.0f), accent[0], accent[1], accent[2], hc2 ? 1.0f : 0.92f);
-        else mask9(chip, 0, R(12.0f), 0.30f, 0.31f, 0.36f, hc2 ? 1.0f : 0.92f);
+        text(nombre, cara.x + 2.0f, cara.y + cara.h + 13.0f, 13.0f, ink[0], ink[1], ink[2], (hov ? 1.0f : 0.90f) * tenue);
+        const bool hc2 = dentro && chip.inside(mx_, my_) && !it.gris;
+        if (it.valor) mask9(chip, 0, R(12.0f), accent[0], accent[1], accent[2], (hc2 ? 1.0f : 0.92f) * tenue);
+        else mask9(chip, 0, R(12.0f), 0.30f, 0.31f, 0.36f, (hc2 ? 1.0f : 0.92f) * tenue);
         const Rect bola{it.valor ? chip.x + chip.w - 22.0f : chip.x + 2.0f, chip.y + 2.0f, 20.0f, 20.0f};
-        mask9(bola, 0, R(10.0f), 0.97f, 0.97f, 0.99f, 1.0f);
+        mask9(bola, 0, R(10.0f), 0.97f, 0.97f, 0.99f, tenue);
         /* la letra de lo que esta puesto va en la bola; la otra, tenue, en el hueco que deja (v0.92:
            las dos a la misma altura y la bola a 2 px de cada borde; antes quedaba 3 arriba y 1 abajo) */
-        text(it.valor ? "3D" : "2D", bola.x + bola.w * 0.5f, chip.y + 6.0f, 10.5f, 0.12f, 0.12f, 0.16f, 1.0f, true);
-        text(it.valor ? "2D" : "3D", it.valor ? chip.x + 19.0f : chip.x + chip.w - 19.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f, true);
+        text(it.valor ? "3D" : "2D", bola.x + bola.w * 0.5f, chip.y + 6.0f, 10.5f, 0.12f, 0.12f, 0.16f, tenue, true);
+        text(it.valor ? "2D" : "3D", it.valor ? chip.x + 19.0f : chip.x + chip.w - 19.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f * tenue, true);
         /* (v1.15) al pasar el raton, arriba a la derecha de la caratula, el engranaje de sus integraciones (Rodolfo:
            «un engranaje que aparezca al pasar el mouse donde te puse en la foto»). Es el sub 2 */
         if (hov && !it.ayudas.empty()) {
@@ -2516,6 +2530,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (panelCopiar_.inside(mx, my)) return HitPanelCopiar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)
     if (panelPestanas_[i].inside(mx, my)) {
+      if (i < st_.pestanaGris.size() && st_.pestanaGris[i]) return HitPanel;   /* (v1.16) en gris: no se abre */
       if (sub) *sub = (int)i;
       return HitPanelPestana;
     }
@@ -2540,6 +2555,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
       case ItemPanel::Seccion:
         return it.plegable ? HitPanelItem : HitPanel;
       case ItemPanel::Juego:
+        if (it.gris) return HitPanel;   /* (v1.16) en gris, quieta */
         if (!z.subs.empty() && z.subs[0].inside(mx, my) && sub) *sub = 1;
         else if (z.subs.size() > 1 && z.subs[1].inside(mx, my) && sub) *sub = 2;   /* (v1.15) el engranaje */
         return HitPanelItem;

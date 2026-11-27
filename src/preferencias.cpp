@@ -1231,7 +1231,7 @@ void probarEdicion(const std::string &clave, const std::string &texto) {
   g_edit.id = "integ:" + clave, g_edit.texto = texto, g_edit.cursor = texto.size();
 }
 
-void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
+static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
   st.pieParametro.clear();   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
   st.pieCopiado = false;
   /* rama experimental: la primera (0) no es una pildora, la abre el logo y el nombre del programa; la de
@@ -1534,6 +1534,31 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     st.pieAyuda = std::string(idioma::tr("Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.")) +
                   " " + idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.") + " " +
                   idioma::tr("En la pestaña Integraciones se pone en todos los juegos de una vez.");
+  }
+}
+
+/* (v1.16) en el panel al estilo de vkDaedalus las teselas de los lados ya llevan la profundidad de DLSS, el HUD, el
+   seguimiento de la cabeza, el cuadrito de FPS, la version y el idioma: sus filas salen de la lista (Rodolfo: «quita
+   las opciones que ya tengan boton de ajustes, no repitas opciones»), y con ellas el rotulo de una seccion que se
+   quede sin nada debajo. En el panel de antes, sin teselas, se quedan */
+void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
+  llenarFilas(st, v, juegos, ids);
+  if (!st.marco || st.teselas.empty()) return;
+  static const char *kEnTesela[] = {"profundidad_dlss", "hud_plano", "fps_juego", "rastreo", "idioma", "actualizar", "buscar_actualizacion"};
+  std::vector<Hud::ItemPanel> items;
+  std::vector<std::string> nids;
+  for (size_t k = 0; k < st.items.size() && k < ids.size(); k++) {
+    bool fuera = false;
+    for (const char *e : kEnTesela) fuera = fuera || ids[k] == e;
+    if (!fuera) items.push_back(st.items[k]), nids.push_back(ids[k]);
+  }
+  /* los rotulos de seccion sin filas debajo (salvo los plegables, que plegados no las tienen) */
+  st.items.clear(), ids.clear();
+  for (size_t k = 0; k < items.size(); k++) {
+    const bool seccion = items[k].tipo == Hud::ItemPanel::Seccion && !items[k].plegable;
+    const bool vacia = k + 1 >= items.size() || items[k + 1].tipo == Hud::ItemPanel::Seccion;
+    if (seccion && vacia) continue;
+    st.items.push_back(items[k]), ids.push_back(nids[k]);
   }
 }
 

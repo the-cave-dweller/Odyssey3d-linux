@@ -73,6 +73,8 @@ public:
        («No instalada») */
     bool apagado = false;
     std::string pastilla;
+    /* (v1.16) una caratula de Juegos en gris (dentro de un juego, las que no son ese): sin color y sin picarse */
+    bool gris = false;
   };
 
   struct State {
@@ -124,6 +126,8 @@ public:
     /* (v1.16) en el escritorio el marco va en una ventana que se mueve por su barra (Rodolfo: «en la vista de escritorio
        hazlo movible, y con boton de cierre»); sobre un juego o el 3D, a pantalla completa */
     bool marcoVentana = false;
+    /* (v1.16) las pestanas que se ven pero no se pueden abrir (Integraciones dentro de un juego): en gris */
+    std::vector<bool> pestanaGris;
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;
@@ -385,6 +389,7 @@ private:
     float radio = 0.0f;
     size_t orden = 0;        /* (v1.14) cuantos vertices habia en v_ al ponerla: se pinta en su turno, no encima de todo */
     float alfa = 1.0f;       /* (v1.16) con el panel apareciendo, se hace opaca con el */
+    bool gris = false;       /* (v1.16) sin color y mas oscura */
   };
   std::vector<ImagenCpu> imagenes_;
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,

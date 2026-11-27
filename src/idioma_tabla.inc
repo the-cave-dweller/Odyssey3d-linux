@@ -370,3 +370,4 @@
 {"{}, hay la {}", {"{}, {} is out", "{}, la {} est sortie", "{}, {} ist da", "{}，{} 已发布", "{}、{} が出ています", "{}, вышла {}"}},
 {"Actualizar a {}", {"Update to {}", "Mettre à jour vers {}", "Auf {} aktualisieren", "更新到 {}", "{} に更新", "Обновить до {}"}},
 {"3D", {"3D", "3D", "3D", "3D", "3D", "3D"}},
+{"En el escritorio", {"On the desktop", "Sur le bureau", "Auf dem Desktop", "在桌面上", "デスクトップで", "На рабочем столе"}},

@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Dentro de un juego: Integraciones en gris y en Juegos solo el suyo; sin opciones repetidas (v1.16)
+
+- Rodolfo, corrigiendo lo de la entrada de abajo: «si muestra el boton de juegos e integraciones, pero integraciones
+  en gris, que juegos deje entrar pero solo se vea de color el juego actual»; y «quita las opciones que ya tengan
+  boton de ajustes, no repitas opciones».
+- **Dentro de un juego**, o con una sesión 3D, las pestañas se ven todas (antes, con una sesión 3D, Juegos no
+  salía):
+  - Integraciones, en gris, con «En el escritorio» debajo: no se abre (ni picándola, ni por guion);
+  - en Juegos, solo la carátula del juego de ahora va en color, con su 2D | 3D. Las demás van en gris (su
+    luminancia, oscurecida), con el nombre tenue, y no se pican: desde dentro de un juego no se arranca otro.
+    Ninguna lleva el engranaje que lleva a Integraciones;
+  - el juego de ahora es el de la ventana activa (`steam_app_<id>`) o, con una sesión 3D, el de la ventana que se
+    ve en 3D: el hub apunta su uuid en `ventana` y el panel lo busca en la lista de ventanas. Con un vídeo no hay
+    juego de ahora: todas en gris.
+- **Sin opciones repetidas**: en el panel nuevo, las filas que ya tienen su tesela salen de la lista de Ajustes
+  (Usar la profundidad de DLSS, HUD en el plano, el cuadro de FPS, Seguir la cabeza, Idioma y la de la
+  actualización), y con ellas el rótulo de una sección que se quede vacía («Juegos con DLSS»). En el panel de
+  antes (`ODYSSEYVK_PANEL_VIEJO=1`), sin teselas, se quedan.
+- `ctl hud`: `ODYSSEYVK_HUD_SESION=1` pone Integraciones en gris y `ODYSSEYVK_HUD_JUEGO=<appid>` deja en color ese
+  juego.
+- Probado: pintado con `ctl hud` (Juegos dentro de Cyberpunk: solo él en color; la lista de Ajustes sin las
+  repetidas); en el KWin aparte con una sesión 3D, picar Integraciones no la abre («la pestaña 2 está en gris»).
+
 ## El ratón desfasado en el escritorio, el panel en ventana y sin Juegos dentro de un juego (v1.16)
 
 - Rodolfo: «mouse desfasado en el escritorio, en la vista de escritorio hazlo movible, y con boton de cierre»; y
@@ -19,7 +42,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   barra, como el panel de antes, y la barra lleva el aspa y la actualización. Sobre un juego o con la sesión 3D
   sigue a pantalla completa. `ODYSSEYVK_PANEL_COMPLETO=1` la pone entera también en el escritorio.
 - **Ni Juegos ni Integraciones dentro de un juego**: con un juego como ventana activa al abrir el panel tampoco
-  sale la pestaña Juegos. Antes solo se quitaba con una sesión 3D. Las dos siguen la misma regla.
+  salía la pestaña Juegos. Las dos seguían la misma regla. (Cambiado enseguida: ver la entrada de arriba.)
 - Probado: pintado con `ctl hud` (la ventana en 2560 × 1440 y la pantalla completa con la sesión 3D, con solo 3D y
   Ajustes); en el KWin aparte a 150 %, la ventana de verdad (1020 × 888 con su borde). Sin probar: arrastrarla y el
   ratón con la escala arreglada en el escritorio de Rodolfo.

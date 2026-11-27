@@ -3149,23 +3149,24 @@ static int cmdAjustes(int argc, char **argv) {
   /* (v1.16) al estilo de vkDaedalus, a pantalla completa; ODYSSEYVK_PANEL_VIEJO=1 deja el panel flotante de antes */
   st.marco = !(entornoOdyssey("ODYSSEYVK_PANEL_VIEJO") && entornoOdyssey("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
   st.aparicion = st.marco ? 0.0f : 1.0f;
-  /* sobre un video o un juego en 3D no sale la pestana de Juegos (rama experimental): se lanzan desde
-     el escritorio. Su nombre vacio la esconde y las demas conservan su numero. */
-  if (haySesion && st.pestana == 1) st.pestana = 0;
-  /* (v1.16) y sobre un juego (o con una sesion 3D) tampoco la de Integraciones (Rodolfo: «sin menu de integraciones
-     cuando la interfaz esta sobre un juego, unicamente fuera en ajustes, en el escritorio»), ni el engranaje de
-     las caratulas que la abre */
+  /* (v1.16) dentro de un juego (o con una sesion 3D) las pestanas se ven, pero Integraciones va en gris y en Juegos
+     solo sale en color el juego de ahora (Rodolfo: «si muestra el boton de juegos e integraciones, pero integraciones
+     en gris, que juegos deje entrar pero solo se vea de color el juego actual»). Antes, con una sesion 3D, la de
+     Juegos no salia. Las demas caratulas, en gris y quietas (no se arranca otro juego desde dentro de uno), y ninguna
+     con el engranaje que lleva a Integraciones. `juegoActual` es su appid («» = ninguno: un video) */
   bool sinIntegraciones = haySesion;
+  std::string juegoActual;
   auto rellenar = [&] {
     prefs::llenar(st, prefs::leer(), juegos, ids);
-    if (haySesion && st.pestanas.size() > 1) st.pestanas[1].clear();
+    st.pestanaGris.assign(st.pestanas.size(), false);
     if (sinIntegraciones) {
-      /* (v1.16) y Juegos tampoco dentro de un juego (Rodolfo: «no games once inside a game, same for integrations»):
-         antes solo se quitaba con una sesion 3D */
-      if (st.pestanas.size() > 2) st.pestanas[1].clear(), st.pestanas[2].clear();
-      if (st.pestana == 1 || st.pestana == 2) st.pestana = 0;
-      for (Hud::ItemPanel &it : st.items)
-        if (it.tipo == Hud::ItemPanel::Juego) it.ayudas.clear();
+      if (st.pestanaGris.size() > 2) st.pestanaGris[2] = true;
+      if (st.pestana == 2) st.pestana = 0;
+      for (size_t k = 0; k < st.items.size() && k < ids.size(); k++)
+        if (st.items[k].tipo == Hud::ItemPanel::Juego) {
+          st.items[k].ayudas.clear();
+          st.items[k].gris = ids[k] != "juego:" + juegoActual || juegoActual.empty();
+        }
     }
   };
   /* al abrirse, una mirada a GitHub (v0.99): asi la pestana Programa y el boton junto al aspa estan
@@ -3190,8 +3191,22 @@ static int cmdAjustes(int argc, char **argv) {
       break;
     }
   }
-  if (!juegoUuid.empty() && !sinIntegraciones) {
-    sinIntegraciones = true;   /* (v1.16) la ventana activa es un juego */
+  /* (v1.16) el juego de ahora: el de la ventana activa o, con una sesion 3D, el de la ventana que se ve en 3D (el hub
+     apunta su uuid en `ventana`) */
+  {
+    auto appDe = [](const std::string &app) {
+      const std::string a = strLower(app);
+      return a.rfind("steam_app_", 0) == 0 ? a.substr(10) : std::string();
+    };
+    juegoActual = appDe(juegoApp);
+    const auto ven = hub.find("ventana");
+    if (juegoActual.empty() && haySesion && ven != hub.end() && ven->second != "-")
+      for (const WindowInfo &w : wmPanel.windows())
+        if (w.uuid == ven->second) juegoActual = appDe(w.appId);
+    if (!juegoActual.empty()) std::printf("[ajustes] dentro del juego %s: Integraciones en gris y en Juegos solo el suyo\n", juegoActual.c_str());
+  }
+  if (!juegoUuid.empty() || haySesion) {
+    sinIntegraciones = true;   /* (v1.16) la ventana activa es un juego, o hay una sesion 3D */
     rellenar();
   }
   /* el pin (rama experimental): fijado encima, sin velo y con el teclado a pedido */
@@ -3450,6 +3465,9 @@ static int cmdAjustes(int argc, char **argv) {
           st.pie = prefs::comprobarActualizacion(&e) ? std::string(idioma::tr("mirando la versión de GitHub…")) : e;
         }
         repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelPestana && (size_t)std::max(0, g.sub) < st.pestanaGris.size() && st.pestanaGris[(size_t)g.sub]) {
+        std::printf("[ajustes] la pestana %d esta en gris: no se abre\n", g.sub);   /* (v1.16) Integraciones dentro de un juego */
+        std::fflush(stdout);
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
         st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
         if (st.pestana == 2) prefs::integracionesDe("");   /* (v1.15) la pildora: lo de todos los juegos */
@@ -3730,8 +3748,17 @@ static int cmdHudSelfTest(int argc, char **argv) {
       if (std::sscanf(tm, "%fx%f", &an, &al) == 2) hud.state().panelAncho = an, hud.state().panelAlto = al;
     }
     /* ODYSSEYVK_HUD_SESION=1: como con un video o un juego en 3D debajo (sin la pestana de Juegos) */
-    if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 2)
-      hud.state().pestanas[1].clear(), hud.state().pestanas[2].clear();   /* (v1.16) ni Juegos ni Integraciones */
+    /* (v1.16) dentro de un juego: Integraciones en gris y en Juegos solo en color el de ODYSSEYVK_HUD_JUEGO=appid */
+    if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 2) {
+      hud.state().pestanaGris.assign(hud.state().pestanas.size(), false);
+      hud.state().pestanaGris[2] = true;
+      const char *jA = std::getenv("ODYSSEYVK_HUD_JUEGO");
+      for (size_t k = 0; k < hud.state().items.size() && k < ids.size(); k++)
+        if (hud.state().items[k].tipo == Hud::ItemPanel::Juego) {
+          hud.state().items[k].ayudas.clear();
+          hud.state().items[k].gris = !jA || ids[k] != std::string("juego:") + jA;
+        }
+    }
     hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
