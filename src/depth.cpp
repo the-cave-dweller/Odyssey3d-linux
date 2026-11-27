@@ -650,8 +650,9 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   im->so.SetIntraOpNumThreads(4);
   im->so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
   /* Poco margen: con el navegador y el compositor por delante la tarjeta suele estar casi llena.
-     Con el arenal de memoria apagada el pico baja bastante (el modelo pequeno no necesita 1 GB
-     reservados de golpe), y aun asi se le deja un techo por si acaso. */
+     Con CUDA el arenal crece solo lo que se le pide (el modelo pequeno no necesita 1 GB reservados
+     de golpe; el arenal de la tarjeta no se puede apagar, ver la rama de CUDA), y aun asi se le deja
+     un techo por si acaso. */
   if (sinGpu) {
     /* Ya decidimos que en la grafica no hay sitio: no hay que intentar CUDA por la puerta vieja,
        que era lo que pasaba (el aviso decia "se hara con la CPU" y despues se abria CUDA igual, y
@@ -680,14 +681,24 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
       dev_ = "CPU";
     }
   } else {
+    /* (v1.16) las opciones de CUDA van por la via V2 (CUDAProviderOptions). MEDIDO el 27-nov con onnxruntime-cuda
+       1.29: AppendExecutionProvider("CUDA", ...) por nombre ya no acepta CUDA (solo DML, QNN, OpenVINO, ...), asi que
+       siempre fallaba y se caia callando a la estructura vieja, con el arenal de fabrica. Y la V2 tampoco habria
+       tragado aquellas opciones: enable_mem_arena no existe («Unknown provider option») y "heuristic" va en
+       mayusculas. El arenal de la tarjeta no se apaga: con kSameAsRequested crece lo que se le pide y no al doble.
+       MEDIDO con la FP16 en la 5080 (CUDA 1): el proceso baja de 666 a 636 MiB en la tarjeta (el arenal reserva 191
+       MiB en vez de 255) y la red tarda lo mismo (4,35 ms de mediana). La estructura vieja queda de reserva por si
+       la V2 no fuera */
     try {
-      std::unordered_map<std::string, std::string> co;
-      co["device_id"] = std::to_string(gpu_);
-      co["gpu_mem_limit"] = "550000000";
-      co["enable_mem_arena"] = "0";
-      co["cudnn_conv_algo_search"] = "heuristic";
-      im->so.AppendExecutionProvider("CUDA", co);
+      Ort::CUDAProviderOptions co;
+      co.Update({{"device_id", std::to_string(gpu_)},
+                 {"gpu_mem_limit", "550000000"},
+                 {"arena_extend_strategy", "kSameAsRequested"},
+                 {"cudnn_conv_algo_search", "HEURISTIC"}});
+      im->so.AppendExecutionProvider_CUDA_V2(*co);
       dev_ = "NVIDIA";
+      std::printf("[conversor] CUDA con sus opciones por la via V2 (techo de 550 MB, arenal kSameAsRequested, "
+                  "busqueda heuristica)\n");
     } catch (const std::exception &e) {
       try {
         OrtCUDAProviderOptions o{};
@@ -696,11 +707,14 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
         o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
         im->so.AppendExecutionProvider_CUDA(o);
         dev_ = "NVIDIA";
+        std::printf("[conversor] la via V2 de CUDA no fue (%s): opciones por la estructura vieja (techo de 550 MiB, "
+                    "busqueda heuristica, arenal de fabrica)\n", resumenOrt(e.what()).c_str());
       } catch (const std::exception &e2) {
         std::printf("[conversor] la tarjeta no se pudo usar (%s): se hara con la CPU, mas despacio\n", e2.what());
         dev_ = "CPU";
       }
     }
+    std::fflush(stdout);
   }
   if (dev_ == "CPU") {
     if (sinSamsungEnCpu()) {

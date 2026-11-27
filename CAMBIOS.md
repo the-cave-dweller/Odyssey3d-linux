@@ -3,6 +3,31 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La red por CUDA, con sus opciones de verdad: la vía V2 de ONNX Runtime 1.29 (v1.16)
+
+- Salió midiendo otra red (27-nov): `DepthNet::init` pedía CUDA por nombre (`AppendExecutionProvider("CUDA", …)`) y
+  con `onnxruntime-cuda` 1.29.0 eso falla siempre («Unknown provider name 'CUDA'»: por nombre van DML, QNN,
+  OpenVINO, XNNPACK, MIGraphX y unos cuantos más, CUDA no). El fallo se callaba y la red abría por la estructura
+  vieja `OrtCUDAProviderOptions`: con el techo de 550 MiB y la búsqueda heurística, pero sin lo del arenal.
+- **Las claves, MEDIDAS** (`UpdateCUDAProviderOptions` de la 1.29): entran `device_id`, `gpu_mem_limit`,
+  `arena_extend_strategy=kSameAsRequested` y `cudnn_conv_algo_search=HEURISTIC`; no entran `enable_mem_arena`
+  («Unknown provider option»: el arenal de la tarjeta no se puede apagar), `heuristic` en minúsculas ni
+  `arena_extend_strategy` con número. Las opciones de antes tampoco habrían pasado.
+- **Cómo quedó**: primero la vía V2 (`Ort::CUDAProviderOptions`) con la tarjeta, el techo de 550 MB, el arenal en
+  `kSameAsRequested` (crece lo que se le pide, no al doble) y la búsqueda heurística; si fallara, la estructura vieja
+  como antes. El registro dice cuál: «CUDA con sus opciones por la via V2 (…)» o «la via V2 de CUDA no fue (…)».
+- **Medido** con la FP16 en la 5080 (CUDA 1), a 1x3x518x518, la memoria del proceso en la tarjeta según nvidia-smi:
+  - banco aparte (fuera del repositorio), 2 de calentamiento y 30 pasadas, cada configuración en su proceso, 3
+    rondas alternadas: antes 666 MiB (el arenal reserva 255 MiB para un pico de 139 en uso), después 636 MiB
+    (reserva 191, pico 129); mediana 4,35 ms en los dos. La V2 con el arenal de fábrica da 666, como antes: lo que
+    baja es el arenal, no la vía. Sacar los pesos del arenal (`session.use_device_allocator_for_initializers`) no
+    baja nada más;
+  - `odysseyvk mapa depth-map.png --red 1` con 30 cuadros y un `HOME` aparte (sus `models`, enlaces a las redes de
+    verdad), dos veces cada binario: 666 → 636 MiB, 10-11 ms por cuadro en los dos y el mismo mapa (a lo sumo 1 de
+    255 de diferencia, como entre dos corridas del mismo binario).
+- **Visto de paso, sin tocar**: cada proceso que abre la red en CUDA 1 ocupa además 386 MiB en la 4090 (CUDA 0)
+  desde que se añade el proveedor CUDA a la sesión, por las dos vías igual.
+
 ## `odysseyvk ctl net download`, en inglés (v1.16)
 
 - Rodolfo, con las dos líneas del README: «change to english in this command». Ahora se escribe `odysseyvk ctl net
