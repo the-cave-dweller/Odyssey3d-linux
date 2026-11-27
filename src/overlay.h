@@ -83,6 +83,12 @@ public:
   /* quita el velo de debajo del panel (al fijarlo encima: los clics fuera llegan al juego) */
   void quitarVelo();
   bool takeTecla(std::string &combo);
+  /* (v1.15) y lo que escribe esa pulsacion (UTF-8, ya con las teclas muertas; vacio si no escribe): los campos de
+     texto. La combinacion sale vacia para una tecla que solo escribe (la ñ, una letra con acento); Retroceso, Intro
+     y Tab van como "Backspace", "Return" y "Tab". La tecla que se deja pulsada se repite */
+  bool takeTecla(std::string &combo, std::string &texto);
+  /* (v1.15) `odysseyvk ctl teclado [es]`: sin compositor, que da cada pulsacion en esa distribucion */
+  static int pruebaTeclado(const char *distribucion);
 
   /* Vuelca la tarjeta a un archivo PNG (para comprobar el dibujo sin el compositor). */
   bool dumpPng(const std::string &ruta, std::string *err = nullptr);

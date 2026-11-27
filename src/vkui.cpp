@@ -1608,8 +1608,19 @@ void Hud::dibujaPanel(int vw, int vh) {
   /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */
   panelCuerpo_ = {px + 12.0f, py + 114.0f, pw - 24.0f, ph - 114.0f - 44.0f};
   const float izq = panelCuerpo_.x + 16.0f, der = panelCuerpo_.x + panelCuerpo_.w - 22.0f;
-  auto alto = [](const ItemPanel &it) {
+  /* (v1.15) la caja de una Linea: lo que mide de ancho (para partirla igual al medirla y al pintarla) */
+  auto anchoLinea = [&](const ItemPanel &it) {
+    const float wb = it.nota.empty() ? 0.0f : textWidth(it.nota, 12.5f) + 28.0f + 12.0f;
+    return std::max(80.0f, (der - wb) - izq);
+  };
+  auto alto = [&](const ItemPanel &it) {
     switch (it.tipo) {
+      case ItemPanel::Linea: {
+        const std::string &t = it.valorTexto.empty() ? it.rotulo : it.valorTexto;
+        const size_t n = std::max<size_t>(1, renglones(t, 13.0f, anchoLinea(it) - 20.0f).size());
+        return 22.0f + 19.0f * (float)n;
+      }
+      case ItemPanel::Texto: return 48.0f;
       case ItemPanel::Seccion: return 38.0f;
       case ItemPanel::Opciones: return 54.0f;
       case ItemPanel::Fila: return 42.0f;
@@ -1667,6 +1678,11 @@ void Hud::dibujaPanel(int vw, int vh) {
     if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
       mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
     const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
+    /* (v1.15) lo propio de un juego en sus integraciones: un punto del acento delante del rotulo */
+    if (it.propio) {
+      const float py0 = it.tipo == ItemPanel::Opciones ? y + 24.0f : (it.tipo == ItemPanel::Texto ? y + h * 0.5f - 3.0f : yr + 7.0f);
+      mask9({izq - 11.0f, py0, 6.0f, 6.0f}, 0, 3.0f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 1.0f);
+    }
     switch (it.tipo) {
       case ItemPanel::Seccion:
         text(it.rotulo, izq, y + 17.0f, 11.5f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
@@ -1758,6 +1774,64 @@ void Hud::dibujaPanel(int vw, int vh) {
         }
         break;
       }
+      case ItemPanel::Texto: {
+        /* (v1.15) el campo: el rotulo a la izquierda y la caja a la derecha. Escribiendo, el borde del acento y la
+           raya del cursor; lo que no cabe se corre para que el cursor se vea */
+        /* los campos, en columna: el rotulo tiene su tercio (y se achica si no cabe) */
+        const float wRot = (der - izq) * 0.30f;
+        textoCabe(it.rotulo, izq, y + (h - 20.0f) * 0.5f, 15.0f, wRot, ink[0], ink[1], ink[2], 1.0f);
+        const float cx0 = izq + wRot + 14.0f;
+        const Rect caja{cx0, y + (h - 32.0f) * 0.5f, der - cx0, 32.0f};
+        z.subs.push_back(caja);
+        const bool editando = it.cursor >= 0, hcaja = dentro && caja.inside(mx_, my_);
+        if (editando) mask9(caja, 0, 9.0f, accent[0], accent[1], accent[2], 1.0f);
+        else mask9(caja, 0, 9.0f, 0.42f, 0.43f, 0.50f, hcaja ? 0.95f : 0.55f);
+        mask9({caja.x + 1.5f, caja.y + 1.5f, caja.w - 3.0f, caja.h - 3.0f}, 0, 8.0f, 0.10f, 0.105f, 0.13f, 1.0f);
+        const float tam = 13.5f, tx0 = caja.x + 10.0f, util = caja.w - 20.0f, ty = caja.y + 7.5f;
+        const std::string &t = it.valorTexto;
+        if (t.empty() && !editando) {
+          textoCabe(it.nota, tx0, ty, tam, util, dim[0], dim[1], dim[2], 0.50f);
+        } else if (!editando) {
+          textoCabe(t, tx0, ty, tam, util, ink[0], ink[1], ink[2], 0.95f);
+        } else {
+          const size_t cur = std::min((size_t)it.cursor, t.size());
+          const float hasta = textWidth(t.substr(0, cur), tam);
+          const float corre = hasta > util - 4.0f ? hasta - (util - 4.0f) : 0.0f;
+          if (it.seleccion && !t.empty())
+            mask9({tx0 - 3.0f, caja.y + 6.0f, std::min(textWidth(t, tam), util) + 6.0f, 20.0f}, 0, 4.0f, accent[0], accent[1],
+                  accent[2], 0.50f);
+          const Rect antes = recorte_;
+          const float x0 = std::max(antes.x, caja.x + 5.0f), x1 = std::min(antes.x + antes.w, caja.x + caja.w - 5.0f);
+          const float y0 = std::max(antes.y, caja.y), y1 = std::min(antes.y + antes.h, caja.y + caja.h);
+          recorte_ = {x0, y0, std::max(0.0f, x1 - x0), std::max(0.0f, y1 - y0)};
+          text(t, tx0 - corre, ty, tam, ink[0], ink[1], ink[2], 0.97f);
+          solid(tx0 - corre + hasta, caja.y + 7.0f, 1.5f, 18.0f, ink[0], ink[1], ink[2], 0.95f);
+          recorte_ = antes;
+        }
+        break;
+      }
+      case ItemPanel::Linea: {
+        /* (v1.15) la linea de Steam, partida en renglones, y su boton Copiar (recien copiado, verde) */
+        const float wCaja = anchoLinea(it);
+        const Rect caja{izq, y + 4.0f, wCaja, h - 8.0f};
+        mask9(caja, 0, 9.0f, 0.10f, 0.105f, 0.13f, 1.0f);
+        const bool vacia = it.valorTexto.empty();
+        const std::vector<std::string> ls = renglones(vacia ? it.rotulo : it.valorTexto, 13.0f, wCaja - 20.0f);
+        for (size_t k = 0; k < ls.size(); k++)
+          text(ls[k], caja.x + 10.0f, caja.y + 7.0f + 19.0f * (float)k, 13.0f, vacia ? dim[0] : ink[0], vacia ? dim[1] : ink[1],
+               vacia ? dim[2] : ink[2], vacia ? 0.70f : 0.95f);
+        if (!it.nota.empty()) {
+          const float wb = textWidth(it.nota, 12.5f) + 28.0f;
+          const Rect b{der - wb, y + 6.0f, wb, 26.0f};
+          z.subs.push_back(b);
+          const bool hb = dentro && b.inside(mx_, my_);
+          if (it.valor) mask9(b, 0, 13.0f, 0.27f, 0.68f, 0.42f, 0.95f);
+          else mask9(b, 0, 13.0f, accent[0], accent[1], accent[2], hb ? 1.0f : 0.92f);
+          text(it.nota, b.x + wb * 0.5f, b.y + 5.5f, 12.5f, it.valor ? 1.0f : tinta[0], it.valor ? 1.0f : tinta[1],
+               it.valor ? 1.0f : tinta[2], 1.0f, true);
+        }
+        break;
+      }
       case ItemPanel::Deslizador: {
         const float anchoPista = 220.0f, cy = y + h * 0.5f;
         textoCabe(it.rotulo, izq, yr, 15.0f, der - 70.0f - anchoPista - 18.0f - izq, ink[0], ink[1], ink[2], 1.0f);
@@ -1837,6 +1911,16 @@ void Hud::dibujaPanel(int vw, int vh) {
            las dos a la misma altura y la bola a 2 px de cada borde; antes quedaba 3 arriba y 1 abajo) */
         text(it.valor ? "3D" : "2D", bola.x + bola.w * 0.5f, chip.y + 6.0f, 10.5f, 0.12f, 0.12f, 0.16f, 1.0f, true);
         text(it.valor ? "2D" : "3D", it.valor ? chip.x + 19.0f : chip.x + chip.w - 19.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f, true);
+        /* (v1.15) al pasar el raton, arriba a la derecha de la caratula, el engranaje de sus integraciones (Rodolfo:
+           «un engranaje que aparezca al pasar el mouse donde te puse en la foto»). Es el sub 2 */
+        if (hov && !it.ayudas.empty()) {
+          const Rect eng{cara.x + cara.w - 38.0f, cara.y + 8.0f, 30.0f, 30.0f};
+          z.subs.push_back(eng);
+          const bool he = dentro && eng.inside(mx_, my_);
+          mask9(eng, 0, 15.0f, 0.0f, 0.0f, 0.0f, he ? 0.88f : 0.66f);
+          if (he) mask9({eng.x - 1.0f, eng.y - 1.0f, eng.w + 2.0f, eng.h + 2.0f}, 0, 16.0f, accent[0], accent[1], accent[2], 0.55f);
+          icono({eng.x + 6.0f, eng.y + 6.0f, 18.0f, 18.0f}, icoEngranaje_, 1.0f, 1.0f, 1.0f, he ? 1.0f : 0.88f);
+        }
         break;
       }
     }
@@ -1852,6 +1936,9 @@ void Hud::dibujaPanel(int vw, int vh) {
       if (it.tipo == ItemPanel::Opciones && !it.ayudas.empty())
         for (size_t k = 0; k < z.subs.size() && k < it.ayudas.size(); k++)
           if (z.subs[k].inside(mx_, my_)) ayudaRaton = it.ayudas[k];
+      /* (v1.15) el engranaje de una caratula: su ayuda va en ayudas[0] */
+      if (it.tipo == ItemPanel::Juego && z.subs.size() > 1 && !it.ayudas.empty() && z.subs[1].inside(mx_, my_))
+        ayudaRaton = it.ayudas[0];
       if (ayudaRaton.empty()) ayudaRaton = it.ayuda;
       break;
     }
@@ -2013,7 +2100,16 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
         return it.plegable ? HitPanelItem : HitPanel;
       case ItemPanel::Juego:
         if (!z.subs.empty() && z.subs[0].inside(mx, my) && sub) *sub = 1;
+        else if (z.subs.size() > 1 && z.subs[1].inside(mx, my) && sub) *sub = 2;   /* (v1.15) el engranaje */
         return HitPanelItem;
+      case ItemPanel::Texto:   /* (v1.15) la fila entera pone a escribir en el campo */
+        return HitPanelItem;
+      case ItemPanel::Linea:
+        if (!z.subs.empty() && z.subs[0].inside(mx, my)) {
+          if (sub) *sub = 0;
+          return HitPanelItem;
+        }
+        return HitPanel;
       case ItemPanel::Opciones:
         for (size_t k = 0; k < z.subs.size(); k++)
           if (z.subs[k].inside(mx, my)) {

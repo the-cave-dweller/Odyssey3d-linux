@@ -27,6 +27,7 @@ extern char **environ;
 
 #include "ajuste.h"
 #include "atajos.h"
+#include "integraciones.h"
 #include "util.h"
 
 #ifdef HAVE_OPENCV
@@ -197,9 +198,36 @@ bool copiarAlPortapapeles(const std::string &texto, std::string *err) {
   return false;
 }
 
+/* (v1.15) lo que hay en el portapapeles (Ctrl+V en un campo de texto): de Klipper o, sin el, de wl-paste */
+bool leerPortapapeles(std::string &texto) {
+  texto.clear();
+#ifdef HAVE_SDBUS
+  sd_bus *bus = nullptr;
+  if (abrirBusUsuario(&bus) >= 0) {
+    sd_bus_error e = SD_BUS_ERROR_NULL;
+    sd_bus_message *m = nullptr;
+    const int r = sd_bus_call_method(bus, "org.kde.klipper", "/klipper", "org.kde.klipper.klipper", "getClipboardContents",
+                                     &e, &m, "");
+    const char *t = nullptr;
+    const bool ok = r >= 0 && sd_bus_message_read(m, "s", &t) >= 0 && t;
+    if (ok) texto = t;
+    sd_bus_message_unref(m);
+    sd_bus_error_free(&e);
+    sd_bus_flush_close_unref(bus);
+    if (ok) return true;
+  }
+#endif
+  FILE *p = ::popen("wl-paste -n 2>/dev/null", "r");
+  if (!p) return false;
+  char buf[4096];
+  size_t n;
+  while ((n = std::fread(buf, 1, sizeof buf, p)) > 0 && texto.size() < 65536) texto.append(buf, n);
+  return ::pclose(p) == 0;
+}
+
 }  // namespace
 
-std::vector<Juego> juegosSteam() {
+std::vector<Juego> juegosSteam(bool conCaratulas) {
   std::vector<Juego> sal;
   const char *home = std::getenv("HOME");
   if (!home) return sal;
@@ -231,7 +259,7 @@ std::vector<Juego> juegosSteam() {
       if (j.id.empty() || esHerramienta(j.nombre) || !(std::atoi(valorVdf(txt, "StateFlags").c_str()) & 4)) continue;
       if (std::find(ids.begin(), ids.end(), j.id) != ids.end()) continue;
       ids.push_back(j.id);
-      cargaCaratula(raices.front(), j);
+      if (conCaratulas) cargaCaratula(raices.front(), j);
       sal.push_back(j);
     }
   }
@@ -730,13 +758,472 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
 }
 }  // namespace
 
+/* ---- la pestana Integraciones (v1.15) ------------------------------------------------------------------------- */
+namespace {
+std::string g_integJuego;     /* el juego cuyas integraciones se ensenan (vacio = las de todos) */
+int g_pestanaPedida = -1;
+double g_copiadoHasta = 0.0;  /* la linea recien copiada: su boton dice «Copiado» */
+struct Edicion {
+  std::string id, texto;      /* id = "integ:<clave>" */
+  size_t cursor = 0;
+  bool todo = false;          /* todo marcado */
+} g_edit;
+
+double ahoraSeg() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+}
+
+std::vector<std::string> idsDe(const std::vector<Juego> &juegos) {
+  std::vector<std::string> ids;
+  for (const Juego &j : juegos) ids.push_back(j.id);
+  return ids;
+}
+
+/* lo que se dice en el pie tras guardar un cambio */
+std::string dichoDe(const integ::Resultado &r) {
+  if (!r.ok) return idioma::trf("guardado, pero no se pudo escribir en Steam: {}", {r.error});
+  if (r.escritos == 1) return idioma::tr("guardado y escrito en Steam");
+  if (r.escritos > 1) return idioma::trf("guardado y escrito en Steam: {} juegos", {std::to_string(r.escritos)});
+  if (r.pendientes > 0 && r.steamAbierto) return idioma::tr("guardado · Steam está abierto: se escribe en cuanto lo cierres");
+  return idioma::tr("guardado");
+}
+
+/* cambia una clave (en todos o en el juego puesto) y lo lleva a Steam */
+bool cambiarIntegracion(const std::string &clave, const std::string &valor, const std::vector<Juego> &juegos,
+                        std::string *aviso) {
+  const std::vector<std::string> ids = idsDe(juegos);
+  integ::Estado e = integ::cargar();
+  std::map<std::string, std::string> steam;
+  if (integ::leerSteam(steam, nullptr)) integ::sincronizar(e, ids, steam);   /* lo cambiado por fuera, antes */
+  integ::fijar(e, g_integJuego, clave, valor);
+  std::string err;
+  if (!integ::guardar(e, &err)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {err});
+    return true;
+  }
+  if (aviso) *aviso = dichoDe(integ::aplicar(ids, true));
+  return true;
+}
+
+size_t cpAntes(const std::string &s, size_t i) {
+  if (i == 0) return 0;
+  i--;
+  while (i > 0 && ((unsigned char)s[i] & 0xC0) == 0x80) i--;
+  return i;
+}
+size_t cpDespues(const std::string &s, size_t i) {
+  if (i >= s.size()) return s.size();
+  i++;
+  while (i < s.size() && ((unsigned char)s[i] & 0xC0) == 0x80) i++;
+  return i;
+}
+
+void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
+  auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    st.items.push_back(std::move(it));
+    ids.push_back(id);
+  };
+  const std::vector<std::string> appids = idsDe(juegos);
+  std::string nombreJuego;
+  for (const Juego &j : juegos)
+    if (j.id == g_integJuego) nombreJuego = j.nombre;
+  if (nombreJuego.empty()) g_integJuego.clear();
+  const std::string &jid = g_integJuego;
+  /* lo que hay ahora: integraciones.conf con lo cambiado en Steam por fuera (sin guardar: solo se mira) */
+  integ::Estado e = integ::cargar();
+  std::map<std::string, std::string> steam;
+  std::string errSteam;
+  const bool haySteam = integ::leerSteam(steam, &errSteam);
+  if (haySteam) integ::sincronizar(e, appids, steam);
+  const std::map<std::string, std::string> pend = haySteam ? integ::porEscribir(e, appids, steam) : std::map<std::string, std::string>{};
+  const integ::Ajustes ef = integ::efectivo(e, jid);
+  const auto jj = jid.empty() ? e.juegos.end() : e.juegos.find(jid);
+  const bool hayJuego = jj != e.juegos.end();
+  auto propio = [&](const char *k) { return hayJuego && jj->second.propios.count(k) > 0; };
+  auto val = [&](const char *k) {
+    const auto it = ef.find(k);
+    return it == ef.end() ? std::string() : it->second;
+  };
+  auto interruptor = [&](const char *clave, const std::string &rotulo, const std::string &ayuda) {
+    Hud::ItemPanel it;
+    it.tipo = Hud::ItemPanel::Interruptor, it.rotulo = rotulo, it.valor = val(clave) == "1", it.ayuda = ayuda;
+    it.propio = propio(clave);
+    pon(it, std::string("integ:") + clave);
+    return st.items.size() - 1;
+  };
+  auto campo = [&](const char *clave, const std::string &rotulo, const char *ejemplo, const std::string &ayuda) {
+    Hud::ItemPanel it;
+    it.tipo = Hud::ItemPanel::Texto, it.rotulo = rotulo, it.nota = ejemplo, it.ayuda = ayuda;
+    it.propio = propio(clave);
+    const std::string id = std::string("integ:") + clave;
+    if (g_edit.id == id) it.valorTexto = g_edit.texto, it.cursor = (int)g_edit.cursor, it.seleccion = g_edit.todo;
+    else it.valorTexto = val(clave);
+    pon(it, id);
+  };
+  Hud::ItemPanel sec;
+  sec.tipo = Hud::ItemPanel::Seccion;
+
+  /* de un juego: su nombre arriba y el boton de volver a los de todos */
+  if (!jid.empty()) {
+    Hud::ItemPanel b;
+    b.tipo = Hud::ItemPanel::Boton, b.rotulo = nombreJuego;
+    if (!(hayJuego && jj->second.propia))   /* la que no se sabe leer lo dice abajo */
+      b.nota = hayJuego && !jj->second.propios.empty() ? idioma::tr("Lo marcado con un punto es solo de este juego; lo demás, como todos los juegos")
+                                                       : idioma::tr("Como todos los juegos: lo que cambies aquí será solo de este");
+    b.valorTexto = idioma::tr("Todos los juegos"), b.valor = true;
+    pon(b, "integ:volver");
+    if (hayJuego && jj->second.propia) {
+      Hud::ItemPanel in;
+      in.tipo = Hud::ItemPanel::Info, in.rotulo = idioma::tr("Su línea de Steam no la sé leer, así que OdysseyVK no la toca");
+      in.nota = idioma::tr("Lleva algo que no se puede poner por piezas (un ;, una tubería, una redirección...).");
+      pon(in, "");
+      Hud::ItemPanel l;
+      l.tipo = Hud::ItemPanel::Linea, l.valorTexto = steam.count(jid) ? steam.at(jid) : std::string();
+      pon(l, "");
+      Hud::ItemPanel u;
+      u.tipo = Hud::ItemPanel::Boton, u.rotulo = idioma::tr("Usar la de OdysseyVK");
+      u.nota = idioma::tr("Se cambia por la que salga de aquí (antes se guarda una copia de la configuración de Steam)");
+      u.valorTexto = idioma::tr("Usar"), u.valor = true;
+      pon(u, "integ:usar");
+      return;
+    }
+  }
+
+  /* PARAMETROS: las variables de cada capa; apagadas, sin el =1 (Rodolfo: «les quitas el =1 si no lo activan») */
+  sec.rotulo = idioma::tr("PARÁMETROS");
+  pon(sec, "");
+  struct Var {
+    const char *clave, *nombre, *ayuda;
+  };
+  const Var vars[] = {{"odysseyvk", "ODYSSEYVK", "La capa de OdysseyVK: en los juegos con DLSS, el 3D usa la profundidad del juego"},
+                      {"mangohud", "MANGOHUD", "El contador de MangoHud encima del juego"},
+                      {"vkdaedalus", "ENABLE_VKDAEDALUS", "La capa de vkDaedalus"},
+                      {"neural_forge", "NEURAL_FORGE_ENABLE", "La capa de Neural Forge; su ejecutable (NEURAL_FORGE_TARGET_EXE) se toma de Neural Forge"},
+                      {"vkbasalt", "ENABLE_VKBASALT", "Los filtros de vkBasalt"}};
+  for (const Var &v : vars) {
+    const bool puesto = val(v.clave) == "1";
+    const size_t k = interruptor(v.clave, std::string(v.nombre) + (puesto ? "=1" : ""), idioma::tr(v.ayuda));
+    /* de un juego: el ejecutable que va con Neural Forge (no se pregunta: se saca de Neural Forge) */
+    if (!jid.empty() && puesto && std::strcmp(v.clave, "neural_forge") == 0) {
+      const std::string exe = integ::exeDe(e, jid);
+      if (!exe.empty()) st.items[k].nota = "NEURAL_FORGE_TARGET_EXE=" + exe;
+    }
+  }
+  campo("otros", idioma::tr("Otros parámetros"), "DXVK_HUD=fps PROTON_LOG=1",
+        idioma::tr("Más variables, separadas por espacios: van con las de arriba"));
+
+  /* COMANDO: lo de delante del juego y lo de detras */
+  sec.rotulo = idioma::tr("COMANDO");
+  pon(sec, "");
+  interruptor("vkdaedalus_run", "vkdaedalus-run", idioma::tr("Arranca el juego a través de vkdaedalus-run"));
+  campo("comando", idioma::tr("Comando personalizado"), "gamemoderun",
+        idioma::tr("Lo que quieras correr delante del juego (va justo antes de %command%)"));
+  campo("opciones", idioma::tr("Opciones del juego"), "--launcher-skip", idioma::tr("Van detrás de %command%: se le pasan al juego"));
+
+  /* GAMESCOPE (Rodolfo: «no menciones de que es, solo da a elegir la resolucion de salida y la de renderizado, solo
+     las abreviaturas»; y el reescalado, que enciende gamescope, con FSR y NIS) */
+  sec.rotulo = "GAMESCOPE";
+  pon(sec, "");
+  interruptor("gamescope", "Gamescope", "");
+  interruptor("reescalado", idioma::tr("Reescalado"), idioma::tr("Al ponerlo se pone gamescope"));
+  if (val("reescalado") == "1") {
+    Hud::ItemPanel f;
+    f.tipo = Hud::ItemPanel::Opciones, f.rotulo = idioma::tr("Filtro"), f.opciones = {"FSR", "NIS"};
+    f.ayudas = {"AMD FidelityFX Super Resolution 1.0 · -F fsr", "NVIDIA Image Scaling · -F nis"};
+    f.elegido = val("filtro") == "nis" ? 1 : 0, f.propio = propio("filtro") || propio("reescalado");
+    pon(f, "integ:filtro");
+  }
+  if (val("gamescope") == "1") {
+    auto resolucion = [&](const char *clave, const std::string &rotulo, const char *banderas) {
+      Hud::ItemPanel r;
+      r.tipo = Hud::ItemPanel::Opciones, r.rotulo = rotulo, r.elegido = -1, r.propio = propio(clave);
+      const std::string puesta = val(clave);
+      for (const integ::Resolucion &x : integ::resoluciones()) {
+        if (puesta == x.medida) r.elegido = (int)r.opciones.size();
+        r.opciones.push_back(x.abrev);
+        std::string m = x.medida;
+        m.replace(m.find('x'), 1, " × ");
+        r.ayudas.push_back(m + " · " + banderas);
+      }
+      if (r.elegido < 0 && !puesta.empty()) {   /* una que no es de las de siempre (venia en su linea) */
+        r.elegido = (int)r.opciones.size();
+        r.opciones.push_back(puesta);
+        r.ayudas.push_back(banderas);
+      }
+      pon(r, std::string("integ:") + clave);
+    };
+    resolucion("render", idioma::tr("Resolución de renderizado"), "-w -h");
+    resolucion("salida", idioma::tr("Resolución de salida"), "-W -H");
+    Hud::ItemPanel es;
+    es.tipo = Hud::ItemPanel::Opciones, es.rotulo = idioma::tr("Escalado"), es.opciones = {"stretch", "fit"};
+    es.ayudas = {idioma::tr("Estira la imagen a la pantalla entera · -S stretch"), idioma::tr("La encaja sin deformarla · -S fit")};
+    const std::string esc = val("escala");
+    es.elegido = esc == "stretch" ? 0 : (esc == "fit" ? 1 : -1);
+    if (es.elegido < 0 && !esc.empty()) es.elegido = 2, es.opciones.push_back(esc), es.ayudas.push_back("-S " + esc);
+    es.propio = propio("escala");
+    pon(es, "integ:escala");
+    interruptor("pantalla_completa", idioma::tr("Pantalla completa"), "-f");
+    interruptor("cursor", idioma::tr("Atrapar el cursor"), "--force-grab-cursor");
+    if (!val("gs_otros").empty() || g_edit.id == "integ:gs_otros")
+      campo("gs_otros", idioma::tr("Otras opciones de gamescope"), "-r 60", idioma::tr("Las que traía su línea y no tienen fila aquí"));
+  }
+
+  /* LA LINEA: la que va a Steam, con su boton Copiar, y si falta escribirla */
+  sec.rotulo = idioma::tr("LÍNEA DE STEAM");
+  pon(sec, "");
+  {
+    Hud::ItemPanel l;
+    l.tipo = Hud::ItemPanel::Linea, l.valorTexto = integ::linea(ef, jid.empty() ? std::string() : integ::exeDe(e, jid));
+    l.rotulo = idioma::tr("Nada: Steam arranca el juego tal cual");
+    l.valor = ahoraSeg() < g_copiadoHasta;
+    l.nota = idioma::tr(l.valor ? "Copiado" : "Copiar");
+    l.ayuda = jid.empty() ? idioma::tr("La de los juegos sin nada propio. Con Steam abierto puedes pegarla tú: Propiedades del juego → General → Opciones de lanzamiento.")
+                          : idioma::tr("Con Steam abierto puedes pegarla tú: Propiedades del juego → General → Opciones de lanzamiento.");
+    if (l.valorTexto.empty()) l.nota.clear();
+    pon(l, "integ:copiar");
+  }
+  {
+    Hud::ItemPanel b;
+    b.tipo = Hud::ItemPanel::Boton;
+    const int n = (int)pend.size();
+    const bool abierto = integ::steamAbierto();
+    if (!haySteam) {
+      b.rotulo = idioma::tr("No encontré la configuración de Steam");
+      b.nota = errSteam, b.valorTexto = idioma::tr("Escribir"), b.valor = false;
+    } else if (n == 0) {
+      b.rotulo = idioma::tr("Steam está al día");
+      b.nota = idioma::tr("Cada juego tiene en Steam la línea que sale de aquí");
+      b.valorTexto = idioma::tr("Escribir"), b.valor = false;
+    } else {
+      b.rotulo = n == 1 ? std::string(idioma::tr("1 juego con la línea por escribir"))
+                        : idioma::trf("{} juegos con la línea por escribir", {std::to_string(n)});
+      if (!abierto) {
+        b.nota = idioma::tr("Steam está cerrado: se escribe ya (antes se guarda una copia de su configuración)");
+        b.valorTexto = idioma::tr("Escribir ahora"), b.valor = true;
+      } else if (integ::hayMarca()) {
+        b.nota = idioma::tr("Steam está abierto: se escribe solo en cuanto lo cierres");
+        b.valorTexto = idioma::tr("Esperando a Steam"), b.valor = false;
+      } else {
+        b.nota = idioma::tr("Steam está abierto: solo lee esto al arrancar y lo reescribe al salir");
+        b.valorTexto = idioma::tr("Al cerrar Steam"), b.valor = true;
+      }
+    }
+    pon(b, "integ:escribir");
+  }
+
+  if (!jid.empty()) {
+    if (hayJuego && !jj->second.propios.empty()) {
+      Hud::ItemPanel v;
+      v.tipo = Hud::ItemPanel::Boton, v.rotulo = idioma::tr("Volver a lo de todos los juegos");
+      v.nota = idioma::tr("Este juego deja lo suyo y toma lo de todos");
+      v.valorTexto = idioma::tr("Volver"), v.valor = true;
+      pon(v, "integ:como_todos");
+    }
+    return;
+  }
+  /* de todos: los juegos que llevan algo suyo, para ir a ellos (o se abren con el engranaje de su caratula) */
+  sec.rotulo = idioma::tr("JUEGOS CON LO SUYO");
+  pon(sec, "");
+  int cuantos = 0;
+  for (const Juego &j : juegos) {
+    const auto it = e.juegos.find(j.id);
+    if (it == e.juegos.end() || (it->second.propios.empty() && !it->second.propia)) continue;
+    cuantos++;
+    Hud::ItemPanel b;
+    b.tipo = Hud::ItemPanel::Boton, b.rotulo = j.nombre;
+    b.nota = it->second.propia ? std::string(idioma::tr("su línea de Steam no la sé leer: no la toco"))
+                               : integ::linea(integ::efectivo(e, j.id), integ::exeDe(e, j.id));
+    if (b.nota.empty()) b.nota = idioma::tr("Nada: Steam arranca el juego tal cual");
+    b.valorTexto = idioma::tr("Abrir"), b.valor = true;
+    pon(b, "integ:juego:" + j.id);
+  }
+  if (cuantos == 0) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("Ninguno: todos toman lo de aquí. En Juegos, el engranaje de cada carátula abre lo de ese juego.");
+    pon(n, "");
+  }
+}
+
+/* un golpe en una fila de Integraciones ("integ:<que>") */
+bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego> &juegos, std::string *aviso) {
+  const std::vector<std::string> ids = idsDe(juegos);
+  if (que == "volver") {
+    g_integJuego.clear();
+    g_pestanaPedida = 2;   /* arriba del todo */
+    return true;
+  }
+  if (que.rfind("juego:", 0) == 0) {
+    g_integJuego = que.substr(6);
+    g_pestanaPedida = 2;
+    return true;
+  }
+  integ::Estado e = integ::cargar();
+  std::map<std::string, std::string> steam;
+  if (integ::leerSteam(steam, nullptr)) integ::sincronizar(e, ids, steam);
+  const integ::Ajustes ef = integ::efectivo(e, g_integJuego);
+  if (que == "copiar") {
+    const std::string l = integ::linea(ef, g_integJuego.empty() ? std::string() : integ::exeDe(e, g_integJuego));
+    std::string err;
+    if (l.empty()) return false;
+    if (copiarAlPortapapeles(l, &err)) {
+      g_copiadoHasta = ahoraSeg() + 2.5;
+      if (aviso) *aviso = idioma::tr("copiada: pégala en Steam, en Propiedades → General → Opciones de lanzamiento");
+    } else if (aviso) {
+      *aviso = idioma::trf("no se pudo copiar ({}): escríbelo a mano", {err});
+    }
+    return true;
+  }
+  if (que == "escribir") {
+    const integ::Resultado r = integ::aplicar(ids, true);
+    if (aviso) {
+      if (!r.ok) *aviso = idioma::trf("no se pudo escribir en Steam: {}", {r.error});
+      else if (r.escritos > 0) *aviso = idioma::trf("escrito en Steam: {} juegos (hay copia de antes en ~/.local/state/odysseyvk/steam)", {std::to_string(r.escritos)});
+      else if (r.pendientes > 0) *aviso = idioma::tr("se escribe en cuanto cierres Steam");
+      else *aviso = idioma::tr("Steam ya estaba al día");
+    }
+    return true;
+  }
+  if (que == "como_todos" || que == "usar") {
+    if (g_integJuego.empty()) return false;
+    integ::comoTodos(e, g_integJuego);
+    std::string err;
+    if (!integ::guardar(e, &err)) {
+      if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {err});
+      return true;
+    }
+    if (aviso) *aviso = dichoDe(integ::aplicar(ids, true));
+    return true;
+  }
+  const auto fab = integ::deFabrica().find(que);
+  if (fab == integ::deFabrica().end()) return false;
+  const std::string ahora = ef.count(que) ? ef.at(que) : fab->second;
+  /* los campos: un clic pone a escribir */
+  if (que == "otros" || que == "comando" || que == "opciones" || que == "gs_otros") {
+    g_edit = Edicion{};
+    g_edit.id = "integ:" + que, g_edit.texto = ahora, g_edit.cursor = ahora.size();
+    if (aviso) *aviso = idioma::tr("escribe y pulsa Intro para guardarlo (Esc lo deja como estaba)");
+    return true;
+  }
+  std::string nuevo;
+  if (integ::esInterruptor(que)) {
+    nuevo = ahora == "1" ? "0" : "1";
+  } else if (que == "filtro") {
+    nuevo = sub == 1 ? "nis" : "fsr";
+  } else if (que == "render" || que == "salida") {
+    const auto &rs = integ::resoluciones();
+    if (sub < 0 || (size_t)sub >= rs.size()) return false;   /* la que venia en su linea: ya esta puesta */
+    nuevo = rs[(size_t)sub].medida;
+  } else if (que == "escala") {
+    if (sub == 0) nuevo = "stretch";
+    else if (sub == 1) nuevo = "fit";
+    else return false;
+  } else {
+    return false;
+  }
+  if (nuevo == ahora) return false;
+  return cambiarIntegracion(que, nuevo, juegos, aviso);
+}
+}  // namespace
+
+bool editandoTexto() { return !g_edit.id.empty(); }
+const std::string &idEditando() { return g_edit.id; }
+void cancelarTexto() { g_edit = Edicion{}; }
+
+bool terminarTexto(const std::vector<Juego> &juegos, std::string *aviso) {
+  if (g_edit.id.empty()) return false;
+  const Edicion ed = g_edit;
+  g_edit = Edicion{};
+  const std::string clave = ed.id.substr(6);
+  integ::Estado e = integ::cargar();
+  const integ::Ajustes ef = integ::efectivo(e, g_integJuego);
+  std::string t = strTrim(ed.texto);
+  if (ef.count(clave) && ef.at(clave) == t) {
+    if (aviso) *aviso = idioma::tr("sin cambios");
+    return true;
+  }
+  return cambiarIntegracion(clave, t, juegos, aviso);
+}
+
+bool teclaTexto(const std::string &combo, const std::string &texto, const std::vector<Juego> &juegos, std::string *aviso) {
+  Edicion &ed = g_edit;
+  if (ed.id.empty()) return false;
+  if (combo == "Escape") {
+    cancelarTexto();
+    if (aviso) *aviso = idioma::tr("sin cambios");
+    return true;
+  }
+  if (combo == "Return" || combo == "Tab" || combo == "Shift+Tab") return terminarTexto(juegos, aviso);
+  auto insertar = [&](std::string t) {
+    for (char &c : t)
+      if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+    if (ed.todo) ed.texto.clear(), ed.cursor = 0, ed.todo = false;
+    if (ed.texto.size() + t.size() > 1000) return;
+    ed.texto.insert(ed.cursor, t);
+    ed.cursor += t.size();
+  };
+  if (combo == "Ctrl+A") {
+    ed.todo = !ed.texto.empty();
+    ed.cursor = ed.texto.size();
+    return true;
+  }
+  if (combo == "Ctrl+V" || combo == "Shift+Insert") {
+    std::string p;
+    if (!leerPortapapeles(p)) {
+      if (aviso) *aviso = idioma::tr("no pude leer el portapapeles");
+      return true;
+    }
+    insertar(strTrim(p));
+    return true;
+  }
+  if (!texto.empty()) {
+    insertar(texto);
+    return true;
+  }
+  if (combo == "Backspace" || combo == "Delete") {
+    if (ed.todo) {
+      ed.texto.clear(), ed.cursor = 0, ed.todo = false;
+    } else if (combo == "Backspace" && ed.cursor > 0) {
+      const size_t a = cpAntes(ed.texto, ed.cursor);
+      ed.texto.erase(a, ed.cursor - a);
+      ed.cursor = a;
+    } else if (combo == "Delete" && ed.cursor < ed.texto.size()) {
+      ed.texto.erase(ed.cursor, cpDespues(ed.texto, ed.cursor) - ed.cursor);
+    }
+    return true;
+  }
+  if (combo == "Left" || combo == "Right" || combo == "Home" || combo == "End") {
+    if (combo == "Left") ed.cursor = ed.todo ? 0 : cpAntes(ed.texto, ed.cursor);
+    else if (combo == "Right") ed.cursor = ed.todo ? ed.texto.size() : cpDespues(ed.texto, ed.cursor);
+    else ed.cursor = combo == "Home" ? 0 : ed.texto.size();
+    ed.todo = false;
+    return true;
+  }
+  return false;
+}
+
+int tomarPestana() {
+  const int p = g_pestanaPedida;
+  g_pestanaPedida = -1;
+  return p;
+}
+
+void integracionesDe(const std::string &appid) { g_integJuego = appid; }
+
+void probarEdicion(const std::string &clave, const std::string &texto) {
+  g_edit = Edicion{};
+  g_edit.id = "integ:" + clave, g_edit.texto = texto, g_edit.cursor = texto.size();
+}
+
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
   st.pieParametro.clear();   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
   st.pieCopiado = false;
   /* rama experimental: la primera (0) no es una pildora, la abre el logo y el nombre del programa; la de
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
-  st.pestanas = {"", idioma::tr("Juegos"), "", idioma::tr("Ajustes")};   /* la de Experimental se fue en la 1.12 */
+  /* (v1.15) la 2, la de Rendimiento que ya no se ensenaba, es ahora Integraciones: queda entre Juegos y Ajustes */
+  st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes")};   /* la de Experimental se fue en la 1.12 */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
@@ -971,7 +1458,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     }
     }
   } else if (st.pestana == 2) {
-    filasRendimiento(st, v, ids);   /* la pestana ya no se ensena: sus filas van en Programa */
+    filasIntegraciones(st, juegos, ids);   /* (v1.15) las opciones de lanzamiento de Steam */
   } else {
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "STEAM";
@@ -989,6 +1476,8 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       fila.valor = true;
       for (const auto &par : v.recordadas)
         if (par.first == "steam_app_" + j.id && par.second == "flat") fila.valor = false;
+      /* (v1.15) el engranaje de la caratula (al pasar el raton) abre sus integraciones: su ayuda */
+      fila.ayudas = {idioma::tr("Integraciones de este juego: sus opciones de lanzamiento de Steam")};
       pon(fila, "juego:" + j.id);
     }
     Hud::ItemPanel n;
@@ -1002,7 +1491,8 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     st.pieCopiar = idioma::tr("Copiar");
     st.pieCopiadoTexto = idioma::tr("Copiado");
     st.pieAyuda = std::string(idioma::tr("Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.")) +
-                  " " + idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.");
+                  " " + idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.") + " " +
+                  idioma::tr("En la pestaña Integraciones se pone en todos los juegos de una vez.");
   }
 }
 
@@ -1069,6 +1559,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       for (const std::string &c : ab) std::fprintf(f, "%s\n", c.c_str());
       std::fclose(f);
     }
+    return true;
+  }
+  if (id.rfind("integ:", 0) == 0) return aplicarIntegracion(id.substr(6), sub, juegos, aviso);
+  /* (v1.15) el engranaje de una caratula: las Integraciones de ese juego */
+  if (id.rfind("juego:", 0) == 0 && sub == 2) {
+    g_integJuego = id.substr(6);
+    g_pestanaPedida = 2;
     return true;
   }
   const Valores v = leer();

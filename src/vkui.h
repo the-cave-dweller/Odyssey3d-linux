@@ -38,7 +38,12 @@ public:
        Info (v0.92): una «i» en un anillo, el rotulo y, debajo, la nota. */
     /* Atajo (v1.09): el rotulo y, a la derecha, la combinacion en una tecla; `valor` = esperando la
        combinacion nueva; `quitar` = no es la de fabrica (sale la flecha de volver a ella). */
-    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info, Atajo };
+    /* Texto (v1.15): un campo para escribir (la pestana Integraciones): el rotulo a la izquierda y la caja a la
+       derecha con `valorTexto`; vacio, la caja ensena `nota` en gris. `cursor` >= 0 = escribiendo, con el cursor en
+       ese byte; `seleccion` = todo marcado (lo que se escriba lo reemplaza).
+       Linea (v1.15): un texto largo partido en renglones en una caja oscura (la linea que va a Steam), con un boton
+       a la derecha que dice `nota` (Copiar; `valor` = recien copiado, en verde); vacio, sale `rotulo` en gris. */
+    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info, Atajo, Texto, Linea };
     Tipo tipo = Nota;
     std::string rotulo, nota;
     std::string valorTexto;          /* a la derecha: el numero del deslizador, el modo de una fila... */
@@ -59,6 +64,10 @@ public:
        que las imagenes van aparte y solo las pinta el pintado de CPU (el del panel). */
     std::shared_ptr<const std::vector<uint8_t>> img;
     int imgW = 0, imgH = 0;
+    int cursor = -1;          /* Texto: escribiendo, donde esta el cursor (en bytes) */
+    bool seleccion = false;   /* Texto: todo marcado */
+    /* (v1.15) en las integraciones de un juego: este valor es suyo, no el de todos (un punto del acento delante) */
+    bool propio = false;
   };
 
   struct State {

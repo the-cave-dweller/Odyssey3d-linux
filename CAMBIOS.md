@@ -28,6 +28,58 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
   las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
 
+## La pestaña Integraciones: las opciones de lanzamiento de Steam por piezas, para todos y para cada juego (v1.15)
+
+- Rodolfo: «si suelo ejecutar otras capas de parametros de steam puedes tener una pestaña de Integrations?, quiero
+  que tenga parametros de lanzamiento de steam que se puedan activar y desactivar para todo, pero tambien que tengas
+  una seccion para gamescope», «quiero que cada juego tenga su herramientita para personalizar esto», y al
+  preguntarle cómo llevarlo a Steam: «Write the whole line to Steam». Después, a medio hacer: «Falto el comando a
+  correr, seria vkdaedalus-run, tambien a activar o desactivar, y una casilla a escribir de comando personalizado»;
+  «en la parte de gamescope no menciones de que es, solo da a elegir la resolucion de salida y la de renderizado,
+  solo las abreviaturas de cada una»; «y la casilla de reescalado Gamescope, que al activarla se active lo de
+  gamescope, pones igual fsr ahi, y nis».
+- **La pestaña** (la 2, la de Rendimiento que ya no se enseñaba; queda entre Juegos y Ajustes):
+  - PARÁMETROS: `ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`, `NEURAL_FORGE_ENABLE`, `ENABLE_VKBASALT` (con `=1` solo
+    puestos: «les quitas el =1 si no lo activan») y un campo de otros parámetros.
+  - COMANDO: `vkdaedalus-run`, un comando personalizado (delante de `%command%`) y las opciones del juego (detrás).
+  - GAMESCOPE: el interruptor, el reescalado (que lo enciende) con FSR o NIS (`-F`), la resolución de renderizado y la
+    de salida por abreviatura (HD, HD+, FHD, QXGA, QHD, 4K; la medida, en la ayuda), `-S stretch|fit`, `-f` y
+    `--force-grab-cursor`.
+  - LÍNEA DE STEAM: la línea que sale, con Copiar; y si falta escribirla en Steam.
+  - JUEGOS CON LO SUYO: los que tienen algo distinto, para ir a ellos.
+- **Cada juego**: un engranaje arriba a la derecha de su carátula (al pasar el ratón, en Juegos) abre sus
+  integraciones; lo suyo lleva un punto delante, y «Volver a lo de todos los juegos» se lo quita. Cambiar algo al
+  valor de todos deja de ser propio.
+- **`NEURAL_FORGE_TARGET_EXE`** no se pregunta: con Neural Forge puesto se saca de `neural-forge-cli games` (solo lee),
+  o se queda el que traía la línea del juego. Con espacios va entre comillas.
+- **La línea entera va a Steam** (`localconfig.vdf` de la última cuenta). Steam solo lo lee al arrancar y lo reescribe
+  al salir: con Steam cerrado se escribe al momento; abierto, queda pendiente y el servicio lo escribe en cuanto se
+  cierra (dos miradas seguidas sin Steam), con un aviso del escritorio. Antes de cada escritura se guarda una copia en
+  `~/.local/state/odysseyvk/steam/` (la primera de todas no se borra nunca; de las demás, las ocho últimas), se
+  escribe aparte y se cambia el fichero de golpe, comprobando que se lee de vuelta lo que se quería y que nadie lo
+  tocó mientras tanto.
+- **Nada se pierde**: la primera vez se leen las líneas que ya hay (Cyberpunk y Harold Halibut con su gamescope, los
+  juegos de Neural Forge) y lo que no es como todos pasa a ser propio del juego; lo que se cambie luego por fuera (a
+  mano en Steam, o Neural Forge) se toma como propio también, solo lo que cambió. Una línea que no se puede poner por
+  piezas (`;`, tuberías, redirecciones, `$(...)`, gamescope sin `--`) se deja como está hasta pedir «Usar la de
+  OdysseyVK». Un juego cuya línea ya dice lo mismo (en otro orden, o con `env` de más) no se reescribe.
+- **Campos de texto en el panel**: la capa del panel ya da lo que escribe cada tecla (con Mayús, AltGr y las teclas
+  muertas del teclado español: ´+a = á, AltGr+4 = ~), Retroceso, Intro, Tab, Supr, flechas, Inicio y Fin, Ctrl+A y
+  Ctrl+V (de Klipper o wl-paste), y la tecla que se deja pulsada se repite. Intro o un clic en otra cosa guardan; Esc
+  lo deja como estaba (y ya no cierra el panel mientras se escribe).
+- Se guarda en `~/.config/odysseyvk/integraciones.conf` (`[todos]` y un `[appid]` por juego, con lo último que se vio
+  en Steam). `odysseyvk integraciones ver` enseña cada juego (su línea en Steam, lo suyo, la de OdysseyVK y si falta
+  escribirla) sin tocar nada; `escribir` hace lo del panel; `linea "…"` dice cómo se lee una.
+- **Probado** sin tocar el Steam de verdad: en una copia de su `localconfig.vdf` (en un HOME aparte) se leyeron las 9
+  líneas de Rodolfo, se escribieron cambios (una línea cambiada, `LaunchOptions` añadido a un juego que no lo tenía,
+  un bloque de juego nuevo), se tomaron cambios hechos por fuera y se respetó una línea ilegible; el panel, en un
+  KWin virtual aparte con su propio bus, con un guion de pasos (`ODYSSEYVK_PANEL_GUION`): la pestaña, MANGOHUD para
+  todos, escribir un comando, el engranaje de Cyberpunk, reescalado NIS, FHD, Esc, un clic que guarda lo escrito,
+  volver a todos, «Usar la de OdysseyVK» y lo de Steam abierto; el servicio, con `integraciones esperar` (la misma
+  función: espera con Steam abierto y escribe al cerrarse); el teclado español, con `ctl teclado es`. **Sin probar**:
+  con Steam y el teclado de verdad, y el botón Copiar con Klipper (en el KWin aparte no hay ni Klipper ni wl-copy:
+  sale el aviso).
+
 ## Tope de FPS de la capa, en Ajustes → Fluidez, y como media exacta (v1.14)
 
 - Rodolfo: «en ajustes en fluidez añade una casilla de Layer FPS cap, y limítala como te digan», y al ver la primera

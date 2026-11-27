@@ -13,6 +13,7 @@
 #include "ajuste.h"
 #include "barra.h"
 #include "preferencias.h"
+#include "integraciones.h"
 #include "bandeja.h"
 #include "idioma.h"
 #include "wm.h"
@@ -41,6 +42,7 @@
 #include <poll.h>
 
 #include <csignal>
+#include <deque>
 #include <functional>
 #include <map>
 #include <set>
@@ -76,6 +78,8 @@ static const char *kUsage =
     "  odysseyvk texto-detect PPM    que considera texto el apoyo de los rotulos (foto del --volcado)\n"
     "  odysseyvk barra-detect PNG..  en un video dividido, que filas tapa la barra del reproductor\n"
     "  odysseyvk ajustes [--juegos]  el panel flotante de ajustes y juegos (otra vez lo cierra)\n"
+    "  odysseyvk integraciones [ver|escribir]  las opciones de lanzamiento de Steam de cada juego (pestana\n"
+    "                                Integraciones): ver lo que hay y lo que falta; escribir, con Steam cerrado\n"
     "  odysseyvk ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odysseyvk ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
@@ -2987,6 +2991,105 @@ static int cmdLegado(int argc, char **argv) {
 static volatile sig_atomic_t g_cierraPanel = 0;
 static void alCerrarPanel(int) { g_cierraPanel = 1; }
 
+/* (v1.15) los appid de los juegos instalados (sin caratulas), para integ::vigilar */
+static const std::vector<std::string> &idsJuegosSteam() {
+  static std::vector<std::string> ids;
+  ids.clear();
+  for (const prefs::Juego &j : prefs::juegosSteam(false)) ids.push_back(j.id);
+  return ids;
+}
+
+/* (v1.15) las integraciones desde la terminal: `ver` (de fabrica) lista cada juego con su linea de Steam, lo que
+   OdysseyVK le pondria y si falta escribirla, sin tocar nada; `escribir` hace lo del panel: con Steam cerrado
+   escribe lo que falta (con copia del fichero), con Steam abierto lo deja para el servicio */
+static int cmdIntegraciones(int argc, char **argv) {
+  const std::string que = argc > 0 ? argv[0] : "ver";
+  std::vector<std::string> ids;
+  std::map<std::string, std::string> nombres;
+  for (const prefs::Juego &j : prefs::juegosSteam(false)) ids.push_back(j.id), nombres[j.id] = j.nombre;
+  if (que == "escribir") {
+    const integ::Resultado r = integ::aplicar(ids, true);
+    if (!r.ok) {
+      std::fprintf(stderr, "no se pudo escribir en Steam: %s\n", r.error.c_str());
+      return 1;
+    }
+    if (r.escritos > 0) {
+      std::printf("escritas las opciones de lanzamiento de %d juegos en Steam (copia de antes: %s):\n", r.escritos,
+                  r.respaldo.c_str());
+      for (const std::string &id : r.cuales) std::printf("  %s  %s\n", id.c_str(), nombres[id].c_str());
+    } else if (r.pendientes > 0) {
+      std::printf("%d juegos por escribir, pero Steam esta abierto: el servicio los escribe al cerrarlo\n", r.pendientes);
+    } else {
+      std::printf("Steam ya tiene lo de las integraciones: nada que escribir\n");
+    }
+    return 0;
+  }
+  if (que == "esperar") {
+    /* lo que hace el servicio, aqui y con el registro a la vista: cada dos segundos, hasta escribir o 30 s */
+    integ::Vigia v;
+    for (int k = 0; k < 15; k++) {
+      integ::Resultado r;
+      const bool hizo = integ::vigilar(v, idsJuegosSteam, r);
+      std::printf("[%2ds] marca %s · Steam %s · cerrado %d %s\n", 2 * k, integ::hayMarca() ? "puesta" : "no",
+                  integ::steamAbierto() ? "abierto" : "cerrado", v.sinSteam,
+                  hizo ? (r.ok ? ("· escritos " + std::to_string(r.escritos)).c_str() : ("· error: " + r.error).c_str()) : "");
+      std::fflush(stdout);
+      if (hizo && r.ok) return 0;
+      ::sleep(2);
+    }
+    return 1;
+  }
+  if (que == "linea" && argc > 1) {
+    /* como se lee una linea de Steam y como la volveria a escribir OdysseyVK (con lo de todos para lo que no dice) */
+    integ::Leida l;
+    if (!integ::leerLinea(argv[1], l)) {
+      std::printf("no se sabe leer: se dejaria como esta\n");
+      return 0;
+    }
+    integ::Ajustes a = integ::efectivo(integ::cargar(), "");
+    for (const auto &[k, v] : l.ajustes) {
+      std::printf("  %-18s %s\n", k.c_str(), v.c_str());
+      a[k] = v;
+    }
+    if (!l.nfExe.empty()) std::printf("  %-18s %s\n", "(nf_exe)", l.nfExe.c_str());
+    std::printf("OdysseyVK: %s\n", integ::linea(a, l.nfExe).c_str());
+    return 0;
+  }
+  if (que != "ver") {
+    std::fprintf(stderr, "uso: odysseyvk integraciones [ver|escribir|linea TEXTO]\n");
+    return 2;
+  }
+  std::map<std::string, std::string> steam;
+  std::string err;
+  if (!integ::leerSteam(steam, &err)) {
+    std::fprintf(stderr, "%s\n", err.c_str());
+    return 1;
+  }
+  integ::Estado e = integ::cargar();
+  integ::sincronizar(e, ids, steam);   /* solo para ver: no se guarda */
+  const auto pend = integ::porEscribir(e, ids, steam);
+  std::printf("%s · Steam %s · %zu juegos · %zu por escribir\n", integ::rutaLocalconfig().c_str(),
+              integ::steamAbierto() ? "abierto" : "cerrado", ids.size(), pend.size());
+  for (const std::string &id : ids) {
+    const auto s = steam.find(id);
+    const std::string cur = s == steam.end() ? std::string() : s->second;
+    const auto j = e.juegos.find(id);
+    std::printf("%s  %s\n    en Steam:  %s\n", id.c_str(), nombres[id].c_str(), cur.empty() ? "(nada)" : cur.c_str());
+    if (j != e.juegos.end() && j->second.propia) {
+      std::printf("    no se sabe leer: se deja como esta\n");
+      continue;
+    }
+    if (j != e.juegos.end() && !j->second.propios.empty()) {
+      std::string p;
+      for (const auto &[k, v] : j->second.propios) p += (p.empty() ? "" : " · ") + k + "=" + v;
+      std::printf("    lo suyo:   %s\n", p.c_str());
+    }
+    const std::string l = integ::linea(integ::efectivo(e, id), integ::exeDe(e, id));
+    std::printf("    OdysseyVK: %s%s\n", l.empty() ? "(nada)" : l.c_str(), pend.count(id) ? "   ← por escribir" : "");
+  }
+  return 0;
+}
+
 static int cmdAjustes(int argc, char **argv) {
   const std::string rutaPid = ajuste::rutaPanel();
   {
@@ -3116,11 +3219,75 @@ static int cmdAjustes(int argc, char **argv) {
   };
   double cerrarEn = -1.0, miradaHub = 0.0, miradaRend = 0.0;
   double copiadoHasta = -1.0;   /* (v1.14) hasta cuando el boton Copiar del pie dice «Copiado» */
+  /* (v1.15) ODYSSEYVK_PANEL_GUION, para probar en un KWin aparte (sin raton ni teclado): pasos «SEGUNDOS ACCION ARG»
+     separados por «;». `golpe ID [SUB]` pica la fila de ese id; `pestana N`; `escribe TEXTO` y `tecla COMBO` son
+     pulsaciones; `volcado RUTA.png`; `fin` cierra el panel */
+  struct PasoGuion {
+    double t;
+    std::string accion, arg;
+  };
+  std::vector<PasoGuion> guion;
+  if (const char *gu = entornoOdyssey("ODYSSEYVK_PANEL_GUION")) {
+    std::string todo = gu;
+    size_t a = 0;
+    while (a < todo.size()) {
+      size_t b = todo.find(';', a);
+      if (b == std::string::npos) b = todo.size();
+      const std::string paso = strTrim(todo.substr(a, b - a));
+      a = b + 1;
+      const size_t e1 = paso.find(' ');
+      if (e1 == std::string::npos) continue;
+      const size_t e2 = paso.find(' ', e1 + 1);
+      PasoGuion p{std::atof(paso.substr(0, e1).c_str()), paso.substr(e1 + 1, e2 == std::string::npos ? std::string::npos : e2 - e1 - 1),
+                  e2 == std::string::npos ? std::string() : paso.substr(e2 + 1)};
+      guion.push_back(p);
+    }
+  }
+  std::deque<Overlay::Golpe> golpesGuion;
+  std::deque<std::pair<std::string, std::string>> teclasGuion;
+  std::string volcadoGuion;
+  const double t0Guion = reloj();
   int idiomaDelAtlas = idioma::actual();
   while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
-    ov.waitAndDispatch(100);
+    ov.waitAndDispatch(guion.empty() ? 100 : 20);
     Overlay::Golpe g;
     bool repintar = false;
+    while (!guion.empty() && reloj() - t0Guion >= guion.front().t) {
+      const PasoGuion p = guion.front();
+      guion.erase(guion.begin());
+      std::printf("[ajustes] guion: %s %s\n", p.accion.c_str(), p.arg.c_str());
+      std::fflush(stdout);
+      if (p.accion == "golpe") {
+        const size_t sp = p.arg.find(' ');
+        const std::string id = p.arg.substr(0, sp);
+        Overlay::Golpe gg;
+        gg.tipo = (int)Hud::HitPanelItem;
+        gg.sub = sp == std::string::npos ? 0 : std::atoi(p.arg.c_str() + sp + 1);
+        for (size_t k = 0; k < ids.size(); k++)
+          if (ids[k] == id) gg.item = (int)k;
+        if (gg.item < 0) std::printf("[ajustes] guion: no hay fila «%s»\n", id.c_str());
+        else golpesGuion.push_back(gg);
+      } else if (p.accion == "pestana") {
+        Overlay::Golpe gg;
+        gg.tipo = (int)Hud::HitPanelPestana, gg.sub = std::atoi(p.arg.c_str());
+        golpesGuion.push_back(gg);
+      } else if (p.accion == "escribe") {
+        teclasGuion.push_back({"", p.arg});
+      } else if (p.accion == "tecla") {
+        teclasGuion.push_back({p.arg, ""});
+      } else if (p.accion == "volcado") {
+        volcadoGuion = p.arg;
+        repintar = true;
+      } else if (p.accion == "fin") {
+        g_cierraPanel = 1;
+      }
+    }
+    auto tomaGolpe = [&](Overlay::Golpe &gg) {
+      if (golpesGuion.empty()) return ov.takeGolpe(gg);
+      gg = golpesGuion.front();
+      golpesGuion.pop_front();
+      return true;
+    };
     /* ODYSSEYVK_PIN_TRAS=S (para probar en un KWin aparte, donde no hay raton): a los S segundos se pica el pin */
     {
       static const char *pinTras = entornoOdyssey("ODYSSEYVK_PIN_TRAS");
@@ -3134,13 +3301,34 @@ static int cmdAjustes(int argc, char **argv) {
         std::printf("[ajustes] prueba: se pica el pin\n");
       }
     }
-    for (bool primero = true; (primero && g.tipo == (int)Hud::HitPanelFijar) || ov.takeGolpe(g); primero = false) {
+    for (bool primero = true; (primero && g.tipo == (int)Hud::HitPanelFijar) || tomaGolpe(g); primero = false) {
       /* un clic en el velo, fuera del panel: el panel se cierra y el juego recupera el control */
       if (g.tipo == Overlay::kClicFuera) {
         std::printf("[ajustes] clic fuera del panel: se cierra y el juego recupera el control\n");
         std::fflush(stdout);
         g_cierraPanel = 1;
         break;
+      }
+      /* (v1.15) escribiendo en un campo de Integraciones: un clic en otra cosa guarda lo escrito */
+      if (prefs::editandoTexto() && g.tipo != (int)Hud::HitPanelTitulo) {
+        const bool mismo = g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() &&
+                           ids[(size_t)g.item] == prefs::idEditando();
+        if (mismo) continue;
+        /* guardar puede quitar o poner filas (el campo de otras opciones de gamescope, vaciado): el clic se vuelve a
+           buscar por su id en la lista nueva */
+        const std::string idClic = g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() ? ids[(size_t)g.item] : "";
+        std::string aviso;
+        prefs::terminarTexto(juegos, &aviso);
+        if (!aviso.empty()) st.pie = aviso;
+        rellenar();
+        repintar = true;
+        if (g.tipo == (int)Hud::HitPanel) continue;
+        if (!idClic.empty()) {
+          g.item = -1;
+          for (size_t k = 0; k < ids.size(); k++)
+            if (ids[k] == idClic) g.item = (int)k;
+          if (g.item < 0) continue;
+        }
       }
       /* esperando un atajo: un clic en otra cosa que no sea la tecla de un atajo deja de esperar */
       if (!prefs::capturando().empty() && g.tipo != (int)Hud::HitPanel && g.tipo != (int)Hud::HitPanelTitulo) {
@@ -3214,6 +3402,7 @@ static int cmdAjustes(int argc, char **argv) {
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
         st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
+        if (st.pestana == 2) prefs::integracionesDe("");   /* (v1.15) la pildora: lo de todos los juegos */
         st.corrida = 0.0f;
         st.pie.clear();
         rellenar();
@@ -3223,6 +3412,11 @@ static int cmdAjustes(int argc, char **argv) {
         bool cerrar = false;
         const std::string id = ids[(size_t)g.item];
         const bool cambio = prefs::aplicar(id, g.sub, g.frac, g.soltado, juegos, &aviso, &cerrar);
+        /* (v1.15) el engranaje de una caratula o un juego de la lista de Integraciones: a esa pestana, arriba */
+        if (const int p = prefs::tomarPestana(); p >= 0) {
+          st.pestana = p;
+          st.corrida = 0.0f;
+        }
         if (!aviso.empty()) st.pie = aviso;
         if (cambio) {
           std::printf("[ajustes] %s%s%s\n", id.c_str(), aviso.empty() ? "" : " · ", aviso.c_str());
@@ -3234,12 +3428,30 @@ static int cmdAjustes(int argc, char **argv) {
       }
     }
     /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
-    ov.modoTeclado(!st.fijado ? 1 : ((!prefs::capturando().empty() && !ov.tecladoAPedido()) ? 1 : 2));
+    ov.modoTeclado(!st.fijado ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
     {
-      std::string combo;
-      while (ov.takeTecla(combo)) {
+      std::string combo, texto;
+      auto tomaTecla = [&] {
+        if (teclasGuion.empty()) return ov.takeTecla(combo, texto);
+        combo = teclasGuion.front().first, texto = teclasGuion.front().second;
+        teclasGuion.pop_front();
+        return true;
+      };
+      while (tomaTecla()) {
+        /* (v1.15) escribiendo en un campo de Integraciones, las teclas van a el (Esc deja de escribir, no cierra) */
+        if (prefs::editandoTexto()) {
+          std::string aviso;
+          if (prefs::teclaTexto(combo, texto, juegos, &aviso)) {
+            if (!aviso.empty()) st.pie = aviso;
+            rellenar();
+            repintar = true;
+          }
+          continue;
+        }
+        /* las que solo valen para escribir (una letra con acento, Retroceso, Intro, Tab) no son atajos */
+        if (combo.empty() || combo == "Backspace" || combo == "Return" || combo == "Tab") continue;
         if (!prefs::capturando().empty()) {
           std::string aviso;
           if (prefs::teclaCapturada(combo, &aviso)) {
@@ -3272,7 +3484,13 @@ static int cmdAjustes(int argc, char **argv) {
       repintar = true;
     }
     /* la pestana de rendimiento se refresca sola, una vez por segundo */
-    if ((st.pestana == 2 || st.pestana == 3) && reloj() - miradaRend >= 1.0) {   /* Programa lleva el rendimiento */
+    if (st.pestana == 3 && reloj() - miradaRend >= 1.0) {   /* Programa lleva el rendimiento */
+      miradaRend = reloj();
+      rellenar();
+      repintar = true;
+    }
+    /* (v1.15) Integraciones, cada dos segundos: si Steam se abrio o se cerro, lo que falta escribir, el «Copiado» */
+    if (st.pestana == 2 && reloj() - miradaRend >= 2.0) {
       miradaRend = reloj();
       rellenar();
       repintar = true;
@@ -3310,6 +3528,13 @@ static int cmdAjustes(int argc, char **argv) {
       }
     }
     if (repintar) ov.repaint();
+    if (!volcadoGuion.empty()) {
+      std::string e;
+      std::printf("[ajustes] guion: volcado a %s: %s · pie: %s\n", volcadoGuion.c_str(), ov.dumpPng(volcadoGuion, &e) ? "hecho" : e.c_str(),
+                  st.pie.c_str());
+      std::fflush(stdout);
+      volcadoGuion.clear();
+    }
     if (cerrarEn > 0.0 && reloj() >= cerrarEn) break;
     /* abierto sobre un video en 3D: cuando ese video se acaba, el panel se va con el (si no, se
        quedaba al doble de grande en medio del escritorio) */
@@ -3319,6 +3544,13 @@ static int cmdAjustes(int argc, char **argv) {
       const auto s2 = h2.find("sesion");
       if (s2 == h2.end() || s2->second.empty() || s2->second == "ninguna") break;
     }
+  }
+  /* (v1.15) se cierra a medio escribir en un campo de Integraciones: lo escrito se guarda */
+  if (prefs::editandoTexto()) {
+    std::string aviso;
+    prefs::terminarTexto(juegos, &aviso);
+    std::printf("[ajustes] integraciones: %s\n", aviso.c_str());
+    std::fflush(stdout);
   }
   ov.tomarTeclado(false);
   ov.hideAsk();
@@ -3412,6 +3644,14 @@ static int cmdHudSelfTest(int argc, char **argv) {
     if (const char *cap = std::getenv("ODYSSEYVK_HUD_CAPTURA")) {
       bool cerrar = false;
       prefs::aplicar(std::string("atajo:") + cap, 0, 0.0f, true, {}, &pieCaptura, &cerrar);
+    }
+    /* (v1.15) ODYSSEYVK_HUD_INTEG=APPID: las Integraciones de ese juego (con ODYSSEYVK_HUD_PANEL=2);
+       ODYSSEYVK_HUD_EDITA=clave=texto: escribiendo ese texto en ese campo */
+    if (const char *ij = std::getenv("ODYSSEYVK_HUD_INTEG")) prefs::integracionesDe(ij);
+    if (const char *ed = std::getenv("ODYSSEYVK_HUD_EDITA")) {
+      const std::string t = ed;
+      const size_t ig = t.find('=');
+      if (ig != std::string::npos) prefs::probarEdicion(t.substr(0, ig), t.substr(ig + 1));
     }
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
     hud.state().fijado = panelFijado();   /* el pin, como lo dejo el panel (rama experimental) */
@@ -3543,7 +3783,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.panelBounds(&bx, &by, &bw, &bh);
     std::printf("  panel de ajustes: %.0f x %.0f px en %.0f,%.0f (escala %.2f) · aspa %d celdas · pestanas %d / %d\n",
                 (double)bw, (double)bh, (double)bx, (double)by, (double)hud.scale(), cerrar, pestanas[0], pestanas[1]);
-    static const char *kTipo[] = {"seccion", "interruptor", "opciones", "deslizador", "fila", "juego", "nota"};
+    static const char *kTipo[] = {"seccion", "interruptor", "opciones", "deslizador", "fila", "juego",
+                                  "nota",    "boton",       "info",     "atajo",      "texto", "linea"};
     for (size_t i = 0; i < porFila.size(); i++) {
       const Hud::ItemPanel &it = hud.state().items[i];
       const Cuenta &c = porFila[i];
@@ -6112,6 +6353,29 @@ static int cmdServe(int argc, char **argv) {
       }
     }
 
+    /* (v1.15) las Integraciones pendientes: lo cambiado con Steam abierto se escribe en su localconfig.vdf en cuanto
+       Steam se cierra (ver integ::vigilar) */
+    {
+      static double miradaInteg = 0.0;
+      static integ::Vigia vigia;
+      if (now - miradaInteg >= 2.0) {
+        miradaInteg = now;
+        integ::Resultado r;
+        if (integ::vigilar(vigia, idsJuegosSteam, r)) {
+          if (!r.ok) {
+            std::printf("[serve] integraciones: no se pudo escribir en Steam: %s\n", r.error.c_str());
+          } else if (r.escritos > 0) {
+            std::printf("[serve] integraciones: Steam se cerro y se escribieron las opciones de lanzamiento de %d juegos "
+                        "(copia de antes: %s)\n", r.escritos, r.respaldo.c_str());
+            avisoEscritorio(idioma::tr("OdysseyVK: opciones de lanzamiento escritas"),
+                            r.escritos == 1 ? std::string(idioma::tr("Un juego de Steam lleva ya lo de Integraciones."))
+                                            : idioma::trf("{} juegos de Steam llevan ya lo de Integraciones.", {std::to_string(r.escritos)}));
+          }
+          std::fflush(stdout);
+        }
+      }
+    }
+
     /* Los ajustes del panel (`odysseyvk ajustes`) se escriben en serve.conf. Antes hacia falta
        reiniciar el servicio para que valieran; ahora, cuando el fichero cambia, se releen los que el
        panel toca. Los demas (camara, pantalla, numeros de la trama) siguen siendo de arranque. */
@@ -6573,6 +6837,7 @@ int main(int argc, char **argv) {
     if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
     if (sub == "vkprobe") return cmdVkProbe(argc - 3, argv + 3);
     if (sub == "hud") return cmdHudSelfTest(argc - 3, argv + 3);
+    if (sub == "teclado") return Overlay::pruebaTeclado(argc > 3 ? argv[3] : "es");
     if (sub == "planos") return cmdPlanos(argc - 3, argv + 3);
     if (sub == "ajuste") return cmdAjuste(argc - 3, argv + 3);
     if (sub == "atajos") return cmdAtajos(argc - 3, argv + 3);
@@ -6645,6 +6910,8 @@ int main(int argc, char **argv) {
     return cmdBarra(argc - 2, argv + 2);
   if (cmd == "ajustes")
     return cmdAjustes(argc - 2, argv + 2);
+  if (cmd == "integraciones")
+    return cmdIntegraciones(argc - 2, argv + 2);
   if (cmd == "planos")
     return cmdPlanos(argc - 2, argv + 2);
   if (cmd == "mapa")

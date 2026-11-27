@@ -38,8 +38,9 @@ struct Juego {
   int caraW = 0, caraH = 0;
 };
 /* Los juegos instalados en todas las bibliotecas de Steam, los jugados hace menos primero. No
-   entran las herramientas (Proton, los Steam Linux Runtime, los redistribuibles). */
-std::vector<Juego> juegosSteam();
+   entran las herramientas (Proton, los Steam Linux Runtime, los redistribuibles). Sin `conCaratulas` (el servicio,
+   v1.15) no se cargan las imagenes. */
+std::vector<Juego> juegosSteam(bool conCaratulas = true);
 /* Arranca un juego por su appid (`steam steam://rungameid/ID`), suelto de este proceso. */
 bool lanzarJuego(const std::string &id, std::string *err = nullptr);
 
@@ -134,6 +135,24 @@ bool teclaCapturada(const std::string &combo, std::string *aviso);
 void cancelarCaptura();
 bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std::vector<Juego> &juegos,
              std::string *aviso, bool *cerrar);
+
+/* ---- la pestana Integraciones (v1.15, la 2): las opciones de lanzamiento de Steam (ver integraciones.h) ----
+   El campo de texto en el que se esta escribiendo (`idEditando`, vacio = ninguno) y lo que le llega del teclado:
+   `teclaTexto` devuelve cierto si hay que repintar. Intro o Tab guardan lo escrito (y se escribe en Steam como
+   cualquier cambio), Esc lo deja como estaba, Ctrl+V pega. `terminarTexto` guarda lo escrito (un clic en otra cosa
+   o el panel que se cierra). */
+bool editandoTexto();
+const std::string &idEditando();
+bool teclaTexto(const std::string &combo, const std::string &texto, const std::vector<Juego> &juegos, std::string *aviso);
+bool terminarTexto(const std::vector<Juego> &juegos, std::string *aviso);
+void cancelarTexto();
+/* la pestana que pidio lo ultimo que se pico (el engranaje de una caratula abre las Integraciones de su juego), una
+   sola vez; -1 = ninguna */
+int tomarPestana();
+/* las Integraciones de todos los juegos (al picar su pildora), o las de un juego (`ODYSSEYVK_HUD_INTEG` en ctl hud) */
+void integracionesDe(const std::string &appid);
+/* para ctl hud: como si se estuviera escribiendo `texto` en el campo `clave` */
+void probarEdicion(const std::string &clave, const std::string &texto);
 
 }  /* namespace prefs */
 

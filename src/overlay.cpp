@@ -34,6 +34,7 @@
 #include <wayland-client.h>
 #ifdef HAVE_XKBCOMMON
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #endif
 
 #include <linux/input-event-codes.h>
@@ -55,6 +56,93 @@
 #endif
 
 /* ---------------- implementación ---------------- */
+
+#ifdef HAVE_XKBCOMMON
+/* (v1.15) una tecla pulsada: su combinacion, escrita como los atajos ("Ctrl+Shift+K"; vacia si la tecla solo escribe,
+   como la ñ), y lo que escribe (UTF-8, con Mayus, AltGr y las teclas muertas; vacio si no escribe). Falso si no da
+   nada (un modificador solo, la primera de una tecla muerta) */
+static bool leeTeclaXkb(xkb_keymap *mapa, xkb_state *estado, xkb_compose_state *compose, xkb_keycode_t kc, std::string &combo,
+                        std::string &texto) {
+  const xkb_keysym_t *syms = nullptr;
+  /* la tecla en su nivel de base: Mayus+1 se apunta como Shift+1, no como «!» */
+  const int n = xkb_keymap_key_get_syms_by_level(mapa, kc, xkb_state_key_get_layout(estado, kc), 0, &syms);
+  if (n < 1) return false;
+  const xkb_keysym_t k = syms[0];
+  /* (v1.15) lo que escribe, con el estado de verdad (Mayus, AltGr) y las teclas muertas */
+  texto.clear();
+  bool compuesta = false;
+  if (compose) {
+    const xkb_keysym_t sym = xkb_state_key_get_one_sym(estado, kc);
+    if (sym != XKB_KEY_NoSymbol && xkb_compose_state_feed(compose, sym) == XKB_COMPOSE_FEED_ACCEPTED) {
+      switch (xkb_compose_state_get_status(compose)) {
+        case XKB_COMPOSE_COMPOSING:
+          compuesta = true;   /* una tecla muerta: se espera a la siguiente */
+          break;
+        case XKB_COMPOSE_COMPOSED: {
+          char b[64] = {0};
+          xkb_compose_state_get_utf8(compose, b, sizeof b);
+          texto = b;
+          compuesta = true;
+          xkb_compose_state_reset(compose);
+          break;
+        }
+        case XKB_COMPOSE_CANCELLED:
+          compuesta = true;
+          xkb_compose_state_reset(compose);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  if (!compuesta) {
+    char b[64] = {0};
+    if (xkb_state_key_get_utf8(estado, kc, b, sizeof b) > 0) texto = b;
+  }
+  if (!texto.empty() && ((unsigned char)texto[0] < 0x20 || texto == "\x7f")) texto.clear();   /* Ctrl+letra, Retroceso, Intro... */
+  std::string nombre;
+  if (k >= XKB_KEY_a && k <= XKB_KEY_z) nombre = std::string(1, (char)('A' + (k - XKB_KEY_a)));
+  else if (k >= XKB_KEY_A && k <= XKB_KEY_Z) nombre = std::string(1, (char)k);
+  else if (k >= XKB_KEY_0 && k <= XKB_KEY_9) nombre = std::string(1, (char)k);
+  else if (k >= XKB_KEY_F1 && k <= XKB_KEY_F24) nombre = "F" + std::to_string(k - XKB_KEY_F1 + 1);   /* F13..F24 desde la 1.12 */
+  else if (k == XKB_KEY_Left) nombre = "Left";
+  else if (k == XKB_KEY_Right) nombre = "Right";
+  else if (k == XKB_KEY_Up) nombre = "Up";
+  else if (k == XKB_KEY_Down) nombre = "Down";
+  else if (k == XKB_KEY_Prior) nombre = "PgUp";
+  else if (k == XKB_KEY_Next) nombre = "PgDown";
+  else if (k == XKB_KEY_Home) nombre = "Home";
+  else if (k == XKB_KEY_End) nombre = "End";
+  else if (k == XKB_KEY_Insert) nombre = "Insert";
+  else if (k == XKB_KEY_Delete) nombre = "Delete";
+  else if (k == XKB_KEY_space) nombre = "Space";
+  else if (k == XKB_KEY_plus) nombre = "Plus";
+  /* v1.12: Pausa/Inter (la PB), Impr Pant, Bloq Despl y Menu; antes se ignoraban y no habia modo de ponerlas */
+  else if (k == XKB_KEY_Pause || k == XKB_KEY_Break) nombre = "Pause";
+  else if (k == XKB_KEY_Print || k == XKB_KEY_Sys_Req) nombre = "Print";
+  else if (k == XKB_KEY_Scroll_Lock) nombre = "ScrollLock";
+  else if (k == XKB_KEY_Menu) nombre = "Menu";
+  else if (k == XKB_KEY_BackSpace) nombre = "Backspace";   /* (v1.15) para los campos de texto */
+  else if (k == XKB_KEY_Return || k == XKB_KEY_KP_Enter) nombre = "Return";
+  else if (k == XKB_KEY_Tab || k == XKB_KEY_ISO_Left_Tab) nombre = "Tab";
+  else if (k >= 0x21 && k <= 0x7e) nombre = std::string(1, (char)k);
+  else if (texto.empty()) return false;   /* los modificadores solos, Bloq Mayus, las teclas raras: se espera a la de verdad */
+  auto activo = [&](const char *m) {
+    return xkb_state_mod_name_is_active(estado, m, XKB_STATE_MODS_EFFECTIVE) > 0;
+  };
+  combo.clear();
+  if (!nombre.empty()) {
+    if (activo(XKB_MOD_NAME_CTRL)) combo += "Ctrl+";
+    if (activo(XKB_MOD_NAME_ALT)) combo += "Alt+";
+    if (activo(XKB_MOD_NAME_SHIFT)) combo += "Shift+";
+    if (activo(XKB_MOD_NAME_LOGO)) combo += "Meta+";
+    combo += nombre;
+  }
+  /* con Ctrl, Alt o Meta no se escribe (Ctrl+V pega, no escribe una v) */
+  if (activo(XKB_MOD_NAME_CTRL) || activo(XKB_MOD_NAME_ALT) || activo(XKB_MOD_NAME_LOGO)) texto.clear();
+  return !(combo.empty() && texto.empty());
+}
+#endif
 
 struct Overlay::Impl {
   /* protocolos */
@@ -79,10 +167,22 @@ struct Overlay::Impl {
   int tecladoPedido = 0;
   uint32_t capaVersion = 1;
   std::vector<std::string> teclas;   /* combinaciones pulsadas: "Ctrl+Shift+K", "Escape" */
+  /* (v1.15) lo que escribe cada pulsacion, a la par de `teclas` (UTF-8; vacio si no escribe nada), para los
+     campos de texto de la pestana Integraciones. Una tecla que solo escribe (la ñ, una letra con acento) va con
+     la combinacion vacia */
+  std::vector<std::string> textos;
+  /* la repeticion de la tecla que se deja pulsada (lo que pide el compositor: tantas por segundo, tras tanta espera) */
+  int32_t repRitmo = 25, repEspera = 600;
+  uint32_t repTecla = 0;   /* la que se repite (0 = ninguna) */
+  std::string repCombo, repTexto;
+  double repSiguiente = 0.0;
 #ifdef HAVE_XKBCOMMON
   xkb_context *xkbCtx = nullptr;
   xkb_keymap *xkbMapa = nullptr;
   xkb_state *xkbEstado = nullptr;
+  /* las teclas muertas (´ + a = á; en el teclado espanol, la ~ y el ^ tambien lo son) */
+  xkb_compose_table *composeTabla = nullptr;
+  xkb_compose_state *compose = nullptr;
 #endif
 #ifdef HAVE_FRACTIONAL_SCALE
   wp_fractional_scale_manager_v1 *escalaMgr = nullptr;
@@ -1194,6 +1294,13 @@ struct Overlay::Impl {
           if (s->xkbMapa) xkb_keymap_unref(s->xkbMapa);
           s->xkbMapa = km;
           s->xkbEstado = xkb_state_new(km);
+          if (!s->composeTabla) {
+            const char *loc = std::getenv("LC_ALL");
+            if (!loc || !*loc) loc = std::getenv("LC_CTYPE");
+            if (!loc || !*loc) loc = std::getenv("LANG");
+            s->composeTabla = xkb_compose_table_new_from_locale(s->xkbCtx, loc && *loc ? loc : "C", XKB_COMPOSE_COMPILE_NO_FLAGS);
+            if (s->composeTabla) s->compose = xkb_compose_state_new(s->composeTabla, XKB_COMPOSE_STATE_NO_FLAGS);
+          }
         }
       }
     }
@@ -1203,55 +1310,39 @@ struct Overlay::Impl {
     close(fd);
   }
   static void kbEnter(void *, wl_keyboard *, uint32_t, wl_surface *, wl_array *) {}
-  static void kbLeave(void *, wl_keyboard *, uint32_t, wl_surface *) {}
+  static void kbLeave(void *data, wl_keyboard *, uint32_t, wl_surface *) { static_cast<Impl *>(data)->repTecla = 0; }
+  static double ahoraSeg() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+  }
+  void ponTecla(const std::string &combo, const std::string &texto) {
+    teclas.push_back(combo);
+    textos.push_back(texto);
+  }
   static void kbKey(void *data, wl_keyboard *, uint32_t, uint32_t, uint32_t tecla, uint32_t estado) {
     Impl *s = static_cast<Impl *>(data);
-    if (estado != WL_KEYBOARD_KEY_STATE_PRESSED || s->tecladoPedido == 0) return;
+    if (estado != WL_KEYBOARD_KEY_STATE_PRESSED) {
+      if (tecla == s->repTecla) s->repTecla = 0;
+      return;
+    }
+    if (s->tecladoPedido == 0) return;
+    s->repTecla = 0;
     if (tecla == KEY_ESC) {   /* sin xkb tambien: Esc cierra o cancela */
-      s->teclas.push_back("Escape");
+      s->ponTecla("Escape", "");
       return;
     }
 #ifdef HAVE_XKBCOMMON
     if (!s->xkbMapa || !s->xkbEstado) return;
     const xkb_keycode_t kc = tecla + 8;
-    const xkb_keysym_t *syms = nullptr;
-    /* la tecla en su nivel de base: Mayus+1 se apunta como Shift+1, no como «!» */
-    const int n = xkb_keymap_key_get_syms_by_level(s->xkbMapa, kc, xkb_state_key_get_layout(s->xkbEstado, kc), 0, &syms);
-    if (n < 1) return;
-    const xkb_keysym_t k = syms[0];
-    std::string nombre;
-    if (k >= XKB_KEY_a && k <= XKB_KEY_z) nombre = std::string(1, (char)('A' + (k - XKB_KEY_a)));
-    else if (k >= XKB_KEY_A && k <= XKB_KEY_Z) nombre = std::string(1, (char)k);
-    else if (k >= XKB_KEY_0 && k <= XKB_KEY_9) nombre = std::string(1, (char)k);
-    else if (k >= XKB_KEY_F1 && k <= XKB_KEY_F24) nombre = "F" + std::to_string(k - XKB_KEY_F1 + 1);   /* F13..F24 desde la 1.12 */
-    else if (k == XKB_KEY_Left) nombre = "Left";
-    else if (k == XKB_KEY_Right) nombre = "Right";
-    else if (k == XKB_KEY_Up) nombre = "Up";
-    else if (k == XKB_KEY_Down) nombre = "Down";
-    else if (k == XKB_KEY_Prior) nombre = "PgUp";
-    else if (k == XKB_KEY_Next) nombre = "PgDown";
-    else if (k == XKB_KEY_Home) nombre = "Home";
-    else if (k == XKB_KEY_End) nombre = "End";
-    else if (k == XKB_KEY_Insert) nombre = "Insert";
-    else if (k == XKB_KEY_Delete) nombre = "Delete";
-    else if (k == XKB_KEY_space) nombre = "Space";
-    else if (k == XKB_KEY_plus) nombre = "Plus";
-    /* v1.12: Pausa/Inter (la PB), Impr Pant, Bloq Despl y Menu; antes se ignoraban y no habia modo de ponerlas */
-    else if (k == XKB_KEY_Pause || k == XKB_KEY_Break) nombre = "Pause";
-    else if (k == XKB_KEY_Print || k == XKB_KEY_Sys_Req) nombre = "Print";
-    else if (k == XKB_KEY_Scroll_Lock) nombre = "ScrollLock";
-    else if (k == XKB_KEY_Menu) nombre = "Menu";
-    else if (k >= 0x21 && k <= 0x7e) nombre = std::string(1, (char)k);
-    else return;   /* los modificadores solos, Bloq Mayus, las teclas raras: se espera a la de verdad */
-    auto activo = [&](const char *m) {
-      return xkb_state_mod_name_is_active(s->xkbEstado, m, XKB_STATE_MODS_EFFECTIVE) > 0;
-    };
-    std::string combo;
-    if (activo(XKB_MOD_NAME_CTRL)) combo += "Ctrl+";
-    if (activo(XKB_MOD_NAME_ALT)) combo += "Alt+";
-    if (activo(XKB_MOD_NAME_SHIFT)) combo += "Shift+";
-    if (activo(XKB_MOD_NAME_LOGO)) combo += "Meta+";
-    s->teclas.push_back(combo + nombre);
+    std::string combo, texto;
+    if (!leeTeclaXkb(s->xkbMapa, s->xkbEstado, s->compose, kc, combo, texto)) return;
+    s->ponTecla(combo, texto);
+    /* la que se deja pulsada se repite (lo que diga el compositor) */
+    if (s->repRitmo > 0 && xkb_keymap_key_repeats(s->xkbMapa, kc)) {
+      s->repTecla = tecla, s->repCombo = combo, s->repTexto = texto;
+      s->repSiguiente = ahoraSeg() + (double)s->repEspera / 1000.0;
+    }
 #endif
   }
   static void kbModifiers(void *data, wl_keyboard *, uint32_t, uint32_t dep, uint32_t lat, uint32_t blo, uint32_t grupo) {
@@ -1262,7 +1353,19 @@ struct Overlay::Impl {
     (void)data, (void)dep, (void)lat, (void)blo, (void)grupo;
 #endif
   }
-  static void kbRepeat(void *, wl_keyboard *, int32_t, int32_t) {}
+  static void kbRepeat(void *data, wl_keyboard *, int32_t ritmo, int32_t espera) {
+    Impl *s = static_cast<Impl *>(data);
+    s->repRitmo = std::max(0, ritmo), s->repEspera = std::max(0, espera);
+  }
+  /* (v1.15) la repeticion que toca: una pulsacion mas de la tecla que sigue abajo */
+  void repetir() {
+    if (repTecla == 0 || repRitmo <= 0 || tecladoPedido == 0) return;
+    const double t = ahoraSeg();
+    if (t < repSiguiente) return;
+    ponTecla(repCombo, repTexto);
+    repSiguiente += 1.0 / (double)repRitmo;
+    if (repSiguiente < t) repSiguiente = t + 1.0 / (double)repRitmo;   /* muy atrasada: no se encadenan de golpe */
+  }
   static const struct wl_keyboard_listener keyboardListener;
   /* pedir o soltar el teclado: la capa lo toma en exclusiva (layer-shell v1: 1 = si) */
   /* el valor que entiende el compositor: «a pedido» (2) solo existe desde la version 4 del protocolo;
@@ -1398,6 +1501,9 @@ int Overlay::waitAndDispatch(int ms) {
       return -1;
     }
   wl_display_flush(d->dpy);
+  /* con una tecla abajo, se despierta a tiempo para su repeticion (v1.15) */
+  if (d->repTecla != 0 && d->repRitmo > 0 && d->tecladoPedido != 0)
+    ms = std::max(0, std::min(ms, (int)std::ceil((d->repSiguiente - Impl::ahoraSeg()) * 1000.0)));
   struct pollfd p{wl_display_get_fd(d->dpy), POLLIN, 0};
   int n = ::poll(&p, 1, ms);
   if (n > 0) {
@@ -1408,9 +1514,11 @@ int Overlay::waitAndDispatch(int ms) {
       d->sucio = false;
       d->pintar();
     }
+    d->repetir();
     return r;
   }
   wl_display_cancel_read(d->dpy);
+  d->repetir();
   return 0;
 }
 
@@ -1589,6 +1697,76 @@ void Overlay::modoTeclado(int modo) {
   d->aplicaTeclado();
 }
 
+int Overlay::pruebaTeclado(const char *distribucion) {
+#ifdef HAVE_XKBCOMMON
+  /* (v1.15) sin compositor: el teclado `distribucion` con las reglas de siempre y unas pulsaciones, para ver que
+     combinacion y que texto da cada una (las teclas muertas, AltGr, la ñ) */
+  xkb_context *ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+  xkb_rule_names nombres{};
+  nombres.layout = distribucion;
+  xkb_keymap *mapa = ctx ? xkb_keymap_new_from_names(ctx, &nombres, XKB_KEYMAP_COMPILE_NO_FLAGS) : nullptr;
+  if (!mapa) {
+    std::fprintf(stderr, "no se pudo armar el teclado «%s»\n", distribucion);
+    return 1;
+  }
+  xkb_state *estado = xkb_state_new(mapa);
+  const char *loc = std::getenv("LC_ALL");
+  if (!loc || !*loc) loc = std::getenv("LC_CTYPE");
+  if (!loc || !*loc) loc = std::getenv("LANG");
+  xkb_compose_table *tabla = xkb_compose_table_new_from_locale(ctx, loc && *loc ? loc : "C", XKB_COMPOSE_COMPILE_NO_FLAGS);
+  xkb_compose_state *compose = tabla ? xkb_compose_state_new(tabla, XKB_COMPOSE_STATE_NO_FLAGS) : nullptr;
+  std::printf("teclado «%s», composicion de «%s»: %s\n", distribucion, loc ? loc : "C", compose ? "si" : "no");
+  struct Paso {
+    const char *que;
+    std::vector<uint32_t> mods, teclas;   /* codigos evdev */
+  };
+  const Paso pasos[] = {
+      {"a", {}, {KEY_A}},
+      {"Mayus+a", {KEY_LEFTSHIFT}, {KEY_A}},
+      {"´ y a", {}, {KEY_APOSTROPHE, KEY_A}},
+      {"¨ y u", {KEY_LEFTSHIFT}, {KEY_APOSTROPHE}},
+      {"(sigue) u", {}, {KEY_U}},
+      {"AltGr+2", {KEY_RIGHTALT}, {KEY_2}},
+      {"AltGr+4", {KEY_RIGHTALT}, {KEY_4}},
+      {"ñ", {}, {KEY_SEMICOLON}},
+      {"Mayus+1", {KEY_LEFTSHIFT}, {KEY_1}},
+      {"Mayus+7", {KEY_LEFTSHIFT}, {KEY_7}},
+      {"tecla de -", {}, {KEY_SLASH}},
+      {"Mayus+tecla de -", {KEY_LEFTSHIFT}, {KEY_SLASH}},
+      {"` y espacio", {}, {KEY_LEFTBRACE, KEY_SPACE}},
+      {"espacio", {}, {KEY_SPACE}},
+      {"Ctrl+V", {KEY_LEFTCTRL}, {KEY_V}},
+      {"Ctrl+A", {KEY_LEFTCTRL}, {KEY_A}},
+      {"Retroceso", {}, {KEY_BACKSPACE}},
+      {"Intro", {}, {KEY_ENTER}},
+      {"Supr", {}, {KEY_DELETE}},
+      {"flecha izquierda", {}, {KEY_LEFT}},
+      {"Mayus solo", {}, {KEY_LEFTSHIFT}},
+  };
+  for (const Paso &p : pasos) {
+    for (uint32_t m : p.mods) xkb_state_update_key(estado, m + 8, XKB_KEY_DOWN);
+    std::string dice;
+    for (uint32_t t : p.teclas) {
+      std::string combo, texto;
+      const bool hay = leeTeclaXkb(mapa, estado, compose, t + 8, combo, texto);
+      dice += hay ? "[" + combo + "|" + texto + "] " : std::string("[nada] ");
+    }
+    for (uint32_t m : p.mods) xkb_state_update_key(estado, m + 8, XKB_KEY_UP);
+    std::printf("  %-18s %s\n", p.que, dice.c_str());
+  }
+  if (compose) xkb_compose_state_unref(compose);
+  if (tabla) xkb_compose_table_unref(tabla);
+  xkb_state_unref(estado);
+  xkb_keymap_unref(mapa);
+  xkb_context_unref(ctx);
+  return 0;
+#else
+  (void)distribucion;
+  std::fprintf(stderr, "compilado sin xkbcommon\n");
+  return 1;
+#endif
+}
+
 bool Overlay::tecladoAPedido() const { return d && d->capaVersion >= 4; }
 
 void Overlay::quitarVelo() {
@@ -1596,9 +1774,19 @@ void Overlay::quitarVelo() {
 }
 
 bool Overlay::takeTecla(std::string &combo) {
+  std::string texto;
+  return takeTecla(combo, texto);
+}
+
+bool Overlay::takeTecla(std::string &combo, std::string &texto) {
   if (!d || d->teclas.empty()) return false;
   combo = d->teclas.front();
   d->teclas.erase(d->teclas.begin());
+  texto.clear();
+  if (!d->textos.empty()) {
+    texto = d->textos.front();
+    d->textos.erase(d->textos.begin());
+  }
   return true;
 }
 

@@ -10,6 +10,7 @@ odysseyvk doctor                     # hardware, permissions and panel diagnosis
 odysseyvk serve                      # the service: watches fullscreen windows (runs as a user unit)
 odysseyvk ajustes                    # the floating settings panel (also from the app menu)
 odysseyvk ajustes --juegos           # the panel open on the Games tab
+odysseyvk integraciones [ver|escribir]  # Steam launch options per game: show them / write the pending ones
 odysseyvk play video_sbs.mkv         # play a stereo file with the built-in mpv viewer
 odysseyvk test                       # fullscreen calibration pattern
 odysseyvk capture3d --uuid <id>      # weave the window KWin captures (what the service launches)
@@ -67,6 +68,30 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
 The monitor's IR stereo camera (`04e8:20d7`) is used when `rastreo = si`; the viewer prints
 `[rastreo]` lines with the eye position. Without it, the nominal factory eye position is used.
 Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distance.
+
+## Integrations (Steam launch options, since 1.15)
+
+The panel's **Integrations** tab builds each game's Steam launch options from pieces instead of typing them:
+the layer variables (`ODYSSEYVK=1`, `MANGOHUD=1`, `ENABLE_VKDAEDALUS=1`, `NEURAL_FORGE_ENABLE=1`, `ENABLE_VKBASALT=1`,
+shown without `=1` while off), other variables, `vkdaedalus-run` and a custom command before `%command%`, game options
+after it, and gamescope (render and output resolution by abbreviation, `-S stretch|fit`, `-f`,
+`--force-grab-cursor`, and upscaling with FSR or NIS, which turns gamescope on). The result follows this format:
+
+```
+gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- env MANGOHUD=1 ... vkdaedalus-run %command% --launcher-skip
+```
+
+- The tab's settings apply to **every installed game**; the gear on a cover (Games tab, on hover) opens that game's
+  own settings, marked with a dot, and "Reset" returns it to the all-games ones.
+- With Neural Forge on, `NEURAL_FORGE_TARGET_EXE` is taken from `neural-forge-cli games` (or kept from the game's line).
+- OdysseyVK writes the **whole line** into Steam's `userdata/<account>/config/localconfig.vdf`. Steam only reads
+  it at startup and rewrites it on exit, so with Steam open the change is kept pending and the service writes it as
+  soon as Steam closes. Every write first saves a copy in `~/.local/state/odysseyvk/steam/` (the very first one,
+  `localconfig-antes-de-odysseyvk.vdf`, is never deleted).
+- Existing lines are read first, and so are later changes made outside (by hand in Steam, or by Neural Forge):
+  they become that game's own settings, so nothing is lost. A line that can't be split into pieces (`;`, pipes,
+  redirections, `$(...)`) is left alone until you choose "Use OdysseyVK's".
+- Stored in `~/.config/odysseyvk/integraciones.conf`: `[todos]` for every game, `[appid]` for each game's own.
 
 ## Configuration keys (serve.conf)
 
