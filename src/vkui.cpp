@@ -2342,17 +2342,29 @@ void Hud::dibujaPanel(int vw, int vh) {
       }
       case ItemPanel::Deslizador: {
         const float anchoPista = 220.0f, cy = y + h * 0.5f;
-        textoCabe(it.rotulo, izq, yr, 15.0f, der - 70.0f - anchoPista - 18.0f - izq, ink[0], ink[1], ink[2], 1.0f);
-        if (!it.nota.empty())
-          textoCabe(it.nota, izq, y + 34.0f, 11.5f, der - 70.0f - anchoPista - 18.0f - izq, dim[0], dim[1], dim[2], 0.85f);
         z.pista = {der - 70.0f - anchoPista, cy - 2.0f, anchoPista, 4.0f};
+        /* (v1.16, PR #1) la flechita de volver a lo de fabrica, a la izquierda de la pista (como la de los atajos) */
+        float izqControl = z.pista.x;
+        if (it.fracDefecto >= 0.0f) {
+          const Rect r{z.pista.x - 45.0f, cy - 15.0f, 30.0f, 30.0f};
+          z.subs.push_back(r);
+          const bool hr = dentro && r.inside(mx_, my_) && st_.arrastrando < 0;
+          if (hr) mask9(r, 0, R(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
+          text("\u21BA", r.x + 15.0f, r.y + 5.0f, 16.0f, ink[0], ink[1], ink[2], hr ? 1.0f : 0.65f, true);
+          izqControl = r.x;
+        }
+        textoCabe(it.rotulo, izq, yr, 15.0f, izqControl - 18.0f - izq, ink[0], ink[1], ink[2], 1.0f);
+        if (!it.nota.empty())
+          textoCabe(it.nota, izq, y + 34.0f, 11.5f, izqControl - 18.0f - izq, dim[0], dim[1], dim[2], 0.85f);
         const float f = std::max(0.0f, std::min(1.0f, it.frac)), kx = z.pista.x + f * anchoPista;
         mask9(z.pista, 0, R(2.0f), 0.30f, 0.31f, 0.36f, 0.98f);
         mask9({z.pista.x, z.pista.y, kx - z.pista.x, 4.0f}, 0, R(2.0f), accent[0], accent[1], accent[2], 1.0f);
         /* la bola, redonda tambien en vkDaedalus (de 14) */
         if (marco) mask9({kx - 7.0f, cy - 7.0f, 14.0f, 14.0f}, 0, 7.0f, 0.97f, 0.97f, 0.99f, 1.0f);
         else mask9({kx - 9.0f, cy - 9.0f, 18.0f, 18.0f}, 0, 9.0f, 0.97f, 0.97f, 0.99f, 1.0f);
-        text(it.valorTexto, der - textWidth(it.valorTexto, 13.5f), cy - 9.0f, 13.5f, ink[0], ink[1], ink[2], 0.95f);
+        /* (v1.16, PR #1) mientras se arrastra, el valor de donde esta la bola; si no, el guardado tal cual */
+        const std::string valor = it.textoFraccion && (int)i == st_.arrastrando ? it.textoFraccion(f) : it.valorTexto;
+        text(valor, der - textWidth(valor, 13.5f), cy - 9.0f, 13.5f, ink[0], ink[1], ink[2], 0.95f);
         break;
       }
       case ItemPanel::Fila: {
@@ -2445,7 +2457,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   hayRecorte_ = false;
   /* la ayuda de lo que hay bajo el raton (se pinta al final, por encima de todo) */
   std::string ayudaRaton;
-  if (dentro && !st_.menuIdioma)
+  if (dentro && !st_.menuIdioma && st_.arrastrando < 0)   /* (v1.16, PR #1) arrastrando, sin ayuda encima */
     for (size_t i = 0; i < st_.items.size() && i < zonas_.size(); i++) {
       const ItemPanel &it = st_.items[i];
       const ZonaItem &z = zonas_[i];
@@ -2456,6 +2468,9 @@ void Hud::dibujaPanel(int vw, int vh) {
       /* (v1.15) el engranaje de una caratula: su ayuda va en ayudas[0] */
       if (it.tipo == ItemPanel::Juego && z.subs.size() > 1 && !it.ayudas.empty() && z.subs[1].inside(mx_, my_))
         ayudaRaton = it.ayudas[0];
+      /* (v1.16, PR #1) la flechita de un deslizador: a que valor vuelve */
+      if (it.tipo == ItemPanel::Deslizador && it.textoFraccion && it.fracDefecto >= 0.0f && !z.subs.empty() && z.subs[0].inside(mx_, my_))
+        ayudaRaton = idioma::trf("Volver a {}", {it.textoFraccion(it.fracDefecto)});
       if (ayudaRaton.empty()) ayudaRaton = it.ayuda;
       break;
     }
@@ -2687,6 +2702,11 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
           }
         return HitPanel;
       case ItemPanel::Deslizador: {
+        if (it.fracDefecto >= 0.0f && !z.subs.empty() && z.subs[0].inside(mx, my)) {   /* (v1.16, PR #1) su flechita */
+          if (sub) *sub = 1;
+          if (frac) *frac = it.fracDefecto;
+          return HitPanelItem;
+        }
         const Rect p{z.pista.x - 12.0f, z.caja.y, z.pista.w + 24.0f, z.caja.h};
         if (!p.inside(mx, my)) return HitPanel;
         if (frac) *frac = std::max(0.0f, std::min(1.0f, (mx - z.pista.x) / std::max(1.0f, z.pista.w)));
@@ -2716,7 +2736,9 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
 }
 
 float Hud::fracDeslizador(int item, float mxa) const {
-  if (item < 0 || (size_t)item >= zonas_.size()) return 0.0f;
+  if (item < 0 || (size_t)item >= st_.items.size()) return 0.0f;
+  /* (v1.16, PR #1) una fila fuera de la vista no tiene pista: se queda donde estaba */
+  if ((size_t)item >= zonas_.size() || zonas_[(size_t)item].pista.w <= 0.0f) return st_.items[(size_t)item].frac;
   const Rect &p = zonas_[(size_t)item].pista;
   return std::max(0.0f, std::min(1.0f, (mxa / sc_ - p.x) / std::max(1.0f, p.w)));
 }

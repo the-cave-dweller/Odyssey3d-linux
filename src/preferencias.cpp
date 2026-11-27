@@ -226,6 +226,25 @@ std::string conDecimal(double v, int decimales) {
     if (c == ',') c = idioma::decimal();
   return s;
 }
+/* (v1.16, de la PR #1 de Noa3) cada deslizador: de su fraccion al valor que se guarda, redondeado igual al soltar que al
+   ensenarlo mientras se arrastra (el numero de la derecha sigue a la bola y dice lo que se va a guardar) */
+float fr01(float f) { return std::max(0.0f, std::min(1.0f, f)); }
+double relieveDe(float f) { return std::round((0.5 + fr01(f) * 1.5) / 0.05) * 0.05; }
+double fantasmaDe(float f) { return std::round(fr01(f) * 0.10 / 0.002) * 0.002; }
+double mezclaDe(float f) { return std::round((0.10 + fr01(f) * 0.90) / 0.05) * 0.05; }
+int topeCapaDe(float f) {
+  int n = (int)std::lround(fr01(f) * 48.0f) * 5;
+  return n > 0 && n < 10 ? 10 : n;
+}
+int anticipacionDe(float f) { return (int)std::lround(fr01(f) * 60.0f); }
+std::string textoRelieve(float f) { return conDecimal(relieveDe(f), 2); }
+std::string textoFantasma(float f) { return conDecimal(fantasmaDe(f) * 100.0, 1) + " %"; }
+std::string textoMezcla(float f) { return std::to_string((int)std::lround(mezclaDe(f) * 100.0)) + " %"; }
+std::string textoTopeCapa(float f) {
+  const int n = topeCapaDe(f);
+  return n > 0 ? std::to_string(n) + " fps" : std::string(idioma::tr("sin tope"));
+}
+std::string textoAnticipacion(float f) { return std::to_string(anticipacionDe(f)) + " ms"; }
 }  // namespace
 
 const char *nombreModo(const std::string &m) {
@@ -1527,6 +1546,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       tc.ayuda = idioma::tr("Cuántas veces por segundo copia la capa de DLSS la profundidad y el HUD dentro del juego · 0 = sin tope. El visor hace 6 mapas por segundo de fábrica: con un tope, el juego gasta menos en copias que no se usan. Se aplica al momento.");
       tc.frac = (float)v.capaTope / 240.0f;
       tc.valorTexto = v.capaTope > 0 ? std::to_string(v.capaTope) + " fps" : std::string(idioma::tr("sin tope"));
+      tc.textoFraccion = textoTopeCapa;
       pon(tc, "capa_fps_tope");
     }
     /* SEGUIMIENTO DE LA CABEZA (26-nov, «manda anticipar la cabeza a Ajustes»): salio de Experimental */
@@ -1543,6 +1563,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       a.ayuda = idioma::tr("La trama apunta a donde estarán los ojos dentro de estos milisegundos · 0 = apagado") + std::string(". ") + idioma::tr("Al mover la cabeza, la cámara y la trama llegan tarde unos milisegundos; con esto la trama se calcula para donde estarán los ojos, siguiendo su velocidad. Any2Odyssey usa 25 ms; de más, la trama se pasa al frenar.");
       a.frac = (float)v.expAnticipacion / 60.0f;
       a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
+      a.textoFraccion = textoAnticipacion;
+      a.fracDefecto = 0.0f;   /* (v1.16, PR #1) su flechita: a 0 ms, apagado */
       pon(a, "exp_anticipacion");
     }
     Hud::ItemPanel s;
@@ -1624,7 +1646,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     Hud::ItemPanel r;
     r.tipo = Hud::ItemPanel::Deslizador, r.rotulo = idioma::tr("Fuerza del relieve");
     r.ayuda = idioma::tr("Para el vídeo normal y el dividido suavizado · desde el siguiente vídeo");
-    r.frac = (float)((v.relieve - 0.5) / 1.5), r.valorTexto = conDecimal(v.relieve, 2);
+    r.frac = (float)((v.relieve - 0.5) / 1.5), r.valorTexto = conDecimal(v.relieve, 2), r.textoFraccion = textoRelieve;
     pon(r, "relieve");
     Hud::ItemPanel d;
     d.tipo = Hud::ItemPanel::Opciones, d.rotulo = idioma::tr("Suavizar los vídeos divididos");
@@ -1638,13 +1660,14 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     Hud::ItemPanel f;
     f.tipo = Hud::ItemPanel::Deslizador, f.rotulo = idioma::tr("Reducir el fantasma");
     f.ayuda = idioma::tr("Cuánta imagen del otro ojo se resta · se nota al momento");
-    f.frac = (float)(v.fantasma / 0.10), f.valorTexto = conDecimal(v.fantasma * 100.0, 1) + " %";
+    f.frac = (float)(v.fantasma / 0.10), f.valorTexto = conDecimal(v.fantasma * 100.0, 1) + " %", f.textoFraccion = textoFantasma;
     pon(f, "crosstalk_base");
     /* la pendiente del filtro de la trama (rama experimental, 26-nov), como parte del ciclo mezclada */
     Hud::ItemPanel mz;
     mz.tipo = Hud::ItemPanel::Deslizador, mz.rotulo = idioma::tr("Suavizar entre las vistas");
     mz.frac = (float)((v.mezclaVistas - 0.10) / 0.90);
     mz.valorTexto = std::to_string((int)std::lround(v.mezclaVistas * 100.0)) + " %";
+    mz.textoFraccion = textoMezcla;
     mz.ayuda = idioma::tr("La lente reparte los subpíxeles entre tu ojo izquierdo y el derecho. Con el 10 % (lo de Samsung) el paso de una vista a la otra es casi un escalón: si el rastreo va un poco atrasado, una franja de la pantalla salta de golpe a la imagen del otro ojo. Más mezcla hace ese paso gradual; con demasiada, algo del otro ojo se ve aun con la cabeza quieta.");
     pon(mz, "filtro");
 
@@ -1748,7 +1771,28 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
    seguimiento de la cabeza, el cuadrito de FPS, la version y el idioma: sus filas salen de la lista (Rodolfo: «quita
    las opciones que ya tengan boton de ajustes, no repitas opciones»), y con ellas el rotulo de una seccion que se
    quede sin nada debajo. En el panel de antes, sin teselas, se quedan */
+static void llenarSinArrastre(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids);
+
+/* (v1.16, de la PR #1 de Noa3) la lista se rehace (en Ajustes, cada segundo, por los datos de rendimiento) aunque se este
+   arrastrando un deslizador: se conserva el que se tiene apretado, por su id (si salen o se van filas por encima,
+   cambia de sitio) y con la bola donde esta. Antes volvia a lo guardado a media arrastrada */
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
+  std::string idArrastre;
+  float fracArrastre = 0.0f;
+  if (st.arrastrando >= 0 && (size_t)st.arrastrando < ids.size() && (size_t)st.arrastrando < st.items.size())
+    idArrastre = ids[(size_t)st.arrastrando], fracArrastre = st.items[(size_t)st.arrastrando].frac;
+  st.arrastrando = -1;
+  llenarSinArrastre(st, v, juegos, ids);
+  if (idArrastre.empty()) return;
+  for (size_t k = 0; k < st.items.size() && k < ids.size(); k++)
+    if (ids[k] == idArrastre && st.items[k].tipo == Hud::ItemPanel::Deslizador) {
+      st.arrastrando = (int)k;
+      st.items[k].frac = fracArrastre;
+      break;
+    }
+}
+
+static void llenarSinArrastre(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
   llenarFilas(st, v, juegos, ids);
   if (!st.marco || st.teselas.empty()) return;
   static const char *kEnTesela[] = {"profundidad_dlss", "hud_plano", "fps_juego", "rastreo", "idioma", "actualizar", "buscar_actualizacion"};
@@ -1865,7 +1909,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     return true;
   }
   if (id == "filtro") {
-    const double m = std::round((0.10 + std::max(0.0f, std::min(1.0f, frac)) * 0.90) / 0.05) * 0.05;
+    const double m = mezclaDe(frac);
     const double pendiente = 1.0 / m;
     avisarVisor({{"filtro", pendiente}}, {});   /* se ve al momento, tambien mientras se arrastra */
     if (!soltado) return false;
@@ -1874,7 +1918,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     return true;
   }
   if (id == "crosstalk_base") {
-    const double val = std::round(std::max(0.0f, std::min(1.0f, frac)) * 0.10 / 0.002) * 0.002;
+    const double val = fantasmaDe(frac);
     avisarVisor({{"crosstalk_base", val}}, {});   /* se ve al momento, tambien mientras se arrastra */
     if (!soltado) return false;
     if (!fija(id, conComa(val, 4))) return false;
@@ -1883,7 +1927,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id == "relieve") {
     if (!soltado) return false;
-    const double val = std::round((0.5 + std::max(0.0f, std::min(1.0f, frac)) * 1.5) / 0.05) * 0.05;
+    const double val = relieveDe(frac);
     if (!fija(id, conComa(val, 2))) return false;
     if (aviso) *aviso = idioma::trf("fuerza del relieve {} · desde el siguiente vídeo", {conDecimal(val, 2)});
     return true;
@@ -1922,8 +1966,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id == "capa_fps_tope") {
     if (!soltado) return false;
-    int n = (int)std::lround(std::max(0.0f, std::min(1.0f, frac)) * 48.0f) * 5;
-    if (n > 0 && n < 10) n = 10;
+    const int n = topeCapaDe(frac);
     if (!fija("capa_fps_tope", std::to_string(n))) return false;
     avisarVisor({}, {{"capa_fps_tope", std::to_string(n)}});   /* al momento: el visor se lo pasa a la capa */
     if (aviso)
@@ -1953,7 +1996,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id == "exp_anticipacion") {
     if (!soltado) return false;
-    const int ms = (int)std::lround(std::max(0.0f, std::min(1.0f, frac)) * 60.0f);
+    const int ms = anticipacionDe(frac);
     if (!fija("exp_anticipacion", std::to_string(ms))) return false;
     if (aviso) *aviso = idioma::trf("anticipación {} ms · desde el siguiente vídeo", {std::to_string(ms)});
     return true;

@@ -361,6 +361,13 @@ int cmdAjustes(int argc, char **argv) {
       } else if (p.accion == "clic") {   /* (v1.16) un clic en x y del lienzo, como el del raton (pasa por la capa) */
         float cx = 0.0f, cy = 0.0f;
         if (std::sscanf(p.arg.c_str(), "%f %f", &cx, &cy) == 2) ov.clicPrueba(cx, cy);
+      } else if (p.accion == "corre") {   /* (v1.16) la lista corrida N puntos, como con la rueda */
+        st.corrida = (float)std::atof(p.arg.c_str());
+        repintar = true;
+      } else if (p.accion == "aprieta" || p.accion == "mueve" || p.accion == "suelta") {   /* (v1.16) arrastrar, a mano */
+        float cx = 0.0f, cy = 0.0f;
+        std::sscanf(p.arg.c_str(), "%f %f", &cx, &cy);
+        ov.ratonPrueba(p.accion == "aprieta" ? 1 : (p.accion == "mueve" ? 0 : -1), cx, cy);
       } else if (p.accion == "tesela") {   /* (v1.16) una tesela chica: su numero (0..5) */
         Overlay::Golpe gg;
         gg.tipo = (int)Hud::HitPanelTesela, gg.sub = std::atoi(p.arg.c_str());

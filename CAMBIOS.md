@@ -3,6 +3,27 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Los deslizadores dicen su valor mientras se arrastran, y Anticipar la cabeza vuelve a 0 con su flechita (v1.16)
+
+- Rodolfo, con la PR #1 de Noa3 («Preview head anticipation while dragging and add a reset button», hecha sobre la
+  1.14): «this helps?, help me to implement». Ayuda: no entra tal cual (el panel cambió entero en la 1.16), así que
+  se pasó a mano, y lo del valor, a los cinco deslizadores, que tenían el mismo fallo.
+- **El valor mientras se arrastra**: el número de la derecha se quedaba en lo guardado hasta soltar (en los cinco:
+  fuerza del relieve, reducir el fantasma, suavizar entre las vistas, tope de FPS de la capa y anticipar la cabeza).
+  Ahora sigue a la bola, con el mismo redondeo que al soltar (unas funciones compartidas), así que dice lo que se va
+  a guardar. Sin arrastrar, el guardado tal cual (el fantasma de fábrica sigue diciendo 1,3 %). La ayuda no sale
+  mientras se arrastra.
+- **El arrastre aguanta que la lista se rehaga**: en Ajustes la lista se rehace cada segundo (los datos de
+  rendimiento) y, con el ratón quieto, la bola volvía a lo guardado. Lo que se arrastra vive ahora en el estado de la
+  interfaz (no en la capa) y `llenar` lo vuelve a encontrar por su id (si salen filas encima cambia de sitio), con la
+  bola donde estaba. Al soltar se guarda donde se ve la bola.
+- **La flechita ↺** a la izquierda de la pista de Anticipar la cabeza: la pone a 0 ms (apagada) sin tocar lo demás;
+  al pasar el ratón dice «Volver a 0 ms». Picarla no empieza un arrastre.
+- **El guion del panel** gana `aprieta X Y`, `mueve X Y`, `suelta` (el arrastre por el camino del ratón de verdad)
+  y `corre N` (la lista corrida, como con la rueda).
+- **Probado** en un KWin aparte, como la prueba de la PR: arrastrar de 12 a 45 ms y quedarse quieto 1,5 s (con la
+  lista rehecha en medio): se ve 45 ms con la bola en 45 y serve.conf sigue en 12; al soltar, 45; la flechita, 0.
+
 ## La tesela de la Versión, como el botón «Actualizar a» de antes (v1.16)
 
 - Rodolfo, con una foto del botón «Actualizar a 1.16» junto al aspa (lo que enseña la 1.15 instalada) y otra de la

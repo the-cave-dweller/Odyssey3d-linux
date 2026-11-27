@@ -277,7 +277,7 @@ struct Overlay::Impl {
   int golpeVisto = Hud::HitNone;
   /* el panel de ajustes: el deslizador que se esta arrastrando, lo que habia bajo el raton la
      ultima vez (para no repintar de mas) y los golpes que esperan a quien lo ensena */
-  int arrastrando = -1;
+  /* (v1.16, PR #1) el deslizador que se arrastra vive en el estado de la interfaz: hud.state().arrastrando */
   /* mover el panel: se agarra por la cabecera y la capa sigue al raton cambiando sus margenes */
   bool moviendo = false, panelMontado = false;
   /* cambiar el tamano del panel con su esquina (rama experimental): el tamano del que se partio, en
@@ -1130,7 +1130,7 @@ struct Overlay::Impl {
     s->ratonDentro = false;
     s->ratonX = s->ratonY = -1.0;
     s->hud.setMouse(-1.0f, -1.0f);
-    if (s->tarjetaPuesta && s->hud.state().panel && s->arrastrando < 0) {
+    if (s->tarjetaPuesta && s->hud.state().panel && s->hud.state().arrastrando < 0) {
       s->firmaVista = -1;
       s->pintar();   /* se apaga el realce de lo que habia bajo el raton */
       return;
@@ -1180,6 +1180,7 @@ struct Overlay::Impl {
       wl_surface_commit(surf);
       return;
     }
+    const int arrastrando = hud.state().arrastrando;
     if (arrastrando >= 0) {
       const float f = hud.fracDeslizador(arrastrando, (float)ratonX);
       if ((size_t)arrastrando < hud.state().items.size()) hud.state().items[(size_t)arrastrando].frac = f;
@@ -1197,20 +1198,23 @@ struct Overlay::Impl {
     }
   }
   void panelBoton(bool apretado) {
+    int &arrastrando = hud.state().arrastrando;
     if (!apretado) {
       if (moviendo || redimensionando) guardaVentana();
       moviendo = redimensionando = false;
-      if (arrastrando >= 0) {
-        golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.fracDeslizador(arrastrando, (float)ratonX), true});
-        arrastrando = -1;
+      if (arrastrando >= 0 && (size_t)arrastrando < hud.state().items.size()) {
+        /* (v1.16, PR #1) se guarda donde se ve la bola (la lista pudo rehacerse mientras tanto) */
+        golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.state().items[(size_t)arrastrando].frac, true});
+        sucio = true;
       }
+      arrastrando = -1;
       return;
     }
     int item = -1, sub = 0;
     float fr = 0.0f;
     const Hud::Hit h = hud.hitDetalle((float)ratonX, (float)ratonY, &item, &sub, &fr);
-    if (h == Hud::HitPanelItem && item >= 0 && (size_t)item < hud.state().items.size() &&
-        hud.state().items[(size_t)item].tipo == Hud::ItemPanel::Deslizador) {
+    if (h == Hud::HitPanelItem && sub == 0 && item >= 0 && (size_t)item < hud.state().items.size() &&
+        hud.state().items[(size_t)item].tipo == Hud::ItemPanel::Deslizador) {   /* (v1.16) sub 1: su flechita */
       arrastrando = item;
       hud.state().items[(size_t)item].frac = fr;
       golpes.push_back({(int)h, item, 0, fr, false});
@@ -1729,6 +1733,18 @@ void Overlay::clicPrueba(float x, float y) {
   d->ratonY = y * d->hud.scale();
   d->panelBoton(true);
   d->panelBoton(false);
+}
+
+void Overlay::ratonPrueba(int que, float x, float y) {
+  if (!d || !d->hud.state().panel) return;
+  if (que >= 0) {
+    d->ratonX = x * d->hud.scale();
+    d->ratonY = y * d->hud.scale();
+    d->hud.setMouse((float)d->ratonX, (float)d->ratonY);
+  }
+  if (que == 1) d->panelBoton(true);
+  else if (que == 0) d->panelMovimiento();
+  else d->panelBoton(false);
 }
 
 void Overlay::tomarTeclado(bool si) { modoTeclado(si ? 1 : 0); }

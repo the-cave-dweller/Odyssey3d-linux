@@ -95,6 +95,8 @@ public:
   /* (v1.16) para el guion del panel: un clic del boton izquierdo en (x, y) del lienzo virtual, por el mismo camino que
      uno del raton de verdad (el que decide que golpes llegan al bucle del panel) */
   void clicPrueba(float x, float y);
+  /* (v1.16) y para arrastrar (un deslizador): apretar en (x, y), mover a (x, y) con el boton apretado, soltar */
+  void ratonPrueba(int que, float x, float y);   /* que: 1 = apretar, 0 = mover, -1 = soltar */
 
   /* Preferencia de pantalla para la tarjeta (nombre o modelo, sin distinguir
      mayúsculas; por ejemplo "DP-4"). Sin esto se elige solo, y por defecto se buscan

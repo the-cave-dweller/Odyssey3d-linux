@@ -51,6 +51,11 @@ public:
     int elegido = 0;                 /* opciones */
     std::vector<std::string> opciones;
     float frac = 0.0f;               /* deslizador, 0..1 */
+    /* (v1.16, de la PR #1 de Noa3) el valor de un deslizador para una fraccion: es el que se ve mientras se arrastra (el
+       numero de la derecha sigue a la bola); `fracDefecto` >= 0 pone a la izquierda de la pista una flechita para volver
+       a esa fraccion */
+    std::string (*textoFraccion)(float) = nullptr;
+    float fracDefecto = -1.0f;
     bool quitar = false;             /* fila con aspa para quitarla */
     bool peligro = false;            /* boton en rojo suave: desinstalar (v1.06) */
     /* una seccion que se pliega (rama experimental): la cabecera lleva una flechita y se pica entera;
@@ -144,6 +149,9 @@ public:
     std::vector<Tesela> teselas;
     float aparicion = 1.0f;
     std::vector<ItemPanel> items;
+    /* (v1.16, PR #1) la fila del deslizador mientras se tiene apretado: aqui (antes en la capa) para que el panel, al
+       rehacer la lista cada segundo, la conserve con su bola donde esta */
+    int arrastrando = -1;
     float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
     std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
     std::string version;             /* "OdysseyVK 0.84", abajo a la derecha */
