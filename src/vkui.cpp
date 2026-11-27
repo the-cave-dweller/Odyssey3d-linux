@@ -1586,123 +1586,84 @@ void Hud::begin(int w, int h, float altoLogico) {
     else mask9(askLuego_, 0, 16.0f, accent[0], accent[1], accent[2], hL ? 1.0f : 0.92f);
     text(entendido, askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
   } else if (st_.ask) {
-    const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
-    /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
-    const float ax = (float)vw - 24.0f - aw,
-                ay = (float)vh - 24.0f - ah;   /* (v1.16) la pastilla volvio arriba */
+    /* (v1.16) la pregunta de la primera vez de una aplicacion de video, como la pastilla (Rodolfo, de la PR #2 de Noa3:
+       «it must be a popup first so that the overlay appears only after selecting ... and remembering, please make a
+       consistent option to the pill»): arriba a la derecha y pegada a las orillas, del color de la barra y con la
+       esquina de abajo a la izquierda redonda; el titulo y la ventana, los botones 3D (el del encendido de la
+       pastilla) y 2D y el aspa; debajo «Recordar» (puesto de fabrica) y donde se cambia. Antes, abajo a la derecha,
+       las dos teselas de video normal y dividido: eso ya lo mira solo el visor */
+    const float aw = std::min(500.0f, (float)vw - 24.0f), ah = 104.0f;
+    const float ax = (float)vw - aw, ay = 0.0f;
     askPanel_ = {ax, ay, aw, ah};
-    fondoTarjeta(ax, ay, aw, ah);   /* el filo claro */
+    askSbs_ = askAyuda_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+    mask9({ax, ay - 8.0f, aw + 8.0f, ah + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1),
+          Hud::canal(pal_.barra, 2), 0.96f);
     auto encaja = [&](const std::string &s, float tam, float maxAncho) {
       if (textWidth(s, tam) <= maxAncho) return s;
-      std::string out, col;
-      float ancho = 0.0f, reserva = textWidth("..", tam);
-      size_t i = 0;
-      while (i < s.size()) {
-        size_t antes = i;
-        nextCp(s, i);
-        col = s.substr(antes, i - antes);
-        float w = textWidth(col, tam);
+      std::string out;
+      float ancho = 0.0f;
+      const float reserva = textWidth("..", tam);
+      size_t k = 0;
+      while (k < s.size()) {
+        const size_t antes = k;
+        nextCp(s, k);
+        const float w = textWidth(s.substr(antes, k - antes), tam);
         if (ancho + w > maxAncho - reserva) break;
         ancho += w;
-        out += col;
+        out += s.substr(antes, k - antes);
       }
       return out + "..";
     };
-    const float borde = 26.0f;
-
-    /* los dos signos de arriba a la derecha: el "?" explica las dos opciones mientras el raton esta
-       encima (no abre nada: cambia los dos renglones de debajo del titulo), el aspa cierra */
-    askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
-    askAyuda_ = {askClose_.x - 34.0f, ay + 16.0f, 30.0f, 30.0f};
-    const bool hc = askClose_.inside(mx_, my_), ha = askAyuda_.inside(mx_, my_);
-    if (hc) mask9(askClose_, 0, Rd(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
-    icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2],
-          hc ? 1.0f : 0.80f);
-    if (ha) mask9(askAyuda_, 0, Rd(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
-    icono({askAyuda_.x + 4.0f, askAyuda_.y + 4.0f, 22.0f, 22.0f}, icoAnillo_, ink[0], ink[1], ink[2],
-          ha ? 1.0f : 0.80f);
-    text("?", askAyuda_.x + 15.0f, askAyuda_.y + 7.0f, 14.0f, ink[0], ink[1], ink[2], ha ? 1.0f : 0.80f, true);
-
-    /* la pregunta. El titulo lo puede poner quien llama; de fabrica es la de la aplicacion oficial.
-       Debajo, en letra chica, la ventana por la que se pregunta (la pone el servicio). */
-    const float anchoTitulo = askAyuda_.x - 10.0f - (ax + borde);
-    fuente_ = fuenteTitulo;
-    text(encaja(askTitulo_.empty() ? std::string(idioma::tr("¿Qué tipo de vídeo estás viendo?")) : askTitulo_, 18.0f, anchoTitulo),
-         ax + borde, ay + 22.0f, 18.0f, ink[0], ink[1], ink[2], 1.0f);
-    fuente_ = estiloD && hayBarlow_ ? 1 : 0;
-    if (ha) {
-      text(idioma::tr("Vídeo normal: una sola imagen; se convierte a 3D."), ax + borde, ay + 50.0f, 12.5f, ink[0], ink[1],
-           ink[2], 0.95f);
-      text(idioma::tr("Vídeo dividido: trae dos imágenes, una al lado de la otra."), ax + borde, ay + 69.0f, 12.5f, ink[0],
-           ink[1], ink[2], 0.95f);
-    } else {
-      text(idioma::tr("Elige la opción correcta para la conversión 3D."), ax + borde, ay + 49.0f, 13.5f, ink[0], ink[1],
-           ink[2], 0.92f);
-      if (!askCuerpo_.empty())
-        text(encaja(askCuerpo_, chica, aw - 2.0f * borde), ax + borde, ay + 71.0f, chica, dim[0], dim[1], dim[2],
-             0.80f);
+    const float aire = 16.0f;
+    /* de derecha a izquierda: el aspa, el 2D y el 3D, en la fila de arriba (del alto de la pastilla) */
+    askClose_ = {ax + aw - 8.0f - 32.0f, ay + 12.0f, 32.0f, 32.0f};
+    {
+      const bool hc = askClose_.inside(mx_, my_);
+      if (hc) mask9(askClose_, 0, 4.0f, hexD(pal_.control, 0), hexD(pal_.control, 1), hexD(pal_.control, 2), 1.0f);
+      icono({askClose_.x + 8.0f, askClose_.y + 8.0f, 16.0f, 16.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.75f);
     }
-
-    /* las dos teselas, en el orden de la foto: el video normal a la izquierda */
-    const float tw = (aw - 2.0f * borde - 14.0f) * 0.5f, th = 156.0f, ty = ay + 98.0f;
-    askConv_ = {ax + borde, ty, tw, th};
-    askSbs_ = {ax + borde + tw + 14.0f, ty, tw, th};
-    const Rect tiles[2] = {askConv_, askSbs_};
-    const char *names[2] = {idioma::tr("Vídeo normal"), idioma::tr("Vídeo dividido")};
-    const char *subs[2] = {idioma::tr("una sola imagen"), idioma::tr("dos imágenes lado a lado")};
-    for (int i = 0; i < 2; i++) {
-      const Rect &t = tiles[i];
-      const bool hov = t.inside(mx_, my_);
-      float fondo[3] = {hov ? 0.27f : 0.195f, hov ? 0.28f : 0.20f, hov ? 0.315f : 0.225f};
-      if (estiloD)   /* como las teselas del panel: 1E1B26, y al pasar el raton el filo del acento */
-        for (int k = 0; k < 3; k++) fondo[k] = hexD(hov ? pal_.suave : pal_.elevado, k);
-      if (hov) {
-        if (estiloD) mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 7.5f, accent[0], accent[1], accent[2], 1.0f);
-        else mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 13.5f, ink[0], ink[1], ink[2], 0.75f);
-      }
-      mask9(t, 1, estiloD ? 6.0f : 12.0f, fondo[0], fondo[1], fondo[2], 1.0f);
-      const float iw = std::min(128.0f, t.w - 36.0f), ih = 72.0f;
-      const float ix = t.x + (t.w - iw) * 0.5f, iy = t.y + 20.0f;
-      if (i == 0) {
-        paisaje({ix, iy, iw, ih}, 1.0f, 1.0f, 7.0f, fondo);
-      } else {
-        const float mitad = (iw - 5.0f) * 0.5f;
-        paisaje({ix, iy, mitad, ih}, 0.5f, 1.0f, 7.0f, fondo);
-        paisaje({ix + mitad + 5.0f, iy, mitad, ih}, 0.5f, 1.0f, 7.0f, fondo);
-      }
-      const float fs = tw < 150.0f ? 12.5f : 15.0f, fss = tw < 150.0f ? chica - 1.5f : chica;
+    askFlat_ = {askClose_.x - 10.0f - 64.0f, ay + 12.0f, 64.0f, 32.0f};
+    askConv_ = {askFlat_.x - 8.0f - 84.0f, ay + 12.0f, 84.0f, 32.0f};
+    {
+      const bool h3 = askConv_.inside(mx_, my_), h2 = askFlat_.inside(mx_, my_);
+      const float t = h3 ? 1.12f : 1.0f;   /* el 3D, como el encendido puesto de la pastilla */
+      mask9(askConv_, 0, 4.0f, std::min(1.0f, accent[0] * t), std::min(1.0f, accent[1] * t), std::min(1.0f, accent[2] * t), 0.95f);
+      icono({askConv_.x + 10.0f, askConv_.y + 6.0f, 20.0f, 20.0f}, icoEncender_, 1.0f, 1.0f, 1.0f, 1.0f);
       fuente_ = fuenteTitulo;
-      text(encaja(names[i], fs, t.w - 16.0f), t.x + t.w * 0.5f, t.y + 104.0f, fs, ink[0], ink[1], ink[2], 1.0f,
-           true);
-      fuente_ = estiloD && hayBarlow_ ? 1 : 0;
-      text(encaja(subs[i], fss, t.w - 16.0f), t.x + t.w * 0.5f, t.y + 127.0f, fss, dim[0], dim[1], dim[2], dim[3],
-           true);
+      text("3D", askConv_.x + 38.0f, askConv_.y + 7.0f, 15.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+      /* el 2D, en el gris de los controles de la paleta del modo (con su tinte azul o ambar) */
+      mask9(askFlat_, 0, 4.0f, hexD(h2 ? pal_.controlHov : pal_.control, 0), hexD(h2 ? pal_.controlHov : pal_.control, 1),
+            hexD(h2 ? pal_.controlHov : pal_.control, 2), 1.0f);
+      text("2D", askFlat_.x + askFlat_.w * 0.5f, askFlat_.y + 7.0f, 15.0f, ink[0], ink[1], ink[2], h2 ? 1.0f : 0.85f, true);
     }
-
-    /* la casilla: se pica en la caja o en su letra */
-    const char *rotulo = idioma::tr("Guardar el tipo de vídeo y no volver a preguntar");
-    const Rect caja{ax + borde, ty + th + 18.0f, 20.0f, 20.0f};
-    askDont_ = {caja.x - 4.0f, caja.y - 6.0f, std::min(aw - 2.0f * borde, 20.0f + 10.0f + textWidth(rotulo, 13.0f)) + 8.0f,
-                32.0f};
+    /* el titulo y, debajo, la ventana por la que se pregunta (la pone el servicio) */
+    const float anchoTexto = askConv_.x - 12.0f - (ax + aire);
+    text(encaja(askTitulo_.empty() ? std::string(idioma::tr("¿Ver en 3D?")) : askTitulo_, 15.0f, anchoTexto), ax + aire, ay + 10.0f,
+         15.0f, ink[0], ink[1], ink[2], 1.0f);
+    fuente_ = estiloD && hayBarlow_ ? 1 : 0;
+    if (!askCuerpo_.empty())
+      text(encaja(askCuerpo_, chica, anchoTexto), ax + aire, ay + 31.0f, chica, dim[0], dim[1], dim[2], 0.90f);
+    /* la fila de abajo: «Recordar» (se pica en la caja o en su letra) y donde se cambia lo recordado */
+    mask9({ax + aire, ay + 56.0f, aw - 2.0f * aire, 1.0f}, 0, 0.0f, hexD(pal_.filo, 0), hexD(pal_.filo, 1), hexD(pal_.filo, 2), 0.8f);
+    const std::string rotulo = idioma::tr("Recordar para esta aplicación");
+    const Rect caja{ax + aire, ay + 70.0f, 18.0f, 18.0f};
+    askDont_ = {caja.x - 4.0f, caja.y - 6.0f, 18.0f + 10.0f + textWidth(rotulo, 13.0f) + 8.0f, 30.0f};
     const bool hd = askDont_.inside(mx_, my_);
-    const float c = hd ? 1.0f : 0.86f;
-    if (estiloD) {   /* la casilla de vkDaedalus: el acento con la palomita, o vacia con su filo */
-      if (st_.remember) {
-        mask9(caja, 1, 4.0f, accent[0], accent[1], accent[2], 1.0f);
-        icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, 1.0f);
-      } else {
-        mask9(caja, 1, 4.0f, hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 0), hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 1), hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 2), 1.0f);
-        mask9({caja.x + 1.5f, caja.y + 1.5f, caja.w - 3.0f, caja.h - 3.0f}, 1, 3.0f, hexD(pal_.pozo, 0), hexD(pal_.pozo, 1), hexD(pal_.pozo, 2), 1.0f);
-      }
+    if (st_.remember) {
+      mask9(caja, 1, 4.0f, accent[0], accent[1], accent[2], 1.0f);
+      icono({caja.x + 2.0f, caja.y + 2.0f, 14.0f, 14.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, 1.0f);
     } else {
-      mask9(caja, 1, 5.0f, c, c, c + 0.02f, 1.0f);
-      if (st_.remember)
-        icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
-      else
-        mask9({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, 1, 3.5f, 0.03f, 0.03f, 0.035f, 1.0f);
+      mask9(caja, 1, 4.0f, hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 0), hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 1),
+            hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 2), 1.0f);
+      mask9({caja.x + 1.5f, caja.y + 1.5f, caja.w - 3.0f, caja.h - 3.0f}, 1, 3.0f, hexD(pal_.pozo, 0), hexD(pal_.pozo, 1),
+            hexD(pal_.pozo, 2), 1.0f);
     }
-    text(encaja(rotulo, 13.0f, aw - 2.0f * borde - 30.0f), caja.x + 30.0f, caja.y + 2.0f, 13.0f, ink[0], ink[1],
-         ink[2], hd ? 1.0f : 0.90f);
+    text(rotulo, caja.x + 28.0f, caja.y + 0.5f, 13.0f, ink[0], ink[1], ink[2], hd ? 1.0f : 0.90f);
+    const float xNota = askDont_.x + askDont_.w + 12.0f;
+    const std::string nota = idioma::tr("se cambia en 3D → Aplicaciones que no preguntan");
+    const float wNota = std::min(textWidth(nota, chica - 1.0f), ax + aw - aire - xNota);
+    if (wNota > 40.0f)
+      text(encaja(nota, chica - 1.0f, wNota), ax + aw - aire - wNota, caja.y + 1.5f, chica - 1.0f, dim[0], dim[1], dim[2], 0.75f);
   }
   fuente_ = 0;   /* (v1.16) la letra de siempre para lo que sigue (el aviso bajo la pastilla) */
 
@@ -2804,6 +2765,7 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
     if (askNoAvisar_.inside(mx, my)) return HitAskNoAvisar;
     if (askAyuda_.inside(mx, my)) return HitAskAyuda;
     if (askConv_.inside(mx, my)) return HitAskConv;
+    if (askFlat_.inside(mx, my)) return HitAskFlat;   /* (v1.16) el 2D de la pregunta */
     if (askSbs_.inside(mx, my)) return HitAskSbs;
     if (askDont_.inside(mx, my)) return HitAskDont;
   }

@@ -67,7 +67,11 @@ UUID, so `red = N` in `serve.conf` always means CUDA device N.
 
 ## Use
 
-Put a video in fullscreen and it goes straight to 3D. In its first seconds the viewer tells a
+Put a video in fullscreen. The first time with each app (a browser, a player), a popup in the top-right
+corner, in the pill's style and its mode colour, asks **3D** or **2D**, with **Remember for this app** ticked;
+nothing changes on the monitor until you choose. 3D starts the viewer; 2D leaves the video as it is, and remembered,
+the app is left alone from then on (both can be undone in 3D → *Apps that don't ask*). With 3D, in its first
+seconds the viewer tells a
 **normal video** (one image, converted to 3D) from a **split** one (side by side or top and bottom),
 switches by itself and stops looking. It compares the two halves of the frame — the picture and its
 fine detail — and was measured on three side-by-side 3D videos and three normal ones (18 of 18

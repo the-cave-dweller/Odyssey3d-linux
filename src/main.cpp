@@ -3131,6 +3131,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
   const int W = o.w > 0 ? o.w : 1920, H = o.h > 0 ? o.h : 1080;
   /* (v1.16) ODYSSEYVK_HUD_ASK=0: sin la tarjeta de la pregunta (la pastilla y sus menus solos) */
   hud.state().ask = !(std::getenv("ODYSSEYVK_HUD_ASK") && std::getenv("ODYSSEYVK_HUD_ASK")[0] == '0');
+  /* (v1.16) ODYSSEYVK_HUD_PASTILLA=0: sin la pastilla (como en el servicio, que solo pone la tarjeta) */
+  if (const char *pa = std::getenv("ODYSSEYVK_HUD_PASTILLA")) hud.state().overlayOn = pa[0] != '0';
   hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
   hud.state().hud = 3;
@@ -4755,6 +4757,12 @@ static int cmdServe(int argc, char **argv) {
     ov = std::move(nueva);
     return true;
   };
+  /* (v1.16) las tarjetas del servicio (la pregunta del 3D, la actualizacion, los avisos) con el color del modo de los
+     ajustes, como la pastilla y el panel (Rodolfo: «recuerda que el layout debe hacer match con el amarillo o azul de
+     las settings»): ambar con «sin red» (modo rendimiento), azul con la red. Se mira al ponerlas: serve.conf cambia */
+  auto colorDelModo = [&]() {
+    if (ov) ov->hud().state().sinRedPanel = cfg.expSinRed == "si" || cfg.expSinRed == "suelo" || cfg.expSinRed == "imagen";
+  };
   bool hayTarjeta = abrirTarjeta();
   if (hayTarjeta) {
     std::printf("[serve] tarjeta superpuesta en %s (escala %.2f)\n", ov->outputName().c_str(), ov->scale());
@@ -4840,7 +4848,7 @@ static int cmdServe(int argc, char **argv) {
     avisoTexto(titulo, lineas);
     ov->hud().state().askAviso = titulo;
     ov->hud().state().askAvisoLineas = lineas;
-    ov->showAsk(std::string(), std::string());
+    colorDelModo(), ov->showAsk(std::string(), std::string());
     tarjetaAviso = true;
     tarjetaAvisoT = ahora;
     std::printf("[serve] tarjeta de aviso: %s\n", titulo.c_str());
@@ -5848,7 +5856,7 @@ static int cmdServe(int argc, char **argv) {
         }
         ov->hud().state().askActualizacion = a.remota;
         ov->hud().state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
-        ov->showAsk(std::string(), std::string());
+        colorDelModo(), ov->showAsk(std::string(), std::string());
         tarjetaActualizacion = true;
         tarjetaActT = now;
         std::printf("[serve] tarjeta de actualizacion puesta (%s)\n", a.remota.c_str());
@@ -6065,6 +6073,9 @@ static int cmdServe(int argc, char **argv) {
     }
 
     if (hayTarjeta && !tarjetaActualizacion && !tarjetaAviso) {
+      /* (v1.16) ODYSSEYVK_TARJETA_PRUEBA=3d|2d|close: la tarjeta se contesta sola al segundo (pruebas con --dry) */
+      if (static const char *pr = entornoOdyssey("ODYSSEYVK_TARJETA_PRUEBA"); pr && !tarjetaUuid.empty() && now - tarjetaT > 1.0)
+        ov->contestaPrueba(pr);
       if (std::string acto = ov->takeAction(); !acto.empty()) {
         ov->hideAsk();
         if (acto == "close") {
@@ -6075,11 +6086,14 @@ static int cmdServe(int argc, char **argv) {
           accionApp = tarjetaApp;
           accionGuardada = ov->remember() && !tarjetaApp.empty() && acto != "flat";
           std::printf("[serve] tarjeta -> %s (%s)\n", acto.c_str(), avisoUuid.c_str());
-          if (ov->remember() && !tarjetaApp.empty() && acto != "flat") {
+          /* (v1.16) tambien el 2D: la aplicacion se deja en paz las siguientes veces (se quita en la pestana 3D, en
+             Aplicaciones que no preguntan) */
+          if (ov->remember() && !tarjetaApp.empty()) {
             cfg.porApp[tarjetaApp] = acto;
             if (std::string e; !ajuste::fijarAutoEnServeConf(tarjetaApp, acto, &e))
               std::fprintf(stderr, "[serve] no se pudo apuntar en serve.conf: %s\n", e.c_str());
-            std::printf("[serve] apuntado: %s pasa directo a %s sin preguntar\n", tarjetaApp.c_str(), acto.c_str());
+            std::printf("[serve] apuntado: %s %s sin preguntar\n", tarjetaApp.c_str(),
+                        acto == "flat" ? "se queda en 2D" : ("pasa a " + acto).c_str());
           }
         }
         tarjetaApp.clear();
@@ -6122,13 +6136,16 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, avisoUuid, act, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
-                             false, accionApp.empty() ? std::string() : accionApp + ":" + act, accionGuardada);
-          accionApp.clear();
-          accionGuardada = false;
+          /* (v1.16) el 3D de la tarjeta, con un video: el visor mira solo si es normal o dividido, como sin tarjeta */
+          const std::string modoVisor = act == "conv" && !accionApp.empty() && !esJuego(accionApp) ? std::string("detectar") : act;
+          hijo = spawnViewer(exe, avisoUuid, modoVisor, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
+                             false, accionApp.empty() || modoVisor == "detectar" ? std::string() : accionApp + ":" + act,
+                             accionGuardada);   /* con un video lo recordo ya la tarjeta: sin la casilla en la pastilla */
           hijoDesde = now;
           hijoUuid = avisoUuid;
-          hijoApp = accionApp;
+          hijoApp = accionApp;   /* (v1.16) antes se vaciaba primero y quedaba siempre vacio */
+          accionApp.clear();
+          accionGuardada = false;
           visorEscondidas = 0;
           std::printf("[serve] lanzando 3D (%s) para %s\n", act.c_str(), hijoUuid.c_str());
           std::fflush(stdout);
@@ -6189,9 +6206,14 @@ static int cmdServe(int argc, char **argv) {
         } else if (fija != cfg.porApp.end() && fija->second == "flat") {
           std::printf("[serve] %s esta marcada como 2D plano: no se hace nada\n", app.c_str());
           std::fflush(stdout);
-        } else if (!esJuego(w.appId) && cfg.modo != "flat" && !dry) {
+        } else if (!esJuego(w.appId) && cfg.modo != "flat" && !(fija == cfg.porApp.end() && cfg.modo == "ask" && hayTarjeta) &&
+                   !dry) {
           /* rama experimental: siempre automatico (Rodolfo: «it should override, will always be auto now»), salvo con
-             `modo = flat` puesto a mano (v1.16, PR #2): entonces lo no apuntado se queda en 2D.
+             `modo = flat` puesto a mano (v1.16, PR #2): entonces lo no apuntado se queda en 2D. (v1.16) Y la primera
+             vez de una aplicacion de video (sin nada apuntado), antes la tarjeta de arriba a la derecha: 3D o 2D, y si
+             se recuerda (Rodolfo, de la PR #2 de Noa3: «he is right, it must be a popup first so that the overlay
+             appears only after selecting ... and remembering, please make a consistent option to the pill»). Hasta
+             elegir no se toca nada: ni visor, ni lente, ni scaler, ni el modo del panel.
              Ni tarjeta ni el modo guardado para la aplicacion: el visor arranca como video normal, mira los
              primeros segundos y, si es un video dividido, se cambia solo. Los juegos siguen por su camino. */
           hijo = spawnViewer(exe, w.uuid, "detectar", cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo,
@@ -6227,7 +6249,8 @@ static int cmdServe(int argc, char **argv) {
              en letra chica, la ventana por la que se pregunta */
           std::string titulo;
           std::string cuerpo = w.title.empty() ? w.appId : w.title;
-          ov->showAsk(titulo, cuerpo);
+          ov->setRemember(true);   /* (v1.16) «Recordar» viene puesto: lo que se elija vale para las siguientes veces */
+          colorDelModo(), ov->showAsk(titulo, cuerpo);
           tarjetaUuid = w.uuid;
           tarjetaApp = app;
           tarjetaT = now;

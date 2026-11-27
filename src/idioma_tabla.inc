@@ -399,3 +399,6 @@
 {"bajando la FP16 (50 MB): al acabar queda puesta", {"downloading the FP16 (50 MB): it is set when done", "téléchargement de la FP16 (50 Mo) : elle sera choisie à la fin", "lade die FP16 (50 MB): danach ist sie gesetzt", "正在下载 FP16（50 MB）：完成后自动启用", "FP16（50 MB）をダウンロード中：終わると有効になります", "загрузка FP16 (50 МБ): по окончании будет выбрана"}},
 {"Versión {}", {"Version {}", "Version {}", "Version {}", "版本 {}", "バージョン {}", "Версия {}"}},
 {"Volver a {}", {"Back to {}", "Revenir à {}", "Zurück auf {}", "恢复为 {}", "{} に戻す", "Вернуть {}"}},
+{"¿Ver en 3D?", {"View in 3D?", "Voir en 3D ?", "In 3D ansehen?", "以 3D 观看？", "3D で見ますか？", "Смотреть в 3D?"}},
+{"Recordar para esta aplicación", {"Remember for this app", "Mémoriser pour cette application", "Für diese App merken", "为此应用记住", "このアプリで記憶する", "Запомнить для этого приложения"}},
+{"se cambia en 3D → Aplicaciones que no preguntan", {"change it in 3D → Apps that don't ask", "modifiable dans 3D → Applis qui ne demandent pas", "änderbar unter 3D → Apps ohne Nachfrage", "可在 3D → 不再询问的应用 中更改", "3D → 確認しないアプリ で変更", "меняется в 3D → Приложения без вопроса"}},

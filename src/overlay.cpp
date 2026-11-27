@@ -1747,6 +1747,11 @@ void Overlay::ratonPrueba(int que, float x, float y) {
   else d->panelBoton(false);
 }
 
+void Overlay::contestaPrueba(const std::string &accion) {
+  if (!d || !d->hud.state().ask) return;
+  d->accion = accion == "3d" ? "conv" : (accion == "2d" ? "flat" : "close");
+}
+
 void Overlay::tomarTeclado(bool si) { modoTeclado(si ? 1 : 0); }
 
 void Overlay::modoTeclado(int modo) {

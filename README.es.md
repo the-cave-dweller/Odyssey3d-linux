@@ -67,7 +67,11 @@ su UUID, así que `red = N` en `serve.conf` es siempre la tarjeta CUDA N.
 
 ## Uso
 
-Pon un vídeo a pantalla completa y pasa directo al 3D. En sus primeros segundos el visor distingue
+Pon un vídeo a pantalla completa. La primera vez con cada aplicación (un navegador, un reproductor), una ventanita
+arriba a la derecha, al estilo de la pastilla y con el color de su modo, pregunta **3D** o **2D**, con **Recordar
+para esta aplicación** puesto; hasta que eliges no cambia nada en el monitor. 3D arranca el visor; 2D deja el vídeo
+como está y, recordado, la aplicación se deja en paz desde entonces (las dos cosas se quitan en 3D → *Aplicaciones
+que no preguntan*). Con 3D, en sus primeros segundos el visor distingue
 un **vídeo normal** (una imagen, se convierte a 3D) de uno **dividido** (lado a lado o arriba y abajo),
 se cambia solo y deja de mirar. Compara las dos mitades del cuadro —la imagen y su detalle fino— y se
 midió con tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s bien en cada uno). Las

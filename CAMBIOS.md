@@ -3,6 +3,34 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La primera vez de cada aplicación de vídeo, una ventanita pregunta 3D o 2D (v1.16)
+
+- Rodolfo, sobre la PR #2 de Noa3 (lo de no pasar a 3D lo no apuntado): «he is right, it must be a popup first so that
+  the overlay appears only after selecting ... and remembering, please make a consistent option to the pill», y luego
+  «recuerda que el layout debe hacer match con el amarillo o azul de las settings».
+- **Cuándo**: un vídeo a pantalla completa de una aplicación sin nada apuntado (con `modo = ask`, el de fábrica, y la
+  capa del servicio a mano). Antes pasaba siempre al 3D solo. Ahora el servicio pone la ventanita y no toca nada más
+  (ni visor, ni lente, ni scaler, ni el modo del panel) hasta que se elige. Lo apuntado va directo como siempre; los
+  juegos siguen con su interruptor; `modo = flat` deja todo en 2D sin preguntar.
+- **Cómo es**: la tarjeta de la pregunta (antes abajo a la derecha, con las teselas de vídeo normal y dividido, que ya
+  mira solo el visor) pasa a ser como la pastilla: arriba a la derecha, pegada a las orillas, del color de la barra y
+  con la esquina de abajo a la izquierda redonda. «¿Ver en 3D?» y la ventana; **3D** (como el encendido de la
+  pastilla, con su símbolo), **2D** (en el gris de los controles) y el aspa; debajo **Recordar para esta aplicación**
+  (puesto de fábrica) y dónde se cambia. Con el azul o el ámbar del modo de los ajustes (`exp_sin_red`), igual que
+  las demás tarjetas del servicio (la actualización, los avisos), que antes salían siempre azules.
+- **Qué hace**: 3D arranca el visor, que mira solo si el vídeo es normal o dividido; 2D lo deja como está. Con
+  «Recordar», se apunta en serve.conf (`auto = app:conv` o `app:flat`): con 3D va directo las siguientes veces, con 2D
+  la aplicación se deja en paz (antes el 2D no se apuntaba nunca). Se quita en 3D → Aplicaciones que no preguntan.
+  El aspa, o no contestar en 40 s, no apunta nada.
+- De paso: `hijoApp` del visor lanzado desde la tarjeta se vaciaba antes de apuntarse.
+- **Probado**:
+  - pintado con `ctl hud` (ODYSSEYVK_HUD_PASTILLA=0, nuevo: sin la pastilla, como en el servicio), en español e
+    inglés y en azul y ámbar;
+  - el servicio de verdad en un KWin aparte (`serve --dry`, casa aparte), con Konsole a pantalla completa haciendo
+    de aplicación y la tarjeta contestada sola (ODYSSEYVK_TARJETA_PRUEBA, nuevo): con 2D, «apuntado: org.kde.konsole
+    se queda en 2D» y la segunda vez «marcada como 2D plano: no se hace nada»; con 3D, `auto = org.kde.konsole:conv`
+    y la segunda vez sin preguntar.
+
 ## La cámara por su enlace, `modo = flat`, la tarjeta CUDA por su UUID, la FP32 en la CPU y el scaler sin confirmar (v1.16)
 
 - Rodolfo, con la PR #2 de Noa3 («Fix stereo camera detection, 2D opt-in, depth selection and scaler rollback», hecha
