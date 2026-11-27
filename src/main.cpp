@@ -6454,6 +6454,23 @@ static int cmdServe(int argc, char **argv) {
     {
       static double miradaInteg = 0.0;
       static integ::Vigia vigia;
+      /* (v1.16) ODYSSEYVK=1 en la linea de cada juego sin que nadie lo pida (Rodolfo: «make sure the game
+         automatically toggles the ODYSSEYVK parameter, make it not optional»): a los 20 s de arrancar el servicio y
+         cada 5 minutos (asi entran los juegos recien instalados), lo que falte se escribe con Steam cerrado y copia
+         del fichero; con Steam abierto queda la marca y lo escribe el vigilante de abajo en cuanto se cierre. Las
+         lineas que no se saben leer se dejan como estan */
+      static double ponerOdyssey = now + 20.0;
+      if (now >= ponerOdyssey) {
+        ponerOdyssey = now + 300.0;
+        const integ::Resultado r = integ::aplicar(idsJuegosSteam(), true);
+        if (!r.ok) std::printf("[serve] integraciones: no se pudo escribir en Steam: %s\n", r.error.c_str());
+        else if (r.escritos > 0)
+          std::printf("[serve] integraciones: ODYSSEYVK=1 y lo demas, escrito en %d juegos (copia de antes: %s)\n", r.escritos,
+                      r.respaldo.c_str());
+        else if (r.pendientes > 0)
+          std::printf("[serve] integraciones: %d juegos por escribir; Steam esta abierto, se escriben al cerrarlo\n", r.pendientes);
+        std::fflush(stdout);
+      }
       if (now - miradaInteg >= 2.0) {
         miradaInteg = now;
         integ::Resultado r;

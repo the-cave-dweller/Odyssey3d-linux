@@ -3,6 +3,28 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## ODYSSEYVK=1 en todos los juegos, solo y sin poder quitarse; fuera el Copiar (v1.16)
+
+- Rodolfo: «no need for copy button anymore, just make sure the game automatically toggles the ODYSSEYVK
+  parameter, make it not optional».
+- **Siempre puesta** (`integraciones.cpp`):
+  - `odysseyvk` vale 1 de fábrica y `efectivo` la fuerza a 1 en cada juego, diga lo que diga un
+    `integraciones.conf` tocado a mano;
+  - `fijar` no la cambia, `cargar` no la lee y `sincronizar` no la toma como propia de un juego aunque su línea de
+    Steam no la lleve: se le pone.
+- **Escrita sola**: el servicio, a los 20 s de arrancar y cada 5 minutos (así entran los juegos recién instalados),
+  hace lo de «Escribir». Con Steam cerrado escribe lo que falte, con copia del fichero; con Steam abierto deja la
+  marca y la escribe su vigilante en cuanto se cierra. Las líneas que no se saben leer (con `;`, tuberías...) se
+  siguen dejando como están, sin ella.
+- **Integraciones**: la fila de ODYSSEYVK ya no es un interruptor, sino una nota: «ODYSSEYVK=1 va siempre: con ella
+  el 3D toma la profundidad de los juegos con DLSS».
+- **Juegos**: fuera el parámetro y el botón Copiar del pie. El README y la guía dicen que se escribe solo.
+- **Probado** sobre una copia del `localconfig.vdf` de Rodolfo, en un HOME aparte:
+  - de 10 juegos, a 2 les faltaba (Cyberpunk, sin nada; Lossless Scaling) y se escribieron, con copia; los 10
+    acaban con `ODYSSEYVK=1`;
+  - con `odysseyvk = 0` puesto a mano en `[todos]` y en Cyberpunk, sigue saliendo `ODYSSEYVK=1 %command%`.
+- **Sin probar**: el servicio de verdad escribiéndolo solo.
+
 ## Las teselas no hacían nada al picarlas, ni el Copiar de Juegos (v1.16)
 
 - Rodolfo: «dar click en los ajustes que tienen boton no hace nada»; «los de fps hud dlss y cabeza».

@@ -72,7 +72,8 @@ Any webcam can stand in (`camara = /dev/videoN`), measuring face size for distan
 ## Integrations (Steam launch options, since 1.15)
 
 The panel's **Integrations** tab builds each game's Steam launch options from pieces instead of typing them:
-the layer variables (`ODYSSEYVK=1`, `MANGOHUD=1`, `ENABLE_VKDAEDALUS=1`, `NEURAL_FORGE_ENABLE=1`, `ENABLE_VKBASALT=1`,
+the layer variables (`ODYSSEYVK=1` always goes in, since 1.16, written by the service for every installed game;
+`MANGOHUD=1`, `ENABLE_VKDAEDALUS=1`, `NEURAL_FORGE_ENABLE=1`, `ENABLE_VKBASALT=1`,
 shown without `=1` while off), other variables, `vkdaedalus-run` and a custom command before `%command%`, game options
 after it, and gamescope (render and output resolution by abbreviation, `-S stretch|fit`, `-f`,
 `--force-grab-cursor`, and upscaling with FSR or NIS, which turns gamescope on). The result follows this format:

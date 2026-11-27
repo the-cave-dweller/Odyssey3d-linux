@@ -371,3 +371,4 @@
 {"Actualizar a {}", {"Update to {}", "Mettre à jour vers {}", "Auf {} aktualisieren", "更新到 {}", "{} に更新", "Обновить до {}"}},
 {"3D", {"3D", "3D", "3D", "3D", "3D", "3D"}},
 {"En el escritorio", {"On the desktop", "Sur le bureau", "Auf dem Desktop", "在桌面上", "デスクトップで", "На рабочем столе"}},
+{"ODYSSEYVK=1 va siempre: con ella el 3D toma la profundidad de los juegos con DLSS.", {"ODYSSEYVK=1 is always on: with it, 3D takes the depth of DLSS games.", "ODYSSEYVK=1 est toujours là : avec elle, la 3D prend la profondeur des jeux DLSS.", "ODYSSEYVK=1 ist immer dabei: damit nimmt das 3D die Tiefe von DLSS-Spielen.", "ODYSSEYVK=1 始终开启：3D 由此使用 DLSS 游戏的深度。", "ODYSSEYVK=1 は常に有効：これで 3D は DLSS ゲームの奥行きを使います。", "ODYSSEYVK=1 всегда включён: с ним 3D берёт глубину из игр с DLSS."}},

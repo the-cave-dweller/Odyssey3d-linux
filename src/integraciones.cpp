@@ -328,7 +328,9 @@ const std::vector<std::string> &claves() {
 }
 
 const Ajustes &deFabrica() {
-  static const Ajustes a = {{"odysseyvk", "0"},       {"mangohud", "0"},        {"vkdaedalus", "0"},
+  /* (v1.16) ODYSSEYVK=1 va siempre (Rodolfo: «make sure the game automatically toggles the ODYSSEYVK parameter, make
+     it not optional»): ver efectivo y fijar */
+  static const Ajustes a = {{"odysseyvk", "1"},       {"mangohud", "0"},        {"vkdaedalus", "0"},
                             {"neural_forge", "0"},    {"vkbasalt", "0"},        {"otros", ""},
                             {"vkdaedalus_run", "0"},  {"comando", ""},          {"gamescope", "0"},
                             {"reescalado", "0"},      {"filtro", "fsr"},        {"render", "2048x1536"},
@@ -371,6 +373,7 @@ Estado cargar() {
     const size_t ig = t.find('=');
     if (ig == std::string::npos) continue;
     const std::string k = strTrim(t.substr(0, ig)), v = strTrim(t.substr(ig + 1));
+    if (k == "odysseyvk") continue;   /* (v1.16) no se elige: va siempre */
     if (seccion == "todos") {
       if (deFabrica().count(k)) e.todos[k] = v;
     } else if (esAppid(seccion)) {
@@ -413,10 +416,12 @@ Ajustes efectivo(const Estado &e, const std::string &appid) {
   if (!appid.empty())
     if (const auto it = e.juegos.find(appid); it != e.juegos.end())
       for (const auto &[k, v] : it->second.propios) a[k] = v;
+  a["odysseyvk"] = "1";   /* (v1.16) siempre, diga lo que diga un fichero tocado a mano */
   return a;
 }
 
 void fijar(Estado &e, const std::string &appid, const std::string &clave, const std::string &valor) {
+  if (clave == "odysseyvk") return;   /* (v1.16) va siempre: no se quita */
   auto pon = [&](const std::string &k, const std::string &v) {
     if (appid.empty()) {
       e.todos[k] = v;
@@ -946,6 +951,7 @@ bool sincronizar(Estado &e, const std::vector<std::string> &appids, const std::m
     Leida vieja;
     const bool hayVieja = j.visto && !j.propia && leerLinea(j.lineaSteam, vieja);
     for (const auto &[k, v] : nueva.ajustes) {
+      if (k == "odysseyvk") continue;   /* (v1.16) una linea sin ella no la quita: se le pone */
       /* solo lo que cambio por fuera: lo demas sigue como estaba (lo de todos, o lo pendiente de escribir) */
       if (hayVieja)
         if (const auto it = vieja.ajustes.find(k); it != vieja.ajustes.end() && it->second == v) continue;

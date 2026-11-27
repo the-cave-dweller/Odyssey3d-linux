@@ -907,8 +907,14 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
   struct Var {
     const char *clave, *nombre, *ayuda;
   };
-  const Var vars[] = {{"odysseyvk", "ODYSSEYVK", "La capa de OdysseyVK: en los juegos con DLSS, el 3D usa la profundidad del juego"},
-                      {"mangohud", "MANGOHUD", "El contador de MangoHud encima del juego"},
+  /* (v1.16) ODYSSEYVK=1 ya no se elige: va siempre, y lo dice una nota */
+  {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota;
+    n.rotulo = idioma::tr("ODYSSEYVK=1 va siempre: con ella el 3D toma la profundidad de los juegos con DLSS.");
+    pon(n, "");
+  }
+  const Var vars[] = {{"mangohud", "MANGOHUD", "El contador de MangoHud encima del juego"},
                       {"vkdaedalus", "ENABLE_VKDAEDALUS", "La capa de vkDaedalus"},
                       {"neural_forge", "NEURAL_FORGE_ENABLE", "La capa de Neural Forge; su ejecutable (NEURAL_FORGE_TARGET_EXE) se toma de Neural Forge"},
                       {"vkbasalt", "ENABLE_VKBASALT", "Los filtros de vkBasalt"}};
@@ -1528,12 +1534,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     /* (v1.14) la profundidad de DLSS se pide juego a juego, en Steam: el parametro va en medio del pie del panel,
        a la vista sin bajar por la lista (Rodolfo: «On the bottom of games tab let user know to add the steam
        parameter, offer a copy button for it» y «el parametro ahi, por el centro») */
-    st.pieParametro = kParametroSteam;
-    st.pieCopiar = idioma::tr("Copiar");
-    st.pieCopiadoTexto = idioma::tr("Copiado");
-    st.pieAyuda = std::string(idioma::tr("Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.")) +
-                  " " + idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.") + " " +
-                  idioma::tr("En la pestaña Integraciones se pone en todos los juegos de una vez.");
+    /* (v1.16) ya no: ODYSSEYVK=1 se escribe solo en la linea de Steam de cada juego (Rodolfo: «no need for copy button
+       anymore, just make sure the game automatically toggles the ODYSSEYVK parameter, make it not optional») */
   }
 }
 
