@@ -119,7 +119,7 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
 | `idioma` | `en` | interface language: `en` / `es` / `fr` / `de` / `zh` / `ja` / `ru` (Settings → App → Language; Other in 1.12, the Program tab up to 1.11) |
 | `modo` | `ask` | `ask` / `conv` / `sbs` / `tb` / `flat` |
 | `auto` | — | `app:modo`, one per line; the card's "remember" writes them |
-| `ignore` | system apps | app ids never offered 3D |
+| `ignore` | system apps | app ids never offered 3D (screen capture and recording apps, such as Spectacle, Flameshot or OBS, are always left out too, since 1.16) |
 | `pantalla` | auto | output name of the Odyssey (`DP-4`) |
 | `espera` | 40 | seconds the card stays |
 | `rastreo` | `no` | eye tracking with the IR camera (Settings → Head tracking) |
