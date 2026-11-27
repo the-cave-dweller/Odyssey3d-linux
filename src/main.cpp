@@ -3433,7 +3433,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
     /* el panel de ajustes: cuantas celdas de raton tiene cada cosa que se pica, y con que senas */
     struct Cuenta { int celdas = 0, subs = 0; float fmin = 9.0f, fmax = -9.0f; };
     std::vector<Cuenta> porFila(hud.state().items.size());
-    int cerrar = 0, pestanas[4] = {0, 0, 0, 0};
+    int cerrar = 0, pestanas[8] = {0, 0, 0, 0, 0, 0, 0, 0};   /* (v1.18) cinco con FG */
     for (int y = 0; y < H; y += 2)
       for (int x = 0; x < W; x += 2) {
         int item = -1, sub = 0;
@@ -3441,7 +3441,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
         const Hud::Hit g = hud.hitDetalle((float)x, (float)y, &item, &sub, &fr);
         if (g == Hud::HitNone || g == Hud::HitPanel) continue;   /* fuera del panel, o en un hueco */
         if (g == Hud::HitPanelCerrar) cerrar++;
-        else if (g == Hud::HitPanelPestana) pestanas[sub & 3]++;
+        else if (g == Hud::HitPanelPestana) pestanas[sub & 7]++;
         else if (g == Hud::HitPanelItem && item >= 0 && (size_t)item < porFila.size()) {
           Cuenta &c = porFila[(size_t)item];
           c.celdas++;
@@ -3451,8 +3451,9 @@ static int cmdHudSelfTest(int argc, char **argv) {
       }
     float bx = 0, by = 0, bw = 0, bh = 0;
     hud.panelBounds(&bx, &by, &bw, &bh);
-    std::printf("  panel de ajustes: %.0f x %.0f px en %.0f,%.0f (escala %.2f) · aspa %d celdas · pestanas %d / %d\n",
-                (double)bw, (double)bh, (double)bx, (double)by, (double)hud.scale(), cerrar, pestanas[0], pestanas[1]);
+    std::printf("  panel de ajustes: %.0f x %.0f px en %.0f,%.0f (escala %.2f) · aspa %d celdas · pestanas %d / %d / %d / %d / %d\n",
+                (double)bw, (double)bh, (double)bx, (double)by, (double)hud.scale(), cerrar, pestanas[0], pestanas[1],
+                pestanas[2], pestanas[3], pestanas[4]);
     static const char *kTipo[] = {"seccion", "interruptor", "opciones", "deslizador", "fila", "juego",
                                   "nota",    "boton",       "info",     "atajo",      "texto", "linea", "desplegable"};
     for (size_t i = 0; i < porFila.size(); i++) {

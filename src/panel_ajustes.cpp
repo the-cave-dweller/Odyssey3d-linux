@@ -596,7 +596,7 @@ int cmdAjustes(int argc, char **argv) {
         std::printf("[ajustes] la pestana %d esta en gris: no se abre\n", g.sub);   /* (v1.16) Integraciones dentro de un juego */
         std::fflush(stdout);
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
-        st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
+        st.pestana = (g.sub >= 0 && (size_t)g.sub < st.pestanas.size()) ? g.sub : 0;   /* (v1.18) antes <= 3: FG (la 4) abria la de 3D */
         if (st.pestana == 1) ponCaratulas();   /* (v1.16) la primera vez que se entra */
         if (st.pestana == 2) prefs::integracionesDe("");   /* (v1.15) la pildora: lo de todos los juegos */
         st.corrida = 0.0f;
