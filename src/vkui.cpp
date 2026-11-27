@@ -936,8 +936,10 @@ void Hud::begin(int w, int h, float altoLogico) {
      color del rayo). La tarjeta de la orilla sigue en morado: se vuelve a poner antes de pintarla. */
   /* (v1.16) la pastilla con la paleta soft de vkDaedalus, como el resto (Rodolfo: «adapta el estilo cuadrado al del
      resto de la aplicacion»): su morado con la red y su ambar en el modo rendimiento */
-  float accent[3] = {st_.rendimiento ? 0xDE / 255.0f : 0xA8 / 255.0f, st_.rendimiento ? 0xAA / 255.0f : 0x8F / 255.0f,
-                     st_.rendimiento ? 0x7C / 255.0f : 0xD0 / 255.0f};
+  /* el azul de la cápsula Neural para la red (Rodolfo: «el boton de encendido no tiene el azul de neural»: el encendido y
+     la capsula van del mismo) y el ambar de vkDaedalus en el modo rendimiento */
+  float accent[3] = {st_.rendimiento ? 0xDE / 255.0f : 0.40f, st_.rendimiento ? 0xAA / 255.0f : 0.72f,
+                     st_.rendimiento ? 0x7C / 255.0f : 1.0f};
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -1001,6 +1003,10 @@ void Hud::begin(int w, int h, float altoLogico) {
                                               : aire + anchoSw + 26.0f + anchoDes + 24.0f + anchoDes + aire;
     if (anchoBloque > 0.0f) pw += 26.0f + anchoBloque;
     if (st_.engranaje) pw += 14.0f + 30.0f;   /* el engranaje de los ajustes, al final */
+    /* (v1.16) los dos botones del tipo de video, junto al engranaje (Rodolfo: «pon los dos botones junto a la
+       herramienta»), en la pastilla con la red y en la de rendimiento; antes iban en el menu Relieve */
+    const bool modosEnPastilla = (hubNormal || st_.rendimiento) && !leg && st_.modoVisible;
+    if (modosEnPastilla) pw += 2.0f * 44.0f + 6.0f + 12.0f;
     /* las teclas, en un renglon. Si la pastilla sale angosta, la letra se achica en vez de salirse. */
     /* en el modo rendimiento las teclas de Profundidad y Salida no hacen nada: no salen */
     const std::string teclas =
@@ -1179,6 +1185,11 @@ void Hud::begin(int w, int h, float altoLogico) {
         }
       }
     };
+    if (modosEnPastilla) {
+      const float bw = 44.0f, bh = 28.0f, by = y0 + (ph - bh) * 0.5f;
+      const float derM = st_.engranaje ? btnEngranaje_.x - 12.0f : x0 + pw - aire;
+      dibujaModos({derM - 2.0f * bw - 6.0f, by, bw, bh}, {derM - bw, by, bw, bh});
+    }
     if (cabeBloque && hayModo) {
       const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
       const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
@@ -1349,7 +1360,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       /* sin conversor no sale la fila Auto | Manual: los deslizadores empiezan arriba */
       const float filaAM = conAuto ? 42.0f : 0.0f;
       float alto = 36.0f + filaAM + (manual ? 2.0f * filaAlto : 18.0f * (float)nota.size() + 30.0f);
-      if (st_.modoVisible) alto += 46.0f;
+      if (st_.modoVisible && !modosEnPastilla) alto += 46.0f;
       if (st_.recordarVisible) alto += 32.0f;
       alto += 8.0f;
       const float my0 = y0 + ph + 6.0f;
@@ -1401,7 +1412,7 @@ void Hud::begin(int w, int h, float altoLogico) {
              mx0 + pad, y, 12.5f, ink[0], ink[1], ink[2], 0.95f);
         y += 24.0f;
       }
-      if (st_.modoVisible) {
+      if (st_.modoVisible && !modosEnPastilla) {
         text(idioma::tr("Tipo de vídeo"), mx0 + pad, y + 13.0f, 12.0f, dim[0], dim[1], dim[2], dim[3]);
         const float bw2 = 64.0f, bh2 = 30.0f;
         dibujaModos({mx0 + mw - pad - 2.0f * bw2 - 8.0f, y + 6.0f, bw2, bh2}, {mx0 + mw - pad - bw2, y + 6.0f, bw2, bh2});

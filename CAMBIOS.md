@@ -15,10 +15,14 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   ratón por ella.
 - **Estilo**:
   - el color de la barra del panel, con la esquina de abajo a la izquierda redonda (8), y la letra Barlow;
-  - la paleta soft: el morado con la red (el encendido y la cápsula Neural, antes azul cielo) y el ámbar en el
-    modo rendimiento;
+  - la paleta soft: el ámbar de vkDaedalus en el modo rendimiento (con la red, ver abajo: el azul de Neural);
   - los botones con esquinas de 4 como los del resto (el encendido ya no es redondo) y la cápsula Auto/Manual en
     el gris de los controles. El cuadrito de FPS va del mismo alto y color, a su izquierda.
+- **Luego**: «pon los dos botones junto a la herramienta» y «el boton de encendido no tiene el azul de neural».
+  - Los dos botones del tipo de vídeo (normal y dividido) van en la pastilla, junto al engranaje, con la red y en
+    el modo rendimiento, y salen del menú Relieve. La pastilla se ensancha lo que miden.
+  - Con la red, el encendido y la cápsula Neural van del mismo azul de la cápsula (66B8FF). En el modo rendimiento,
+    del ámbar.
 - **Sus menús** (Relieve, el del rayo) vuelven a abrirse hacia abajo, pegados a su derecha, en la tarjeta de
   vkDaedalus (121117, esquinas de 8). La tarjeta de aviso vuelve a su esquina de abajo, sin nada encima. El rincón
   que trae la pastilla oculta vuelve a ser su punta derecha.
