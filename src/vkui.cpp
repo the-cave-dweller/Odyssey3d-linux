@@ -931,8 +931,8 @@ void Hud::begin(int w, int h, float altoLogico) {
   /* rama experimental: la pastilla va en azul claro (el del chip «AI») y en ambar la de rendimiento (el
      color del rayo). La tarjeta de la orilla sigue en morado: se vuelve a poner antes de pintarla. */
   float accent[3] = {st_.rendimiento ? 0.93f : 0.40f, st_.rendimiento ? 0.62f : 0.72f, st_.rendimiento ? 0.12f : 1.0f};
-  const float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
-  const float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
+  float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
+  float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
   /* ---- pastilla superior derecha (v0.78: una sola fila) ----
      Lo que se toca de verdad mientras se ve un video: el interruptor del 3D, los dos deslizadores y,
@@ -1403,6 +1403,32 @@ void Hud::begin(int w, int h, float altoLogico) {
   }
 
   accent[0] = 0.46f, accent[1] = 0.37f, accent[2] = 0.92f;   /* la tarjeta, en su morado */
+  /* (v1.16) las tarjetas, al estilo de vkDaedalus como el panel (Rodolfo: «Yes, the cards too»): su paleta soft, Barlow,
+     esquinas de 8 (la tarjeta) y de 4 (botones), el boton principal en su morado fuerte. Con el panel de antes
+     (ODYSSEYVK_PANEL_VIEJO=1) se quedan como eran */
+  const bool estiloD = st_.marco;
+  auto hexD = [](uint32_t c, int k) { return (float)((c >> (16 - 8 * k)) & 0xFFu) / 255.0f; };
+  if (estiloD)
+    for (int k = 0; k < 3; k++) accent[k] = hexD(0xA88FD0u, k), ink[k] = hexD(0xE9ECEFu, k), dim[k] = hexD(0xA3ACB6u, k);
+  auto Rd = [estiloD](float rr) { return estiloD ? std::min(rr, 4.0f) : rr; };
+  auto fondoTarjeta = [&](float ax, float ay, float aw, float ah) {
+    if (estiloD) {
+      mask9({ax, ay, aw, ah}, 1, 8.0f, hexD(0x343C46u, 0), hexD(0x343C46u, 1), hexD(0x343C46u, 2), 1.0f);
+      mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 7.0f, hexD(0x121117u, 0), hexD(0x121117u, 1), hexD(0x121117u, 2), 0.97f);
+    } else {
+      mask9({ax, ay, aw, ah}, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
+      mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
+    }
+  };
+  /* un boton: el principal en el morado fuerte (6E4E8C) con letra blanca, el otro en el gris de los controles */
+  auto botonD = [&](const Rect &b, bool principal, bool hov) {
+    if (principal) mask9(b, 0, 4.0f, hov ? 0x7E / 255.0f : 0x6E / 255.0f, hov ? 0x5E / 255.0f : 0x4E / 255.0f, hov ? 0x9C / 255.0f : 0x8C / 255.0f, 1.0f);
+    else mask9(b, 0, 4.0f, hexD(hov ? 0x2A2635u : 0x201D29u, 0), hexD(hov ? 0x2A2635u : 0x201D29u, 1), hexD(hov ? 0x2A2635u : 0x201D29u, 2), 1.0f);
+  };
+  fuente_ = estiloD && hayBarlow_ ? 1 : 0;
+  const int fuenteTitulo = estiloD && hayBarlow_ ? 2 : 0;
+  /* la letra chica: Barlow a 11,5 queda por debajo de la mas chica de vkDaedalus (12) y se lee floja */
+  const float chica = estiloD ? 12.5f : 11.5f;
   /* ---- la tarjeta de la orilla (abajo a la derecha) ----
      v0.78: se parece a la de la aplicacion oficial, que es la que Rodolfo paso en foto: tarjeta
      oscura de esquinas redondas, la pregunta arriba, dos teselas grandes con su dibujo (video normal
@@ -1419,22 +1445,23 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ax = (float)vw - 24.0f - aw,
                 ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
     askPanel_ = {ax, ay, aw, ah};
-    mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
-    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
+    fondoTarjeta(ax, ay, aw, ah);
     const float borde = 26.0f;
     askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
     const bool hc = askClose_.inside(mx_, my_);
-    if (hc) mask9(askClose_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    if (hc) mask9(askClose_, 0, Rd(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
     icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
     /* el circulo amarillo con la flecha, como el boton del panel, y el titulo a su lado */
     mask9({ax + borde, ay + 20.0f, 28.0f, 28.0f}, 0, 14.0f, 0.98f, 0.76f, 0.18f, 1.0f);
     icono({ax + borde + 6.0f, ay + 26.0f, 16.0f, 16.0f}, icoFlecha_, 0.16f, 0.12f, 0.04f, 1.0f);
+    fuente_ = fuenteTitulo;
     textoCabe(idioma::tr("Hay una versión nueva de OdysseyVK"), ax + borde + 38.0f, ay + 24.0f, 17.0f, aw - borde - 38.0f - 60.0f, ink[0],
               ink[1], ink[2], 1.0f);
+    fuente_ = estiloD && hayBarlow_ ? 1 : 0;
     textoCabe(idioma::trf("OdysseyVK {} en GitHub · tienes la {}", {st_.askActualizacion, st_.version.substr(st_.version.rfind(' ') + 1)}),
               ax + borde, ay + 60.0f, 13.0f, aw - 2.0f * borde, ink[0], ink[1], ink[2], 0.92f);
     textoCabe(idioma::tr("Se instala sola (pide tu clave) y el vídeo o juego que haya en 3D se reabre."),
-              ax + borde, ay + 80.0f, 11.5f, aw - 2.0f * borde, dim[0], dim[1], dim[2], 0.85f);
+              ax + borde, ay + 80.0f, chica, aw - 2.0f * borde, dim[0], dim[1], dim[2], 0.85f);
     /* Actualizar y Luego, dos pildoras; y abajo, chico, «No avisar de actualizaciones» */
     const float by = ay + 108.0f;
     /* el ancho sigue a la palabra: «Mettre à jour» o «Aktualisieren» no caben donde «Actualizar» */
@@ -1443,15 +1470,17 @@ void Hud::begin(int w, int h, float altoLogico) {
     askActualizar_ = {ax + borde, by, wA, 34.0f};
     askLuego_ = {ax + borde + wA + 12.0f, by, wL, 34.0f};
     const bool hA = askActualizar_.inside(mx_, my_), hL = askLuego_.inside(mx_, my_);
-    mask9(askActualizar_, 0, 17.0f, accent[0], accent[1], accent[2], hA ? 1.0f : 0.92f);
+    if (estiloD) botonD(askActualizar_, true, hA);
+    else mask9(askActualizar_, 0, 17.0f, accent[0], accent[1], accent[2], hA ? 1.0f : 0.92f);
     text(idioma::tr("Actualizar"), askActualizar_.x + askActualizar_.w * 0.5f, by + 8.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
-    mask9(askLuego_, 0, 17.0f, 1.0f, 1.0f, 1.0f, hL ? 0.18f : 0.10f);
+    if (estiloD) botonD(askLuego_, false, hL);
+    else mask9(askLuego_, 0, 17.0f, 1.0f, 1.0f, 1.0f, hL ? 0.18f : 0.10f);
     text(idioma::tr("Luego"), askLuego_.x + askLuego_.w * 0.5f, by + 8.0f, 14.0f, ink[0], ink[1], ink[2], hL ? 1.0f : 0.85f, true);
     const char *noAvisar = idioma::tr("No avisar de actualizaciones");
-    askNoAvisar_ = {ax + borde - 4.0f, ay + ah - 36.0f, textWidth(noAvisar, 11.5f) + 8.0f, 22.0f};
+    askNoAvisar_ = {ax + borde - 4.0f, ay + ah - 36.0f, textWidth(noAvisar, chica) + 8.0f, 22.0f};
     const bool hN = askNoAvisar_.inside(mx_, my_);
-    if (hN) mask9(askNoAvisar_, 0, 11.0f, 1.0f, 1.0f, 1.0f, 0.10f);
-    text(noAvisar, ax + borde, ay + ah - 31.0f, 11.5f, dim[0], dim[1], dim[2], hN ? 1.0f : 0.70f);
+    if (hN) mask9(askNoAvisar_, 0, Rd(11.0f), 1.0f, 1.0f, 1.0f, 0.10f);
+    text(noAvisar, ax + borde, ay + ah - 31.0f, chica, dim[0], dim[1], dim[2], hN ? 1.0f : 0.70f);
   } else if (st_.ask && !st_.askAviso.empty()) {
     /* un aviso (v1.00): titulo con el anillo de informacion, renglones y «Entendido» */
     askConv_ = askSbs_ = askDont_ = askAyuda_ = askActualizar_ = askNoAvisar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
@@ -1461,16 +1490,18 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ax = (float)vw - 24.0f - aw,
                 ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
     askPanel_ = {ax, ay, aw, ah};
-    mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
-    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
+    fondoTarjeta(ax, ay, aw, ah);
     const float borde = 26.0f;
     askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
     const bool hc = askClose_.inside(mx_, my_);
-    if (hc) mask9(askClose_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    if (hc) mask9(askClose_, 0, Rd(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
     icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
-    icono({ax + borde, ay + 22.0f, 24.0f, 24.0f}, icoAnillo_, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
-    text("i", ax + borde + 12.0f, ay + 26.0f, 14.0f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f, true);
+    const float ai[3] = {estiloD ? accent[0] : accent[0] + 0.22f, estiloD ? accent[1] : accent[1] + 0.25f, estiloD ? accent[2] : 1.0f};
+    icono({ax + borde, ay + 22.0f, 24.0f, 24.0f}, icoAnillo_, ai[0], ai[1], ai[2], 0.95f);
+    text("i", ax + borde + 12.0f, ay + 26.0f, 14.0f, ai[0], ai[1], ai[2], 0.95f, true);
+    fuente_ = fuenteTitulo;
     textoCabe(st_.askAviso, ax + borde + 34.0f, ay + 24.0f, 16.0f, aw - borde - 34.0f - 60.0f, ink[0], ink[1], ink[2], 1.0f);
+    fuente_ = estiloD && hayBarlow_ ? 1 : 0;
     float ly = ay + 58.0f;
     for (const std::string &l : st_.askAvisoLineas) {
       textoCabe(l, ax + borde, ly, 12.5f, aw - 2.0f * borde, ink[0], ink[1], ink[2], 0.90f);
@@ -1482,7 +1513,8 @@ void Hud::begin(int w, int h, float altoLogico) {
                                       : std::string(idioma::tr("Entendido"));
     askLuego_ = {ax + borde, ay + ah - 48.0f, std::max(120.0f, textWidth(entendido, 14.0f) + 40.0f), 32.0f};
     const bool hL = askLuego_.inside(mx_, my_);
-    mask9(askLuego_, 0, 16.0f, accent[0], accent[1], accent[2], hL ? 1.0f : 0.92f);
+    if (estiloD) botonD(askLuego_, true, hL);
+    else mask9(askLuego_, 0, 16.0f, accent[0], accent[1], accent[2], hL ? 1.0f : 0.92f);
     text(entendido, askLuego_.x + askLuego_.w * 0.5f, askLuego_.y + 7.5f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, true);
   } else if (st_.ask) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
@@ -1490,8 +1522,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ax = (float)vw - 24.0f - aw,
                 ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
     askPanel_ = {ax, ay, aw, ah};
-    mask9(askPanel_, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);   /* el filo claro */
-    mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
+    fondoTarjeta(ax, ay, aw, ah);   /* el filo claro */
     auto encaja = [&](const std::string &s, float tam, float maxAncho) {
       if (textWidth(s, tam) <= maxAncho) return s;
       std::string out, col;
@@ -1515,10 +1546,10 @@ void Hud::begin(int w, int h, float altoLogico) {
     askClose_ = {ax + aw - 18.0f - 30.0f, ay + 16.0f, 30.0f, 30.0f};
     askAyuda_ = {askClose_.x - 34.0f, ay + 16.0f, 30.0f, 30.0f};
     const bool hc = askClose_.inside(mx_, my_), ha = askAyuda_.inside(mx_, my_);
-    if (hc) mask9(askClose_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    if (hc) mask9(askClose_, 0, Rd(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
     icono({askClose_.x + 5.0f, askClose_.y + 5.0f, 20.0f, 20.0f}, icoCerrar_, ink[0], ink[1], ink[2],
           hc ? 1.0f : 0.80f);
-    if (ha) mask9(askAyuda_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    if (ha) mask9(askAyuda_, 0, Rd(15.0f), 1.0f, 1.0f, 1.0f, 0.14f);
     icono({askAyuda_.x + 4.0f, askAyuda_.y + 4.0f, 22.0f, 22.0f}, icoAnillo_, ink[0], ink[1], ink[2],
           ha ? 1.0f : 0.80f);
     text("?", askAyuda_.x + 15.0f, askAyuda_.y + 7.0f, 14.0f, ink[0], ink[1], ink[2], ha ? 1.0f : 0.80f, true);
@@ -1526,8 +1557,10 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* la pregunta. El titulo lo puede poner quien llama; de fabrica es la de la aplicacion oficial.
        Debajo, en letra chica, la ventana por la que se pregunta (la pone el servicio). */
     const float anchoTitulo = askAyuda_.x - 10.0f - (ax + borde);
+    fuente_ = fuenteTitulo;
     text(encaja(askTitulo_.empty() ? std::string(idioma::tr("¿Qué tipo de vídeo estás viendo?")) : askTitulo_, 18.0f, anchoTitulo),
          ax + borde, ay + 22.0f, 18.0f, ink[0], ink[1], ink[2], 1.0f);
+    fuente_ = estiloD && hayBarlow_ ? 1 : 0;
     if (ha) {
       text(idioma::tr("Vídeo normal: una sola imagen; se convierte a 3D."), ax + borde, ay + 50.0f, 12.5f, ink[0], ink[1],
            ink[2], 0.95f);
@@ -1537,7 +1570,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       text(idioma::tr("Elige la opción correcta para la conversión 3D."), ax + borde, ay + 49.0f, 13.5f, ink[0], ink[1],
            ink[2], 0.92f);
       if (!askCuerpo_.empty())
-        text(encaja(askCuerpo_, 11.5f, aw - 2.0f * borde), ax + borde, ay + 71.0f, 11.5f, dim[0], dim[1], dim[2],
+        text(encaja(askCuerpo_, chica, aw - 2.0f * borde), ax + borde, ay + 71.0f, chica, dim[0], dim[1], dim[2],
              0.80f);
     }
 
@@ -1551,9 +1584,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     for (int i = 0; i < 2; i++) {
       const Rect &t = tiles[i];
       const bool hov = t.inside(mx_, my_);
-      const float fondo[3] = {hov ? 0.27f : 0.195f, hov ? 0.28f : 0.20f, hov ? 0.315f : 0.225f};
-      if (hov) mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 13.5f, ink[0], ink[1], ink[2], 0.75f);
-      mask9(t, 1, 12.0f, fondo[0], fondo[1], fondo[2], 1.0f);
+      float fondo[3] = {hov ? 0.27f : 0.195f, hov ? 0.28f : 0.20f, hov ? 0.315f : 0.225f};
+      if (estiloD)   /* como las teselas del panel: 1E1B26, y al pasar el raton el filo del acento */
+        for (int k = 0; k < 3; k++) fondo[k] = hexD(hov ? 0x241F30u : 0x1E1B26u, k);
+      if (hov) {
+        if (estiloD) mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 7.5f, accent[0], accent[1], accent[2], 1.0f);
+        else mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 13.5f, ink[0], ink[1], ink[2], 0.75f);
+      }
+      mask9(t, 1, estiloD ? 6.0f : 12.0f, fondo[0], fondo[1], fondo[2], 1.0f);
       const float iw = std::min(128.0f, t.w - 36.0f), ih = 72.0f;
       const float ix = t.x + (t.w - iw) * 0.5f, iy = t.y + 20.0f;
       if (i == 0) {
@@ -1563,9 +1601,11 @@ void Hud::begin(int w, int h, float altoLogico) {
         paisaje({ix, iy, mitad, ih}, 0.5f, 1.0f, 7.0f, fondo);
         paisaje({ix + mitad + 5.0f, iy, mitad, ih}, 0.5f, 1.0f, 7.0f, fondo);
       }
-      const float fs = tw < 150.0f ? 12.5f : 15.0f, fss = tw < 150.0f ? 10.0f : 11.5f;
+      const float fs = tw < 150.0f ? 12.5f : 15.0f, fss = tw < 150.0f ? chica - 1.5f : chica;
+      fuente_ = fuenteTitulo;
       text(encaja(names[i], fs, t.w - 16.0f), t.x + t.w * 0.5f, t.y + 104.0f, fs, ink[0], ink[1], ink[2], 1.0f,
            true);
+      fuente_ = estiloD && hayBarlow_ ? 1 : 0;
       text(encaja(subs[i], fss, t.w - 16.0f), t.x + t.w * 0.5f, t.y + 127.0f, fss, dim[0], dim[1], dim[2], dim[3],
            true);
     }
@@ -1577,14 +1617,25 @@ void Hud::begin(int w, int h, float altoLogico) {
                 32.0f};
     const bool hd = askDont_.inside(mx_, my_);
     const float c = hd ? 1.0f : 0.86f;
-    mask9(caja, 1, 5.0f, c, c, c + 0.02f, 1.0f);
-    if (st_.remember)
-      icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
-    else
-      mask9({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, 1, 3.5f, 0.03f, 0.03f, 0.035f, 1.0f);
+    if (estiloD) {   /* la casilla de vkDaedalus: el acento con la palomita, o vacia con su filo */
+      if (st_.remember) {
+        mask9(caja, 1, 4.0f, accent[0], accent[1], accent[2], 1.0f);
+        icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, 1.0f);
+      } else {
+        mask9(caja, 1, 4.0f, hexD(hd ? 0x5A6270u : 0x3A424Cu, 0), hexD(hd ? 0x5A6270u : 0x3A424Cu, 1), hexD(hd ? 0x5A6270u : 0x3A424Cu, 2), 1.0f);
+        mask9({caja.x + 1.5f, caja.y + 1.5f, caja.w - 3.0f, caja.h - 3.0f}, 1, 3.0f, hexD(0x0C0F13u, 0), hexD(0x0C0F13u, 1), hexD(0x0C0F13u, 2), 1.0f);
+      }
+    } else {
+      mask9(caja, 1, 5.0f, c, c, c + 0.02f, 1.0f);
+      if (st_.remember)
+        icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.08f, 0.10f, 1.0f);
+      else
+        mask9({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, 1, 3.5f, 0.03f, 0.03f, 0.035f, 1.0f);
+    }
     text(encaja(rotulo, 13.0f, aw - 2.0f * borde - 30.0f), caja.x + 30.0f, caja.y + 2.0f, 13.0f, ink[0], ink[1],
          ink[2], hd ? 1.0f : 0.90f);
   }
+  fuente_ = 0;   /* (v1.16) la letra de siempre para lo que sigue (el aviso bajo la pastilla) */
 
   if (st_.panel) dibujaPanel(vw, vh);
 

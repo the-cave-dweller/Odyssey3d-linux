@@ -30,6 +30,16 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - las secciones van en frase («Tarjetas gráficas», no «TARJETAS GRÁFICAS»), dejando las siglas;
   - los interruptores son casillas a la izquierda del rótulo, los botones van en el morado fuerte (6E4E8C) con
     letra blanca, y las esquinas son de 4. La opción puesta va en un fondo más claro, no en el acento.
+- **Las tarjetas también** (Rodolfo: «Yes, the cards too»): la de la pregunta del tipo de vídeo, la de la
+  actualización y los avisos.
+  - Van en la tarjeta 121117 con un filo fino (343C46), con esquinas de 8, la letra Barlow y los títulos en
+    seminegrita.
+  - El botón principal (Actualizar, Entendido) va en el morado fuerte de vkDaedalus, y el otro (Luego) en el gris
+    de sus controles, con esquinas de 4. Las teselas del tipo de vídeo van como las del panel, con el filo del
+    acento al pasar el ratón, y la casilla de «no volver a preguntar» es la de vkDaedalus.
+  - La letra chica sube de 11,5 a 12,5: Barlow a 11,5 queda por debajo de la más chica de vkDaedalus (12).
+  - Con `ODYSSEYVK_PANEL_VIEJO=1` vuelven a ser las de antes.
+  - Probado: pintadas con `ctl hud`, las de antes al lado.
 - **Aparece desde la pastilla**: en 0,22 s la interfaz sube desde abajo, donde está la pastilla, y se hace opaca.
   Las carátulas también. El velo solo se oscurece.
 - Sin arrastrar ni cambiar el tamaño (no hay ventana que mover) y sin el pin. Se cierra con el aspa o con Esc,
