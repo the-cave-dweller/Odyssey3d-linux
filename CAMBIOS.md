@@ -15,6 +15,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     por abreviatura, stretch o fit, `-f`, el cursor y el reescalado FSR o NIS, que lo enciende). La línea entera se
     escribe en Steam con copia del fichero: con Steam cerrado al momento; abierto, en cuanto se cierra. Lo que los
     juegos ya tenían, y lo que se cambie luego por fuera, se lee y queda como propio de cada juego.
+  - **Lo que no está instalado, en gris** con la pastilla «No instalada», y `ENABLE_VKDAEDALUS` y `vkdaedalus-run`,
+    uno u otro. La pestaña solo se rehace si algo cambió.
   - **Campos de texto en el panel**: con acentos y AltGr, Ctrl+V, y la tecla pulsada que se repite.
   - **El tope de FPS de la capa** (Ajustes → Fluidez): cuántas veces por segundo copia la capa de DLSS la
     profundidad y el HUD dentro del juego, como media exacta (con 50 de tope salen 50, no 30).
@@ -26,6 +28,40 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - README y README.es: la sección Integraciones, con su captura, y el tope en la de DLSS; las capturas se rehicieron
   (`tools/capturas-readme.py`: la pestaña nueva sale en la fila de pestañas). La guía ya llevaba la sección
   Integraciones y la orden `odysseyvk integraciones`.
+
+## Integraciones: lo no instalado en gris, vkDaedalus uno u otro y menos trabajo mirando Steam (v1.15)
+
+- Rodolfo: «Que enable_vkdaedalus no permita habilitar vkdaedalus-run y viceversa, es uno y otro, también procura
+  que estén en gris todos los que no estén instalados en el equipo, y que la pill diga Proyecto no instalado»; y de
+  la pastilla, «Esta herramienta no está instalada, o lo que supongas mejor». Y: «¿no es mucho recurso ver tan
+  activamente cuáles están en Steam?, optimiza esa parte lo que se pueda».
+- **Lo no instalado** (`integ::instalado`): una capa lo está si algún manifiesto de capa implícita de Vulkan se
+  enciende con su variable (`enable_environment`), buscado donde lo busca el cargador (`~/.config`, `XDG_CONFIG_DIRS`,
+  `/etc/vulkan`, `~/.local/share`, `XDG_DATA_DIRS`); `vkdaedalus-run` y gamescope (y con él el reescalado), si su
+  comando está en el `PATH` (más `~/.local/bin`, `/usr/local/bin` y `/usr/bin`, por si el servicio arranca con un
+  PATH corto). Así no hay una lista de rutas por proyecto: vale lo instale quien lo instale. Su fila sale en gris con
+  la pastilla «No instalada» (corta, para que quepa al lado del interruptor) y la ayuda «Esta herramienta no está
+  instalada en el equipo»; no se enciende, pero si venía puesta en la línea del juego se puede apagar. Se vuelve a
+  mirar solo si cambia alguna de esas carpetas. En el equipo de Rodolfo: vkDaedalus, vkBasalt y `vkdaedalus-run`, no
+  instalados; ODYSSEYVK, MangoHud, Neural Forge y gamescope, sí.
+- **Uno u otro** (`integ::excluyente`): con `ENABLE_VKDAEDALUS` puesto, `vkdaedalus-run` sale en gris con «Es una u
+  otra: está puesto ENABLE_VKDAEDALUS» (y al revés). `fijar` apaga el otro al poner uno, por si llega de otra parte.
+  Si la línea de un juego traía las dos, ninguna sale en gris, para poder quitar una.
+- **Menos trabajo**: con la pestaña a la vista, el panel la rehacía entera cada 2 s (leer y analizar los ~100 KB de
+  `localconfig.vdf`, recorrer los ~600 procesos de `/proc` buscando Steam y repintar el panel). Ahora cada 2 s mira
+  `integ::firma()` (las fechas de `localconfig.vdf`, `integraciones.conf`, la marca y las carpetas de lo instalado,
+  y si Steam está abierto) y solo la rehace si cambió. Steam abierto se mira como lo mira el propio `steam.sh`: el
+  proceso de `~/.steam/steam.pid` vivo y llamado `steam` (recordando el último visto); solo sin ese fichero (Steam de
+  Flatpak, donde el número es el de su caja) se recorre `/proc`. Antes de escribir en Steam se sigue recorriendo
+  `/proc` entero, por si el `steam.pid` mintiera. `rutaLocalconfig` ya no relee `loginusers.vdf` si no cambió. El
+  vigilante del servicio sin nada pendiente ya solo miraba si existe la marca (un `stat`); con algo pendiente usa
+  ahora la mirada barata.
+- **Medido** (`-O2`, este equipo): la mirada de cada 2 s pasa de ~0,6 ms más el repintado a 0,01 ms (Steam abierto,
+  por `steam.pid`: 0,002 ms; antes recorrer `/proc`: 0,33 ms; leer `localconfig.vdf`: 0,24 ms).
+- **Probado**: la detección en un HOME aparte con un manifiesto de vkDaedalus y un `vkdaedalus-run` falsos; Steam
+  abierto y cerrado con un proceso de prueba llamado `steam` y su `steam.pid`; y en el panel, en un KWin aparte, que
+  picar vkBasalt (no instalado) y `vkdaedalus-run` (con `ENABLE_VKDAEDALUS` puesto) no cambia nada, y que al quitar
+  uno se puede poner el otro. Las capturas del README no se rehicieron.
 
 ## La pestaña Integraciones: las opciones de lanzamiento de Steam por piezas, para todos y para cada juego (v1.15)
 

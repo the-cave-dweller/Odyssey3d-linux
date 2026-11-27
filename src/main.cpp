@@ -3489,11 +3489,18 @@ static int cmdAjustes(int argc, char **argv) {
       rellenar();
       repintar = true;
     }
-    /* (v1.15) Integraciones, cada dos segundos: si Steam se abrio o se cerro, lo que falta escribir, el «Copiado» */
+    /* (v1.15) Integraciones, cada dos segundos: si Steam se abrio o se cerro, lo que falta escribir, el «Copiado».
+       Solo se rehace si cambio algo (integ::firma: unas fechas de ficheros y el steam.pid); rehacerla entera es leer
+       y analizar el localconfig.vdf de Steam */
     if (st.pestana == 2 && reloj() - miradaRend >= 2.0) {
+      static std::string firmaInteg;
       miradaRend = reloj();
-      rellenar();
-      repintar = true;
+      std::string f = prefs::firmaIntegraciones();
+      if (f != firmaInteg) {
+        firmaInteg = std::move(f);
+        rellenar();
+        repintar = true;
+      }
     }
     /* la comprobacion de la version (v0.95): al acabar se repinta con lo que haya dicho GitHub */
     if (prefs::comprobacionEnMarcha() && prefs::vigilarComprobacion()) {

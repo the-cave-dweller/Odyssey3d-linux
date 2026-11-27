@@ -850,6 +850,16 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
     Hud::ItemPanel it;
     it.tipo = Hud::ItemPanel::Interruptor, it.rotulo = rotulo, it.valor = val(clave) == "1", it.ayuda = ayuda;
     it.propio = propio(clave);
+    /* (v1.15) lo que no esta en el equipo, en gris (Rodolfo: «que la pill diga Proyecto no instalado», «o lo que
+       supongas mejor»); y lo que es uno u otro, en gris mientras el otro este puesto */
+    const char *otra = integ::excluyente(clave);
+    if (!integ::instalado(clave)) {
+      it.apagado = true, it.pastilla = idioma::tr("No instalada");
+      it.ayuda = std::string(idioma::tr("Esta herramienta no está instalada en el equipo")) + (ayuda.empty() ? "" : " · " + ayuda);
+    } else if (otra[0] && !it.valor && val(otra) == "1") {
+      it.apagado = true;
+      it.nota = idioma::trf("Es una u otra: está puesto {}", {std::strcmp(otra, "vkdaedalus") == 0 ? "ENABLE_VKDAEDALUS" : "vkdaedalus-run"});
+    }
     pon(it, std::string("integ:") + clave);
     return st.items.size() - 1;
   };
@@ -1109,6 +1119,9 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
   std::string nuevo;
   if (integ::esInterruptor(que)) {
     nuevo = ahora == "1" ? "0" : "1";
+    /* (v1.15) lo de gris no se enciende: lo que no esta instalado, o con su otra puesta */
+    const char *otra = integ::excluyente(que);
+    if (nuevo == "1" && (!integ::instalado(que) || (otra[0] && ef.count(otra) && ef.at(otra) == "1"))) return false;
   } else if (que == "filtro") {
     nuevo = sub == 1 ? "nis" : "fsr";
   } else if (que == "render" || que == "salida") {
@@ -1210,6 +1223,8 @@ int tomarPestana() {
 }
 
 void integracionesDe(const std::string &appid) { g_integJuego = appid; }
+
+std::string firmaIntegraciones() { return integ::firma() + (ahoraSeg() < g_copiadoHasta ? "|copiado" : ""); }
 
 void probarEdicion(const std::string &clave, const std::string &texto) {
   g_edit = Edicion{};

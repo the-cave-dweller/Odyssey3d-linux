@@ -84,6 +84,10 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
 - The tab's settings apply to **every installed game**; the gear on a cover (Games tab, on hover) opens that game's
   own settings, marked with a dot, and "Reset" returns it to the all-games ones.
 - With Neural Forge on, `NEURAL_FORGE_TARGET_EXE` is taken from `neural-forge-cli games` (or kept from the game's line).
+- What isn't installed shows greyed out with a "Not installed" pill and can't be turned on: a layer counts as
+  installed when some Vulkan implicit-layer manifest is enabled by its variable (`enable_environment`), and
+  `vkdaedalus-run` and gamescope when their command is in the `PATH`. `ENABLE_VKDAEDALUS` and `vkdaedalus-run` are
+  one or the other: while one is on, the other is greyed out.
 - OdysseyVK writes the **whole line** into Steam's `userdata/<account>/config/localconfig.vdf`. Steam only reads
   it at startup and rewrites it on exit, so with Steam open the change is kept pending and the service writes it as
   soon as Steam closes. Every write first saves a copy in `~/.local/state/odysseyvk/steam/` (the very first one,

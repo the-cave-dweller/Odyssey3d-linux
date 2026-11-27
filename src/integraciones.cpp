@@ -428,6 +428,8 @@ void fijar(Estado &e, const std::string &appid, const std::string &clave, const 
     else j.propios[k] = v;
   };
   pon(clave, valor);
+  if (valor == "1")
+    if (const char *otra = excluyente(clave); otra[0]) pon(otra, "0");   /* uno u otro */
   if (clave == "reescalado" && valor == "1") pon("gamescope", "1");
   if (clave == "gamescope" && valor == "0") pon("reescalado", "0");
 }
@@ -618,10 +620,30 @@ std::string raizSteam() {
   return {};
 }
 
+namespace {
+std::string buscarLocalconfig(const std::string &raiz);
+/* la fecha y el tamano de un fichero, para ver si cambio ("" si no esta) */
+std::string sello(const std::string &ruta) {
+  struct stat sb {};
+  if (ruta.empty() || ::stat(ruta.c_str(), &sb) != 0) return "-";
+  return std::to_string((long long)sb.st_mtim.tv_sec) + "." + std::to_string((long)sb.st_mtim.tv_nsec) + ":" +
+         std::to_string((long long)sb.st_size);
+}
+}  // namespace
+
 std::string rutaLocalconfig() {
   if (const char *r = std::getenv("ODYSSEYVK_STEAM_LOCALCONFIG")) return r;   /* para las pruebas */
   const std::string raiz = raizSteam();
   if (raiz.empty()) return {};
+  /* la de la ultima vez mientras loginusers.vdf siga igual (se mira cada dos segundos con el panel abierto) */
+  static std::string clave, ruta;
+  const std::string c = raiz + "|" + sello(raiz + "/config/loginusers.vdf");
+  if (c != clave || !fileExists(ruta)) clave = c, ruta = buscarLocalconfig(raiz);
+  return ruta;
+}
+
+namespace {
+std::string buscarLocalconfig(const std::string &raiz) {
   /* la cuenta de la ultima vez: MostRecent = 1, o la del inicio automatico, o la de la marca mas nueva */
   std::string txt;
   NodoVdf n;
@@ -662,27 +684,62 @@ std::string rutaLocalconfig() {
   return mejor;
 }
 
-bool steamAbierto() {
-  if (const char *f = std::getenv("ODYSSEYVK_STEAM_ABIERTO")) return f[0] == '1';   /* para las pruebas */
+/* el proceso `pid` es Steam de este usuario */
+bool esSteam(long pid) {
+  if (pid <= 0) return false;
+  const std::string base = "/proc/" + std::to_string(pid);
+  struct stat sb {};
+  if (::stat(base.c_str(), &sb) != 0 || sb.st_uid != ::getuid()) return false;
+  std::string comm;
+  if (!readSmallFile(base + "/comm", comm)) return false;
+  comm = strTrim(comm);
+  return comm == "steam" || comm == "steamwebhelper";
+}
+
+/* un Steam de este usuario en todo /proc (unos 600 procesos): para cuando no hay steam.pid y antes de escribir */
+bool recorrerProc(long *pid) {
   DIR *d = ::opendir("/proc");
   if (!d) return false;
-  const uid_t yo = ::getuid();
   bool hay = false;
   while (dirent *e = ::readdir(d)) {
     if (!std::isdigit((unsigned char)e->d_name[0])) continue;
-    const std::string base = std::string("/proc/") + e->d_name;
-    struct stat sb {};
-    if (::stat(base.c_str(), &sb) != 0 || sb.st_uid != yo) continue;
-    std::string comm;
-    if (!readSmallFile(base + "/comm", comm)) continue;
-    comm = strTrim(comm);
-    if (comm == "steam" || comm == "steamwebhelper") {
+    const long p = std::atol(e->d_name);
+    if (esSteam(p)) {
+      if (pid) *pid = p;
       hay = true;
       break;
     }
   }
   ::closedir(d);
   return hay;
+}
+
+/* antes de escribir, la mirada entera: el steam.pid podria mentir */
+bool steamAbiertoSeguro() {
+  if (std::getenv("ODYSSEYVK_STEAM_ABIERTO")) return steamAbierto();
+  return steamAbierto() || recorrerProc(nullptr);
+}
+}  // namespace
+
+bool steamAbierto() {
+  if (const char *f = std::getenv("ODYSSEYVK_STEAM_ABIERTO")) return f[0] == '1';   /* para las pruebas */
+  /* el ultimo que se vio, si sigue ahi: una mirada */
+  static long visto = 0;
+  if (esSteam(visto)) return true;
+  visto = 0;
+  /* el de ~/.steam/steam.pid, que Steam escribe al arrancar: si ese ya no esta, Steam esta cerrado (es lo que mira
+     steam.sh). En Flatpak el numero es el de su caja, asi que alli no vale y se recorre /proc */
+  const std::string raiz = raizSteam();
+  const char *home = std::getenv("HOME");
+  if (home && raiz.find("/.var/app/") == std::string::npos) {
+    std::string t;
+    if (readSmallFile(std::string(home) + "/.steam/steam.pid", t)) {
+      const long pid = std::atol(strTrim(t).c_str());
+      if (esSteam(pid)) visto = pid;
+      return visto != 0;
+    }
+  }
+  return recorrerProc(&visto);
 }
 
 bool leerSteam(std::map<std::string, std::string> &opciones, std::string *err) {
@@ -709,7 +766,7 @@ bool leerSteam(std::map<std::string, std::string> &opciones, std::string *err) {
 
 bool escribirSteam(const std::map<std::string, std::string> &lineas, std::string *respaldo, std::string *err) {
   if (lineas.empty()) return true;
-  if (steamAbierto()) {
+  if (steamAbiertoSeguro()) {
     if (err) *err = "Steam está abierto";
     return false;
   }
@@ -803,7 +860,7 @@ bool escribirSteam(const std::map<std::string, std::string> &lineas, std::string
     if (err) *err = "localconfig.vdf cambió mientras tanto: no se tocó";
     return false;
   }
-  if (steamAbierto()) {
+  if (steamAbiertoSeguro()) {
     if (err) *err = "Steam está abierto";
     return false;
   }
@@ -939,7 +996,7 @@ Resultado aplicar(const std::vector<std::string> &appids, bool escribir) {
   const std::map<std::string, std::string> pend = porEscribir(e, appids, steam);
   for (const auto &par : pend) r.cuales.push_back(par.first);
   r.pendientes = (int)pend.size();
-  r.steamAbierto = steamAbierto();
+  r.steamAbierto = escribir ? steamAbiertoSeguro() : steamAbierto();
   if (pend.empty()) {
     quitarMarca();
     return r;
@@ -995,5 +1052,123 @@ void ponerMarca() {
   }
 }
 void quitarMarca() { ::unlink(rutaMarca().c_str()); }
+
+/* ---- lo instalado ---- */
+namespace {
+/* donde busca el cargador de Vulkan las capas implicitas (las que se encienden con una variable), y las carpetas
+   del PATH: si alguna cambia, se vuelve a mirar */
+std::vector<std::string> carpetasCapas() {
+  std::vector<std::string> v;
+  auto lista = [&](const char *var, const char *defecto, const char *sufijo) {
+    const char *e = std::getenv(var);
+    std::string t = e && *e ? e : defecto;
+    size_t i = 0;
+    while (i <= t.size()) {
+      const size_t j = std::min(t.find(':', i), t.size());
+      if (j > i) v.push_back(t.substr(i, j - i) + sufijo);
+      i = j + 1;
+    }
+  };
+  const char *home = std::getenv("HOME");
+  const std::string h = home ? home : "";
+  const char *xc = std::getenv("XDG_CONFIG_HOME");
+  v.push_back((xc && *xc ? std::string(xc) : h + "/.config") + "/vulkan/implicit_layer.d");
+  lista("XDG_CONFIG_DIRS", "/etc/xdg", "/vulkan/implicit_layer.d");
+  v.push_back("/etc/vulkan/implicit_layer.d");
+  const char *xd = std::getenv("XDG_DATA_HOME");
+  v.push_back((xd && *xd ? std::string(xd) : h + "/.local/share") + "/vulkan/implicit_layer.d");
+  lista("XDG_DATA_DIRS", "/usr/local/share:/usr/share", "/vulkan/implicit_layer.d");
+  for (const char *d : {"/usr/local/share/vulkan/implicit_layer.d", "/usr/share/vulkan/implicit_layer.d"})
+    if (std::find(v.begin(), v.end(), d) == v.end()) v.push_back(d);
+  return v;
+}
+std::vector<std::string> carpetasPath() {
+  std::vector<std::string> v;
+  const char *p = std::getenv("PATH");
+  const std::string t = p ? p : "";
+  size_t i = 0;
+  while (i <= t.size()) {
+    const size_t j = std::min(t.find(':', i), t.size());
+    if (j > i) v.push_back(t.substr(i, j - i));
+    i = j + 1;
+  }
+  /* el servicio puede arrancar con un PATH corto */
+  const char *home = std::getenv("HOME");
+  for (const std::string d : {std::string(home ? home : "") + "/.local/bin", std::string("/usr/local/bin"), std::string("/usr/bin")})
+    if (std::find(v.begin(), v.end(), d) == v.end()) v.push_back(d);
+  return v;
+}
+
+std::string sellosCarpetas() {
+  std::string s;
+  for (const std::string &d : carpetasCapas()) s += sello(d) + "|";
+  for (const std::string &d : carpetasPath()) s += sello(d) + "|";
+  return s;
+}
+
+/* las variables con las que se enciende alguna capa implicita: lo de dentro de cada "enable_environment" */
+std::vector<std::string> variablesDeCapas() {
+  std::vector<std::string> vars;
+  for (const std::string &d : carpetasCapas()) {
+    std::error_code ec;
+    for (const auto &f : std::filesystem::directory_iterator(d, ec)) {
+      if (f.path().extension() != ".json") continue;
+      std::string t;
+      if (!readSmallFile(f.path().string(), t)) continue;
+      for (size_t i = t.find("\"enable_environment\""); i != std::string::npos; i = t.find("\"enable_environment\"", i + 1)) {
+        const size_t a = t.find('{', i), b = a == std::string::npos ? a : t.find('}', a);
+        if (b == std::string::npos) break;
+        /* las claves: lo que va entre comillas justo antes de cada ':' */
+        size_t k = a;
+        while ((k = t.find('"', k + 1)) != std::string::npos && k < b) {
+          const size_t fin = t.find('"', k + 1);
+          if (fin == std::string::npos || fin > b) break;
+          size_t m = fin + 1;
+          while (m < b && std::isspace((unsigned char)t[m])) m++;
+          if (m < b && t[m] == ':') vars.push_back(t.substr(k + 1, fin - k - 1));
+          k = fin;
+        }
+      }
+    }
+  }
+  return vars;
+}
+
+bool hayComando(const std::string &nombre) {
+  for (const std::string &d : carpetasPath()) {
+    const std::string r = d + "/" + nombre;
+    struct stat sb {};
+    if (::stat(r.c_str(), &sb) == 0 && S_ISREG(sb.st_mode) && ::access(r.c_str(), X_OK) == 0) return true;
+  }
+  return false;
+}
+}  // namespace
+
+bool instalado(const std::string &clave) {
+  static std::string sellos;
+  static std::map<std::string, bool> hay;
+  const std::string ahora = sellosCarpetas();
+  if (ahora != sellos || hay.empty()) {
+    sellos = ahora;
+    hay.clear();
+    const std::vector<std::string> vars = variablesDeCapas();
+    for (const Variable &v : kVariables) hay[v.clave] = std::find(vars.begin(), vars.end(), v.nombre) != vars.end();
+    hay["vkdaedalus_run"] = hayComando("vkdaedalus-run");
+    hay["gamescope"] = hay["reescalado"] = hayComando("gamescope");
+  }
+  const auto it = hay.find(clave);
+  return it == hay.end() || it->second;
+}
+
+const char *excluyente(const std::string &clave) {
+  if (clave == "vkdaedalus") return "vkdaedalus_run";
+  if (clave == "vkdaedalus_run") return "vkdaedalus";
+  return "";
+}
+
+std::string firma() {
+  return sello(rutaLocalconfig()) + "|" + sello(rutaConf()) + "|" + sello(rutaMarca()) + "|" + (steamAbierto() ? "A" : "C") +
+         "|" + sellosCarpetas();
+}
 
 }  // namespace integ

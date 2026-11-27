@@ -1673,9 +1673,10 @@ void Hud::dibujaPanel(int vw, int vh) {
       continue;
     }
     const bool hov = dentro && z.caja.inside(mx_, my_);
-    const bool picable = it.tipo == ItemPanel::Interruptor || it.tipo == ItemPanel::Juego || it.tipo == ItemPanel::Atajo ||
-                         (it.tipo == ItemPanel::Seccion && it.plegable);
-    if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador))
+    const bool picable = (it.tipo == ItemPanel::Interruptor && !(it.apagado && !it.valor)) || it.tipo == ItemPanel::Juego ||
+                         it.tipo == ItemPanel::Atajo || (it.tipo == ItemPanel::Seccion && it.plegable);
+    if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador) &&
+        !(it.tipo == ItemPanel::Interruptor && it.apagado && !it.valor))
       mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
     const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
     /* (v1.15) lo propio de un juego en sus integraciones: un punto del acento delante del rotulo */
@@ -1721,12 +1722,22 @@ void Hud::dibujaPanel(int vw, int vh) {
         break;
       }
       case ItemPanel::Interruptor: {
-        textoCabe(it.rotulo, izq, yr, 15.0f, der - 46.0f - 16.0f - izq, ink[0], ink[1], ink[2], 1.0f);
-        if (!it.nota.empty()) textoCabe(it.nota, izq, y + 34.0f, 11.5f, der - 46.0f - 16.0f - izq, dim[0], dim[1], dim[2], 0.85f);
+        /* (v1.15) en gris: el rotulo y el interruptor apagados, y la pastilla a su izquierda */
+        const float ap = it.apagado ? 0.42f : 1.0f;
+        float derTexto = der - 46.0f - 16.0f;
+        if (!it.pastilla.empty()) {
+          const float wp = textWidth(it.pastilla, 11.5f) + 20.0f;
+          const Rect pa{der - 46.0f - 12.0f - wp, y + (h - 22.0f) * 0.5f, wp, 22.0f};
+          mask9(pa, 0, 11.0f, 0.30f, 0.31f, 0.36f, 0.95f);
+          text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, ink[0], ink[1], ink[2], 0.80f, true);
+          derTexto = pa.x - 12.0f;
+        }
+        textoCabe(it.rotulo, izq, yr, 15.0f, derTexto - izq, ink[0], ink[1], ink[2], ap);
+        if (!it.nota.empty()) textoCabe(it.nota, izq, y + 34.0f, 11.5f, derTexto - izq, dim[0], dim[1], dim[2], 0.85f * (it.apagado ? 0.8f : 1.0f));
         const Rect sw{der - 46.0f, y + (h - 26.0f) * 0.5f, 46.0f, 26.0f};
-        if (it.valor) mask9(sw, 0, 13.0f, accent[0], accent[1], accent[2], 0.98f);
-        else mask9(sw, 0, 13.0f, 0.28f, 0.29f, 0.33f, 0.98f);
-        mask9({it.valor ? sw.x + sw.w - 23.0f : sw.x + 3.0f, sw.y + 3.0f, 20.0f, 20.0f}, 0, 10.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+        if (it.valor) mask9(sw, 0, 13.0f, accent[0], accent[1], accent[2], 0.98f * ap);
+        else mask9(sw, 0, 13.0f, 0.28f, 0.29f, 0.33f, it.apagado ? 0.55f : 0.98f);
+        mask9({it.valor ? sw.x + sw.w - 23.0f : sw.x + 3.0f, sw.y + 3.0f, 20.0f, 20.0f}, 0, 10.0f, 0.97f, 0.97f, 0.99f, it.apagado ? 0.40f : 1.0f);
         break;
       }
       case ItemPanel::Atajo: {
@@ -2094,8 +2105,8 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     const ItemPanel &it = st_.items[i];
     if (item) *item = (int)i;
     switch (it.tipo) {
-      case ItemPanel::Interruptor:
-        return HitPanelItem;
+      case ItemPanel::Interruptor:   /* en gris no se enciende (si ya estaba puesto, si se puede apagar) */
+        return it.apagado && !it.valor ? HitPanel : HitPanelItem;
       case ItemPanel::Seccion:
         return it.plegable ? HitPanelItem : HitPanel;
       case ItemPanel::Juego:

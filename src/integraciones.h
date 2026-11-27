@@ -40,6 +40,15 @@ bool esInterruptor(const std::string &clave);
 struct Resolucion { const char *abrev, *medida; };
 const std::vector<Resolucion> &resoluciones();
 
+/* lo que esta instalado en el equipo, por clave (las demas claves, siempre): una capa, si algun manifiesto de capa
+   implicita de Vulkan se enciende con su variable (enable_environment, donde la busca el cargador de Vulkan);
+   vkdaedalus_run y gamescope (y el reescalado), si su comando esta en el PATH. Se vuelve a mirar solo si cambian
+   esas carpetas (Rodolfo: «que esten en gris todos los que no esten instalados en el equipo») */
+bool instalado(const std::string &clave);
+/* ENABLE_VKDAEDALUS y vkdaedalus-run son uno u otro (Rodolfo: «que enable_vkdaedalus no permita habilitar
+   vkdaedalus-run y viceversa»): la clave que no se puede poner con esta, o "" */
+const char *excluyente(const std::string &clave);
+
 /* ---- el estado: integraciones.conf ---- */
 struct Juego {
   Ajustes propios;          /* lo que este juego tiene distinto de lo de todos */
@@ -78,8 +87,14 @@ bool leerLinea(const std::string &linea, Leida &l);
 
 /* ---- Steam ---- */
 std::string raizSteam();
-std::string rutaLocalconfig();   /* el de la cuenta con la que se entro la ultima vez */
-bool steamAbierto();             /* hay un `steam` o un `steamwebhelper` de este usuario */
+std::string rutaLocalconfig();   /* el de la cuenta con la que se entro la ultima vez (releida si cambia loginusers.vdf) */
+/* Steam esta abierto: como lo mira el propio steam.sh, el proceso de ~/.steam/steam.pid vivo (y llamado steam);
+   sin ese fichero (Steam de Flatpak), un `steam` o un `steamwebhelper` de este usuario en /proc */
+bool steamAbierto();
+/* lo que, si cambia, cambia lo que ensena la pestana: las fechas de localconfig.vdf, integraciones.conf y la marca,
+   si Steam esta abierto y las carpetas de lo instalado. El panel la mira cada dos segundos y solo rehace la pestana
+   si es otra (antes la rehacia entera: leer y analizar los ~100 KB de localconfig.vdf y recorrer /proc) */
+std::string firma();
 /* appid → sus opciones de lanzamiento (los que no tienen, no salen) */
 bool leerSteam(std::map<std::string, std::string> &opciones, std::string *err = nullptr);
 /* escribe esas lineas (appid → linea) en localconfig.vdf con Steam cerrado: antes guarda una copia en

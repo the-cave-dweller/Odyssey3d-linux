@@ -68,6 +68,11 @@ public:
     bool seleccion = false;   /* Texto: todo marcado */
     /* (v1.15) en las integraciones de un juego: este valor es suyo, no el de todos (un punto del acento delante) */
     bool propio = false;
+    /* (v1.15) un interruptor que no se puede encender ahora (lo que no esta instalado, o lo que es uno u otro): sale
+       en gris y no se pica, salvo para apagarlo si ya estaba puesto; `pastilla`, a la izquierda del interruptor
+       («No instalada») */
+    bool apagado = false;
+    std::string pastilla;
   };
 
   struct State {

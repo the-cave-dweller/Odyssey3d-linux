@@ -151,6 +151,8 @@ void cancelarTexto();
 int tomarPestana();
 /* las Integraciones de todos los juegos (al picar su pildora), o las de un juego (`ODYSSEYVK_HUD_INTEG` en ctl hud) */
 void integracionesDe(const std::string &appid);
+/* (v1.15) lo que, si cambia, hay que rehacer la pestana Integraciones (integ::firma y el «Copiado» del boton) */
+std::string firmaIntegraciones();
 /* para ctl hud: como si se estuviera escribiendo `texto` en el campo `clave` */
 void probarEdicion(const std::string &clave, const std::string &texto);
 
