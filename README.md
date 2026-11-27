@@ -158,8 +158,7 @@ no keys; Esc closes it.
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
 taskbar icon or the system-tray icon (click: settings, middle click: games). It fills the screen in the
-style of vkDaedalus's menu, at the same size on the desktop and over a game: a title bar with the close cross (and,
-when it was opened from the pill, an arrow back to the pill); in the middle a large tile per tab — **3D** (video,
+style of vkDaedalus's menu, at the same size on the desktop and over a game: a title bar with the close cross; in the middle a large tile per tab — **3D** (video,
 screen, the depth network, keyboard shortcuts, apps that don't ask), **Games**, **Integrations** (each game's Steam
 launch options; see below) and **Settings** (the performance figures — 3D viewer, GPUs — and the rest:
 smoothness, head-tracking anticipation, updates, taskbar and tray, and **Uninstall** folded under its arrow) —; and

@@ -27,6 +27,23 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
   (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
 
+## Sin la flecha de volver a la pastilla, la nota de la carpeta en cada lista, y lo que se recargaba (v1.17)
+
+- Rodolfo: «quita la flecha y mira porque presionar el boton luego hace que el pill recargue la imagen». La flecha (a
+  la izquierda del aspa, con el panel abierto desde la pastilla) se quita: cerrar ya vuelve al vídeo.
+- **Lo que se recargaba, MEDIDO en el registro del servicio** (27-nov, 05:43 y 05:47, Firefox a pantalla completa):
+  al cerrarse el panel, KWin le devuelve el foco al navegador (~1 s después); el gestor de ventanas minimiza el visor y
+  el servicio lo vuelve a subir, así que el visor rehace su intercambio y su captura (la imagen «se recarga») y
+  Firefox pausa el vídeo. A las 05:43 el visor lo reanudó solo; a las 05:47 no, y la fuente se quedó parada ~30 s. No
+  es cosa de la flecha: pasa igual al abrirse o cerrarse el panel por otras vías (05:43:38, 05:43:46, 05:43:52) y a
+  lo largo del día. Queda por arreglar aparte.
+- **La nota de la carpeta**, que iba a lo ancho y mal dicha, va ahora al pie de cada lista: «Las redes .onnx que dejes
+  en ~/.local/share/odysseyvk/models salen aquí» a la izquierda y «Las de esa carpeta con «video» en el nombre salen
+  en esta lista» a la derecha.
+- **«Reoptimiza, por si algo se alentó con la vista de depuración»: MEDIDO** en el registro del visor, nada se
+  alentó: 165 cuadros por segundo y la vuelta por debajo de ~3 ms (tope 6,1) con la vista puesta y quitada. La
+  miniatura del corte por la imagen se calcula ya solo con la red de vídeo (la única que la usa).
+
 ## `install.sh` compila en silencio, y sin avisos del compilador (v1.17)
 
 - Rodolfo, con la salida de `./install.sh`: «mis usuarios ven esto?». Sí, quien instala a mano: cientos de avisos del

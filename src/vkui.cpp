@@ -1857,23 +1857,9 @@ void Hud::dibujaPanel(int vw, int vh) {
       fuente_ = hayBarlow_ ? 1 : 0;
     }
     panelCerrar_ = {F.x + F.w - 16.0f * s - 32.0f * s, F.y + 12.0f * s, 32.0f * s, 32.0f * s};
-    /* (v1.16) abierto desde la pastilla: la flecha de volver a ella, a la izquierda del aspa; la actualizacion, a la
-       izquierda de la flecha */
+    /* (v1.17) sin la flecha de volver a la pastilla (Rodolfo: «quita la flecha»): cerrar ya devuelve el video, y la
+       flecha ademas mandaba `capa = mostrar` justo cuando KWin le devuelve el foco al navegador */
     panelVolver_ = fuera;
-    std::string rotuloVolver;
-    if (st_.desdePastilla) {
-      panelVolver_ = {panelCerrar_.x - 8.0f * s - 32.0f * s, panelCerrar_.y, 32.0f * s, 32.0f * s};
-      const bool hv = panelVolver_.inside(mx_, my_);
-      if (hv) relleno(panelVolver_, 4.0f * s, pal_.control, 1.0f), rotuloVolver = idioma::tr("Volver a la pastilla");
-      icono({panelVolver_.x + 8.0f * s, panelVolver_.y + 8.0f * s, 16.0f * s, 16.0f * s}, icoAtras_, ink[0], ink[1], ink[2],
-            hv ? 1.0f : 0.80f);
-      if (!rotuloVolver.empty()) {   /* su rotulo, debajo, en la franja libre entre la barra y las teselas */
-        const float w = textWidth(rotuloVolver, 12.5f) + 24.0f;
-        const Rect rr{std::min(panelVolver_.x, (float)vw - 8.0f - w), panelVolver_.y + panelVolver_.h + 6.0f, w, 28.0f};
-        mask9(rr, 0, 4.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.95f);
-        text(rotuloVolver, rr.x + 12.0f, rr.y + 7.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
-      }
-    }
     {
       const bool hc = panelCerrar_.inside(mx_, my_);
       if (hc) relleno(panelCerrar_, 4.0f * s, pal_.control, 1.0f);

@@ -163,7 +163,7 @@ teclas; Esc lo cierra.
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
 icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos). Ocupa
 la pantalla entera al estilo del menú de vkDaedalus, del mismo tamaño en el escritorio y sobre un juego: una barra de
-título con el aspa (y, si se abrió desde la pastilla, una flecha para volver a ella); en medio una tesela grande por
+título con el aspa; en medio una tesela grande por
 pestaña —**3D** (vídeo, pantalla, la red de profundidad, atajos de teclado, aplicaciones que no preguntan),
 **Juegos**, **Integraciones** (las opciones de lanzamiento de Steam de cada juego; ver más abajo) y
 **Ajustes** (los datos de rendimiento —visor 3D, tarjetas gráficas— y lo demás: fluidez, la anticipación de la

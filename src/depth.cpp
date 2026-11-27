@@ -1190,7 +1190,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
      la red y se mira ANTES de pasarla, asi que la ventana se vacia a tiempo. Con la red de video manda esta; las de
      un cuadro siguen con la del mapa, que con ellas va bien (lo ve en el mismo mapa y no salta en falso) */
   bool corteImagen = false;
-  {
+  if (im->ventana) {   /* solo la red de video la usa: las de un cuadro se ahorran la miniatura */
     constexpr int kCeldas = 32;
     const int n = sz_;
     std::vector<float> mini((size_t)kCeldas * kCeldas);

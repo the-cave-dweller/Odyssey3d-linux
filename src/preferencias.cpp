@@ -1034,6 +1034,17 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
   } else {
     for (const RedDisco &r : redes) ponCasilla(r, r.ruta == puesta, ladoRed, "red:");
   }
+  /* (v1.17) donde poner mas, al pie de cada lista (Rodolfo: «lo de video mencionalo para los modelos de la derecha, esto
+     esta mal redactado»): la carpeta (con ~, la de cada usuario) en la de la izquierda y lo del nombre en la derecha */
+  std::string carpeta = carpetaRedes().substr(0, carpetaRedes().size() - 1);
+  if (const char *home = std::getenv("HOME"); home && *home && carpeta.rfind(std::string(home) + "/", 0) == 0)
+    carpeta = "~" + carpeta.substr(std::strlen(home));
+  if (!dep) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.lado = ladoRed;
+    n.rotulo = idioma::trf("Las redes .onnx que dejes en {} salen aquí.", {carpeta});
+    pon(n, "");
+  }
 
   /* 3) solo para videos (Rodolfo: «can we try this for videos only?»): Video Depth Anything mira los ultimos 32 cuadros a
      la vez. MEDIDO el 27-nov en la RTX 5080 con dos videos a 6 mapas por segundo: menos saltos de cerca y lejos de un
@@ -1066,18 +1077,12 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
   } else {
     for (const RedDisco &r : deVideo) ponCasilla(r, r.ruta == v.modeloVideo, ladoVideo, "redvid:");
   }
-
-  /* 4) a lo ancho, debajo de las dos (en la vista de depuracion no sale) */
-  if (dep) return;
-  Hud::ItemPanel n;
-  n.tipo = Hud::ItemPanel::Nota;
-  /* la carpeta con ~ (la de cada usuario; en la de Rodolfo, /home/rodolfo/.local/share/odysseyvk/models): entera no
-     cabia en el renglon con una casa de ruta larga */
-  std::string carpeta = carpetaRedes().substr(0, carpetaRedes().size() - 1);
-  if (const char *home = std::getenv("HOME"); home && *home && carpeta.rfind(std::string(home) + "/", 0) == 0)
-    carpeta = "~" + carpeta.substr(std::strlen(home));
-  n.rotulo = idioma::trf("Cualquier red de profundidad .onnx que pongas en {} empieza a salir aquí (si su nombre lleva «video», en la de vídeos).", {carpeta});
-  pon(n, "");
+  if (!dep) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.lado = ladoVideo;
+    n.rotulo = idioma::tr("Las de esa carpeta con «video» en el nombre salen en esta lista.");
+    pon(n, "");
+  }
 }
 /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que dice
    nvidia-smi de las tarjetas. Desde la rama experimental va dentro de Programa (Rodolfo: «mete la info de
