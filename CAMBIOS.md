@@ -27,6 +27,26 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
   (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
 
+## El visor ya no se minimiza al abrir o cerrar el panel (lo que «recargaba la imagen» y pausaba el vídeo), y «DLSS» solo con su profundidad (v1.17)
+
+- Rodolfo: «y sí, arregla el foco». **La causa, MEDIDA** en un KWin aparte (sin GPU) con una ventana GLFW a pantalla
+  completa como la del visor, una de Alacritty a pantalla completa como el vídeo, el panel de verdad y una sonda con el
+  mismo protocolo de ventanas que el servicio (estados y orden de apilado cada 200 ms): no era KWin sino el
+  **auto-iconify de GLFW**, que viene puesto y minimiza la ventana a pantalla completa al perder el foco.
+  - Con él (como hasta ahora): al abrirse el panel, que se queda con el teclado, el visor se minimiza solo; al
+    cerrarse, el foco va al vídeo, que queda encima. En el visor de verdad, el servicio lo devolvía y se rehacían su
+    intercambio y su captura (la imagen «se recargaba») y Firefox pausaba el vídeo.
+  - Sin él: el visor no se minimiza; al cerrarse el panel el foco le vuelve y sigue encima. El vídeo nunca se activa.
+- **Lo que queda**: si el vídeo se activa (un clic en el navegador: el ratón atraviesa el visor fuera de la pastilla),
+  KWin lo sube a su capa de las activas, por encima del «encima fijo». El servicio lo ve (activo, a pantalla completa
+  y por encima en el orden de apilado) y le devuelve el foco al visor: MEDIDO, el visor vuelve encima en ~20 ms y sin
+  minimizarse. Con un juego no se le quita el foco (le quitaría el teclado y el ratón): si lo tapa 2 s, la tarjeta de
+  «El juego tapa el 3D» de siempre.
+- **«DLSS» en el cuadrito** solo mientras la profundidad sale de ahí de verdad (Rodolfo: «que solo diga dlss cuando
+  esté corriéndose el depth de ahí»): la marca se pone en cada mapa, así que con el conversor parado o el 3D apagado
+  se quedaba con lo último. Ahora pide además el conversor y el 3D puestos.
+- Sin probar aún en el monitor de verdad con Firefox.
+
 ## El cuadrito de los FPS vigila lo que elijas, como MangoHud, y la tarjeta de «se cerró» solo en los primeros 20 s (v1.17)
 
 - Rodolfo: «añade una flechita ahí, donde también dé un dropdown de otras cosas que se puedan monitorear, como uso de
@@ -72,7 +92,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   el servicio lo vuelve a subir, así que el visor rehace su intercambio y su captura (la imagen «se recarga») y
   Firefox pausa el vídeo. A las 05:43 el visor lo reanudó solo; a las 05:47 no, y la fuente se quedó parada ~30 s. No
   es cosa de la flecha: pasa igual al abrirse o cerrarse el panel por otras vías (05:43:38, 05:43:46, 05:43:52) y a
-  lo largo del día. Queda por arreglar aparte.
+  lo largo del día. Arreglado más arriba (el auto-iconify de GLFW).
 - **La nota de la carpeta**, que iba a lo ancho y mal dicha, va ahora al pie de cada lista: «Las redes .onnx que dejes
   en ~/.local/share/odysseyvk/models salen aquí» a la izquierda y «Las de esa carpeta con «video» en el nombre salen
   en esta lista» a la derecha.

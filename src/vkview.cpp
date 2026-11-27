@@ -1668,6 +1668,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      `setcap` en el binario el proceso no se deja leer (no volcable). MEDIDO 26-nov: el servicio no
      encontraba la ventana del visor, no bajaba el juego y el juego quedaba encima del 3D. */
   glfwWindowHintString(GLFW_WAYLAND_APP_ID, "odysseyvk");
+  /* (v1.17) sin auto-iconify: GLFW minimizaba el visor al perder el foco (al abrirse el panel, que se queda con el
+     teclado, o al activarse el video), y al devolverlo se rehacian el intercambio y la captura y el navegador
+     pausaba el video. MEDIDO en un KWin aparte: ver «el video quedo activo encima del visor» en main.cpp */
+  glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
   GLFWwindow *win = glfwCreateWindow(W, H, NOMBRE_APP, (opts.windowed || opts.borderless) ? nullptr : mon, nullptr);
   marcaArranque("ventana");
   if (!win) {
@@ -4232,7 +4236,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         fuenteFps = (float)((double)(cuentaFuente - fuente0) / (ahoraT - tTasas));
         tTasas = ahoraT, fuente0 = cuentaFuente;
       }
-      const bool dlss = red.usandoJuego();
+      /* (v1.17) «DLSS» solo mientras la profundidad sale de ahi de verdad (Rodolfo: «que solo diga dlss cuando este
+         corriendose el depth de ahi»): la marca de la red se pone en cada mapa, asi que con el conversor parado o el 3D
+         apagado se quedaba con lo ultimo */
+      const bool dlss = red.usandoJuego() && wv.converterOn() && ui.hud.state().weaveOn;
       const int modo = g_ajenas.hayFpsAjeno() || g_ajenas.menuVkd ? 0 : (dlss ? 1 : (sobreJuego(ui) && wv.converterOn() ? 2 : 0));
       const float vj = dlss ? fj : fuenteFps, vs = dlss ? fc : 0.0f;
       if ((int)std::lround(vj) != (int)std::lround(hs.fpsJuego) || (int)std::lround(vs) != (int)std::lround(hs.fpsCapa) ||

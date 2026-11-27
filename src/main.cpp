@@ -4915,6 +4915,9 @@ static int cmdServe(int argc, char **argv) {
   double intentoAparecer = 0.0;   /* cuando intentamos por ultima vez devolver la ventana minimizada */
   bool avisoAparecerHecho = false;
   double intentoEncima = 0.0;     /* cuando reforzamos el "encima de todo" del visor */
+  double tapadoDesde = 0.0;       /* (v1.17) desde cuando el video (activo, a pantalla completa) tapa al visor */
+  double intentoFoco = 0.0;       /* (v1.17) cuando le devolvimos el foco al visor por ultima vez */
+  bool avisoFocoHecho = false;
   bool avisoEncimaHecho = false;
   double fueraVideoDesde = 0.0;   /* cuando el video empezo a estar fuera de su sitio */
   bool cerrandoSesion = false;    /* ya avisamos al visor que se vaya; estamos esperando que muera */
@@ -5457,6 +5460,53 @@ static int cmdServe(int argc, char **argv) {
              poner "visible" y sigue como si nada. */
           escribirMarcaVentana(fueraVideoDesde > 0.0 ? "oculta" : "visible", now);
           avisoAparecerHecho = false;
+          /* (v1.17) El video activo y a pantalla completa sube a la capa de las activas de KWin, por encima del «encima
+             fijo» del visor (un clic en el navegador, que el raton atraviesa el visor fuera de la pastilla). Hasta la 1.17
+             el visor se minimizaba solo al perder el foco (el auto-iconify de GLFW) y arriba se le devolvia: se rehacian
+             su intercambio y su captura (la imagen «se recargaba») y Firefox pausaba el video, y pasaba tambien al abrir
+             o cerrar el panel. MEDIDO en un KWin aparte con una ventana GLFW como la del visor: con el auto-iconify, abrir
+             el panel la minimiza y al cerrarlo el foco va al video, que queda encima; sin el, el visor no se minimiza y
+             el foco le vuelve. Queda este caso: con un video se le devuelve el foco al visor; con un juego no (le quitaria
+             el teclado y el raton), y si lo tapa 2 s se avisa como antes */
+          if (!nuestra) {
+            WindowInfo vid;
+            bool tapado = false;
+            if (wm.find(hijoUuid, vid) && vid.active() && vid.fullscreen() && !vid.minimized()) {
+              std::vector<std::string> orden;
+              tapado = true;
+              if (wm.stackingOrder(&orden, nullptr)) {
+                const auto pv = std::find(orden.begin(), orden.end(), visor.uuid), pj = std::find(orden.begin(), orden.end(), vid.uuid);
+                if (pv != orden.end() && pj != orden.end()) tapado = pj > pv;
+              }
+            }
+            if (!tapado) {
+              tapadoDesde = 0.0;
+            } else {
+              if (tapadoDesde <= 0.0) tapadoDesde = now;
+              if (esJuego(hijoApp)) {
+                if (now - tapadoDesde >= 2.0 && visorEscondidas < 2) {
+                  visorEscondidas = 2;
+                  mostrarAviso([](std::string &t, std::vector<std::string> &l) {
+                    t = idioma::tr("El juego tapa el 3D");
+                    l = {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
+                         idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se ve encima."),
+                         idioma::tr("Con gamescope igual: también tiene que ir sin bordes.")};
+                  }, now, 4.0);
+                }
+              } else if (now - intentoFoco >= 0.5) {
+                intentoFoco = now;
+                std::string e4;
+                const bool pudo = wm.setState(visor.uuid, WindowInfo::Active, true, &e4);
+                wm.flush();
+                if (!avisoFocoHecho) {
+                  avisoFocoHecho = true;
+                  std::printf("[ventana] el video quedo activo encima del visor: %s\n",
+                              pudo ? "se le devuelve el foco al visor (sin minimizarlo)" : ("no se pudo: " + e4).c_str());
+                  std::fflush(stdout);
+                }
+              }
+            }
+          }
           /* por si el compositor perdio el "encima" o el "pantalla completa" al recolocar la ventana */
           if (!visor.minimized() && now - intentoEncima >= 5.0 &&
               (!(visor.states & WindowInfo::KeepAbove) || !visor.fullscreen())) {
