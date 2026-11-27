@@ -1955,9 +1955,15 @@ void Hud::dibujaPanel(int vw, int vh) {
       const Rect t{tx, arriba + (float)(k % 3) * 68.0f * s, 200.0f * s, 64.0f * s};
       panelTeselas_[k] = t;
       const bool hov = t.inside(mx_, my_) && !te.id.empty();
-      relleno(t, 6.0f * s, hov ? pal_.control : pal_.elevado, 0.97f);
-      /* (v1.16) la de la Version hace lo de la flecha que habia junto al aspa: su flecha en ambar con una version nueva */
+      /* (v1.16) la de la Version hace lo de la flecha que habia junto al aspa: su flecha en ambar con una version nueva,
+         y entonces con el filo del boton «Actualizar a» de antes */
       const bool esVersion = te.id == "buscar_actualizacion", nueva = esVersion && !st_.actualizacion.empty();
+      if (nueva) {
+        relleno(t, 6.0f * s, pal_.filo, 1.0f);
+        relleno({t.x + 1.0f, t.y + 1.0f, t.w - 2.0f, t.h - 2.0f}, 6.0f * s, hov ? pal_.control : pal_.barra, 1.0f);
+      } else {
+        relleno(t, 6.0f * s, hov ? pal_.control : pal_.elevado, 0.97f);
+      }
       if (esVersion) {
         ha = hov && !st_.menuIdioma;
         anclaActualizar = t;

@@ -3,6 +3,15 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La tesela de la Versión, como el botón «Actualizar a» de antes (v1.16)
+
+- Rodolfo, con una foto del botón «Actualizar a 1.16» junto al aspa (lo que enseña la 1.15 instalada) y otra de la
+  tesela diciendo «1.15, hay la 1.16»: «haz que esto ocurra aqui».
+- Con una versión nueva, la tesela dice «Actualizar a 1.17», con la versión de ahora en su título («Versión 1.16»),
+  la flecha en ámbar y el filo y el fondo oscuro de aquel botón. Picarla instala, como el botón (ya lo hacía).
+- **Probado**: pintado con `ctl hud`, con GitHub de mentira en 1.17, sin y con el ratón encima (sale su rótulo
+  «Hay una actualización pendiente… Pica para instalarla»).
+
 ## Versión 1.16: la interfaz al estilo de vkDaedalus, las redes con su casilla y la carpeta `models` (v1.16)
 
 - Rodolfo: «program says 1.15 is up to date». Lo estaba diciendo bien: `VERSION` seguía en 1.15 aquí y en GitHub,

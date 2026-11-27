@@ -1457,10 +1457,13 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
         {"hud_plano", idioma::tr("HUD del juego"), idioma::tr(v.hudPlano ? "En el plano" : "Con relieve"), v.hudPlano, 2},
         {"rastreo", idioma::tr("Seguir la cabeza"), onOff(v.rastreo), v.rastreo, 3},
         {"fps_juego", idioma::tr("Cuadrito de FPS"), onOff(v.fpsJuego), v.fpsJuego, 4},
-        {"buscar_actualizacion", idioma::tr("Versión"),
+        /* (v1.16) con una version nueva, como el boton que habia junto al aspa (Rodolfo, con una foto de el y de la
+           tesela: «haz que esto ocurra aqui»): «Actualizar a 1.17», y la version de ahora en el titulo */
+        {"buscar_actualizacion",
+         st.actualizacion.empty() ? std::string(idioma::tr("Versión")) : idioma::trf("Versión {}", {ODYSSEYVK_VERSION}),
          st.actualizacion.empty() ? std::string(ODYSSEYVK_VERSION) + (st.alDia ? std::string(" · ") + idioma::tr("al día") : std::string())
-                                  : idioma::trf("{}, hay la {}", {ODYSSEYVK_VERSION, st.actualizacion}),
-         !st.actualizacion.empty(), 5},
+                                  : idioma::trf("Actualizar a {}", {st.actualizacion}),
+         false, 5},
         {"menu_idioma", idioma::tr("Idioma"), idioma::nombre(idioma::actual()), false, 6}};
   }
   if (st.pestana == 3) {
