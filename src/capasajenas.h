@@ -21,6 +21,7 @@
 
 #include <sys/types.h>
 
+#include <string>
 #include <vector>
 
 namespace ajenas {
@@ -35,10 +36,13 @@ struct Estado {
   bool hudVkd = false;     /* el HUD de vkDaedalus a la vista */
   bool fpsVkd = false;     /*   y con los FPS en el */
   bool mangohud = false;   /* MangoHud a la vista (lleva los FPS) */
+  bool mako = false;       /* (v1.18) la capa de MAKO (la generacion de cuadros) cargada en el juego */
+  std::string exe;         /* (v1.18) el ejecutable del juego («Raji-Win64-Shipping.exe»), para su perfil de MAKO */
   std::vector<Zona> planas;   /* lo que va al plano de la pantalla: todo con el menu; la esquina de cada HUD */
   bool hayFpsAjeno() const { return mangohud || fpsVkd; }
   bool operator==(const Estado &o) const {
-    return menuVkd == o.menuVkd && hudVkd == o.hudVkd && fpsVkd == o.fpsVkd && mangohud == o.mangohud;
+    return menuVkd == o.menuVkd && hudVkd == o.hudVkd && fpsVkd == o.fpsVkd && mangohud == o.mangohud && mako == o.mako &&
+           exe == o.exe;
   }
 };
 

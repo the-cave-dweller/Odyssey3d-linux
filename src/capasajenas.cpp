@@ -115,7 +115,8 @@ Zona esquina(const std::string &pos, float w, float h) {
 struct Lento {
   pid_t pid = -1;
   double cuando = -1e9;
-  bool mango = false, vkd = false, hudVkd = false, fpsVkd = false;
+  bool mango = false, vkd = false, hudVkd = false, fpsVkd = false, mako = false;
+  std::string exe;
   std::string posMango = "top-left";
 };
 
@@ -130,7 +131,17 @@ void mirarJuego(pid_t pid, Lento &l) {
   while (std::getline(maps, linea)) {
     if (!l.mango && linea.find("libMangoHud") != std::string::npos) l.mango = true;
     if (!l.vkd && linea.find("/libvkdaedalus.so") != std::string::npos) l.vkd = true;
-    if (l.mango && l.vkd) break;
+    if (!l.mako && linea.find("/libmako-render.so") != std::string::npos) l.mako = true;   /* (v1.18) */
+  }
+  /* (v1.18) su ejecutable, el que nombra su perfil de MAKO: el primero de su linea de ordenes, sin la carpeta (en Wine
+     es una ruta de Windows: «S:\steamapps\...\Raji-Win64-Shipping.exe») */
+  {
+    std::string cmd;
+    if (readSmallFile(base + "/cmdline", cmd) && !cmd.empty()) {
+      std::string a0 = cmd.substr(0, cmd.find('\0'));
+      const size_t s = a0.find_last_of("/\\");
+      l.exe = s == std::string::npos ? a0 : a0.substr(s + 1);
+    }
   }
   /* su entorno: MANGOHUD_CONFIG y el fichero de MangoHud que use */
   std::string env;
@@ -190,6 +201,7 @@ Estado mirar(pid_t pid) {
   e.mangohud = l.mango;
   e.hudVkd = l.hudVkd;
   e.fpsVkd = l.fpsVkd;
+  e.mako = l.mako, e.exe = l.exe;
   if (e.menuVkd) {
     e.planas.push_back({0.0f, 0.0f, 1.0f, 1.0f});
     return e;

@@ -36,6 +36,11 @@ Lo que tienes:
 - **Lo pesado va a la segunda tarjeta.** Con dos tarjetas, la red de profundidad corre sola en la que no dibuja el 3D
   ni el juego (`red = auto`, lo de fábrica; un número la sigue fijando a mano). Si puede ir a más de una, el visor
   las mide con la red que corre y se queda la que menos le quita al juego, hasta que cambies de red.
+- **La generación de cuadros desde el cuadrito de los FPS.** El clic derecho en el cuadrito abre la generación de
+  cuadros de MAKO del juego de debajo, como el menú de vkDaedalus: encendida o apagada, de x2 a x4, el flujo, el modo
+  rendimiento y la tarjeta que genera. Escribe el perfil del juego en el `conf.toml` de MAKO (antes, una copia; y
+  comprobado con `mako-cli validate`), que MAKO lee en marcha; con la profundidad de DLSS, el cuadrito dice además lo
+  que llega a la pantalla. La capa de MAKO se pone en Integraciones (`ENABLE_MAKO`).
 - **Una prueba en cada cambio de capa**: otra red, la profundidad de DLSS que llega o se va, u otro preset de DLSS en
   el juego, y el registro apunta 3 segundos de lo que corre (FPS del juego, mapas por segundo, refrescos perdidos y lo
   ocupada que va cada tarjeta).

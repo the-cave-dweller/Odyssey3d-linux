@@ -194,6 +194,7 @@ add_executable(odysseyvk
   src/barra.cpp
   src/preferencias.cpp
   src/monitor.cpp
+  src/mako.cpp
   src/integraciones.cpp
   src/capasajenas.cpp
   src/panel_ajustes.cpp

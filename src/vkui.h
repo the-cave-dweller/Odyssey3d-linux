@@ -247,6 +247,23 @@ public:
       std::vector<std::pair<std::string, std::string>> valores;
     };
     std::vector<FilaMonitor> monitor;
+    /* (v1.18) la generacion de cuadros de MAKO desde el cuadrito: el clic derecho abre su menu (`menuFg`), como el de
+       vkDaedalus (Rodolfo: «que click derecho en el contador de fps muestre opciones de generacion de frames, haz lo
+       mismo que vkdaedalus»). Lo que dice el perfil del juego en el conf.toml de MAKO (ver mako.h) */
+    bool menuFg = false;
+    struct Fg {
+      bool mako = false;          /* MAKO esta en el equipo */
+      bool enJuego = false;       /* y su capa, cargada en el juego */
+      std::string exe;            /* el ejecutable del juego; vacio = el 3D no esta sobre un juego */
+      bool puesta = false;
+      int multiplicador = 2;
+      int flujo = 85;             /* % */
+      bool rendimiento = false;
+      int tarjeta = 0;            /* 0 = la del juego; k = tarjetas[k - 1] */
+      std::vector<std::string> tarjetas;   /* nombres cortos («RTX 5080») */
+      std::string aviso;          /* el pie: lo que paso al tocar, o por que no se puede */
+      float enPantalla = 0.0f;    /* los cuadros que llegan al visor por segundo, generados incluidos */
+    } fg;
     /* (v1.14) en la pestana Juegos, en medio del pie del panel: el parametro de Steam para la profundidad de DLSS y
        su boton Copiar (Rodolfo: «el parametro ahi, por el centro»). `pieParametro` vacio = no sale. Recien copiado
        (`pieCopiado`), el boton dice `pieCopiadoTexto` un momento; `pieAyuda`, al pasar el raton */
@@ -306,7 +323,13 @@ public:
     HitPanelItem,      /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
     HitPanelCopiar,    /* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam */
     HitPanelTesela,    /* (v1.16) una tesela chica de los lados: `sub` = cual (State::teselas) */
-    HitPanelVolver     /* (v1.16) la flecha de volver a la pastilla, junto al aspa */
+    HitPanelVolver,    /* (v1.16) la flecha de volver a la pastilla, junto al aspa */
+    /* (v1.18) la generacion de cuadros: el cuadrito (su clic derecho abre el menu), el menu, y sus opciones: fila * 8 +
+       la opcion, desde HitFgOpcion0 */
+    HitFgCuadro,
+    HitFgFondo,
+    HitFgOpcion0,
+    HitFgOpcionFin = HitFgOpcion0 + 47
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -358,6 +381,10 @@ public:
   bool overlayVisible() const { return st_.overlayOn; }
   /* (v1.17) el cuadrito de los FPS del juego a la vista (sale aunque la pastilla este oculta) */
   bool cuadroFps() const { return st_.fpsCuadro && (st_.fpsModo != 0 || !st_.monitor.empty()); }
+  /* (v1.18) donde quedaron el cuadrito y el menu de la generacion de cuadros (pixeles del lienzo), para la region de
+     entrada: el clic derecho en el cuadrito tiene que llegar al visor */
+  bool cuadroFpsBounds(float *x, float *y, float *w, float *h) const;
+  bool menuFgBounds(float *x, float *y, float *w, float *h) const;
 
   /* Cuadro ocupado por el aviso / la pastilla en la disposicion actual, en pixeles
      reales de la ventana (los mismos que llevan los vertices). Lo usa la superposicion
@@ -528,6 +555,10 @@ private:
   Rect btnRayo_, menuRend_, rendTrack_[4], rendFila_[4];
   Rect btnFoco_;     /* el boton del chip «AI» del hub normal */
   Rect btnAM_[2];    /* su menu: Auto y Manual */
+  /* (v1.18) el cuadrito de los FPS y el menu de la generacion de cuadros: 5 filas de hasta 8 opciones */
+  Rect cuadroFps_{-10.0f, -10.0f, 0.0f, 0.0f}, menuFg_{-10.0f, -10.0f, 0.0f, 0.0f};
+  Rect fgOpc_[6][8];
+  void dibujaMenuFg(const float accent[3], const float ink[4], const float dim[4]);
   /* el panel de ajustes: su caja, el aspa, las pestanas, el cuerpo que corre y la caja de cada fila */
   struct ZonaItem {
     Rect caja;

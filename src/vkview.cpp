@@ -31,6 +31,7 @@
 #include "integraciones.h"   /* (v1.18) donde va el juego sin decirle nada: integ::tarjetasParaJuego */
 #include "rendimiento.h"
 #include "monitor.h"
+#include "mako.h"   /* (v1.18) la generacion de cuadros de MAKO, desde el cuadrito de los FPS */
 #include "vkui.h"
 #include "vkweave.h"
 
@@ -989,9 +990,97 @@ static void cambio3D(VkUi &ui, bool puesto, const char *fuente) {
   printTuning(ui, fuente);
 }
 
+/* (v1.18) lo que dice el perfil de MAKO del juego, en el estado del menu (ver mako.h) */
+static void leerFg(Hud::State::Fg &g) {
+  const std::vector<std::string> todas = mako::tarjetas();
+  g.tarjetas.clear();
+  for (const std::string &n : todas) g.tarjetas.push_back(n.rfind("NVIDIA GeForce ", 0) == 0 ? n.substr(15) : n);
+  if (!g.mako || g.exe.empty()) return;
+  const mako::Perfil p = mako::leer(g.exe);
+  g.puesta = p.existe && p.puesta;
+  g.multiplicador = std::max(2, std::min(4, p.multiplicador));
+  g.flujo = (int)std::lround(p.flujo * 100.0);
+  g.rendimiento = p.rendimiento;
+  g.tarjeta = 0;
+  for (size_t k = 0; k < todas.size(); k++)
+    if (!p.tarjeta.empty() && todas[k] == p.tarjeta) g.tarjeta = (int)k + 1;
+}
+
+/* (v1.18) una opcion del menu de la generacion de cuadros: al perfil de MAKO del juego, como hace vkDaedalus */
+static void aplicarFg(VkUi &ui, int fila, int k) {
+  Hud::State::Fg &g = ui.hud.state().fg;
+  if (!g.mako || g.exe.empty()) return;
+  static const int kFlujo[4] = {50, 75, 85, 100};
+  std::map<std::string, std::string> c;
+  std::string que, dicho;   /* lo de registro (en español) y lo del pie del menu (en el idioma de la interfaz) */
+  if (fila == 0) {
+    c["frame_generation_enabled"] = k == 1 ? "true" : "false";
+    que = k == 1 ? "encendida" : "apagada";
+    dicho = idioma::tr(k == 1 ? "Generación encendida" : "Generación apagada");
+  } else if (fila == 1 && k <= 2) {
+    c["multiplier"] = std::to_string(k + 2);
+    que = dicho = "x" + std::to_string(k + 2);
+  } else if (fila == 2 && k <= 3) {
+    char b[16];
+    std::snprintf(b, sizeof b, "%.2f", kFlujo[k] / 100.0);
+    c["flow_scale"] = b;
+    que = "flujo " + std::to_string(kFlujo[k]) + " %";
+    dicho = idioma::trf("Flujo {} %", {std::to_string(kFlujo[k])});
+  } else if (fila == 3 && k <= 1) {
+    c["performance_mode"] = k == 1 ? "true" : "false";
+    que = k == 1 ? "modo rendimiento" : "sin modo rendimiento";
+    dicho = idioma::tr(k == 1 ? "Modo rendimiento" : "Sin modo rendimiento");
+  } else if (fila == 4) {
+    const std::vector<std::string> todas = mako::tarjetas();
+    if (k == 0) c["gpu"] = "", que = "la tarjeta del juego", dicho = idioma::tr("La del juego");
+    else if ((size_t)k <= todas.size()) c["gpu"] = "'" + todas[(size_t)k - 1] + "'", que = dicho = todas[(size_t)k - 1];
+    else return;
+  } else {
+    return;
+  }
+  /* un perfil nuevo lleva tambien lo demas, como se ve en el menu */
+  if (!mako::leer(g.exe).existe) {
+    char b[16];
+    std::snprintf(b, sizeof b, "%.2f", g.flujo / 100.0);
+    c.emplace("frame_generation_enabled", g.puesta ? "true" : "false");
+    c.emplace("multiplier", std::to_string(g.multiplicador));
+    c.emplace("flow_scale", b);
+    c.emplace("performance_mode", g.rendimiento ? "true" : "false");
+  }
+  std::string err;
+  if (mako::fijar(g.exe, c, &err)) {
+    g.aviso = g.enJuego ? idioma::trf("{}: guardado en el perfil de MAKO de {}", {dicho, g.exe})
+                        : idioma::trf("{}: guardado; se aplicará cuando MAKO esté en el juego", {dicho});
+    std::printf("[fg] %s · %s · %s\n", g.exe.c_str(), que.c_str(), mako::rutaConf().c_str());
+  } else {
+    g.aviso = idioma::trf("MAKO no lo aceptó: {}", {err});
+    std::printf("[fg] %s · %s: MAKO no lo acepto: %s\n", g.exe.c_str(), que.c_str(), err.c_str());
+  }
+  std::fflush(stdout);
+  leerFg(g);
+  ui.inputChanged = true;
+}
+
 void applyHit(VkUi &ui, Hud::Hit hit) {
   Hud::State &st = ui.hud.state();
   WeaveTuning &t = ui.tune;
+  /* (v1.18) el menu de la generacion de cuadros: el cuadrito lo abre y lo cierra (tambien con el clic izquierdo), sus
+     opciones van al perfil de MAKO, y un clic en otro sitio lo cierra */
+  if (hit >= Hud::HitFgOpcion0 && hit <= Hud::HitFgOpcionFin) {
+    const int n = (int)hit - (int)Hud::HitFgOpcion0;
+    aplicarFg(ui, n / 8, n % 8);
+    return;
+  }
+  if (hit == Hud::HitFgFondo) return;
+  if (hit == Hud::HitFgCuadro) {
+    st.menuFg = !st.menuFg;
+    if (st.menuFg) st.menuNormal = st.menuRendimiento = false, st.fg.aviso.clear(), leerFg(st.fg);
+    ui.inputChanged = true;
+    std::printf("[fg] menu de la generacion de cuadros %s\n", st.menuFg ? "abierto" : "cerrado");
+    std::fflush(stdout);
+    return;
+  }
+  if (st.menuFg) st.menuFg = false, ui.inputChanged = true;
   switch (hit) {
     case Hud::Hit3D:
       ui.hud.toggle3D();
@@ -1507,7 +1596,7 @@ void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dej
   const bool pleno = !dejarPasar || ui->dragging != Hud::HitNone;
   float kx = 1.0f, ky = 1.0f;
   pointerScale(win, ui, kx, ky);
-  int cajas[2][4];
+  int cajas[4][4];
   int n = 0;
   const Hud::State &st = ui->hud.state();
   float px = 0.0f, py = 0.0f, pw = 0.0f, ph = 0.0f;
@@ -1530,6 +1619,15 @@ void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dej
     re->hogar[2] = pw;
     re->hogar[3] = ph;
     re->hayHogar = true;
+    cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
+    n++;
+  }
+  /* (v1.18) despues del rincon de la pastilla oculta (que solo va sin otras cajas): el cuadrito de los FPS (su clic derecho) y, abierto, el menu de la generacion de cuadros */
+  if (!pleno && n < 4 && ui->hud.cuadroFpsBounds(&px, &py, &pw, &ph)) {
+    cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
+    n++;
+  }
+  if (!pleno && n < 4 && ui->hud.menuFgBounds(&px, &py, &pw, &ph)) {
     cajaEnLogico(kx, ky, px, py, pw, ph, cajas[n]);
     n++;
   }
@@ -1617,6 +1715,14 @@ void onEnterVK(GLFWwindow *win, int entered) {
 
 void onButtonVK(GLFWwindow *win, int button, int action, int) {
   VkUi *ui = (VkUi *)glfwGetWindowUserPointer(win);
+  /* (v1.18) el clic derecho en el cuadrito de los FPS (o en su menu): el menu de la generacion de cuadros */
+  if (ui && button == GLFW_MOUSE_BUTTON_RIGHT) {
+    if (action != GLFW_PRESS) return;
+    const Hud::Hit h = ui->hud.hit((float)ui->mx, (float)ui->my);
+    if (h == Hud::HitFgCuadro || h == Hud::HitFgFondo || (h >= Hud::HitFgOpcion0 && h <= Hud::HitFgOpcionFin))
+      applyHit(*ui, Hud::HitFgCuadro);
+    return;
+  }
   if (!ui || button != GLFW_MOUSE_BUTTON_LEFT) return;
   ui->inputChanged = true;
   if (action == GLFW_RELEASE) {
@@ -4807,6 +4913,24 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                       e.hudVkd ? "si" : "no", e.fpsVkd ? " (con FPS)" : "", e.menuVkd ? "abierto" : "cerrado");
         std::fflush(stdout);
         g_ajenas = e;
+        /* (v1.18) la generacion de cuadros: si MAKO esta en el equipo, el ejecutable del juego y si su capa va cargada en
+           el; y su perfil, cada 2 s o al cambiar de juego (el menu lo ensena y el cuadrito dice lo que llega a pantalla) */
+        {
+          Hud::State::Fg &fg = hsA.fg;
+          static double tPerfil = -10.0;
+          const bool otro = fg.exe != e.exe || fg.enJuego != e.mako;
+          fg.mako = mako::instalado();
+          fg.exe = e.exe;
+          fg.enJuego = e.mako;
+          if (otro || ahoraA - tPerfil >= 2.0) tPerfil = ahoraA, leerFg(fg);
+          if (otro) {
+            ui.inputChanged = true;
+            if (!e.exe.empty())
+              std::printf("[fg] %s · MAKO %s · su perfil: generacion %s, x%d, flujo %d %%\n", e.exe.c_str(),
+                          !fg.mako ? "no instalado" : (e.mako ? "cargado en el juego" : "no cargado en el juego"),
+                          fg.puesta ? "encendida" : "apagada", fg.multiplicador, fg.flujo);
+          }
+        }
         std::lock_guard<std::mutex> g(g_ajenasMx);
         g_zonasAjenas = e.planas;
       }
@@ -4839,6 +4963,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           hs.fpsCuadro != g_fpsCuadro || hs.fpsModo != modo)
         ui.inputChanged = true;
       hs.fpsJuego = vj, hs.fpsCapa = vs, hs.fpsModo = modo, hs.fpsCuadro = g_fpsCuadro;
+      hs.fg.enPantalla = fuenteFps;   /* (v1.18) con la generacion de cuadros, los que llegan (los generados tambien) */
       g_fpsJuego = fj, g_fpsCapa = fc, g_hudJuego = red.hudFrac();
       g_profJuego = red.descJuego();
     }

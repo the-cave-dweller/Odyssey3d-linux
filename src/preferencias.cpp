@@ -1401,7 +1401,8 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
                       {"mangohud", "MANGOHUD", "El contador de MangoHud encima del juego"},
                       {"vkdaedalus", "ENABLE_VKDAEDALUS", "La capa de vkDaedalus"},
                       {"neural_forge", "NEURAL_FORGE_ENABLE", "La capa de Neural Forge; su ejecutable (NEURAL_FORGE_TARGET_EXE) se toma de Neural Forge"},
-                      {"vkbasalt", "ENABLE_VKBASALT", "Los filtros de vkBasalt"}};
+                      {"vkbasalt", "ENABLE_VKBASALT", "Los filtros de vkBasalt"},
+                      {"mako", "ENABLE_MAKO", "La generación de cuadros de MAKO: se ajusta con clic derecho en el cuadrito de los FPS"}};
   for (const Var &v : vars) {
     const bool puesto = val(v.clave) == "1";
     const size_t k = interruptor(v.clave, std::string(v.nombre) + (puesto ? "=1" : ""), idioma::tr(v.ayuda));

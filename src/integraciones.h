@@ -25,6 +25,7 @@ using Ajustes = std::map<std::string, std::string>;
 
 /* las claves, en el orden de la pestana:
      odysseyvk mangohud vkdaedalus neural_forge vkbasalt   las variables (1 = puesta, 0 = no)
+     mako                                                 (v1.18) ENABLE_MAKO: la generacion de cuadros de MAKO
      nf_offload                                           (v1.18) el modelo de Neural Forge en la segunda tarjeta:
                                                           NEURAL_FORGE_OFFLOAD_GPU (ver secundariaNf)
      juego_tarjeta                                        (v1.18) la tarjeta del juego si no es la del monitor 3D: su

@@ -3174,6 +3174,17 @@ static int cmdHudSelfTest(int argc, char **argv) {
                            {"CPU", {{"40", "%"}, {"79", "°C"}}},
                            {"RAM", {{"38,9", "GB"}}},
                            {idioma::tr("Cuadro"), {{"8,5", "ms"}}}};
+  /* (v1.18) ODYSSEYVK_HUD_MENU_FG=1|2|3: el menu de la generacion de cuadros abierto (1 = MAKO en el juego, x3 encendida y
+     su perfil en la 5080; 2 = MAKO sin cargar en el juego; 3 = sin MAKO) */
+  if (const char *mf = std::getenv("ODYSSEYVK_HUD_MENU_FG")) {
+    Hud::State::Fg &g = hud.state().fg;
+    const int caso = std::atoi(mf);
+    hud.state().menuFg = true;
+    g.mako = caso != 3, g.enJuego = caso == 1, g.exe = "Raji-Win64-Shipping.exe";
+    g.puesta = caso == 1, g.multiplicador = 3, g.flujo = 85, g.rendimiento = true, g.tarjeta = caso == 1 ? 2 : 0;
+    g.tarjetas = {"RTX 4090", "RTX 5080"};
+    g.enPantalla = 180.0f;
+  }
   hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
   hud.state().hud = 3;

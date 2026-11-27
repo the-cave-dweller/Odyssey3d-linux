@@ -964,6 +964,14 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   if (st_.fpsModo != 0) {
     filas.push_back({idioma::tr("Juego"), {{nj, "fps"}}});
     if (dlss) filas.push_back({idioma::tr("Capa"), {{nc, "fps"}}});
+    /* (v1.18) con la generacion de cuadros de MAKO en el juego: lo que llega a la pantalla. MEDIDO con el cargador de
+       Vulkan: MAKO va por debajo de la capa de OdysseyVK, asi que «Juego» (los cuadros que ve la capa) son los de verdad y
+       los generados solo se ven aqui, en los que llegan al visor por la captura */
+    if (dlss && st_.fg.enJuego && st_.fg.puesta && st_.fg.enPantalla > 0.5f) {
+      char np[16];
+      std::snprintf(np, sizeof np, "%d", (int)std::lround(st_.fg.enPantalla));
+      filas.push_back({idioma::tr("En pantalla"), {{np, "fps"}}});
+    }
   }
   for (const State::FilaMonitor &m : st_.monitor) {
     Fila f{m.rotulo, {}};
@@ -991,6 +999,7 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   /* (v1.16) del mismo alto y color que la pastilla, pegado arriba (v1.17: mas alto si hay mas filas) */
   mask9({bx, y0 - 8.0f, bw + (orilla ? 8.0f : 0.0f), alto + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1),
         Hud::canal(pal_.barra, 2), 0.94f);
+  cuadroFps_ = {bx, y0, bw + (orilla ? 8.0f : 0.0f), alto};   /* (v1.18) su clic derecho: la generacion de cuadros */
   text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
   for (size_t i = 0; i < filas.size(); i++) {
     /* una sola fila (los FPS sin DLSS), a media altura como antes */
@@ -1006,6 +1015,89 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
       x += wNum[j] + 4.0f + wUni[j] + hueco;
     }
   }
+}
+
+/* (v1.18) el menu de la generacion de cuadros, debajo del cuadrito de los FPS y con su orilla derecha: como el de vkDaedalus,
+   el perfil de MAKO de este juego (ver mako.h). Cinco filas de botones; con algo que no deja (sin MAKO, sin juego), en gris
+   y el pie dice por que */
+void Hud::dibujaMenuFg(const float accent[3], const float ink[4], const float dim[4]) {
+  for (auto &fila : fgOpc_)
+    for (Rect &r : fila) r = {-10.0f, -10.0f, 0.0f, 0.0f};
+  menuFg_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  if (!st_.menuFg || cuadroFps_.w <= 0.0f) return;
+  const State::Fg &g = st_.fg;
+  const bool vale = g.mako && !g.exe.empty();
+  struct Fila {
+    std::string rot;
+    std::vector<std::string> opc;
+    int elegida;
+  };
+  static const int kFlujo[4] = {50, 75, 85, 100};
+  int flujo = 0;
+  for (int k = 1; k < 4; k++)
+    if (std::abs(g.flujo - kFlujo[k]) < std::abs(g.flujo - kFlujo[flujo])) flujo = k;
+  std::vector<std::string> tarjetas = {idioma::tr("La del juego")};
+  tarjetas.insert(tarjetas.end(), g.tarjetas.begin(), g.tarjetas.end());
+  const std::vector<Fila> filas = {
+      {idioma::tr("Generación"), {idioma::tr("Apagada"), idioma::tr("Encendida")}, g.puesta ? 1 : 0},
+      {idioma::tr("Multiplicador"), {"x2", "x3", "x4"}, g.multiplicador - 2},
+      {idioma::tr("Flujo"), {"50 %", "75 %", "85 %", "100 %"}, flujo},
+      {idioma::tr("Modo rendimiento"), {idioma::tr("No"), idioma::tr("Sí")}, g.rendimiento ? 1 : 0},
+      {idioma::tr("Tarjeta"), tarjetas, g.tarjeta}};
+  const float mw = 440.0f, pad = 16.0f, filaAlto = 38.0f, rotW = 150.0f, tam = 12.0f;
+  std::string pie = g.aviso;
+  if (pie.empty()) {
+    if (!g.mako) pie = idioma::tr("MAKO no está instalado: la generación de cuadros es su capa de Vulkan (mako-render).");
+    else if (g.exe.empty()) pie = idioma::tr("Sin un juego debajo: la generación de cuadros va en el juego, no en el vídeo.");
+    else if (!g.enJuego) pie = idioma::tr("MAKO no está cargado en este juego: pon ENABLE_MAKO=1 en Integraciones. Lo que elijas se guarda para cuando lo esté.");
+    else pie = idioma::tr("Se guarda en el perfil de MAKO de este juego y se aplica al momento.");
+  }
+  const std::vector<std::string> lineasPie = renglones(pie, 11.5f, mw - 2.0f * pad);
+  const float alto = 40.0f + filaAlto * (float)filas.size() + 6.0f + 16.0f * (float)lineasPie.size() + 12.0f;
+  /* con el cuadrito pegado a la orilla (la pastilla oculta), el menu se queda a 8 de ella: se ven sus esquinas */
+  const float der = std::min(cuadroFps_.x + cuadroFps_.w, (float)W_ / sc_ - 8.0f);
+  const float mx0 = std::max(8.0f, der - mw), my0 = cuadroFps_.y + cuadroFps_.h + 6.0f;
+  menuFg_ = {mx0, my0, mw, alto};
+  mask9(menuFg_, 1, 8.0f, Hud::canal(pal_.tarjeta, 0), Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 0.97f);
+  solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
+  text(idioma::tr("GENERACIÓN DE CUADROS · MAKO"), mx0 + pad, my0 + 13.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
+  if (!g.exe.empty()) {
+    const float we = std::min(mw * 0.42f, textWidth(g.exe, 10.5f));
+    textoCabe(g.exe, mx0 + mw - pad - we, my0 + 14.0f, 10.5f, we, dim[0], dim[1], dim[2], dim[3]);
+  }
+  for (size_t f = 0; f < filas.size() && f < 6; f++) {
+    const float y = my0 + 38.0f + filaAlto * (float)f;
+    textoCabe(filas[f].rot, mx0 + pad, y + 8.0f, tam, rotW - 8.0f, dim[0], dim[1], dim[2], dim[3]);
+    const size_t n = std::min<size_t>(filas[f].opc.size(), 8);
+    const float x0b = mx0 + pad + rotW, wTot = mw - pad - (x0b - mx0), bw = (wTot - 6.0f * (float)(n - 1)) / (float)n;
+    for (size_t k = 0; k < n; k++) {
+      Rect r{x0b + (float)k * (bw + 6.0f), y + 2.0f, bw, 28.0f};
+      fgOpc_[f][k] = vale ? r : Rect{-10.0f, -10.0f, 0.0f, 0.0f};
+      const bool elegida = (int)k == filas[f].elegida, hov = vale && r.inside(mx_, my_);
+      if (elegida && vale) mask9(r, 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+      else mask9(r, 0, 4.0f, 1.0f, 1.0f, 1.0f, !vale ? 0.04f : (hov ? 0.16f : 0.07f));
+      const float a = !vale ? 0.40f : (elegida || hov ? 1.0f : 0.85f);
+      textoCabe(filas[f].opc[k], r.x + bw * 0.5f, r.y + 7.0f, 12.0f, bw - 10.0f, elegida && vale ? 0.06f : ink[0],
+                elegida && vale ? 0.10f : ink[1], elegida && vale ? 0.16f : ink[2], a, true);
+    }
+  }
+  float yp = my0 + 38.0f + filaAlto * (float)filas.size() + 6.0f;
+  for (const std::string &l : lineasPie) {
+    text(l, mx0 + pad, yp, 11.5f, dim[0], dim[1], dim[2], dim[3]);
+    yp += 16.0f;
+  }
+}
+
+bool Hud::cuadroFpsBounds(float *x, float *y, float *w, float *h) const {
+  if (cuadroFps_.w <= 0.0f) return false;
+  *x = cuadroFps_.x * sc_, *y = cuadroFps_.y * sc_, *w = cuadroFps_.w * sc_, *h = cuadroFps_.h * sc_;
+  return true;
+}
+
+bool Hud::menuFgBounds(float *x, float *y, float *w, float *h) const {
+  if (!st_.menuFg || menuFg_.w <= 0.0f) return false;
+  *x = menuFg_.x * sc_, *y = menuFg_.y * sc_, *w = menuFg_.w * sc_, *h = menuFg_.h * sc_;
+  return true;
 }
 
 void Hud::begin(int w, int h, float altoLogico) {
@@ -1053,10 +1145,12 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnRayo_ = menuRend_ = btnFoco_ = btnAM_[0] = btnAM_[1] = {-10.0f, -10.0f, 0.0f, 0.0f};
   for (int k = 0; k < 4; k++) rendTrack_[k] = rendFila_[k] = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
+  cuadroFps_ = menuFg_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) */
   /* (v1.17) la pastilla oculta: el cuadrito de los FPS se queda, en la esquina */
   if (!st_.overlayOn && !st_.panel && cuadroFps()) {
     fuente_ = hayBarlow_ ? 1 : 0;
     dibujaCuadroFps((float)vw, st_.legado ? 76.0f : 56.0f, !st_.legado, true, accent, ink, dim);
+    dibujaMenuFg(accent, ink, dim);
   }
   if (st_.overlayOn) {
     const bool leg = st_.legado;
@@ -1144,7 +1238,10 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* (v1.13) sin DLSS, con la red sobre un juego, el mismo cuadrito dice «Modelo de serie» y solo los FPS del juego
        (los cuadros nuevos que llegan; Rodolfo: «en los fps que no son de dlss solo deja los del juego»), en un
        renglon a media altura */
-    if (cuadroFps()) dibujaCuadroFps(x0 - 10.0f, ph, compacta, false, accent, ink, dim);
+    if (cuadroFps()) {
+      dibujaCuadroFps(x0 - 10.0f, ph, compacta, false, accent, ink, dim);
+      dibujaMenuFg(accent, ink, dim);
+    }
 
     /* ---- el encendido del 3D (v1.12) ----
        Un boton redondo (antes el interruptor ON/OFF, «en vez de on y off un boton redondo de apagado»,
@@ -2969,6 +3066,14 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
     if (askSbs_.inside(mx, my)) return HitAskSbs;
     if (askDont_.inside(mx, my)) return HitAskDont;
   }
+  /* (v1.18) el menu de la generacion de cuadros y el cuadrito (con la pastilla oculta tambien) */
+  if (st_.menuFg && menuFg_.inside(mx, my)) {
+    for (int f = 0; f < 6; f++)
+      for (int k = 0; k < 8; k++)
+        if (fgOpc_[f][k].w > 0.0f && fgOpc_[f][k].inside(mx, my)) return (Hit)(HitFgOpcion0 + f * 8 + k);
+    return HitFgFondo;
+  }
+  if (cuadroFps_.w > 0.0f && cuadroFps_.inside(mx, my)) return HitFgCuadro;
   if (!st_.overlayOn) return HitNone;
   if (sw3D_.inside(mx, my)) return Hit3D;   /* el boton de encendido */
   if (pillModo_.w > 0.0f && pillModo_.inside(mx, my)) return HitModoRed;   /* Neural | Rendimiento, en marcha */

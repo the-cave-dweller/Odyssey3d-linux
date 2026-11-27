@@ -132,6 +132,8 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   real PCIe link (the lower of the card and its slot: an RTX 5080 that can do 5.0 x16 in a 4.0 x4 slot shows
   `PCIe 4.0 x4`), warning at x4 or x8. Turning it on turns Neural Forge on; turning Neural Forge off turns it off. A
   value already in the game's line (`=1`, `same`) is kept. `odysseyvk integraciones linea TEXT` shows the card found.
+- Since 1.18, `ENABLE_MAKO` (MAKO's frame generation layer) is one of the layer switches, and a right-click on the FPS
+  box in the 3D opens its menu for the game underneath (see below).
 - Since 1.18, *Game's card* (`juego_tarjeta`, with two or more dedicated cards): sends the game to one card with
   `DXVK_FILTER_DEVICE_NAME` and `VKD3D_FILTER_DEVICE_NAME` (DX9 to DX12, by the name the game sees) and
   `MESA_VK_DEVICE_SELECT` (native Vulkan, the card order; not `_FORCE_DEFAULT_DEVICE`, which would also hide the other

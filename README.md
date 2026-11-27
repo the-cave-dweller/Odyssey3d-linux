@@ -36,6 +36,11 @@ What you get:
   drawing the 3D and the game, on its own (`red = auto`, the default; a number still pins one). If it could go to
   more than one, the viewer times each with the network that is running and keeps the one that costs the game least,
   until you switch networks.
+- **Frame generation from the FPS box.** A right-click on the FPS box opens MAKO's frame generation for the game
+  underneath, like vkDaedalus's menu: on or off, x2 to x4, flow, performance mode and the card that generates. It
+  writes the game's profile in MAKO's `conf.toml` (backed up first, checked with `mako-cli validate`), which MAKO
+  reads on the fly; with DLSS depth the box adds what reaches the screen. MAKO's layer goes in Integrations
+  (`ENABLE_MAKO`).
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the
   log.

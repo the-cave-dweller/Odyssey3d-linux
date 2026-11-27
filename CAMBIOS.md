@@ -44,9 +44,39 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **La tarjeta de la red, sola** (`red = auto`): lo pesado, en la secundaria; medida si puede ir a más de una; y una
     prueba de lo que corre en cada cambio de capa;
   - **El offloading de Neural Forge en Integraciones**: su modelo en la segunda tarjeta, con su enlace PCIe;
-  - **El monitor 3D en otra tarjeta**: el 3D en la del monitor y la tarjeta del juego en Integraciones.
+  - **El monitor 3D en otra tarjeta**: el 3D en la del monitor y la tarjeta del juego en Integraciones;
+  - **La generación de cuadros de MAKO** con el clic derecho en el cuadrito de los FPS.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## La generación de cuadros de MAKO con el clic derecho en el cuadrito de los FPS (v1.18)
+
+- Rodolfo: «ahora que click derecho en el contador de fps muestre opciones de generacion de frames, haz lo mismo que
+  vkdaedalus, haz pruebas de si sirve en la capa o juego».
+- **Lo que hace vkDaedalus** (un vkBasalt con menú de ImGui; sus textos, leídos de su biblioteca): la generación de
+  cuadros es de MAKO (mako-render 5.0, GPL-3.0, una capa de Vulkan con el modelo de Lossless Scaling, como lsfg-vk) y
+  vkDaedalus la maneja escribiendo el perfil del juego en el `conf.toml` de MAKO («Set writes it into MAKO's file»),
+  que MAKO lee en marcha. Aquí lo mismo, sin su código (`src/mako.cpp`): se toca el `[[profile]]` cuyo `active_in`
+  nombra al juego (también una lista en varias líneas) o se crea uno al final, «OdysseyVK · exe»; lo demás del fichero
+  se queda como está; antes de la primera escritura, una copia en `~/.local/state/odysseyvk/mako/` (y la primera de
+  todas, `conf-antes-de-odysseyvk.toml`); y lo nuevo se comprueba con `mako-cli validate` antes de cambiar el fichero.
+- **El menú**: clic derecho en el cuadrito de los FPS (también con la pastilla oculta, en la esquina): Generación
+  (apagada o encendida), Multiplicador (x2, x3, x4), Flujo (50, 75, 85 o 100 %), Modo rendimiento y Tarjeta (la del juego
+  o una NVIDIA por su nombre de Vulkan, la clave `gpu` de MAKO). El pie dice qué pasó, o por qué no se puede: sin MAKO, sin
+  un juego debajo, o MAKO sin cargar en el juego («pon ENABLE_MAKO=1 en Integraciones»; lo elegido se guarda igual). El
+  ejecutable del juego sale de su línea de órdenes (en Wine, la ruta de Windows) y si MAKO está cargado, de sus
+  bibliotecas (`capasajenas`). El cuadrito y el menú entran en la región de entrada del visor, para que el clic llegue.
+- **Dónde genera MAKO, MEDIDO con el cargador de Vulkan** (`VK_LOADER_DEBUG=layer`): la cadena del dispositivo es juego
+  → OdysseyVK → MAKO → vkDaedalus → controlador. MAKO genera por debajo de la capa de OdysseyVK: la capa solo ve los
+  cuadros de verdad (y copia la profundidad de DLSS y el HUD de esos, que es lo que hay: un cuadro generado no tiene
+  profundidad), y los generados llegan a la pantalla y al visor por la captura. Por eso, con la profundidad de DLSS el
+  cuadrito añade «En pantalla» (los cuadros que llegan al visor) a «Juego» (los de verdad).
+- **ENABLE_MAKO en Integraciones**, como las demás capas («La generación de cuadros de MAKO: se ajusta con clic derecho
+  en el cuadrito de los FPS»).
+- **Probado**: el módulo con una copia del `conf.toml` de Rodolfo (`MAKO_CONFIG`): lee los dos perfiles (el de vkcube con
+  `active_in` en varias líneas y el de Genshin), cambia el multiplicador del de vkcube tocando solo esa línea, crea el
+  de Raji al final, un x9 lo rechaza `mako-cli validate` y el fichero no cambia, y la copia de antes es el original; el
+  menú pintado con `ctl hud` (`ODYSSEYVK_HUD_MENU_FG=1|2|3`: MAKO en el juego, sin cargar y sin MAKO).
 
 ## El monitor 3D en otra tarjeta: el 3D en la suya y la tarjeta del juego en Integraciones (v1.18)
 

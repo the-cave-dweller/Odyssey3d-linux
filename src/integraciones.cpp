@@ -28,7 +28,8 @@ const Variable kVariables[] = {{"odysseyvk", "ODYSSEYVK"},
                                {"mangohud", "MANGOHUD"},
                                {"vkdaedalus", "ENABLE_VKDAEDALUS"},
                                {"neural_forge", "NEURAL_FORGE_ENABLE"},
-                               {"vkbasalt", "ENABLE_VKBASALT"}};
+                               {"vkbasalt", "ENABLE_VKBASALT"},
+                               {"mako", "ENABLE_MAKO"}};   /* (v1.18) la generacion de cuadros de MAKO */
 
 bool esAppid(const std::string &s) {
   return !s.empty() && s.size() < 12 && std::all_of(s.begin(), s.end(), [](unsigned char c) { return std::isdigit(c); });
@@ -321,7 +322,7 @@ std::string rutaMarca() { return rutaEstadoOdyssey("integraciones-pendiente"); }
 /* ------------------------------------------------------------------------------------------------ */
 
 const std::vector<std::string> &claves() {
-  static const std::vector<std::string> k = {"odysseyvk", "mangohud",   "vkdaedalus", "neural_forge", "nf_offload", "juego_tarjeta", "vkbasalt",
+  static const std::vector<std::string> k = {"odysseyvk", "mangohud",   "vkdaedalus", "neural_forge", "nf_offload", "juego_tarjeta", "vkbasalt", "mako",
                                              "otros",     "vkdaedalus_run", "comando", "gamescope",  "reescalado",
                                              "filtro",    "render",     "salida",     "escala",       "pantalla_completa",
                                              "cursor",    "gs_otros",   "opciones"};
@@ -332,7 +333,7 @@ const Ajustes &deFabrica() {
   /* (v1.16) ODYSSEYVK=1 estuvo puesta siempre y luego volvio a ser una opcion (Rodolfo: «stop putting the odyssey
      parameter by yourself, return it as an option»): de fabrica, apagada */
   static const Ajustes a = {{"odysseyvk", "0"},       {"mangohud", "0"},        {"vkdaedalus", "0"},
-                            {"neural_forge", "0"},    {"nf_offload", "0"},      {"juego_tarjeta", ""},    {"vkbasalt", "0"},        {"otros", ""},
+                            {"neural_forge", "0"},    {"nf_offload", "0"},      {"juego_tarjeta", ""},    {"vkbasalt", "0"},        {"mako", "0"},        {"otros", ""},
                             {"vkdaedalus_run", "0"},  {"comando", ""},          {"gamescope", "0"},
                             {"reescalado", "0"},      {"filtro", "fsr"},        {"render", "2048x1536"},
                             {"salida", "3840x2160"},  {"escala", "stretch"},    {"pantalla_completa", "1"},
@@ -341,7 +342,7 @@ const Ajustes &deFabrica() {
 }
 
 bool esInterruptor(const std::string &c) {
-  return c == "odysseyvk" || c == "mangohud" || c == "vkdaedalus" || c == "neural_forge" || c == "nf_offload" || c == "vkbasalt" ||
+  return c == "odysseyvk" || c == "mangohud" || c == "vkdaedalus" || c == "neural_forge" || c == "nf_offload" || c == "vkbasalt" || c == "mako" ||
          c == "vkdaedalus_run" || c == "gamescope" || c == "reescalado" || c == "pantalla_completa" || c == "cursor";
 }
 
