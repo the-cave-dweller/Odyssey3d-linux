@@ -845,6 +845,14 @@ static bool monitorVentanas(VkUi &ui) {
 #endif
 }
 /* la ventana capturada es un juego de Steam (o gamescope): la misma regla que el servicio */
+static bool sobreJuego(VkUi &ui);
+/* (v1.18) que ya se sabe que NO es un juego: sobreJuego dice «no» mientras aun no sabe que ventana es. MEDIDO el 27-nov: al
+   abrir Stray la generacion de los videos se encendio 2 s hasta saberse que era un juego (Rodolfo: «it shouldnt, i opened a
+   game») */
+static bool seguroNoJuego(VkUi &ui) {
+  sobreJuego(ui);
+  return ui.esJuego == 0;
+}
 static bool sobreJuego(VkUi &ui) {
   if (ui.esJuego >= 0) return ui.esJuego == 1;
   /* ODYSSEYVK_JUEGO=1|0 lo fija a mano: para probarlo en el compositor aparte, que no tiene el de KWin */
@@ -2245,7 +2253,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double fgVideoMirado = -10.0;
   /* un cuadro real nuevo (el que acaba de entrar en la trama), a MAKO FG */
   auto fgVideoReal = [&](VkFormat formato) {
-    if (fgVideoMult < 2 || fgVideoRoto || sobreJuego(ui)) return;
+    if (fgVideoMult < 2 || fgVideoRoto || !seguroNoJuego(ui)) return;
     std::string efg;
     const VkImg *real = wv.fuenteReal();
     bool bien = real && fgVideo.preparar(dev, real->w, real->h, fgVideoMult, formato, &efg);
@@ -4311,7 +4319,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         const int m0 = it == sc.end() ? 0 : std::atoi(it->second.c_str());
         const int m = m0 >= 2 && m0 <= 4 ? m0 : 2;
         const bool activa = ia != sc.end() ? ia->second == "si" : (m0 >= 2 && m0 <= 4);
-        const int quiere = activa && !sobreJuego(ui) ? m : 0;
+        const int quiere = activa && seguroNoJuego(ui) ? m : 0;
         if (quiere != fgVideoMult) {
           std::printf("[fg-video] %s\n", quiere ? ("x" + std::to_string(quiere)).c_str() : "apagada");
           std::fflush(stdout);

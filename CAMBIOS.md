@@ -96,6 +96,9 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   nueva, `ODYSSEYVK_FUENTE_CUADROS` y `ODYSSEYVK_FUENTE_FPS`): 24 reales y 24 generados por segundo en pantalla a 60 Hz,
   la tarjeta a 3,6 ms por cuadro con la trama; con x3 caben 24 de los 48 generados en 60 Hz (en el panel, a 165, caben
   todos); y con un host que no existe, «apagada para esta sesión» y el 3D sigue a 60.
+- **No se enciende sobre un juego, ni al empezar**: mientras el visor aún no sabe qué ventana tiene debajo, la contaba como
+  «no es un juego», y al abrir Stray la generación de los vídeos se encendió 2 s (sin llegar a abrir MAKO FG). Ahora solo se
+  enciende cuando ya se sabe que no es un juego.
 - **El visor se caía al cambiar el multiplicador** con el vídeo en marcha (Rodolfo, dos veces el 27-nov: de x4 a x2 y de
   x4 a x3): al reabrir, el anillo de los generados cambia de tamaño (10 imágenes con x4, 4 con x2) y su posición no volvía
   a cero; se escribía fuera. Ahora `cerrar()` la pone a cero.
