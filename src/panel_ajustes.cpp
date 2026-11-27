@@ -665,13 +665,18 @@ int cmdAjustes(int argc, char **argv) {
              abierto la carga ya (orden `cargar_red`), el servicio la ve en su proxima mirada y este panel, que se abrio
              para eso, se cierra solo (v0.94); con otra ya puesta, se cambia a esta y el panel se queda */
           std::string e, aviso;
-          prefs::ponerRed(bajada, &aviso);
-          if (!prefs::descargaHabiaRed()) {
-            ajuste::escribir(std::map<std::string, double>(), bajada, {{"cargar_red", "si"}}, &e);
-            st.pie = idioma::tr("red descargada: el 3D de vídeo normal ya puede calcular la profundidad");
-            cerrarEn = reloj() + 2.5;
-          } else {
+          if (esRedDeVideo(bajada)) {   /* (v1.16) la de video: queda puesta para los videos, y nada mas */
+            prefs::ponerRedVideo(bajada, &aviso);
             st.pie = aviso;
+          } else {
+            prefs::ponerRed(bajada, &aviso);
+            if (!prefs::descargaHabiaRed()) {
+              ajuste::escribir(std::map<std::string, double>(), bajada, {{"cargar_red", "si"}}, &e);
+              st.pie = idioma::tr("red descargada: el 3D de vídeo normal ya puede calcular la profundidad");
+              cerrarEn = reloj() + 2.5;
+            } else {
+              st.pie = aviso;
+            }
           }
           rellenar();
         } else {

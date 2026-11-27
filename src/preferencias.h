@@ -54,6 +54,7 @@ struct Valores {
   double relieve = 1.0;           /* fuerza del relieve del conversor: 0,5 .. 2 */
   std::string modelo;             /* `modelo =` de serve.conf, ya expandido; vacio = la red abierta de siempre */
   std::string nuestra;            /* (v1.16) `nuestra =` (la abierta a mano), ya expandido */
+  std::string modeloVideo;        /* (v1.16) `modelo_video =`: la red solo para videos, ya expandido; vacio = ninguna */
   bool avisarActualizaciones = true;   /* `actualizaciones = no` apaga la tarjeta de version nueva (v0.95) */
   bool actualizarAuto = false;         /* `actualizar_auto = si`: con una version nueva se instala sola (v0.95) */
   bool enBarraTareas = true;           /* `barra_tareas = no`: el visor 3D no sale en la barra de tareas (v1.02) */
@@ -96,6 +97,10 @@ bool descargaHabiaRed();            /* al empezar ya habia alguna red puesta */
 std::string recogerRedBajada();     /* la que acaba de bajar entera (una vez; luego vacio) */
 extern const char *const kUrlRedFp32;
 bool redFp32Presente();
+/* (v1.16) la red de video (Video Depth Anything pequena, ONNX de la comunidad, 116 528 885 bytes) */
+extern const char *const kUrlRedVideo;
+constexpr long kBytesRedVideo = 116528885;
+bool redVideoPresente();
 
 /* ---- (v1.16) las redes de ~/.local/share/odysseyvk/models y la que va puesta ----
    Rodolfo: «ofrece descargar la red FP32 tambien, sugiere por defecto la fp16, activalas con un toggle, en gris la no
@@ -111,6 +116,10 @@ struct RedDisco {
 std::vector<RedDisco> redesDelDisco(const Valores &v);   /* la fp16, la fp32 y las demas .onnx (por nombre) */
 std::string redPuesta(const Valores &v);                 /* la que arranca el visor; vacio = ninguna */
 bool ponerRed(const std::string &ruta, std::string *aviso);
+/* (v1.16) las redes solo para videos (Video Depth Anything y las .onnx con «video» en el nombre) y la puesta, en
+   `modelo_video =` (vacio = los videos van con la de siempre) */
+std::vector<RedDisco> redesDeVideo(const Valores &v);
+bool ponerRedVideo(const std::string &ruta, std::string *aviso);
 
 /* ---- la actualizacion (v0.95) ------------------------------------------------------------------
    La version nueva se mira en el VERSION de la rama main del repositorio de GitHub. La comprobacion

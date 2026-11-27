@@ -2111,6 +2111,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     modeloActivo = ui.rutaRed[1];
   else if (modeloActivo.empty())
     modeloActivo = ui.rutaRed[2];
+  /* (v1.16) con un video, la red de video si el servicio la manda (Rodolfo: «can we try this for videos only?»). Si no
+     abre (por la CPU, o sin sitio en la tarjeta), arrancarRed sigue con la de siempre */
+  if (!opts.modeloVideo.empty() && fileExists(opts.modeloVideo) && !sobreJuego(ui)) {
+    std::printf("[conversor] con un video: la red de video (%s); si no abre, la de siempre\n", opts.modeloVideo.c_str());
+    std::fflush(stdout);
+    modeloActivo = opts.modeloVideo;
+  }
   ui.hud.state().red = modeloActivo.empty() ? 2 : slotRed(modeloActivo);
   ui.hud.state().redViva = false;
   int convGpu = opts.convGpu;   /* se sube solo a la 1 si la 0 esta llena (strata, juegos, ...) */
@@ -2557,6 +2564,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         std::map<std::string, double> pedidos;
         std::map<std::string, std::string> palabras;   /* las ordenes de palabra: `capa`, `camara`, `mono` */
         std::string modeloPedido;
+        /* (v1.16) el primer vistazo al fichero (haya algo o no): lo que traiga es de antes de este visor */
+        static bool primerVistazo = true;
+        [[maybe_unused]] const bool vistazoInicial = primerVistazo;
+        primerVistazo = false;
         if (lector.cambio(pedidos, modeloPedido, &palabras)) {
           for (const auto &kv : pedidos) {
             if (ajuste::esOrden(kv.first)) continue;   /* `overlay` lo atiende el vigilante, no nosotros */
@@ -2732,6 +2743,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             else
               std::printf("[vista] no entiendo `vista = %s`: vale 1 o 0\n", v.c_str());
           }
+#ifdef HAVE_ORT
+          /* (v1.16) con la red de video puesta, la de siempre que se marque en el panel vale para los juegos y para cuando
+             se quite la de video: aqui no la cambia (y una orden vieja del fichero no la quita al arrancar) */
+          if (!modeloPedido.empty() && red.ventana() > 0 && !esRedDeVideo(modeloPedido)) {
+            std::printf("[conversor] con la red de video puesta, %s queda para los juegos\n", modeloPedido.c_str());
+            std::fflush(stdout);
+            modeloPedido.clear();
+          }
+          /* (v1.16) `modelo_video = RUTA|no`: el panel puso o quito la red de video. Vale con un video y solo si llega con
+             el visor en marcha (no la que se quedo en el fichero de otra vez) */
+          if (const auto ov = palabras.find("modelo_video"); ov != palabras.end() && !vistazoInicial && !sobreJuego(ui)) {
+            const std::string v = ov->second;
+            const std::string normal = !opts.modelPath.empty() && !esRedDeVideo(opts.modelPath) ? opts.modelPath : ui.rutaRed[2];
+            const std::string quiere = !v.empty() && strLower(v) != "no" && fileExists(v) ? v : normal;
+            if (!quiere.empty() && quiere != red.modelPath()) {
+              std::printf("[conversor] el panel %s la red de video: se pasa a %s\n", quiere == v ? "puso" : "quito", quiere.c_str());
+              std::fflush(stdout);
+              modeloPedido = quiere;
+            }
+          }
+#endif
           if (!modeloPedido.empty()) {
             ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
             ui.avisoRedLejos = false;

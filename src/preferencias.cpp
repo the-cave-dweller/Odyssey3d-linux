@@ -423,6 +423,7 @@ Valores leer() {
   v.relieve = std::max(0.5, std::min(2.0, numero(de("relieve"), 1.0)));
   v.modelo = de("modelo");
   v.nuestra = de("nuestra");
+  v.modeloVideo = de("modelo_video");
   v.avisarActualizaciones = si(de("actualizaciones"), true);
   v.actualizarAuto = si(de("actualizar_auto"), false);
   v.enBarraTareas = si(de("barra_tareas"), true);
@@ -451,7 +452,7 @@ Valores leer() {
   v.capaTope = std::max(0, std::min(240, std::atoi(de("capa_fps_tope").c_str())));
   v.expPrioridad = de("exp_prioridad");
   if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
-  for (std::string *m : {&v.modelo, &v.nuestra})
+  for (std::string *m : {&v.modelo, &v.nuestra, &v.modeloVideo})
     if (!m->empty() && (*m)[0] == '~') {
       const char *home = std::getenv("HOME");
       *m = std::string(home ? home : "") + m->substr(1);
@@ -493,6 +494,10 @@ Valores leer() {
    tambien se ofrece (Rodolfo: «ofrece descargar la red FP32 tambien, sugiere por defecto la fp16») */
 const char *const kUrlRedAbierta = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_fp16.onnx";
 const char *const kUrlRedFp32 = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx";
+/* (v1.16) la red de video: Video Depth Anything pequena (Apache-2.0), exportada a ONNX por la comunidad (looplj); no hay
+   una oficial. Fijada a la revision que se midio el 27-nov (su SHA-256, eb5926ad…bb99) */
+const char *const kUrlRedVideo = "https://huggingface.co/looplj/video-depth-anything-small-onnx/resolve/"
+                                 "ff810849333df46d37ea18a885fc11689661fe96/video-depth-anything-small-dynamic-fp32.onnx";
 
 namespace {
 bool tamanoEs(const std::string &ruta, long bytes) {
@@ -503,6 +508,7 @@ bool tamanoEs(const std::string &ruta, long bytes) {
 
 bool redLigeraPresente() { return tamanoEs(rutaRedLigera(), kBytesRedAbierta); }
 bool redFp32Presente() { return tamanoEs(rutaRedVieja(), kBytesRedVieja); }
+bool redVideoPresente() { return tamanoEs(rutaRedVideo(), kBytesRedVideo); }
 bool redAbiertaPresente() { return redLigeraPresente() || redFp32Presente(); }
 
 namespace {
@@ -518,11 +524,11 @@ struct Descarga {
 } g_descarga;
 const char *urlDe(int cual) {
   if (const char *u = entornoOdyssey("ODYSSEYVK_RED_URL")) return u;   /* para las pruebas: un file:// en vez de Hugging Face */
-  return cual == 1 ? kUrlRedFp32 : kUrlRedAbierta;
+  return cual == 2 ? kUrlRedVideo : (cual == 1 ? kUrlRedFp32 : kUrlRedAbierta);
 }
-std::string destinoDe(int cual) { return cual == 1 ? rutaRedVieja() : rutaRedLigera(); }
-long bytesDe(int cual) { return cual == 1 ? kBytesRedVieja : kBytesRedAbierta; }
-std::string megasDe(int cual) { return cual == 1 ? "99" : "50"; }
+std::string destinoDe(int cual) { return cual == 2 ? rutaRedVideo() : (cual == 1 ? rutaRedVieja() : rutaRedLigera()); }
+long bytesDe(int cual) { return cual == 2 ? kBytesRedVideo : (cual == 1 ? kBytesRedVieja : kBytesRedAbierta); }
+std::string megasDe(int cual) { return cual == 2 ? "117" : (cual == 1 ? "99" : "50"); }
 }  // namespace
 
 bool descargaEnMarcha() { return g_descarga.pid > 0; }
@@ -539,7 +545,7 @@ bool descargar(std::string *err) { return descargar(0, err); }
 
 bool descargar(int cual, std::string *err) {
   if (g_descarga.pid > 0) return true;
-  cual = cual == 1 ? 1 : 0;
+  cual = cual == 1 || cual == 2 ? cual : 0;   /* (v1.16) 2 = la de video */
   const std::string destino = destinoDe(cual);
   const std::string dir = destino.substr(0, destino.rfind('/'));
   std::error_code ec;
@@ -586,7 +592,8 @@ bool vigilarDescarga() {
   const bool bien = r > 0 && WIFEXITED(estado) && WEXITSTATUS(estado) == 0;
   const bool entera = tamanoEs(g_descarga.parte, bytesDe(cual));
   if (bien && entera && ::rename(g_descarga.parte.c_str(), destinoDe(cual).c_str()) == 0) {
-    g_descarga.texto = idioma::tr(cual == 1 ? "lista: la FP32 ya está en su carpeta" : "lista: la red abierta ya está en su carpeta");
+    g_descarga.texto = idioma::tr(cual == 2 ? "lista: la red de vídeo ya está en su carpeta"
+                                            : (cual == 1 ? "lista: la FP32 ya está en su carpeta" : "lista: la red abierta ya está en su carpeta"));
     g_descarga.fallo = false;
     g_descarga.lista = destinoDe(cual);
   } else {
@@ -627,10 +634,11 @@ std::vector<RedDisco> redesDelDisco(const Valores &v) {
     if (e.path().extension() != ".onnx" || !e.is_regular_file(e2)) continue;
     if (e.path().string() == rutaRedLigera() || e.path().string() == rutaRedVieja()) continue;
     if (nombre.rfind("face_detection", 0) == 0) continue;
+    if (esRedDeVideo(nombre)) continue;   /* (v1.16) las de video van en su lista (redesDeVideo) */
     otras.push_back({e.path().string(), nombre.substr(0, nombre.size() - 5), 0, true, (long)e.file_size(e2)});
   }
   /* y la de `modelo =` si esta fuera de la carpeta */
-  if (!v.modelo.empty() && fileExists(v.modelo)) {
+  if (!v.modelo.empty() && fileExists(v.modelo) && !esRedDeVideo(v.modelo)) {
     const std::string m = std::filesystem::path(v.modelo).lexically_normal().string();
     bool ya = m == rutaRedLigera() || m == rutaRedVieja();
     for (const RedDisco &o : otras) ya = ya || o.ruta == m;
@@ -658,6 +666,46 @@ bool ponerRed(const std::string &ruta, std::string *aviso) {
   for (const RedDisco &r : redesDelDisco(leer()))
     if (r.ruta == ruta) nombre = r.conocida ? std::string(idioma::tr(r.conocida == 1 ? "la FP16" : "la FP32")) : r.nombre;
   if (aviso) *aviso = idioma::trf("red puesta: {} (la cambia el visor abierto, o el siguiente vídeo)", {nombre});
+  return true;
+}
+
+/* (v1.16) las redes de video: la que se baja desde aqui y cualquier .onnx de la carpeta con «video» en el nombre (y la
+   de `modelo_video =` si esta fuera) */
+std::vector<RedDisco> redesDeVideo(const Valores &v) {
+  std::vector<RedDisco> r;
+  r.push_back({rutaRedVideo(), "Video Depth Anything pequeña", 3, redVideoPresente(), kBytesRedVideo});
+  std::error_code ec;
+  for (const auto &e : std::filesystem::directory_iterator(carpetaRedes(), ec)) {
+    std::error_code e2;
+    const std::string nombre = e.path().filename().string();
+    if (e.path().extension() != ".onnx" || !e.is_regular_file(e2) || !esRedDeVideo(nombre) || e.path().string() == rutaRedVideo()) continue;
+    r.push_back({e.path().string(), nombre.substr(0, nombre.size() - 5), 0, true, (long)e.file_size(e2)});
+  }
+  if (!v.modeloVideo.empty() && fileExists(v.modeloVideo)) {
+    const std::string m = std::filesystem::path(v.modeloVideo).lexically_normal().string();
+    bool ya = false;
+    for (const RedDisco &o : r) ya = ya || o.ruta == m;
+    if (!ya) {
+      struct stat sb {};
+      const std::string nombre = std::filesystem::path(m).filename().string();
+      r.push_back({m, nombre.size() > 5 ? nombre.substr(0, nombre.size() - 5) : nombre, 0, true,
+                   ::stat(m.c_str(), &sb) == 0 ? (long)sb.st_size : 0});
+    }
+  }
+  return r;
+}
+
+bool ponerRedVideo(const std::string &ruta, std::string *aviso) {
+  std::string e;
+  if (!ajuste::fijarEnServeConf("modelo_video", ruta, &e)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+    return false;
+  }
+  /* el visor abierto con un video se cambia ya; con un juego no hace caso (ver vkview.cpp) */
+  ajuste::escribir(std::map<std::string, double>(), std::string(), {{"modelo_video", ruta.empty() ? std::string("no") : ruta}}, &e);
+  if (aviso)
+    *aviso = ruta.empty() ? std::string(idioma::tr("red de vídeo quitada: los vídeos vuelven a la de siempre"))
+                          : std::string(idioma::tr("red de vídeo puesta: vale con los vídeos (la cambia el visor abierto, o el siguiente vídeo)"));
   return true;
 }
 
@@ -861,6 +909,39 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
       pon(it, "red_bajar:" + std::to_string(cual));
     }
   }
+  /* (v1.16) solo para videos (Rodolfo: «can we try this for videos only?»): Video Depth Anything mira los ultimos 32
+     cuadros a la vez. MEDIDO el 27-nov en la RTX 5080 con dos videos a 6 mapas por segundo: menos saltos de cerca y
+     lejos de un mapa al siguiente (la mitad en un paisaje), pero 123 ms por mapa contra 4 de la de siempre, y 2,8 GB.
+     Una casilla aparte: se pone o se quita (sin ninguna, los videos van con la de arriba). Los juegos, con la de arriba */
+  {
+    Hud::ItemPanel sv;
+    sv.tipo = Hud::ItemPanel::Seccion, sv.rotulo = idioma::tr("SOLO PARA VÍDEOS (EXPERIMENTAL)");
+    pon(sv, "");
+    Hud::ItemPanel nv;
+    nv.tipo = Hud::ItemPanel::Info;
+    nv.rotulo = idioma::tr("Mira los últimos 32 cuadros: menos saltos de profundidad entre uno y otro. Los juegos siguen con la de arriba.");
+    nv.nota = idioma::tr("Unas 30 veces más trabajo para la tarjeta (unos 120 ms por mapa en una RTX 5080) y 2,8 GB; no va por la CPU.");
+    pon(nv, "");
+    for (const RedDisco &r : redesDeVideo(v)) {
+      Hud::ItemPanel it;
+      it.tipo = Hud::ItemPanel::Interruptor;
+      it.rotulo = r.conocida == 3 ? std::string(idioma::tr("Video Depth Anything pequeña")) : r.nombre;
+      it.nota = r.conocida == 3 ? std::string(idioma::tr("Exportada a ONNX por la comunidad (no hay una oficial) · 117 MB · Apache-2.0"))
+                                : idioma::trf("{} · {} MB", {r.ruta.rfind(carpetaRedes(), 0) == 0 ? r.ruta.substr(carpetaRedes().size()) : r.ruta,
+                                                             std::to_string(std::max(1L, r.bytes / 1000000))});
+      it.valor = r.presente && r.ruta == v.modeloVideo;
+      if (r.presente) {
+        it.pastilla = idioma::tr(r.conocida ? "Descargada" : "En la carpeta");
+        it.pastillaAcento = true;
+        pon(it, "redvid:" + r.ruta);
+      } else {
+        it.apagado = true;
+        it.descargable = bajando < 0;
+        it.pastilla = bajando == 2 ? textoDescarga() : idioma::trf("Descargar · {} MB", {"117"});
+        pon(it, "red_bajar:2");
+      }
+    }
+  }
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
   /* la carpeta con ~ (la de cada usuario; en la de Rodolfo, /home/rodolfo/.local/share/odysseyvk/models): entera no
@@ -868,7 +949,7 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
   std::string carpeta = carpetaRedes().substr(0, carpetaRedes().size() - 1);
   if (const char *home = std::getenv("HOME"); home && *home && carpeta.rfind(std::string(home) + "/", 0) == 0)
     carpeta = "~" + carpeta.substr(std::strlen(home));
-  n.rotulo = idioma::trf("Cualquier red de profundidad .onnx que pongas en {} empieza a salir en esta lista.", {carpeta});
+  n.rotulo = idioma::trf("Cualquier red de profundidad .onnx que pongas en {} empieza a salir aquí (si su nombre lleva «video», en la de vídeos).", {carpeta});
   pon(n, "");
 }
 /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que dice
@@ -2097,8 +2178,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     }
     return ponerRed(ruta, aviso);
   }
+  /* (v1.16) la casilla de una red de video: se pone o se quita (sin ninguna, los videos van con la de siempre) */
+  if (id.rfind("redvid:", 0) == 0) {
+    const std::string ruta = id.substr(7);
+    return ponerRedVideo(ruta == v.modeloVideo ? std::string() : ruta, aviso);
+  }
   if (id.rfind("red_bajar:", 0) == 0) {
-    const int cual = std::atoi(id.c_str() + 10) == 1 ? 1 : 0;
+    const int cn = std::atoi(id.c_str() + 10), cual = cn == 1 || cn == 2 ? cn : 0;
     if (descargaEnMarcha()) {
       if (aviso) *aviso = idioma::tr("ya se está bajando una red: espera a que acabe");
       return true;
@@ -2107,7 +2193,9 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
       if (aviso) *aviso = e;
       return false;
     }
-    if (aviso) *aviso = idioma::tr(cual == 1 ? "bajando la FP32 (99 MB): al acabar queda puesta" : "bajando la FP16 (50 MB): al acabar queda puesta");
+    if (aviso)
+      *aviso = idioma::tr(cual == 2 ? "bajando la red de vídeo (117 MB): al acabar queda puesta para los vídeos"
+                                    : (cual == 1 ? "bajando la FP32 (99 MB): al acabar queda puesta" : "bajando la FP16 (50 MB): al acabar queda puesta"));
     return true;
   }
   if (id == "descargar_red") {

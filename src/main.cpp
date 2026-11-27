@@ -1750,6 +1750,9 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
       if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a.c_str()); return 2; }
       o.modelPath = argv[++i];
       o.conver = true;
+    } else if (a == "--modelo-video") {   /* (v1.16) la red solo para videos */
+      if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a.c_str()); return 2; }
+      o.modeloVideo = argv[++i];
     } else if (a == "--alterno" || a == "--alternativa") {
       if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita una ruta\n", a.c_str()); return 2; }
       o.altModel = argv[++i];
@@ -3532,6 +3535,7 @@ struct ServeCfg {
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
   std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
   std::string nuestra;            /* la otra red (.onnx), la nativa, la del boton 2 del visor */
+  std::string modeloVideo;        /* (v1.16) `modelo_video =`: la red solo para videos (vacio = la de siempre tambien) */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
   int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
@@ -3689,6 +3693,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "modo") cfg.modo = strLower(v);
     else if (k == "pantalla") cfg.pantalla = v;
     else if (k == "modelo") cfg.modelo = expansionRuta(v);
+    else if (k == "modelo_video") cfg.modeloVideo = v.empty() ? std::string() : expansionRuta(v);
     else if (k == "nuestra") cfg.nuestra = expansionRuta(v);
     else if (k == "rastreo") cfg.rastreo = (v == "si" || v == "on" || v == "1" || v == "track");
     else if (k == "camara") cfg.camara = v;
@@ -3911,7 +3916,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
                         const std::string &pantalla = std::string(),
                         const std::string &alterno = std::string(), bool rastreo = false,
                         float suavizado = 0.0f, ServeCfg *pila = nullptr, bool escritorio = false,
-                        const std::string &recordar = std::string(), bool recordado = false) {
+                        const std::string &recordar = std::string(), bool recordado = false, bool video = false) {
   /* El modo de legado se cambia desde la ventana de ajustes sin reiniciar el servicio, y el
      vigilante leia serve.conf una sola vez al arrancar: lo volvemos a mirar justo antes de lanzar el
      visor, para que el modo que se ve marcado en la ventana sea el que sale en pantalla. Solo se
@@ -4084,6 +4089,12 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     if (!alterno.empty()) {   /* la otra red, para el boton 1 / 2 del visor */
       args.push_back("--alterno");
       args.push_back(alterno);
+    }
+    /* (v1.16) la red de video, solo si lo de debajo es un video (no un juego): la decide quien llama, que sabe de que
+       aplicacion es la ventana */
+    if (video && pila && !pila->modeloVideo.empty() && fileExists(pila->modeloVideo)) {
+      args.push_back("--modelo-video");
+      args.push_back(pila->modeloVideo);
     }
     if (pila && !pila->texto.empty() && pila->texto != "auto") {
       /* texto = no en serve.conf deja los rotulos con la profundidad que les da la red; sirve para
@@ -5990,6 +6001,10 @@ static int cmdServe(int argc, char **argv) {
             cfg.modelo = nuevo.modelo;
             elegirRedes();
           }
+          if (nuevo.modeloVideo != cfg.modeloVideo) {   /* (v1.16) vale desde el siguiente video */
+            std::printf("[serve] red para videos: %s\n", nuevo.modeloVideo.empty() ? "la de siempre" : nuevo.modeloVideo.c_str());
+            cfg.modeloVideo = nuevo.modeloVideo;
+          }
           cfg.modo = nuevo.modo;
           cfg.rastreo = nuevo.rastreo;
           cfg.atajosGlobales = nuevo.atajosGlobales;
@@ -6140,7 +6155,8 @@ static int cmdServe(int argc, char **argv) {
           const std::string modoVisor = act == "conv" && !accionApp.empty() && !esJuego(accionApp) ? std::string("detectar") : act;
           hijo = spawnViewer(exe, avisoUuid, modoVisor, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
                              false, accionApp.empty() || modoVisor == "detectar" ? std::string() : accionApp + ":" + act,
-                             accionGuardada);   /* con un video lo recordo ya la tarjeta: sin la casilla en la pastilla */
+                             accionGuardada,   /* con un video lo recordo ya la tarjeta: sin la casilla en la pastilla */
+                             !accionApp.empty() && !esJuego(accionApp));   /* (v1.16) un video: la red de video, si hay */
           hijoDesde = now;
           hijoUuid = avisoUuid;
           hijoApp = accionApp;   /* (v1.16) antes se vaciaba primero y quedaba siempre vacio */
@@ -6195,7 +6211,8 @@ static int cmdServe(int argc, char **argv) {
         auto fija = cfg.porApp.find(app);
         if (!reabrirUuid.empty() && w.uuid == reabrirUuid && !dry) {
           /* la sesion que corto la actualizacion: se reabre tal cual estaba, sin preguntar */
-          hijo = spawnViewer(exe, w.uuid, reabrirModo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
+          hijo = spawnViewer(exe, w.uuid, reabrirModo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
+                             false, std::string(), false, !esJuego(w.appId));
           hijoDesde = now;
           hijoUuid = w.uuid;
           hijoApp = strLower(w.appId);
@@ -6217,7 +6234,7 @@ static int cmdServe(int argc, char **argv) {
              Ni tarjeta ni el modo guardado para la aplicacion: el visor arranca como video normal, mira los
              primeros segundos y, si es un video dividido, se cambia solo. Los juegos siguen por su camino. */
           hijo = spawnViewer(exe, w.uuid, "detectar", cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo,
-                             cfg.suavizado, &cfg);
+                             cfg.suavizado, &cfg, false, std::string(), false, true);   /* (v1.16) un video, siempre */
           hijoDesde = now;
           hijoUuid = w.uuid;
           hijoApp = strLower(w.appId);
@@ -6233,7 +6250,7 @@ static int cmdServe(int argc, char **argv) {
             if (unaVez) break;
           } else {
             hijo = spawnViewer(exe, w.uuid, fija->second, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
-                               false, app + ":" + fija->second, true);
+                               false, app + ":" + fija->second, true, !esJuego(w.appId));
             hijoDesde = now;
             hijoUuid = w.uuid;
             hijoApp = strLower(w.appId);
@@ -6288,7 +6305,8 @@ static int cmdServe(int argc, char **argv) {
           std::fflush(stdout);
           if (unaVez) break;
         } else {
-          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg);
+          hijo = spawnViewer(exe, w.uuid, cfg.modo, cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo, cfg.suavizado, &cfg,
+                             false, std::string(), false, !esJuego(w.appId));
           hijoDesde = now;
           hijoUuid = w.uuid;
           hijoApp = strLower(w.appId);
@@ -6453,25 +6471,35 @@ int main(int argc, char **argv) {
           std::printf("  odysseyvk ctl net download   deja ahi la ligera (fp16, 50 MB)\n");
         if (!prefs::redFp32Presente())
           std::printf("  odysseyvk ctl net download fp32   y la de precision completa (99 MB, la que va por la CPU)\n");
+        /* (v1.16) la de video */
+        const prefs::Valores vv = prefs::leer();
+        std::printf("red para videos: %s\n", vv.modeloVideo.empty() ? (prefs::redVideoPresente() ? "bajada, sin poner" : "ninguna")
+                                                                  : vv.modeloVideo.c_str());
+        if (!prefs::redVideoPresente())
+          std::printf("  odysseyvk ctl net download video   Video Depth Anything pequena (117 MB, solo para videos, experimental)\n");
         return hay ? 0 : 1;
       }
       /* (v1.16) `ctl red descargar fp32`: la de precision completa (99 MB); otra cosa, el uso (de la PR #2 de Noa3) */
       const std::string precision = argc > 4 ? strLower(argv[4]) : std::string("fp16");
-      if (argc > 5 || (precision != "fp16" && precision != "fp32")) {
-        std::fprintf(stderr, "uso: odysseyvk ctl net download [fp16|fp32]\n");
+      if (argc > 5 || (precision != "fp16" && precision != "fp32" && precision != "video")) {
+        std::fprintf(stderr, "uso: odysseyvk ctl net download [fp16|fp32|video]\n");
         return 2;
       }
-      const bool fp32 = precision == "fp32";
-      if (fp32 ? prefs::redFp32Presente() : prefs::redLigeraPresente()) {
-        std::printf("ya esta: %s\n", (fp32 ? rutaRedVieja() : rutaRedLigera()).c_str());
+      /* (v1.16) `video`: la red solo para videos (Video Depth Anything pequena, 117 MB); queda puesta para los videos */
+      const int cual = precision == "video" ? 2 : (precision == "fp32" ? 1 : 0);
+      auto presente = [cual] { return cual == 2 ? prefs::redVideoPresente() : (cual == 1 ? prefs::redFp32Presente() : prefs::redLigeraPresente()); };
+      const std::string destino = cual == 2 ? rutaRedVideo() : (cual == 1 ? rutaRedVieja() : rutaRedLigera());
+      const bool fp32 = cual == 1;
+      if (presente()) {
+        std::printf("ya esta: %s\n", destino.c_str());
         return 0;
       }
       std::string err;
-      if (!prefs::descargar(fp32 ? 1 : 0, &err)) {
+      if (!prefs::descargar(cual, &err)) {
         std::fprintf(stderr, "%s\n", err.c_str());
         return 1;
       }
-      std::printf("descargando %s\n", fp32 ? prefs::kUrlRedFp32 : prefs::kUrlRedAbierta);
+      std::printf("descargando %s\n", cual == 2 ? prefs::kUrlRedVideo : (fp32 ? prefs::kUrlRedFp32 : prefs::kUrlRedAbierta));
       while (prefs::descargaEnMarcha()) {
         if (prefs::vigilarDescarga()) {
           std::printf("  %s\n", prefs::textoDescarga().c_str());
@@ -6479,7 +6507,12 @@ int main(int argc, char **argv) {
         }
         ::usleep(500000);
       }
-      return (fp32 ? prefs::redFp32Presente() : prefs::redLigeraPresente()) ? 0 : 1;
+      if (cual == 2 && presente()) {   /* bajada: queda puesta para los videos, como desde el panel */
+        std::string aviso;
+        prefs::ponerRedVideo(destino, &aviso);
+        std::printf("%s\n", aviso.c_str());
+      }
+      return presente() ? 0 : 1;
     }
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "legado") return cmdLegado(argc - 3, argv + 3);

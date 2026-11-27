@@ -50,6 +50,9 @@ std::string defaultModelPath() { return rutaRedNuestra(); }
 const long kSamsungMiB = 700;   /* lo que ocupa mde_* / disp_* en la grafica (medido 678) */
 const long kNativaMiB = 480;    /* lo que ocupa depth_anything_v2_small (medido unos 400) */
 const long kColchonMiB = 300;   /* lo que el navegador o el compositor pueden pedir entre medias */
+/* (v1.16) la red de video (Video Depth Anything pequena, 32 cuadros de 504 x 280 a la vez): MEDIDO en la RTX 5080 con
+   ONNX Runtime 1.29, 2844 MiB el proceso entero; sin el contexto de CUDA (unos 570 de los 1052 con la nativa), ~2300 */
+const long kVideoMiB = 2300;
 
 /* La red de Samsung es la que se llama mde_* o disp_* (la de Depth Anything se llama otra cosa).
    Solo abre en la grafica: intentarla por CPU se cuelga, medido el 24-nov con mde_large.onnx mas de
@@ -72,7 +75,7 @@ long requisitoMiB(const std::string &ruta) {
     const long v = std::atol(c);
     if (v >= 0 && v <= 2000) colchon = v;
   }
-  return (esRedDeSamsung(ruta) ? kSamsungMiB : kNativaMiB) + colchon;
+  return (esRedDeSamsung(ruta) ? kSamsungMiB : (esRedDeVideo(ruta) ? kVideoMiB : kNativaMiB)) + colchon;
 }
 
 /* Muestreo bilineal sobre la imagen de origen (RGBA, primera fila arriba), a ow x oh planar. */
@@ -349,6 +352,10 @@ struct OrtImpl {
   Ort::AllocatorWithDefaultOptions alloc;
   std::string inN, outN;   /* nombres de la entrada y la salida, copiados: viven lo que nosotros */
   std::vector<float> in;
+  /* (v1.16) la red de video: cuantos cuadros mira a la vez (0 = una red de un cuadro) y su ventana, los ultimos
+     cuadros ya normalizados uno detras de otro (el de ahora, el ultimo) */
+  int ventana = 0;
+  std::vector<float> hist;
   OrtImpl() : env(ORT_LOGGING_LEVEL_ERROR, "odysseyvk") {}
   ~OrtImpl() { delete ses; }
 };
@@ -509,6 +516,9 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
      bloque con entradas de mas de ~1700 parches (770x770 = 3025 y 1022x574 = 2993 fallan; 770x434 =
      1705 abre); en CPU las mismas entradas van bien. */
   inW_ = inH_ = 518;
+  /* (v1.16) la de video, a 504 x 280 (16:9, de 14 en 14): MEDIDO en la RTX 5080, 123 ms por mapa con sus 32 cuadros;
+     a 518 x 518, 269 ms (no llega a los 6 mapas por segundo) */
+  if (esRedDeVideo(model.empty() ? defaultModelPath() : model)) inW_ = 504, inH_ = 280;
   if (const char *e = entornoOdyssey("ODYSSEYVK_RED_ENTRADA")) {
     int w = 0, h = 0;
     if (std::sscanf(e, "%dx%d", &w, &h) == 2 && w >= 224 && h >= 224 && w <= 1400 && h <= 1400) {
@@ -636,6 +646,14 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
      mde_large.onnx: mas de 4 minutos quemando CPU sin acabarla) y acaba en abort. No se intenta: se dice lo que hace
      falta. (v1.16, PR #2) Se mira tambien mas abajo, si la CPU sale porque el proveedor CUDA no arranco */
   auto sinSamsungEnCpu = [&]() {
+    /* (v1.16) la de video tampoco: 32 cuadros por mapa en el procesador son varios segundos por mapa. El visor sigue
+       entonces con la de siempre */
+    if (esRedDeVideo(path)) {
+      if (err)
+        *err = "la red de video no va por la CPU (mira 32 cuadros por mapa: serian varios segundos por mapa); "
+               "se sigue con la de siempre";
+      return true;
+    }
     if (!esRedDeSamsung(path)) return false;
     if (err)
       *err = std::string("la red de Samsung no puede abrirse por CPU: se cuelga creando la sesion ") +
@@ -703,7 +721,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
       try {
         OrtCUDAProviderOptions o{};
         o.device_id = gpu_;
-        o.gpu_mem_limit = 550ull << 20;
+        o.gpu_mem_limit = esRedDeVideo(path) ? 3500ull << 20 : 550ull << 20;   /* (v1.16) la de video pide ~2,3 GB */
         o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
         im->so.AppendExecutionProvider_CUDA(o);
         dev_ = "NVIDIA";
@@ -757,11 +775,19 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
         std::printf("[conversor] la red pide su entrada fija de %lld x %lld\n", (long long)dims[3], (long long)dims[2]);
         iw = (int)dims[3], ih = (int)dims[2];
       }
+      /* (v1.16) una red de video: [1, cuadros, 3, alto, ancho] (Video Depth Anything: 32 cuadros) */
+      q->ventana = dims.size() == 5 ? (dims[1] > 0 ? (int)dims[1] : 32) : 0;
+      if (q->ventana && dims[3] > 0 && dims[4] > 0) iw = (int)dims[4], ih = (int)dims[3];
     }
     q->in.assign((size_t)3 * (size_t)iw * (size_t)ih, 0.0f);
     std::vector<int64_t> shape{1, 3, ih, iw};
+    if (q->ventana) {
+      q->hist.assign((size_t)q->ventana * q->in.size(), 0.0f);
+      shape = {1, q->ventana, 3, ih, iw};
+    }
     Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-    Ort::Value tin = Ort::Value::CreateTensor<float>(mem, q->in.data(), q->in.size(), shape.data(), shape.size());
+    Ort::Value tin = q->ventana ? Ort::Value::CreateTensor<float>(mem, q->hist.data(), q->hist.size(), shape.data(), shape.size())
+                                : Ort::Value::CreateTensor<float>(mem, q->in.data(), q->in.size(), shape.data(), shape.size());
     const char *inN = q->inN.c_str(), *outN = q->outN.c_str();
     q->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);   /* el primero vale para calentar */
   };
@@ -792,6 +818,10 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   impl_ = im;
   ready_ = true;
   ruta_ = path;
+  ventana_ = im->ventana, ventanaN_ = 0;   /* (v1.16) la ventana de la red de video, vacia */
+  if (ventana_)
+    std::printf("[conversor] red de video: mira %d cuadros a la vez (el de ahora y los %d anteriores), solo con videos\n",
+                ventana_, ventana_ - 1);
   std::printf("[conversor] modelo %s (entrada %d x %d · mapa %d x %d%s) con %s%s\n", path.c_str(), inW_, inH_, sz_, sz_,
               topeArrastre_ ? " · tope de arrastre" : "", dev_.c_str(),
               dev_ == "NVIDIA" ? (" (CUDA " + std::to_string(gpu_) +
@@ -1176,9 +1206,24 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     for (size_t i = 0; i < planeIn; i++) p[i] = (p[i] - m) / s;
   }
   std::vector<int64_t> shape{1, 3, inH_, inW_};
+  float *datosIn = im->in.data();
+  size_t cuentaIn = im->in.size();
+  /* (v1.16) la red de video: el cuadro de ahora va al final de la ventana y los demas corren un sitio. Recien
+     abierta (o tras un cambio de plano) la ventana se llena con el de ahora, como un video quieto */
+  if (im->ventana) {
+    const size_t fr = im->in.size();
+    if (ventanaN_ <= 0) {
+      for (int k = 0; k < im->ventana; k++) std::copy(im->in.begin(), im->in.end(), im->hist.begin() + (long)k * (long)fr);
+    } else {
+      std::memmove(im->hist.data(), im->hist.data() + fr, (size_t)(im->ventana - 1) * fr * sizeof(float));
+      std::copy(im->in.begin(), im->in.end(), im->hist.begin() + (long)(im->ventana - 1) * (long)fr);
+    }
+    ventanaN_ = std::min(im->ventana, ventanaN_ + 1);
+    shape = {1, im->ventana, 3, inH_, inW_};
+    datosIn = im->hist.data(), cuentaIn = im->hist.size();
+  }
   Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Value tin =
-      Ort::Value::CreateTensor<float>(mem, im->in.data(), im->in.size(), shape.data(), shape.size());
+  Ort::Value tin = Ort::Value::CreateTensor<float>(mem, datosIn, cuentaIn, shape.data(), shape.size());
   const char *inN = im->inN.c_str(), *outN = im->outN.c_str();
   try {
     outs = im->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);
@@ -1191,6 +1236,12 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   auto info = outs[0].GetTensorTypeAndShapeInfo();
   n = info.GetElementCount();
   if (!n) return false;
+  /* (v1.16) la red de video contesta un mapa por cuadro de la ventana: vale el ultimo, el del cuadro de ahora */
+  if (im->ventana && n % (size_t)im->ventana == 0) {
+    const size_t porMapa = n / (size_t)im->ventana;
+    d += (size_t)(im->ventana - 1) * porMapa;
+    n = porMapa;
+  }
   /* la red contesta a su tamano: si no es el del mapa (rama experimental), se remuestrea aqui y
      todo lo de abajo (corte, escala, filtros, planos) trabaja con el mapa cuadrado de sz_ */
   {
@@ -1275,6 +1326,14 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     cuadrosDesdeCorte_ = 0;
     cortes_++;
     haveScale_ = false;
+    /* (v1.16) la red de video: lo de antes del cambio de plano ya no le sirve; la ventana se queda con el cuadro de
+       ahora en todos sus sitios */
+    if (im->ventana) {
+      const size_t fr = im->in.size();
+      const float *ult = im->hist.data() + (size_t)(im->ventana - 1) * fr;
+      for (int k = 0; k < im->ventana - 1; k++) std::copy(ult, ult + fr, im->hist.begin() + (long)k * (long)fr);
+      ventanaN_ = 1;
+    }
   } else {
     cuadrosDesdeCorte_++;
   }

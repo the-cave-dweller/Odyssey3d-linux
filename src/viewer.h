@@ -38,6 +38,8 @@ struct ViewerOpts {
   std::string modelPath;
   /* la otra red de profundidad, la del boton 1 / 2 de la pastilla (--alterno RUTA) */
   std::string altModel;
+  /* (v1.16) la red solo para videos (--modelo-video RUTA): el servicio la manda solo cuando lo de debajo no es un juego */
+  std::string modeloVideo;
   int convEach = 3;          /* cada cuantos cuadros se vuelve a calcular la profundidad */
   int convGpu = 0;           /* 0 = primera tarjeta NVIDIA, 1 = la otra (la primera puede estar llena) */
   /* mapa de profundidad fijo para medir en el taller (--mapa-fijo F.pgm): el relieve se prueba con un

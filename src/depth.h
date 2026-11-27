@@ -160,7 +160,7 @@ public:
   /* Olvidar el mapa anterior y la escala seguida. Hace falta cuando cambia algo que entra dentro
      del mapa (por ejemplo al quitar el apoyo de los rotulos), para que el cuadro nuevo no salga
      mezclado con el mapa viejo. */
-  void reset() { prev_.clear(); haveScale_ = false; }
+  void reset() { prev_.clear(); haveScale_ = false; ventanaN_ = 0; }
 
   /* plano de enfoque: donde deberia apoyarse el plano de la pantalla (0 = fondo, 1 = lo mas cerca).
      Sale del histograma del mapa ya limpio, ponderando el centro del cuadro y los cantos, para que
@@ -180,6 +180,7 @@ public:
      esto, pasar varias fotos sin relacion en una sola llamada mezcla cada mapa con el anterior (el
      suavizado en el tiempo) y las medidas salen contaminadas (paso el 25-nov, ver CAMBIOS v0.66). */
   void olvidar() {
+    ventanaN_ = 0;   /* (v1.16) la red de video empieza la ventana de nuevo */
     tUltima_ = -1.0;
     prev_.clear();
     haveScale_ = false;
@@ -188,6 +189,8 @@ public:
     pFondo_ = pFrente_ = -1.0f;
   }
   bool lastCut() const { return corte_; }    /* hubo cambio de plano en la ultima estimacion */
+  /* (v1.16) la red de video (Video Depth Anything): cuantos cuadros mira a la vez (0 = una red de un cuadro) */
+  int ventana() const { return ventana_; }
   long cutCount() const { return cortes_; }  /* cambios de plano contados desde el arranque */
 
   /* limpieza del mapa (filtro guiado + dilatar). Se apaga con ODYSSEYVK_LIMPIEZA=0 para comparar en
@@ -287,7 +290,9 @@ private:
   float pivote_ = 0.0f;                 /* cuanto se retrasa el plano de la pantalla respecto al sujeto (0..0,9) */
   double tUltima_ = -1.0;               /* reloj de la estimacion anterior, en segundos (< 0 = no hubo) */
   double pasoFijo_ = 0.0;               /* ver setPasoFijo */
-  bool corte_ = false;                  /* cambio de plano en la ultima estimacion */
+  bool corte_ = false;
+  /* (v1.16) la red de video: los cuadros que mira a la vez (0 = de un cuadro) y cuantos lleva ya su ventana */
+  int ventana_ = 0, ventanaN_ = 0;                  /* cambio de plano en la ultima estimacion */
   long cortes_ = 0;
   int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */

@@ -61,6 +61,11 @@ struct TarjetaAmd {
   double tempC = -1.0;
 };
 std::vector<TarjetaAmd> tarjetasAmd();
+/* (v1.16) una red de video (Video Depth Anything): lleva «video» en el nombre del archivo. Mira 32 cuadros a la vez, solo
+   para videos (los juegos siguen con la de siempre), y solo en la tarjeta */
+bool esRedDeVideo(const std::string &ruta);
+/* la red de video que se baja desde el panel (Video Depth Anything pequena, exportada a ONNX por la comunidad) */
+std::string rutaRedVideo();
 /* Marcas del arranque del visor (v1.12): cada paso, en ms desde que arranco el proceso (de
    /proc/self/stat, no del reloj del registro, que agrupa las lineas por tandas). `resumenArranque`
    da la linea con lo que tardo cada paso. */

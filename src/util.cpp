@@ -215,6 +215,12 @@ std::string carpetaRedes() {
 std::string rutaRedLigera() { return carpetaRedes() + "depth_anything_v2_small_fp16.onnx"; }
 std::string rutaRedVieja() { return carpetaRedes() + "depth_anything_v2_small.onnx"; }
 
+bool esRedDeVideo(const std::string &ruta) {
+  const size_t p = ruta.find_last_of('/');
+  return strLower(p == std::string::npos ? ruta : ruta.substr(p + 1)).find("video") != std::string::npos;
+}
+std::string rutaRedVideo() { return carpetaRedes() + "video_depth_anything_small_fp32.onnx"; }
+
 /* (v1.16) ver util.h. Solo los cardN (no sus conectores, cardN-DP-1) del fabricante 0x1002 con amdgpu */
 std::vector<TarjetaAmd> tarjetasAmd() {
   std::vector<TarjetaAmd> v;
