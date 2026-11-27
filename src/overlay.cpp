@@ -15,6 +15,9 @@
    que hace falta son cuatro líneas. */
 #include "overlay.h"
 
+#include <chrono>
+#include <thread>
+
 #include "glutil.h"
 #include "vkui.h"
 #include "util.h"
@@ -686,7 +689,10 @@ struct Overlay::Impl {
       std::printf("[depurar capa] al dibujar: hud %.2f | recorte ox=%.0f buf=%dx%d\n",
                   hud.scale(), ox, bufAncho, bufAlto);
     const size_t npx = (size_t)bufAncho * (size_t)bufAlto;
+    static const bool medirPintado = entornoOdyssey("ODYSSEYVK_DEBUG_UI") != nullptr;
+    const auto tP0 = std::chrono::steady_clock::now();
     hud.pintarCpu((float)ox, (float)oy, bufAncho, bufAlto, acum);   /* el mismo pintado que `ctl hud --png` */
+    const auto tP1 = std::chrono::steady_clock::now();
 
     /* ARGB8888 sin premultiplicar (así lo pide wl_shm) */
     Bloque *bl = nullptr;
@@ -708,22 +714,35 @@ struct Overlay::Impl {
     }
     uint32_t *pinta = reinterpret_cast<uint32_t *>(bl->mapa);
     const float *fuente = acum.data();
-    for (size_t p = 0; p < npx; p++) {
-      const float A = fuente[p * 4u + 3u];
-      if (A <= 0.0001f) {
-        pinta[p] = 0u;
-        continue;
+    /* (v1.16) mas deprisa y en varios hilos: MEDIDO en 4K a pantalla completa, esta vuelta costaba 50-55 ms por cuadro
+       (cuatro std::lround y cuatro productos por punto, y con el velo todos los puntos pasan por aqui), y era lo que
+       hacia lenta la animacion del panel sobre un video. El redondeo (x + 0,5 truncado) da lo mismo que lround para
+       valores positivos */
+    auto convierte = [pinta, fuente](size_t desde, size_t hasta) {
+      for (size_t p = desde; p < hasta; p++) {
+        const float A = fuente[p * 4u + 3u];
+        if (A <= 0.0001f) {
+          pinta[p] = 0u;
+          continue;
+        }
+        const float k = 255.0f / A;
+        auto canal = [k](float c) -> uint32_t {
+          const float v = c * k;
+          return v <= 0.0f ? 0u : (v >= 255.0f ? 255u : (uint32_t)(v + 0.5f));
+        };
+        const uint32_t aa = A >= 1.0f ? 255u : (uint32_t)(A * 255.0f + 0.5f);
+        pinta[p] = (aa << 24) | (canal(fuente[p * 4u]) << 16) | (canal(fuente[p * 4u + 1u]) << 8) | canal(fuente[p * 4u + 2u]);
       }
-      const float inv = 1.0f / A;
-      auto canal = [&](float c) -> uint32_t {
-        float s = c * inv;
-        if (s < 0.0f) s = 0.0f;
-        if (s > 1.0f) s = 1.0f;
-        return (uint32_t)std::lround(s * 255.0f);
-      };
-      const uint32_t aa = (uint32_t)std::lround(std::min(1.0f, A) * 255.0f);
-      pinta[p] = (aa << 24) | (canal(fuente[p * 4u]) << 16) | (canal(fuente[p * 4u + 1u]) << 8) |
-                 canal(fuente[p * 4u + 2u]);
+    };
+    const unsigned hilos = npx >= 1000000u ? std::max(1u, std::min(8u, std::thread::hardware_concurrency())) : 1u;
+    if (hilos <= 1) {
+      convierte(0, npx);
+    } else {
+      std::vector<std::thread> trabajo;
+      const size_t trozo = (npx + hilos - 1) / hilos;
+      for (unsigned h = 1; h < hilos; h++) trabajo.emplace_back(convierte, std::min(npx, h * trozo), std::min(npx, (h + 1) * trozo));
+      convierte(0, std::min(npx, trozo));
+      for (std::thread &t : trabajo) t.join();
     }
 
     if (surf && !(layer && !hayConfigure)) {
@@ -735,6 +754,11 @@ struct Overlay::Impl {
       wl_surface_attach(surf, bl->buf, 0, 0);
       wl_surface_damage(surf, 0, 0, supAncho, supAlto);
       wl_surface_commit(surf);
+    }
+    if (medirPintado) {
+      const auto tP2 = std::chrono::steady_clock::now();
+      std::printf("[depurar capa] cuadro de %dx%d: pintado %.1f ms, conversion y envio %.1f ms\n", bufAncho, bufAlto,
+                  std::chrono::duration<double, std::milli>(tP1 - tP0).count(), std::chrono::duration<double, std::milli>(tP2 - tP1).count());
     }
   }
 

@@ -673,19 +673,12 @@ int cmdAjustes(int argc, char **argv) {
       if (s2 == h2.end() || s2->second.empty() || s2->second == "ninguna") break;
     }
   }
-  /* (v1.16) al cerrarse, lo mismo al reves y mas corto: en 0,10 s vuelve hacia la pastilla y se desvanece (con la
-     conexion viva; si la cerro el compositor, se va sin mas) */
-  if (st.marco && !ov.conexionCaida() && !ov.entradaCerrada()) {
-    const double t0Cierre = reloj();
-    const float desde = st.aparicion;
-    for (;;) {
-      const double t = std::min(1.0, (reloj() - t0Cierre) / 0.10);
-      st.aparicion = desde * (float)((1.0 - t) * (1.0 - t));
-      ov.repaint();
-      if (t >= 1.0) break;
-      ov.waitAndDispatch(8);
-    }
-  }
+  /* (v1.16) al cerrarse, de golpe (Rodolfo: «closing is still slow from a video»). Hubo una animacion de 0,10 s al
+     reves de la de abrirse: MEDIDO en 4K, cada cuadro de la pantalla entera cuesta ~50 ms en la CPU, asi que eran
+     150-165 ms con 3 cuadros a trompicones. Ahora la capa se quita en cuanto se pide */
+  const double t0Cierre = reloj();
+  const int cuadrosCierre = 0;
+  const double tFinAnim = reloj();
   /* (v1.15) se cierra a medio escribir en un campo de Integraciones: lo escrito se guarda */
   if (prefs::editandoTexto()) {
     std::string aviso;
@@ -707,5 +700,9 @@ int cmdAjustes(int argc, char **argv) {
     std::fflush(stdout);
   }
   ::unlink(rutaPid.c_str());
+  /* (v1.16) lo que tarda en cerrarse, como lo de abrirse */
+  std::printf("[ajustes] cerrado en %.0f ms: animacion %.0f ms (%d cuadros), lo demas %.0f ms\n", (reloj() - t0Cierre) * 1000.0,
+              (tFinAnim - t0Cierre) * 1000.0, cuadrosCierre, (reloj() - tFinAnim) * 1000.0);
+  std::fflush(stdout);
   return 0;
 }

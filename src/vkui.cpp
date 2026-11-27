@@ -1,5 +1,7 @@
 /* vkui.cpp — atlas (fuentes + máscaras), disposición de la interfaz y manejo del ratón. */
 #include "vkui.h"
+
+#include <thread>
 #include "idioma.h"
 #include "rendimiento.h"
 #include "logo_mascara.inc"
@@ -736,11 +738,13 @@ float Hud::muestra(float u, float v) const {
    para mirarla sin el panel. `acum` sale en RGBA de coma flotante con el color YA multiplicado por
    su opacidad. Un color por cuadro y sin espejos: la interfaz no usa otra cosa. */
 void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> &acum) const {
-  acum.assign((size_t)ancho * (size_t)alto * 4u, 0.0f);
+  /* (v1.16) en varios hilos, por franjas de filas: cada hilo pone a cero su franja y pinta en ella todo, en el mismo
+     orden, asi que cada punto sale igual. MEDIDO en 4K a pantalla completa: 20 ms por cuadro en un hilo */
+  acum.resize((size_t)ancho * (size_t)alto * 4u);
   /* (v1.14) cada caratula se pinta en su turno: despues de lo que se dibujo antes que ella y debajo de lo que vino
      despues. Antes iban todas al final, encima de todo, y tapaban la ayuda que sale al pasar el raton (MEDIDO por
      Rodolfo: la caratula de Red Dead Redemption 2 sobre la ayuda del boton Copiar del pie de Juegos) */
-  auto pintaCuadros = [&](size_t desde, size_t hasta) {
+  auto pintaCuadros = [&](size_t desde, size_t hasta, int banda0, int banda1) {
   for (size_t i = desde; i + 5 < hasta; i += 6) {
     float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
     float u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
@@ -768,13 +772,14 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
        alrededor de cada letra. */
     const int px0 = std::max(0, (int)std::ceil(ax0 - 0.5f)), py0 = std::max(0, (int)std::ceil(ay0 - 0.5f));
     const int px1 = std::min(ancho, (int)std::ceil(ax1 - 0.5f)), py1 = std::min(alto, (int)std::ceil(ay1 - 0.5f));
+    if (std::max(py0, banda0) >= std::min(py1, banda1)) continue;   /* fuera de esta franja */
     /* cuadro liso (el pixel blanco, o el centro de una mascara: sus cuatro esquinas del todo
        opacas): una sola muestra para todo el cuadro. El fondo del panel de ajustes son dos millones
        de pixeles y muestrearlos uno a uno costaba la mitad del pintado. */
     const float c00 = muestra(u0, v0), c10 = muestra(u1, v0), c01 = muestra(u0, v1), c11 = muestra(u1, v1);
     const bool liso = (du * (float)aw_ <= 1.01f && dv * (float)ah_ <= 1.01f) ||
                       (c00 >= 0.999f && c10 >= 0.999f && c01 >= 0.999f && c11 >= 0.999f);
-    for (int py = py0; py < py1; py++) {
+    for (int py = std::max(py0, banda0); py < std::min(py1, banda1); py++) {
       const float fy = ((float)py + 0.5f - (y0 - oy)) / h;
       const float v = v0 + fy * dv;
       float *fila = acum.data() + ((size_t)py * (size_t)ancho + (size_t)px0) * 4u;
@@ -794,7 +799,7 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
   }
   };
   /* una caratula, con las esquinas redondeadas por cuenta propia */
-  auto pintaImagen = [&](const ImagenCpu &im) {
+  auto pintaImagen = [&](const ImagenCpu &im, int banda0, int banda1) {
     if (!im.px || im.w <= 0 || im.h <= 0) return;
     const float cx0 = im.caja.x * sc_, cy0 = im.caja.y * sc_, cw = im.caja.w * sc_, ch = im.caja.h * sc_;
     const float rx0 = std::max(cx0, im.recorte.x * sc_), ry0 = std::max(cy0, im.recorte.y * sc_);
@@ -803,7 +808,7 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
     const int px0 = std::max(0, (int)std::ceil(rx0 - ox - 0.5f)), py0 = std::max(0, (int)std::ceil(ry0 - oy - 0.5f));
     const int px1 = std::min(ancho, (int)std::ceil(rx1 - ox - 0.5f)), py1 = std::min(alto, (int)std::ceil(ry1 - oy - 0.5f));
     const float rad = im.radio * sc_;
-    for (int py = py0; py < py1; py++) {
+    for (int py = std::max(py0, banda0); py < std::min(py1, banda1); py++) {
       const float y = (float)py + 0.5f + oy - cy0;
       const float fy = std::max(0.0f, std::min((float)im.h - 1.001f, y / ch * (float)im.h - 0.5f));
       const int iy = (int)fy;
@@ -831,13 +836,30 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
       }
     }
   };
-  size_t hecho = 0;
-  for (const ImagenCpu &im : imagenes_) {
-    const size_t hasta = std::min(im.orden, v_.size());
-    if (hasta > hecho) pintaCuadros(hecho, hasta), hecho = hasta;
-    pintaImagen(im);
+  auto franja = [&](int banda0, int banda1) {
+    std::fill(acum.begin() + (ptrdiff_t)((size_t)banda0 * (size_t)ancho * 4u), acum.begin() + (ptrdiff_t)((size_t)banda1 * (size_t)ancho * 4u), 0.0f);
+    size_t hecho = 0;
+    for (const ImagenCpu &im : imagenes_) {
+      const size_t hasta = std::min(im.orden, v_.size());
+      if (hasta > hecho) pintaCuadros(hecho, hasta, banda0, banda1), hecho = hasta;
+      pintaImagen(im, banda0, banda1);
+    }
+    pintaCuadros(hecho, v_.size(), banda0, banda1);
+  };
+  static const bool unHilo = std::getenv("ODYSSEYVK_PINTA_HILOS") && std::getenv("ODYSSEYVK_PINTA_HILOS")[0] == '1';   /* pruebas */
+  const unsigned hilos = unHilo ? 1u : (size_t)ancho * (size_t)alto >= 1000000u ? std::max(1u, std::min(8u, std::thread::hardware_concurrency())) : 1u;
+  if (hilos <= 1 || alto < 64) {
+    franja(0, alto);
+    return;
   }
-  pintaCuadros(hecho, v_.size());
+  std::vector<std::thread> trabajo;
+  const int alto1 = (alto + (int)hilos - 1) / (int)hilos;
+  for (unsigned k = 1; k < hilos; k++) {
+    const int b0 = std::min(alto, (int)k * alto1), b1 = std::min(alto, ((int)k + 1) * alto1);
+    if (b0 < b1) trabajo.emplace_back(franja, b0, b1);
+  }
+  franja(0, std::min(alto, alto1));
+  for (std::thread &t : trabajo) t.join();
 }
 
 const Hud::Glyph *Hud::glifo(unsigned cp) const {

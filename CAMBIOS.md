@@ -40,6 +40,27 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## La carátula de Alice, el cierre al momento y cada cuadro del panel en 4K de ~72 ms a ~13 (v1.16)
+
+- Rodolfo: «alice lost its image, also, closing is still slow from a video».
+- **Alice: Madness Returns sin carátula**: su `library_600x900.jpg` es un JPEG de cuatro componentes (CMYK).
+  OpenCV lo pasaba a RGB, pero libjpeg no sabe hacerlo: daba un error y la carátula se quedaba fuera. Ahora las
+  CMYK (y YCCK) se piden en CMYK y se pasan a RGB aquí (R = C·K/255, con la tinta al revés en las de Adobe, como la
+  de Alice). Sale con sus colores.
+- **Cerrar, lento sobre un vídeo: era la animación.** El panel apunta ahora también lo que tarda en cerrarse
+  («[ajustes] cerrado en N ms: animación ... (k cuadros), lo demás ...»). MEDIDO en el KWin aparte en 4K, sobre un
+  vídeo (sesión 3D de prueba, dibujo a 2): la animación de 0,10 s duraba 150-165 ms y solo daba 3 cuadros, porque
+  cada cuadro de la pantalla entera costaba ~50 ms. Ahora el panel se quita al momento: cerrado en 0 ms.
+- **Cada cuadro, mucho más barato** (lo que hacía lenta la animación de abrirse y el resaltado al pasar el ratón,
+  sobre todo sobre un vídeo en 4K). Medido con `ODYSSEYVK_DEBUG_UI=1` («[depurar capa] cuadro de ...»):
+  - **la conversión al lienzo del compositor, de 50-55 ms a 3-9.** Con el velo, cada punto pasaba por cuatro
+    `std::lround` y cuatro productos. Ahora hay una división por punto, un redondeo que da lo mismo para valores
+    positivos y hasta 8 hilos por franjas;
+  - **el pintado, de 20 ms a 7-12**: hasta 8 hilos por franjas de filas. Cada hilo pone a cero su franja y pinta en
+    ella todo, en el mismo orden. Comprobado que la imagen sale idéntica, píxel a píxel, con un hilo y con 8
+    (`ODYSSEYVK_PINTA_HILOS=1` obliga a uno, para pruebas). También acelera `ctl hud`.
+  - En total, ~70-75 ms por cuadro → ~10-20 ms en 4K a pantalla completa.
+
 ## `odysseyvk-panel`: el panel en un ejecutable ligero, que arranca en ~2 ms en vez de ~50 (v1.16)
 
 - Rodolfo, a la pregunta de si hacer un ejecutable aparte para quitar los ~47 ms de arranque: «Yes, do it».
@@ -89,7 +110,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     pinta. Lo que no se ve (opacidad 0) no recorre la pantalla. Comprobado que la imagen sale idéntica, píxel a
     píxel.
 - **La animación**: al abrir, 0,16 s en vez de 0,22, saliendo deprisa (1 − (1 − t)³). Al cerrar (aspa, Esc,
-  volver o el visor), lo mismo al revés en 0,10 s. Antes desaparecía de golpe.
+  volver o el visor), lo mismo al revés en 0,10 s. Antes desaparecía de golpe. (La de cerrar se quitó luego:
+  ver arriba.)
 - **Resultado**: abierto en 14 ms en 1080p y en 25 ms en 4K al 150 % (desde que empieza el panel).
 - **Queda**: los ~47 ms de arrancar el programa. El panel carga las bibliotecas del visor (onnxruntime, OpenCV,
   mpv y ffmpeg, ICU) aunque no las use. Solo se quitan con un ejecutable aparte para el panel.

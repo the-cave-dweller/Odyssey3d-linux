@@ -118,7 +118,11 @@ void cargaCaratula(const std::string &raizSteam, Juego &j) {
     jpeg_create_decompress(&cinfo);
     jpeg_stdio_src(&cinfo, f);
     jpeg_read_header(&cinfo, TRUE);
-    cinfo.out_color_space = JCS_RGB;
+    /* las de cuatro componentes (CMYK o YCCK, como la de Alice: Madness Returns) no las pasa libjpeg a RGB: se piden en
+       CMYK y se convierten aqui (las de Adobe guardan la tinta al reves) */
+    const bool cmyk = cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK;
+    const bool adobe = cinfo.saw_Adobe_marker;
+    cinfo.out_color_space = cmyk ? JCS_CMYK : JCS_RGB;
     cinfo.scale_num = 1;
     cinfo.scale_denom = 1;
     while (cinfo.scale_denom < 8 && (int)cinfo.image_width / (int)(cinfo.scale_denom * 2) >= 280 &&
@@ -127,9 +131,19 @@ void cargaCaratula(const std::string &raizSteam, Juego &j) {
     jpeg_start_decompress(&cinfo);
     sw = (int)cinfo.output_width, sh = (int)cinfo.output_height;
     src.resize((size_t)sw * sh * 3u);
+    std::vector<uint8_t> fila4(cmyk ? (size_t)sw * 4u : 0u);
     while (cinfo.output_scanline < cinfo.output_height) {
-      JSAMPROW fila = src.data() + (size_t)cinfo.output_scanline * sw * 3u;
+      const size_t y = cinfo.output_scanline;
+      JSAMPROW fila = cmyk ? fila4.data() : src.data() + y * sw * 3u;
       jpeg_read_scanlines(&cinfo, &fila, 1);
+      if (cmyk)
+        for (int x = 0; x < sw; x++) {
+          const uint8_t *q = fila4.data() + (size_t)x * 4u;
+          for (int c = 0; c < 3; c++) {
+            const unsigned t = adobe ? q[c] : 255u - q[c], k = adobe ? q[3] : 255u - q[3];
+            src[(y * sw + x) * 3u + c] = (uint8_t)((t * k + 127u) / 255u);
+          }
+        }
     }
     jpeg_finish_decompress(&cinfo);
   } catch (const std::exception &) {
