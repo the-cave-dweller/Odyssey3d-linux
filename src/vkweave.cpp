@@ -1018,6 +1018,9 @@ void VkWeave::pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo
   if (ih > rh) ih = rh, iw = (int)std::lround(rh * prop);
   iw &= ~1;
   const int ix = rx + (rw - iw) / 2, iy = ry + (rh - ih) / 2;
+  /* la raya: a su izquierda la fuente, a su derecha la salida de los efectos, cada una en su sitio del juego */
+  const int md = std::max(ix + 2, std::min(ix + iw - 2, (int)std::lround(vista_[4] * W)));
+  const int mf = std::max(1, std::min(fuente.w - 1, (int)std::lround((double)(md - ix) * fuente.w / std::max(1, iw))));
   barrier(cb, destino, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
           VK_ACCESS_TRANSFER_WRITE_BIT);
   auto copia = [&](VkImage desde, int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int dy1, VkFilter filtro) {
@@ -1028,7 +1031,6 @@ void VkWeave::pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo
     vkCmdBlitImage(cb, desde, VK_IMAGE_LAYOUT_GENERAL, destino, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl, filtro);
   };
   if (iw != rw || ih != rh) copia(black_.img, 0, 0, 1, 1, rx, ry, rx + rw, ry + rh, VK_FILTER_NEAREST);
-  const int mf = fuente.w / 2, md = ix + iw / 2;
   copia(fuente.img, 0, 0, mf, fuente.h, ix, iy, md, iy + ih, VK_FILTER_LINEAR);
   copia(conEfectos ? conEfectos : fuente.img, mf, 0, fuente.w, fuente.h, md, iy, ix + iw, iy + ih, VK_FILTER_LINEAR);
   if (blanco_.valid()) copia(blanco_.img, 0, 0, 1, 1, md - 1, iy, md + 1, iy + ih, VK_FILTER_NEAREST);
@@ -1224,15 +1226,21 @@ bool VkWeave::frame(std::string *err) {
   vkCmdSetViewport(cb, 0, 1, &vpc);
   vkCmdSetScissor(cb, 0, 1, &scis);
 
+  /* (v1.18) la vista previa de los efectos: encima de la trama y debajo de la interfaz; si tapa la pantalla entera, la trama
+     no se pinta (no se renderiza dos veces) */
+  const bool conVista = swapCopiable_ && vista_[2] > 0.0f && vista_[3] > 0.0f && !fuenteGenerada_ && fuenteImg && fuenteImg->valid();
+  const bool vistaTapa = conVista && vista_[0] <= 0.001f && vista_[1] <= 0.001f && vista_[0] + vista_[2] >= 0.999f && vista_[1] + vista_[3] >= 0.999f;
+
   /* pasada 1: la trama, un triángulo a pantalla completa */
   vkCmdBeginRendering(cb, &ri);
-  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weavePipe_);
-  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weaveLay_, 0, 1, &s.weave, 0, nullptr);
-  vkCmdDraw(cb, 3, 1, 0, 0);
+  if (!vistaTapa) {
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weavePipe_);
+    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, weaveLay_, 0, 1, &s.weave, 0, nullptr);
+    vkCmdDraw(cb, 3, 1, 0, 0);
+  }
   vkCmdEndRendering(cb);
 
-  /* (v1.18) la vista de los efectos, en el hueco del panel: encima de la trama y debajo de la interfaz */
-  if (swapCopiable_ && vista_[2] > 0.0f && vista_[3] > 0.0f && !fuenteGenerada_ && fuenteImg && fuenteImg->valid())
+  if (conVista)
     pintarVista(cb, imgs_[idx], ext_, *fuenteImg, efectos_.vistaSalida() ? efectos_.imagenSalida() : VK_NULL_HANDLE);
 
   /* pasada 2: la interfaz encima, conservando lo dibujado */

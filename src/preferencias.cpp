@@ -2160,14 +2160,31 @@ std::string nombreDeJuego(const std::vector<Juego> &juegos, const std::string &a
 }  // namespace
 
 static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const std::vector<Juego> &juegos) {
-  /* (v1.18) debajo de la vista, en dos columnas (Rodolfo: «divide the effect space at the bottom half into two parts, in
-     half»): a la izquierda los efectos de la lista con sus ajustes; a la derecha, añadir y las fuentes publicas */
+  /* (v1.18) en dos mitades (Rodolfo: «divide the effect space at the bottom half into two parts, in half», «el menu normal
+     se queda asi mitad y mitad»): a la izquierda los efectos de la lista con sus ajustes; a la derecha, añadir y las
+     fuentes publicas. Con la vista previa palomeada, todo en la columna de la izquierda (sin las notas ni las fuentes) */
+  const bool previa = st.vistaEfectos && st.marco;
   int lado = 0;
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
-    if (st.vistaEfectosCaja) it.lado = lado;
+    if (st.marco && !previa) it.lado = lado;
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
+  /* la casilla de la vista previa: en medio, encima de las dos mitades, como la de la vista de depuracion (Rodolfo: «pon la
+     casilla de preview para palomearla igual que pusiste la de depuracion en la otra seccion»); palomeada, arriba de la
+     columna. Solo con el panel sobre el 3D de un juego: el visor es el que pinta el juego */
+  if (st.marco) {
+    Hud::ItemPanel d;
+    d.tipo = Hud::ItemPanel::Interruptor;
+    d.rotulo = idioma::tr("Vista previa");
+    d.valor = previa;
+    d.centrado = !previa;
+    d.apagado = !st.vistaEnVivo && !previa;
+    if (previa) d.nota = idioma::tr("A la izquierda de la raya sin efectos, a la derecha con ellos");
+    d.ayuda = idioma::tr(st.vistaEnVivo ? "El juego a la vista con los efectos a un lado: a la izquierda de la raya sin ellos y a la derecha con ellos."
+                                        : "Hace falta un juego en 3D abierto: enseña el juego sin efectos y con ellos.");
+    pon(d, "vista_efectos");
+  }
   const std::string app = g_efectosDe == "*" ? std::string() : g_efectosDe;   /* vacio: los de todos */
   const std::string nombre = app.empty() ? std::string() : nombreDeJuego(juegos, app);
   const efectos::Ajustes a = efectos::cargar(app);
@@ -2308,6 +2325,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     idd += '\x1f' + std::string("efx:anadir:") + n;
   }
   pon(dsp, idd);
+  if (previa) return;   /* en la columna, solo lo que se prueba con el juego a la vista */
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
   n.rotulo = carpeta.empty() ? std::string() : idioma::trf("{} efectos en {}", {std::to_string(disp.size()), carpeta});
@@ -2538,7 +2556,6 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
   /* (v1.15) la 2, la de Rendimiento que ya no se ensenaba, es ahora Integraciones: queda entre Juegos y Ajustes */
   st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes"), "FG", idioma::tr("Efectos")};   /* (v1.18) y FG, y los efectos */
   st.ordenPestanas = {0, 1, 5, 2, 3, 4};   /* (v1.18) Efectos junto a Juegos (Rodolfo: «beside games, call it effects») */
-  st.vistaEfectosCaja = st.pestana == 5 && st.marco && !st.depuracion;   /* (v1.18) la vista de los efectos, a la derecha */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();

@@ -163,13 +163,14 @@ public:
     /* (v1.16) las pestanas que se ven pero no se pueden abrir (Integraciones dentro de un juego): en gris */
     std::vector<bool> pestanaGris;
     std::vector<int> ordenPestanas;   /* (v1.18) en que orden se ven (vacio: el de sus numeros) */
-    /* (v1.18) la vista de los efectos (Rodolfo: «on the effects tab, show a preview square for the game with the effect
-       applied on the half of the screen shown, make the rectangle not movable», «can you find a way to make the preview
-       fast?, maybe not cpu based», «move it to the top middle, and divide the effect space at the bottom half into two
-       parts, in half»): con `vistaEfectosCaja`, arriba en medio de la tarjeta un cuadro quieto (no corre con la lista) y
-       las filas debajo, en dos columnas. Con `vistaEnVivo` (el panel sobre el 3D de un juego) el cuadro es un hueco
-       transparente y el visor, debajo, pinta ahi el juego: la mitad izquierda sin efectos y la derecha con ellos */
-    bool vistaEfectosCaja = false;
+    /* (v1.18) la vista previa de los efectos (Rodolfo: «show a preview square for the game with the effect applied on the
+       half of the screen shown», «can you find a way to make the preview fast?, maybe not cpu based», «distribuyelo como
+       en la vista de depuracion, el menu normal se queda asi mitad y mitad, pon la casilla de preview para palomearla»):
+       la pestana Efectos va en dos mitades, con la casilla «Vista previa» arriba en medio. Palomeada (`vistaEfectos`), el
+       panel queda como en la vista de depuracion: una columna a la izquierda con la casilla y los efectos, sin velo, y el
+       visor pinta el juego en la pantalla, a la izquierda de la raya sin efectos y a la derecha con ellos. Solo se puede
+       con `vistaEnVivo` (el panel sobre el 3D de un juego); sin palomearla no corre nada de mas */
+    bool vistaEfectos = false;
     bool vistaEnVivo = false;
     std::vector<std::string> pestanasNota;
     struct Tesela {
@@ -439,8 +440,9 @@ public:
   float fracDeslizador(int item, float mx) const;
   /* la rueda del raton sobre la lista del panel (positivo = bajar) */
   void correr(float cuanto);
-  /* (v1.18) el hueco de la vista de los efectos del ultimo dibujo, en fracciones del lienzo; falso si no hay */
-  bool huecoVista(float *x, float *y, float *w, float *h) const;
+  /* (v1.18) la vista previa de los efectos del ultimo dibujo, en fracciones del lienzo: donde pinta el visor el juego y
+     la x de la raya (a la izquierda sin efectos, a la derecha con ellos); falso si no hay */
+  bool vistaPantalla(float *x, float *y, float *w, float *h, float *corte) const;
   /* (v1.18) con el raton encima de un boton de correr de un desplegable por grupos: lo corre `dt` segundos (empieza
      despacio y acelera un poco: de ~140 a ~320 puntos por segundo en 1,5 s). Verdadero si se movio: hay que repintar */
   bool autodesplazar(float dt);
@@ -632,7 +634,8 @@ private:
   Rect despGrupo_[2] = {{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}};
   Rect despBoton_[2][2] = {{{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}}, {{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}}};
   float despTope_[2] = {0.0f, 0.0f};
-  Rect huecoVista_{0.0f, 0.0f, 0.0f, 0.0f};   /* (v1.18) el de la vista de los efectos (transparente en el pintado de CPU) */
+  Rect vistaRect_{0.0f, 0.0f, 0.0f, 0.0f};   /* (v1.18) la de la vista previa de los efectos, y su raya */
+  float corteVista_ = 0.0f;
   float lienzoW_ = 0.0f, lienzoH_ = 0.0f;
   Rect despCerrar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* su aspa (el sub 51: lo cierra) */
   int autoGrupo_ = -1, autoDir_ = 0;

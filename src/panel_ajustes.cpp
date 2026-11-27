@@ -622,6 +622,22 @@ int cmdAjustes(int argc, char **argv) {
         st.pie.clear();
         rellenar();
         repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "vista_efectos") {
+        /* (v1.18) la vista previa de los efectos: como la de depuracion, el panel queda en una columna a la izquierda, sin
+           velo y con el teclado a pedido, y el visor pinta el juego en la pantalla con la raya (lo publica el bloque de
+           la vista, abajo). Quitada, vuelve todo y el visor deja de correr nada para ella */
+        if (st.vistaEfectos || st.vistaEnVivo) {
+          st.vistaEfectos = !st.vistaEfectos;
+          st.desplegado = -1;
+          st.corrida = 0.0f;
+          if (st.vistaEfectos) ov.quitarVelo();
+          else if (quiereVelo && !st.fijado) ov.showPanel(grande, true);
+          st.pie = idioma::tr(st.vistaEfectos ? "vista previa: a la izquierda de la raya sin efectos, a la derecha con ellos" : "vista previa quitada");
+          std::printf("[ajustes] vista previa de los efectos %s\n", st.vistaEfectos ? "puesta" : "quitada");
+          std::fflush(stdout);
+          rellenar();
+          repintar = true;
+        }
       } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "depuracion") {
         /* (v1.16) la vista de depuracion: el visor ensena su mapa de profundidad (la orden `ver_profundidad`, lo de
            Ctrl+Mayus+9) y el panel deja solo las dos listas de redes en una columna a la izquierda, sin velo y con el
@@ -678,6 +694,11 @@ int cmdAjustes(int argc, char **argv) {
         if (const int p = prefs::tomarPestana(); p >= 0 && !(p == 2 && sinIntegraciones)) {
           st.pestana = p;
           st.corrida = 0.0f;
+          /* (v1.18) fuera de Efectos (el Atras de los de un juego que se abrio desde Juegos) no hay vista previa */
+          if (p != 5 && st.vistaEfectos) {
+            st.vistaEfectos = false;
+            if (quiereVelo && !st.fijado) ov.showPanel(grande, true);
+          }
         }
         if (!aviso.empty()) st.pie = aviso;
         if (cambio) {
@@ -691,7 +712,7 @@ int cmdAjustes(int argc, char **argv) {
       }
     }
     /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
-    ov.modoTeclado(!(st.fijado || st.depuracion) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
+    ov.modoTeclado(!(st.fijado || st.depuracion || st.vistaEfectos) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
     {
@@ -754,17 +775,17 @@ int cmdAjustes(int argc, char **argv) {
       rellenar();
       repintar = true;
     }
-    /* (v1.18) la vista de los efectos: el hueco que dejo el ultimo dibujo, al visor (al cambiar y cada segundo); sin el, se
-       suelta (otra pestana, el desplegable encima) */
+    /* (v1.18) la vista previa de los efectos: lo que dejo el ultimo dibujo (donde va el juego y la raya), al visor, al
+       cambiar y cada segundo; sin palomearla, se suelta y el visor no corre nada para ella */
     {
       static std::string publicado;
       static double cuando = -10.0;
-      float x = 0, y = 0, w = 0, h = 0;
-      const bool hay = st.pestana == 5 && ov.hud().huecoVista(&x, &y, &w, &h);
-      char b[96] = "";
-      if (hay) std::snprintf(b, sizeof b, "%.4f %.4f %.4f %.4f", x, y, w, h);
+      float x = 0, y = 0, w = 0, h = 0, c = 0;
+      const bool hay = st.pestana == 5 && st.vistaEfectos && ov.hud().vistaPantalla(&x, &y, &w, &h, &c);
+      char b[128] = "";
+      if (hay) std::snprintf(b, sizeof b, "%.4f %.4f %.4f %.4f %.4f", x, y, w, h, c);
       if (b != publicado || (hay && reloj() - cuando >= 1.0)) {
-        if (hay) efectos::pedirVista(x, y, w, h);
+        if (hay) efectos::pedirVista(x, y, w, h, c);
         else if (!publicado.empty()) efectos::soltarVista();
         publicado = b, cuando = reloj();
       }

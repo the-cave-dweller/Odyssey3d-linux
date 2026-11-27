@@ -534,28 +534,29 @@ long long horaNs(const std::string &ruta) {
 }
 }  // namespace
 
-void pedirVista(float x, float y, float w, float h) {
+void pedirVista(float x, float y, float w, float h, float corte) {
   const std::string r = rutaRun("odysseyvk-efectos-vista-pide");
   if (FILE *f = std::fopen((r + ".nuevo").c_str(), "we")) {
-    std::fprintf(f, "%.5f %.5f %.5f %.5f\n", x, y, w, h);
+    std::fprintf(f, "%.5f %.5f %.5f %.5f %.5f\n", x, y, w, h, corte);
     std::fclose(f);
     std::rename((r + ".nuevo").c_str(), r.c_str());
   }
 }
 void soltarVista() { ::unlink(rutaRun("odysseyvk-efectos-vista-pide").c_str()); }
-bool vistaPedida(float *x, float *y, float *w, float *h) {
+bool vistaPedida(float *x, float *y, float *w, float *h, float *corte) {
   const std::string r = rutaRun("odysseyvk-efectos-vista-pide");
   const long long hora = horaNs(r);
   struct timespec ahora{};
   clock_gettime(CLOCK_REALTIME, &ahora);
   if (hora <= 0 || (long long)ahora.tv_sec * 1000000000LL + ahora.tv_nsec - hora >= 2500000000LL) return false;
-  float v[4] = {0, 0, 0, 0};
+  float v[5] = {0, 0, 0, 0, 0};
   FILE *f = std::fopen(r.c_str(), "re");
   if (!f) return false;
-  const int n = std::fscanf(f, "%f %f %f %f", &v[0], &v[1], &v[2], &v[3]);
+  const int n = std::fscanf(f, "%f %f %f %f %f", &v[0], &v[1], &v[2], &v[3], &v[4]);
   std::fclose(f);
-  if (n != 4 || v[2] <= 0.0f || v[3] <= 0.0f) return false;
+  if (n < 4 || v[2] <= 0.0f || v[3] <= 0.0f) return false;
   *x = v[0], *y = v[1], *w = v[2], *h = v[3];
+  *corte = n == 5 ? v[4] : v[0] + v[2] * 0.5f;   /* sin raya: en medio */
   return true;
 }
 

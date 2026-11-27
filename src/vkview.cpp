@@ -3290,9 +3290,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (tAhora - tEf >= 0.5) {
         tEf = tAhora;
         if (ui.esJuego < 0) sobreJuego(ui);
-        /* (v1.18) la pestana Efectos del panel abierta: la vista de los efectos (mitad sin, mitad con) */
-        float vx = 0, vy = 0, vw = 0, vh = 0;
-        const bool vista = efectos::vistaPedida(&vx, &vy, &vw, &vh);
+        /* (v1.18) la vista previa de los efectos palomeada en el panel (a un lado de la raya sin, al otro con) */
+        float vx = 0, vy = 0, vw = 0, vh = 0, vc = 0;
+        const bool vista = efectos::vistaPedida(&vx, &vy, &vw, &vh, &vc);
         /* ODYSSEYVK_EFECTOS_JUEGO=APPID (o «todos»): para las pruebas, como si la fuente fuera ese juego */
         static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
         const bool esJuego = forzado || ui.esJuego == 1;
@@ -3323,10 +3323,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       static double tVista = -1.0;
       if (glfwGetTime() - tVista >= 0.1) {
         tVista = glfwGetTime();
-        float vx = 0, vy = 0, vw = 0, vh = 0;
+        float vx = 0, vy = 0, vw = 0, vh = 0, vc = 0;
         static const bool forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO") != nullptr;
-        if ((ui.esJuego == 1 || forzado) && efectos::vistaPedida(&vx, &vy, &vw, &vh)) wv.ponerVista(vx, vy, vw, vh);
-        else wv.ponerVista(0.0f, 0.0f, 0.0f, 0.0f);
+        if ((ui.esJuego == 1 || forzado) && efectos::vistaPedida(&vx, &vy, &vw, &vh, &vc)) wv.ponerVista(vx, vy, vw, vh, vc);
+        else wv.ponerVista(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
       }
     }
 #ifdef HAVE_ORT

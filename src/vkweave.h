@@ -49,12 +49,15 @@ public:
   CadenaEfectos &efectos() { return efectos_; }
   /* (v1.18) los efectos en la trama, o solo en la vista de los efectos (la pestana Efectos abierta con ellos apagados) */
   void efectosEnPantalla(bool si) { efectosEnPantalla_ = si; }
-  /* (v1.18) la vista de los efectos (Rodolfo: «on the effects tab, show a preview square for the game with the effect
-     applied on the half of the screen shown», y luego «can you find a way to make the preview fast?, maybe not cpu
-     based»): el panel deja un hueco transparente en su pestana Efectos y el visor, que esta debajo, pinta ahi en cada cuadro
-     el juego con la mitad izquierda sin efectos y la derecha con ellos: dos copias en la tarjeta, sin pasar por la CPU.
-     x, y, ancho y alto en fracciones de la pantalla; ancho 0 = ninguna */
-  void ponerVista(float x, float y, float w, float h) { vista_[0] = x, vista_[1] = y, vista_[2] = w, vista_[3] = h; }
+  /* (v1.18) la vista previa de los efectos (Rodolfo: «show a preview square for the game with the effect applied on the
+     half of the screen shown», «can you find a way to make the preview fast?, maybe not cpu based», y luego «distribuyelo
+     como en la vista de depuracion»): con su casilla palomeada el panel queda en una columna a la izquierda y el visor
+     pinta en cada cuadro el juego en (x, y, ancho, alto), a la izquierda de la raya `corte` sin efectos y a la derecha con
+     ellos: copias en la tarjeta, sin pasar por la CPU. Todo en fracciones de la pantalla; ancho 0 = ninguna. Si tapa la
+     pantalla entera, la trama de ese cuadro no se pinta */
+  void ponerVista(float x, float y, float w, float h, float corte) {
+    vista_[0] = x, vista_[1] = y, vista_[2] = w, vista_[3] = h, vista_[4] = corte;
+  }
   /* la fuente real mas nueva (la que llego y aun no paso por frame(), o la ultima que paso) */
   const VkImg *fuenteReal() const;
 
@@ -247,7 +250,7 @@ private:
   int efectosGen_ = -1;                            /* la fuente que ya paso por los efectos */
   bool efectosEnPantalla_ = true;                  /* (v1.18) */
   /* (v1.18) la vista de los efectos: el hueco del panel, si el intercambio deja copiar en sus imagenes, y el blanco de la raya */
-  float vista_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  float vista_[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
   bool swapCopiable_ = false;
   VkImg blanco_{};
   void pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo, const VkImg &fuente, VkImage conEfectos);

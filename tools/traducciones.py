@@ -652,8 +652,12 @@ T = {
 # (v1.18) la vista de los efectos en su pestana
 "Sin efectos": ("Without effects", "Sans effets", "Ohne Effekte", "无效果", "エフェクトなし"),
 "Con efectos": ("With effects", "Avec effets", "Mit Effekten", "有效果", "エフェクトあり"),
-"Con un juego en 3D, aquí se ve con sus efectos": ("With a game in 3D, it shows here with its effects", "Avec un jeu en 3D, il s'affiche ici avec ses effets", "Mit einem Spiel in 3D erscheint es hier mit seinen Effekten", "游戏在 3D 中运行时，这里会显示其效果", "3D でゲームを動かすと、ここにエフェクト付きで表示されます"),
-"A la izquierda sin ellos, a la derecha con ellos": ("Left without them, right with them", "À gauche sans, à droite avec", "Links ohne, rechts mit", "左侧无效果，右侧有效果", "左がなし、右があり"),
+"Vista previa": ("Preview", "Aperçu", "Vorschau", "预览", "プレビュー"),
+"A la izquierda de la raya sin efectos, a la derecha con ellos": ("Left of the line without effects, right of it with them", "À gauche de la ligne sans effets, à droite avec", "Links der Linie ohne Effekte, rechts davon mit", "分隔线左侧无效果，右侧有效果", "線の左はエフェクトなし、右はあり"),
+"El juego a la vista con los efectos a un lado: a la izquierda de la raya sin ellos y a la derecha con ellos.": ("The game in view with the effects to one side: left of the line without them, right of it with them.", "Le jeu à l'écran avec les effets sur le côté : à gauche de la ligne sans eux, à droite avec.", "Das Spiel im Blick, die Effekte an der Seite: links der Linie ohne, rechts davon mit.", "游戏显示在屏幕上，效果列表在一侧：分隔线左侧无效果，右侧有效果。", "ゲームを表示し、エフェクトは横に：線の左はなし、右はあり。"),
+"Hace falta un juego en 3D abierto: enseña el juego sin efectos y con ellos.": ("Needs a game open in 3D: it shows the game without effects and with them.", "Il faut un jeu ouvert en 3D : il montre le jeu sans effets et avec.", "Braucht ein in 3D geöffnetes Spiel: zeigt das Spiel ohne und mit Effekten.", "需要以 3D 打开一个游戏：显示游戏无效果和有效果的样子。", "3D で開いたゲームが必要です：エフェクトなしとありのゲームを表示します。"),
+"vista previa: a la izquierda de la raya sin efectos, a la derecha con ellos": ("preview: left of the line without effects, right of it with them", "aperçu : à gauche de la ligne sans effets, à droite avec", "Vorschau: links der Linie ohne Effekte, rechts davon mit", "预览：分隔线左侧无效果，右侧有效果", "プレビュー：線の左はエフェクトなし、右はあり"),
+"vista previa quitada": ("preview off", "aperçu retiré", "Vorschau aus", "预览已关闭", "プレビューをオフにしました"),
 }
 
 from traducciones_ru import RU

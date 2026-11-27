@@ -122,6 +122,31 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     mueven los deslizadores.
   - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
+## La vista previa de los efectos, con su casilla y como la vista de depuración (v1.18)
+
+- Rodolfo, con una foto de la vista de depuración y otra de la pestaña Efectos: «cambialo, distribuyelo como en la vista de
+  depuracion, el menu normal se queda asi mitad y mitad, pon la casilla de preview para palomearla igual que pusiste la de
+  depuracion en la otra seccion», y luego «asi ya no renderiza doble».
+- **La pestaña Efectos**, sin el cuadro de arriba: la casilla «Vista previa» arriba en medio, como la de la vista de
+  depuración en la pestaña 3D, y debajo las dos mitades de antes (los efectos a la izquierda; añadir, las notas y las
+  fuentes públicas a la derecha). Sin un juego en 3D debajo del panel la casilla va en gris.
+- **Palomeada**, el panel queda como en la vista de depuración: una columna a la izquierda (la casilla, con lo que es cada
+  lado, y luego los efectos con sus ajustes y «Añadir un efecto»; sin las notas ni las fuentes públicas), sin velo, con el
+  teclado a pedido y el ratón fuera de la columna para lo de debajo. El visor pinta el juego en toda la pantalla, a su
+  proporción: a la izquierda de una raya blanca sin efectos y a la derecha con ellos, con la raya en medio de lo que se ve
+  a la derecha de la columna; abajo, a cada lado, «Sin efectos» y «Con efectos» (arriba están la pastilla y el cuadrito
+  de FPS). Con un desplegable abierto sigue, porque va dentro de la columna. Quitarla, salir de la pestaña (el «Atrás» de
+  los de un juego que se abrió desde Juegos) o cerrar el panel la quita.
+- **Nada de más sin palomearla**: el panel ya no pide la vista solo por estar en la pestaña, así que el visor no corre los
+  efectos para ella (con los efectos apagados corrían igual, para el cuadro). Y mientras la vista tapa la pantalla entera
+  el visor no pinta la trama de ese cuadro: no se renderiza dos veces.
+- `odysseyvk-efectos-vista-pide` lleva ahora cinco números, donde va el juego y la x de la raya (sin el quinto, en medio).
+- **Probado** en un gamescope sin salida, con la pantalla entera pedida y la raya al 60 %: a la izquierda de la raya la
+  salida es igual a la fuente del visor (diferencia 0,0), a la derecha lleva los efectos (14/255) y la raya es blanca; el
+  cuadrito de colores que cruza la raya sale mitad sin y mitad con. Con la capa de validación de Vulkan, nada nuevo (los dos
+  avisos de siempre). El panel, pintado en la CPU: las dos mitades con la casilla arriba en medio, la columna con la
+  casilla palomeada y los rótulos abajo, y la casilla en gris sin juego. Sin probar con un juego delante.
+
 ## La vista de los efectos en la tarjeta gráfica, arriba en medio, y la lista en dos columnas (v1.18)
 
 - Rodolfo: «stray fixed, can you find a way to make the preview fast?, maybe not cpu based» y «also, move it to the top
