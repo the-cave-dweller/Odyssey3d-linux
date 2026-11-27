@@ -3,6 +3,15 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## `odysseyvk ctl net download`, en inglés (v1.16)
+
+- Rodolfo, con las dos líneas del README: «change to english in this command». Ahora se escribe `odysseyvk ctl net
+  download` (la FP16) y `odysseyvk ctl net download fp32`; también vale `network`. El de siempre, `ctl red
+  descargar`, sigue funcionando (lo pueden tener apuntado scripts o costumbres). Los README, las guías y los avisos
+  del programa que lo nombran dicen ya el nuevo.
+- Probado: `net download`, `net download fp32`, `network download fp32` y `red descargar` dicen que ya está;
+  `net download fp64` da el uso; `net` sola, el estado.
+
 ## La red de profundidad también en tarjetas AMD, con ROCm (v1.16)
 
 - Rodolfo: «can you implement rocm apart from cuda?, not sure if i talk nonsense». No lo era: la red va con ONNX

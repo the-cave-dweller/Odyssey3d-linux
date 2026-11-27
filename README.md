@@ -60,8 +60,8 @@ renames it on its first start). When the first download finishes the panel close
 terminal it is:
 
 ```bash
-odysseyvk ctl red descargar        # FP16
-odysseyvk ctl red descargar fp32   # FP32
+odysseyvk ctl net download        # FP16
+odysseyvk ctl net download fp32   # FP32
 ```
 
 When the network has to run on the processor (no CUDA, or no room on any GPU), OdysseyVK uses the FP32 instead of

@@ -5020,7 +5020,7 @@ static int cmdServe(int argc, char **argv) {
      desde v0.94 cada vez que el servicio arranca sin red, no solo la primera). */
   if (redActiva.empty()) {
     std::printf("[serve] no hay ninguna red de profundidad: %s el panel de ajustes para descargar la abierta "
-                "(o `odysseyvk ctl red descargar`)\n", dry ? "(dry) se abriria" : "se abre");
+                "(o `odysseyvk ctl net download`)\n", dry ? "(dry) se abriria" : "se abre");
     std::fflush(stdout);
     if (!dry) {
       const pid_t p = ::fork();
@@ -6438,25 +6438,27 @@ int main(int argc, char **argv) {
                   ajuste::rutaBarra().c_str());
       return 0;
     }
-    if (sub == "red") {
+    if (sub == "red" || sub == "net" || sub == "network") {
       /* `ctl red`: que red de profundidad hay; `ctl red descargar`: baja la abierta a su carpeta, con
-         el mismo camino que el boton del panel de ajustes (v0.92), y espera a que acabe. */
-      const std::string que = argc > 3 ? strLower(argv[3]) : std::string();
+         el mismo camino que el boton del panel de ajustes (v0.92), y espera a que acabe. (v1.16) En ingles, `ctl net
+         download [fp16|fp32]` (Rodolfo: «change to english in this command»); el de siempre sigue valiendo */
+      std::string que = argc > 3 ? strLower(argv[3]) : std::string();
+      if (que == "download") que = "descargar";
       const bool hay = prefs::redAbiertaPresente();
       if (que != "descargar") {
         std::printf("red abierta (Depth Anything V2 pequena%s): %s\n  %s\n", prefs::redLigeraPresente() ? ", fp16" : "",
                     hay ? "en su sitio" : "FALTA", rutaRedNuestra().c_str());
         std::printf("se baja de %s\n", prefs::kUrlRedAbierta);
         if (!prefs::redLigeraPresente())
-          std::printf("  odysseyvk ctl red descargar   deja ahi la ligera (fp16, 50 MB)\n");
+          std::printf("  odysseyvk ctl net download   deja ahi la ligera (fp16, 50 MB)\n");
         if (!prefs::redFp32Presente())
-          std::printf("  odysseyvk ctl red descargar fp32   y la de precision completa (99 MB, la que va por la CPU)\n");
+          std::printf("  odysseyvk ctl net download fp32   y la de precision completa (99 MB, la que va por la CPU)\n");
         return hay ? 0 : 1;
       }
       /* (v1.16) `ctl red descargar fp32`: la de precision completa (99 MB); otra cosa, el uso (de la PR #2 de Noa3) */
       const std::string precision = argc > 4 ? strLower(argv[4]) : std::string("fp16");
       if (argc > 5 || (precision != "fp16" && precision != "fp32")) {
-        std::fprintf(stderr, "uso: odysseyvk ctl red descargar [fp16|fp32]\n");
+        std::fprintf(stderr, "uso: odysseyvk ctl net download [fp16|fp32]\n");
         return 2;
       }
       const bool fp32 = precision == "fp32";

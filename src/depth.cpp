@@ -550,7 +550,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
       *err = "no esta el modelo de profundidad en " + path +
-             "\n    la red abierta se baja con: odysseyvk ctl red descargar [fp32] (o su casilla en la pestana 3D)";
+             "\n    la red abierta se baja con: odysseyvk ctl net download [fp32] (o su casilla en la pestana 3D)";
     return false;
   }
 #ifdef HAVE_ORT
@@ -716,7 +716,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
         std::printf("[conversor] por la CPU se usa la FP32 (%s): la FP16 alli va unas 5 veces mas lenta\n", rutaRedVieja().c_str());
         path = rutaRedVieja();
       } else {
-        std::printf("[conversor] por la CPU la FP32 iria unas 5 veces mas rapida: odysseyvk ctl red descargar fp32\n");
+        std::printf("[conversor] por la CPU la FP32 iria unas 5 veces mas rapida: odysseyvk ctl net download fp32\n");
       }
       std::fflush(stdout);
     }

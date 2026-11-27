@@ -14,7 +14,7 @@ odysseyvk integraciones [ver|escribir]  # Steam launch options per game: show th
 odysseyvk play video_sbs.mkv         # play a stereo file with the built-in mpv viewer
 odysseyvk test                       # fullscreen calibration pattern
 odysseyvk capture3d --uuid <id>      # weave the window KWin captures (what the service launches)
-odysseyvk ctl red [descargar]        # the depth network: status / download it
+odysseyvk ctl net [download [fp32]]  # the depth network: status / download it
 odysseyvk ctl estado                 # what the viewer is doing right now
 odysseyvk ctl windows                # list windows and the fullscreen candidate
 odysseyvk ctl ajuste clave=valor     # send a live number or order to the open viewer
@@ -57,7 +57,7 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   50 MB, recommended), the FP32 (`model.onnx`, 99 MB) and any other `.onnx` placed in that folder. One not
   downloaded yet is grey with «Download · 50 MB» and clicking it downloads it and sets it; downloaded ones show a
   blue tag. The ticked one goes to `modelo =` in `serve.conf` and a running viewer switches to it at once. From the
-  terminal: `odysseyvk ctl red descargar` (FP16) or `odysseyvk ctl red descargar fp32`. If the Odyssey 3D Hub's own
+  terminal: `odysseyvk ctl net download` (FP16) or `odysseyvk ctl net download fp32`. If the Odyssey 3D Hub's own
   `mde_large.onnx` is in that folder it is used when nothing is ticked (key `1`/`2` switches).
 - GPU engine (since 1.16): whatever the installed ONNX Runtime offers, in this order: CUDA (`onnxruntime-cuda`,
   NVIDIA), MIGraphX (`onnxruntime-rocm`, AMD), the older ROCm engine, else the CPU (where the FP32 is used if
@@ -166,6 +166,6 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
 - **Browser video freezes under the viewer** → Firefox/Zen: `about:config` →
   `gfx.vsync.compositor.unobserve-count = 0`; Chrome: `--disable-gpu-vsync`.
 - **Monitor stays rotated / scaled after a crash** → `odysseyvk ctl panel restore`.
-- **No depth, video stays flat** → the network is missing: `odysseyvk ctl red descargar`.
+- **No depth, video stays flat** → the network is missing: `odysseyvk ctl net download`.
 - Logs: `journalctl --user -u odysseyvk-serve -f`; the update log is
   `~/.local/state/odysseyvk/actualizar.log`.

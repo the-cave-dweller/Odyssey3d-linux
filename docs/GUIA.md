@@ -184,7 +184,7 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
   Desde la terminal es lo mismo:
 
   ```sh
-  odysseyvk ctl red descargar
+  odysseyvk ctl net download
   ```
 
   Se baja de <https://huggingface.co/XnetShadow/depth_anything_v2_small>. Si en esa misma carpeta

@@ -60,8 +60,8 @@ hasta la 1.15; la 1.16 le cambia el nombre al arrancar). Al acabar la primera de
 carga. Desde la terminal es:
 
 ```bash
-odysseyvk ctl red descargar        # FP16
-odysseyvk ctl red descargar fp32   # FP32
+odysseyvk ctl net download        # FP16
+odysseyvk ctl net download fp32   # FP32
 ```
 
 Cuando la red tiene que ir por el procesador (sin CUDA, o sin sitio en ninguna tarjeta), OdysseyVK usa la FP32 en vez
