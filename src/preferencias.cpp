@@ -1808,12 +1808,21 @@ JuegoFg juegoFg() {
 }
 }  // namespace
 
-/* (v1.18) la de los videos, en serve.conf: 0 = apagada, 2 a 4 = el multiplicador (fgvideo.h) */
-int fgVideoPuesta() {
+/* (v1.18) la de los videos, en serve.conf: `fg_video_activo` (si/no, el interruptor «Activar en vídeos») y `fg_video`, el
+   multiplicador de 2 a 4 (fgvideo.h). Devuelve el multiplicador si esta encendida, si no 0 */
+int fgVideoMultiplicador() {
   const auto sc = ajuste::leerServeConf();
   const auto it = sc.find("fg_video");
   const int m = it == sc.end() ? 0 : std::atoi(it->second.c_str());
-  return m >= 2 && m <= 4 ? m : 0;
+  return m >= 2 && m <= 4 ? m : 2;
+}
+int fgVideoPuesta() {
+  const auto sc = ajuste::leerServeConf();
+  const auto it = sc.find("fg_video");
+  const auto ia = sc.find("fg_video_activo");
+  const int m = it == sc.end() ? 0 : std::atoi(it->second.c_str());
+  const bool activa = ia != sc.end() ? ia->second == "si" : (m >= 2 && m <= 4);
+  return activa ? fgVideoMultiplicador() : 0;
 }
 
 std::string notaFg() {
@@ -1871,11 +1880,17 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
     sv.tipo = Hud::ItemPanel::Seccion, sv.rotulo = idioma::tr("VÍDEOS");
     pon(sv, "");
     const bool hay = mako::generadorInstalado();
+    /* (v1.18) Rodolfo: «dejalo con multiplicadores, que se active con un toggle que se llame activar en videos» */
+    Hud::ItemPanel sw;
+    sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = idioma::tr("Activar en vídeos");
+    sw.valor = fgVideoPuesta() > 0;
+    sw.ayuda = idioma::tr("Cuadros intermedios para los vídeos (no los juegos), hechos con MAKO FG dentro del visor. El vídeo va un poco por detrás: 21 ms a 24 fps con x2.");
+    if (!hay) sw.apagado = true;
+    pon(sw, "fg:video_activo");
     Hud::ItemPanel o;
-    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = idioma::tr("Generación en vídeos");
-    o.opciones = {idioma::tr("Apagada"), "x2", "x3", "x4"};
-    o.elegido = std::max(0, fgVideoPuesta() - 1);
-    o.ayuda = idioma::tr("Cuadros intermedios para los vídeos (no los juegos), hechos con MAKO FG dentro del visor. El vídeo va un poco por detrás: 21 ms a 24 fps con x2.");
+    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = idioma::tr("Multiplicador");
+    o.opciones = {"x2", "x3", "x4"};
+    o.elegido = fgVideoMultiplicador() - 2;
     if (!hay) o.apagado = true;
     pon(o, "fg:video");
     Hud::ItemPanel n;
@@ -1933,14 +1948,26 @@ static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
     if (aviso) *aviso = bien ? idioma::tr("instalando MAKO FG…") : idioma::trf("No se pudo instalar MAKO FG: {}", {err});
     return true;
   }
-  if (que == "video") {   /* (v1.18) la de los videos: el visor la mira cada 2 s */
+  /* (v1.18) los videos: el interruptor y el multiplicador (el visor los mira cada 2 s) */
+  if (que == "video_activo") {
     std::string e;
-    const std::string val = sub <= 0 ? "0" : std::to_string(std::min(4, sub + 1));
+    const bool poner = fgVideoPuesta() == 0;
+    if (!ajuste::fijarEnServeConf("fg_video_activo", poner ? "si" : "no", &e)) {
+      if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+      return true;
+    }
+    if (aviso) *aviso = poner ? idioma::trf("generación en vídeos: x{}", {std::to_string(fgVideoMultiplicador())})
+                              : std::string(idioma::tr("generación en vídeos apagada"));
+    return true;
+  }
+  if (que == "video") {
+    std::string e;
+    const std::string val = std::to_string(std::max(2, std::min(4, sub + 2)));
     if (!ajuste::fijarEnServeConf("fg_video", val, &e)) {
       if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
       return true;
     }
-    if (aviso) *aviso = sub <= 0 ? std::string(idioma::tr("generación en vídeos apagada")) : idioma::trf("generación en vídeos: x{}", {val});
+    if (aviso) *aviso = idioma::trf("generación en vídeos: x{}", {val});
     return true;
   }
   const JuegoFg j = juegoFg();

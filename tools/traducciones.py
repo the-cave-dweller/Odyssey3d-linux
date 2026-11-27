@@ -539,6 +539,7 @@ T = {
 "Hace falta MAKO FG: instálalo arriba.": ("MAKO FG is needed: install it above.", "MAKO FG est nécessaire : installez-le ci-dessus.", "MAKO FG wird benötigt: oben installieren.", "需要 MAKO FG：请在上方安装。", "MAKO FG が必要です：上でインストールしてください。"),
 "generación en vídeos apagada": ("video frame generation off", "génération dans les vidéos désactivée", "Bildgenerierung in Videos aus", "视频补帧已关闭", "動画のフレーム生成をオフにしました"),
 "generación en vídeos: x{}": ("video frame generation: x{}", "génération dans les vidéos : x{}", "Bildgenerierung in Videos: x{}", "视频补帧：x{}", "動画のフレーム生成：x{}"),
+"Activar en vídeos": ("Turn on for videos", "Activer pour les vidéos", "Für Videos aktivieren", "在视频中启用", "動画で有効にする"),
 }
 
 from traducciones_ru import RU

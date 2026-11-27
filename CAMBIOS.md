@@ -66,8 +66,11 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Independiente de los juegos**: solo con el 3D sobre algo que no es un juego; su `mako-fg-host` es otro que el de cada
   juego; nada va a la línea de Steam ni a la capa. Si algo falla (sin MAKO FG, el host no arranca o deja de contestar),
   se apaga para esa sesión y el 3D sigue con los cuadros reales.
-- **La pestaña FG**, sección «Vídeos»: Apagada, x2, x3 o x4 (`fg_video` en serve.conf, 0 de fábrica); el visor la mira
-  cada 2 s. Sin juego, la tesela FG dice «Vídeos X2».
+- **La pestaña FG**, sección «Vídeos»: el interruptor «Activar en vídeos» (`fg_video_activo`, apagado de fábrica) y el
+  multiplicador, x2, x3 o x4 (`fg_video`); el visor los mira cada 2 s. Sin juego, la tesela FG dice «Vídeos X2». Rodolfo
+  pidió también un objetivo de cuadros por segundo (hasta 165); se probó y se dejó: con el objetivo igual al refresco, el
+  real que llega a la vez que un momento de la rejilla se perdía (de 24 a 60 salían 36). Rodolfo: «dejalo con
+  multiplicadores, que se active con un toggle que se llame activar en videos».
 - **MEDIDO**: primero fuera del visor (`tools/prueba_fg_video.cpp`, un cliente del protocolo con un clip real de 24 fps):
   1,7 ms por cuadro a 1080p y 2,3 ms a 4K en la 4090, 2,0 ms en la 5080; los generados salen nítidos, en el medio de
   los dos reales y sin doble imagen. Después en el visor, en el compositor aparte con ese clip (la fuente de prueba

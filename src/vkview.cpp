@@ -4304,9 +4304,14 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (now - fgVideoMirado >= 2.0) {
         fgVideoMirado = now;
         const auto sc = ajuste::leerServeConf();
+        /* `fg_video_activo = si` (el interruptor «Activar en vídeos» de la pestana FG) y `fg_video` = el multiplicador, 2 a 4
+           (2 si no esta); sin el interruptor, un `fg_video` de 2 a 4 tambien la enciende (lo de antes) */
         const auto it = sc.find("fg_video");
-        const int m = it == sc.end() ? 0 : std::atoi(it->second.c_str());
-        const int quiere = m >= 2 && m <= 4 && !sobreJuego(ui) ? m : 0;
+        const auto ia = sc.find("fg_video_activo");
+        const int m0 = it == sc.end() ? 0 : std::atoi(it->second.c_str());
+        const int m = m0 >= 2 && m0 <= 4 ? m0 : 2;
+        const bool activa = ia != sc.end() ? ia->second == "si" : (m0 >= 2 && m0 <= 4);
+        const int quiere = activa && !sobreJuego(ui) ? m : 0;
         if (quiere != fgVideoMult) {
           std::printf("[fg-video] %s\n", quiere ? ("x" + std::to_string(quiere)).c_str() : "apagada");
           std::fflush(stdout);

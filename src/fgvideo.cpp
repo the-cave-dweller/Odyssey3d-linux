@@ -371,7 +371,11 @@ bool FgVideo::nuevoReal(const VkImg &src, double ahora, std::string *err) {
   const size_t k = cbSig_;
   cbSig_ = (cbSig_ + 1) % cbs_.size();
   VkCommandBuffer &cb = cbs_[k];
-  vkWaitForFences(d, 1, &vallas_[k], VK_TRUE, UINT64_MAX);
+  /* con plazo: un host colgado apaga la generacion en vez de colgar el visor */
+  if (vkWaitForFences(d, 1, &vallas_[k], VK_TRUE, 1000000000ull) != VK_SUCCESS) {
+    if (err) *err = "mako-fg-host no acabo a tiempo";
+    return false;
+  }
   vkResetFences(d, 1, &vallas_[k]);
   vkResetCommandBuffer(cb, 0);
   VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -416,7 +420,10 @@ bool FgVideo::nuevoReal(const VkImg &src, double ahora, std::string *err) {
   const size_t k2 = cbSig_;
   cbSig_ = (cbSig_ + 1) % cbs_.size();
   VkCommandBuffer &cb2 = cbs_[k2];
-  vkWaitForFences(d, 1, &vallas_[k2], VK_TRUE, UINT64_MAX);
+  if (vkWaitForFences(d, 1, &vallas_[k2], VK_TRUE, 1000000000ull) != VK_SUCCESS) {
+    if (err) *err = "mako-fg-host no acabo a tiempo";
+    return false;
+  }
   vkResetFences(d, 1, &vallas_[k2]);
   vkResetCommandBuffer(cb2, 0);
   vkBeginCommandBuffer(cb2, &bi);
