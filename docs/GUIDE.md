@@ -64,7 +64,13 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   the last 32 frames at 504×280 and keeps the newest map; the window restarts at scene cuts. It goes to
   `modelo_video =` in `serve.conf`; the service passes it to the viewer only for non-game windows, and a running video
   session switches when it's ticked or unticked (a game ignores it). Needs ~2.3 GB on the GPU (the CUDA cap rises to
-  3.5 GB for it) and refuses the CPU, falling back to the usual network.
+  3.5 GB for it) and refuses the CPU, falling back to the usual network. In the panel the two lists sit side by side
+  (the usual on the left, videos only on the right), and a side with more than two networks becomes a drop-down.
+- Debug view (since 1.16): the panel's *Debug view* checkbox sends `ver_profundidad = 1|0` to the viewer (the
+  `Ctrl+Shift+9` view) and keeps only the two network lists, in a column on the left, without the veil and with the
+  keyboard on demand, so networks can be switched while watching the depth. Beside the checkbox: `red_ms` (the
+  network alone), `mapa_ms` (with preparing and cleaning the map), `mapas_s` and `fps` from the viewer's `estado`,
+  refreshed every second. It mirrors the viewer: opening the panel while the depth view is on opens this layout.
 - GPU engine (since 1.16): whatever the installed ONNX Runtime offers, in this order: CUDA (`onnxruntime-cuda`,
   NVIDIA), MIGraphX (`onnxruntime-rocm`, AMD), the older ROCm engine, else the CPU (where the FP32 is used if
   present). `ODYSSEYVK_PROVEEDOR=cuda|migraphx|rocm|cpu` forces one. With AMD, ONNX Runtime's HIP device numbers are

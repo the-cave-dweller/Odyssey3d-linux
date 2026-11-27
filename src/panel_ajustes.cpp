@@ -166,6 +166,13 @@ int cmdAjustes(int argc, char **argv) {
   st.marco = !(entornoOdyssey("ODYSSEYVK_PANEL_VIEJO") && entornoOdyssey("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
   st.aparicion = st.marco ? 0.0f : 1.0f;
   if (st.marco) grande = true;
+  /* (v1.16) abierto con la vista de depuracion del visor ya puesta (Ctrl+Mayus+9, o se cerro el panel con ella): en la
+     columna de la izquierda y sin velo hasta que se quite. La casilla refleja lo del visor */
+  if (st.marco && haySesion) {
+    const auto e = ajuste::leerEstado();
+    const auto vp = e.find("ver_profundidad");
+    st.depuracion = vp != e.end() && vp->second == "si";
+  }
   /* (v1.16) dentro de un juego (o con una sesion 3D) las pestanas se ven, pero Integraciones va en gris y en Juegos
      solo sale en color el juego de ahora (Rodolfo: «si muestra el boton de juegos e integraciones, pero integraciones
      en gris, que juegos deje entrar pero solo se vea de color el juego actual»). Antes, con una sesion 3D, la de
@@ -174,7 +181,16 @@ int cmdAjustes(int argc, char **argv) {
   bool sinIntegraciones = haySesion;
   std::string juegoActual;
   auto rellenar = [&] {
+    /* (v1.16) el desplegable abierto se vuelve a buscar por la cabeza de su id («lista:red»): al rehacerse, las filas
+       pueden cambiar de sitio (y sus opciones, de orden: una red bajada) */
+    std::string cabezaDesp;
+    if (st.desplegado >= 0 && (size_t)st.desplegado < ids.size())
+      cabezaDesp = ids[(size_t)st.desplegado].substr(0, ids[(size_t)st.desplegado].find('\x1f'));
     prefs::llenar(st, prefs::leer(), juegos, ids);
+    st.desplegado = -1;
+    if (!cabezaDesp.empty())
+      for (size_t k = 0; k < ids.size(); k++)
+        if (ids[k].substr(0, ids[k].find('\x1f')) == cabezaDesp) st.desplegado = (int)k;
     st.pestanaGris.assign(st.pestanas.size(), false);
     if (sinIntegraciones) {
       if (st.pestanaGris.size() > 2) st.pestanaGris[2] = true;
@@ -245,7 +261,7 @@ int cmdAjustes(int argc, char **argv) {
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
   /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
   paso("ventanas");
-  ov.showPanel(grande, quiereVelo && !st.fijado);
+  ov.showPanel(grande, quiereVelo && !st.fijado && !st.depuracion);
   paso("puesto");
   {
     std::string t;
@@ -351,7 +367,7 @@ int cmdAjustes(int argc, char **argv) {
         gg.tipo = (int)Hud::HitPanelItem;
         gg.sub = sp == std::string::npos ? 0 : std::atoi(p.arg.c_str() + sp + 1);
         for (size_t k = 0; k < ids.size(); k++)
-          if (ids[k] == id) gg.item = (int)k;
+          if (ids[k] == id || ids[k].rfind(id + '\x1f', 0) == 0) gg.item = (int)k;   /* (v1.16) un desplegable, por su cabeza */
         if (gg.item < 0) std::printf("[ajustes] guion: no hay fila «%s»\n", id.c_str());
         else golpesGuion.push_back(gg);
       } else if (p.accion == "pestana") {
@@ -456,6 +472,11 @@ int cmdAjustes(int argc, char **argv) {
         st.menuIdioma = false;
         repintar = true;
       }
+      /* (v1.16) y el desplegable de redes, con cualquiera que no sea en su caja o en sus opciones */
+      if (st.desplegado >= 0 && !(g.tipo == (int)Hud::HitPanelItem && g.item == st.desplegado)) {
+        st.desplegado = -1;
+        repintar = true;
+      }
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
       } else if (g.tipo == (int)Hud::HitPanelVolver) {
@@ -549,11 +570,55 @@ int cmdAjustes(int argc, char **argv) {
         st.pie.clear();
         rellenar();
         repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "depuracion") {
+        /* (v1.16) la vista de depuracion: el visor ensena su mapa de profundidad (la orden `ver_profundidad`, lo de
+           Ctrl+Mayus+9) y el panel deja solo las dos listas de redes en una columna a la izquierda, sin velo y con el
+           teclado a pedido, para probarlas con el video a la vista. Quitada, vuelve todo */
+        st.depuracion = !st.depuracion;
+        st.desplegado = -1;
+        st.corrida = 0.0f;
+        std::string e;
+        if (!ajuste::escribir(std::map<std::string, double>(), std::string(), {{"ver_profundidad", st.depuracion ? "1" : "0"}}, &e))
+          std::fprintf(stderr, "[ajustes] vista de depuracion: %s\n", e.c_str());
+        if (st.depuracion) ov.quitarVelo();
+        else if (quiereVelo && !st.fijado) ov.showPanel(grande, true);
+        st.pie = idioma::tr(st.depuracion ? "vista de depuración: prueba las redes con el vídeo a la vista" : "vista de depuración quitada");
+        std::printf("[ajustes] vista de depuracion %s\n", st.depuracion ? "puesta" : "quitada");
+        std::fflush(stdout);
+        miradaRend = reloj();
+        rellenar();
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size()) {
         std::string aviso;
         bool cerrar = false;
-        const std::string id = ids[(size_t)g.item];
-        const bool cambio = prefs::aplicar(id, g.sub, g.frac, g.soltado, juegos, &aviso, &cerrar);
+        std::string id = ids[(size_t)g.item];
+        int subA = g.sub;
+        /* (v1.16) un desplegable de redes: su caja lo abre o lo cierra; una opcion (sub 100 + k) hace lo de su casilla,
+           cuya orden va detras de la cabeza del id (la k-esima, separadas por \x1f). La que ya esta puesta, nada */
+        bool seguir = true;
+        if (id.rfind("lista:", 0) == 0) {
+          repintar = true;
+          if (g.sub < 100) {
+            st.desplegado = st.desplegado == g.item ? -1 : g.item;
+            std::printf("[ajustes] %s %s\n", id.substr(0, id.find('\x1f')).c_str(), st.desplegado >= 0 ? "abierto" : "cerrado");
+            std::fflush(stdout);
+            seguir = false;
+          } else {
+            const int k = g.sub - 100;
+            st.desplegado = -1;
+            std::vector<std::string> partes;
+            for (size_t a = 0; a <= id.size();) {
+              size_t b = id.find('\x1f', a);
+              if (b == std::string::npos) b = id.size();
+              partes.push_back(id.substr(a, b - a));
+              a = b + 1;
+            }
+            if (k == st.items[(size_t)g.item].elegido || k < 0 || (size_t)k + 1 >= partes.size()) seguir = false;
+            else id = partes[(size_t)k + 1], subA = 0;
+          }
+        }
+        if (seguir) {
+        const bool cambio = prefs::aplicar(id, subA, g.frac, g.soltado, juegos, &aviso, &cerrar);
         /* (v1.15) el engranaje de una caratula o un juego de la lista de Integraciones: a esa pestana, arriba */
         if (const int p = prefs::tomarPestana(); p >= 0 && !(p == 2 && sinIntegraciones)) {
           st.pestana = p;
@@ -567,10 +632,11 @@ int cmdAjustes(int argc, char **argv) {
         }
         if (cambio || !aviso.empty()) repintar = true;
         if (cerrar) cerrarEn = reloj() + 1.2;   /* que de tiempo a leer «arrancando ...» */
+        }
       }
     }
     /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
-    ov.modoTeclado(!st.fijado ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
+    ov.modoTeclado(!(st.fijado || st.depuracion) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
     {
@@ -604,8 +670,9 @@ int cmdAjustes(int argc, char **argv) {
             repintar = true;
           }
         } else if (combo == "Escape") {
-          if (st.menuIdioma) {
+          if (st.menuIdioma || st.desplegado >= 0) {
             st.menuIdioma = false;
+            st.desplegado = -1;
             repintar = true;
           } else {
             g_cierraPanel = 1;
@@ -626,7 +693,7 @@ int cmdAjustes(int argc, char **argv) {
       repintar = true;
     }
     /* la pestana de rendimiento se refresca sola, una vez por segundo */
-    if (st.pestana == 3 && reloj() - miradaRend >= 1.0) {   /* Programa lleva el rendimiento */
+    if ((st.pestana == 3 || st.depuracion) && reloj() - miradaRend >= 1.0) {   /* Programa lleva el rendimiento; (v1.16) la vista de depuracion, lo de la red */
       miradaRend = reloj();
       rellenar();
       repintar = true;

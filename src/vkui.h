@@ -43,7 +43,10 @@ public:
        ese byte; `seleccion` = todo marcado (lo que se escriba lo reemplaza).
        Linea (v1.15): un texto largo partido en renglones en una caja oscura (la linea que va a Steam), con un boton
        a la derecha que dice `nota` (Copiar; `valor` = recien copiado, en verde); vacio, sale `rotulo` en gris. */
-    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info, Atajo, Texto, Linea };
+    /* Desplegable (v1.16): una caja con lo elegido (`valorTexto`) y su flechita (el rotulo, el de la seccion de encima); picada, debajo cuelga la
+       lista de `opciones`, cada una con su etiqueta a la derecha (`ayudas[k]`) en azul (`estadosOpc[k]` 0: esta) o en
+       gris (1: se baja al picarla; 2: no se puede ahora). `elegido`, la puesta (-1 = ninguna) */
+    enum Tipo { Seccion, Interruptor, Opciones, Deslizador, Fila, Juego, Nota, Boton, Info, Atajo, Texto, Linea, Desplegable };
     Tipo tipo = Nota;
     std::string rotulo, nota;
     std::string valorTexto;          /* a la derecha: el numero del deslizador, el modo de una fila... */
@@ -84,6 +87,11 @@ public:
        `pastillaAcento` = la pastilla en el azul del acento («Descargada») en vez de gris */
     bool descargable = false;
     bool pastillaAcento = false;
+    /* (v1.16) la mitad del ancho: 0 = entera, 1 = la izquierda, 2 = la derecha (las seguidas van lado a lado; con la vista
+       de depuracion, arriba y abajo de la columna). `centrado`: la casilla y su rotulo en medio de la fila */
+    int lado = 0;
+    bool centrado = false;
+    std::vector<int> estadosOpc;   /* Desplegable */
   };
 
   struct State {
@@ -152,6 +160,10 @@ public:
     /* (v1.16, PR #1) la fila del deslizador mientras se tiene apretado: aqui (antes en la capa) para que el panel, al
        rehacer la lista cada segundo, la conserve con su bola donde esta */
     int arrastrando = -1;
+    /* (v1.16) el desplegable abierto (su fila, -1 = ninguno) y la vista de depuracion del panel: solo las dos listas de
+       redes en una columna a la izquierda, para probarlas en vivo con la profundidad a la vista (Rodolfo) */
+    int desplegado = -1;
+    bool depuracion = false;
     float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
     std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
     std::string version;             /* "OdysseyVK 0.84", abajo a la derecha */
@@ -520,6 +532,8 @@ public:
   float panelAltoVisto() const { return panelCaja_.h; }
 private:
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
+  std::vector<Rect> panelDespOpc_;   /* (v1.16) las opciones del desplegable abierto */
+  Rect panelDespCaja_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) y su caja entera */
   std::vector<Rect> panelPestanas_;
   std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */
   Rect panelVolver_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) la flecha de volver a la pastilla */

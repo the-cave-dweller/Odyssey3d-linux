@@ -212,6 +212,9 @@ static void abrirPanelDeAjustes() {
 }
 static bool g_cantosFinos = true;   /* v0.89: el mapa va tal cual y el sombreador busca la vista de cada ojo */
 static double g_fpsVisto = 0.0, g_mapaMs = 0.0;   /* para el `estado`: lo ensena la pestana de rendimiento */
+/* (v1.16) y para la vista de depuracion del panel: los mapas hechos (de ahi, los mapas por segundo) y lo de la red sola */
+static long long g_mapasHechos = 0;
+static double g_redMs = 0.0;
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
 /* (v1.13) la profundidad de DLSS, para el `estado` (la ventana de ajustes) y el cuadrito junto a la pastilla: los
    FPS del juego y de la capa (0 = no llega), lo que se lee y la parte del mapa del HUD del juego (< 0 = sin el) */
@@ -415,7 +418,23 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
     s += std::string("fps = ") + num + "\n";
     std::snprintf(num, sizeof num, "%.1f", g_mapaMs);
     s += std::string("mapa_ms = ") + num + "\n";
+    /* (v1.16) los mapas que salen de verdad por segundo (contados entre una escritura y la siguiente) y lo que tarda la
+       red sola, sin preparar la foto ni limpiar el mapa: lo ensena la vista de depuracion del panel */
+    static double tAntes = -1.0;
+    static long long nAntes = 0;
+    static double porSegundo = 0.0;
+    const double ahora = glfwGetTime();
+    if (tAntes < 0.0) tAntes = ahora, nAntes = g_mapasHechos;
+    else if (ahora - tAntes >= 0.45) {
+      porSegundo = (double)(g_mapasHechos - nAntes) / (ahora - tAntes);
+      tAntes = ahora, nAntes = g_mapasHechos;
+    }
+    std::snprintf(num, sizeof num, "%.1f", porSegundo);
+    s += std::string("mapas_s = ") + num + "\n";
+    std::snprintf(num, sizeof num, "%.1f", g_redMs);
+    s += std::string("red_ms = ") + num + "\n";
   }
+  s += std::string("ver_profundidad = ") + (ui.verProfundidad ? "si" : "no") + "\n";
   s += std::string("trama = ") + (ui.tune.weave && ui.hud.state().weaveOn ? "activa" : "apagada") + "\n";
   /* si la pastilla esta a la vista o ocultada (Ctrl+Shift+F1 / `ctl capa`): lo lee `ctl capa estado`
      y la ventana de ajustes. Con la pastilla oculta la trama sigue igual, solo se quita la interfaz. */
@@ -2733,6 +2752,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               if (!autoQ && ui.hud.state().modo3d >= 2 && ui.hud.state().weaveOn) ui.modoPedido = quiere ? 3 : 2;
             }
           }
+          /* (v1.16) `ver_profundidad = 1|0`: la vista de depuracion de la profundidad (Ctrl+Mayus+9), desde el panel */
+          if (const auto vp = palabras.find("ver_profundidad"); vp != palabras.end() && !vistazoInicial) {   /* la de una sesion vieja, no */
+            const std::string v = strLower(vp->second);
+            const bool quiere = v == "1" || v == "si" || v == "on" || v == "poner" || v == "encender";
+            if (quiere != ui.verProfundidad) {
+              ui.verProfundidad = quiere;
+              std::printf("[depuracion] vista de profundidad %s (el panel)\n", quiere ? "puesta" : "quitada");
+              std::fflush(stdout);
+            }
+          }
           const auto ordenVista = palabras.find("vista");
           if (ordenVista != palabras.end()) {
             const std::string v = strLower(ordenVista->second);
@@ -3767,6 +3796,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (estado == 1) {
         convMs = msHecho;
         g_mapaMs = msHecho;
+        g_mapasHechos++;                 /* (v1.16) para los mapas por segundo de la vista de depuracion */
+        g_redMs = red.lastMsRed();
         const double tSube0 = glfwGetTime();
         const bool subido = mapaRG.size() == mapa.size() * 4
                                 ? wv.setDepthMapGuia(mapaRG.data(), red.size(), red.size(), &cerr)

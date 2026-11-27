@@ -1799,17 +1799,20 @@ void Hud::dibujaPanel(int vw, int vh) {
     const bool ventana = st_.marcoVentana;
     const float s = ventana ? 1.0f : std::max(0.5f, std::min(1.0f, std::min((float)vw / 1280.0f, (float)vh / 720.0f)));
     const float a = std::max(0.0f, std::min(1.0f, st_.aparicion));
+    /* (v1.16) lo de en medio, de 1160 (antes 980): las dos mitades de la red de profundidad caben con su letra (Rodolfo:
+       «make the main hub a bit bigger if needed»). En el lienzo minimo de 1280 quedan 60 de margen a cada lado */
+    const float anchoC = 1160.0f;
     Rect F{0.0f, 0.0f, (float)vw, (float)vh};
     float arribaT = 88.0f, arribaC = 304.0f;
     if (ventana) {
-      const float fw = std::min(1012.0f, (float)vw - 24.0f), fh = std::min(880.0f, (float)vh - 48.0f);
+      const float fw = std::min(anchoC + 32.0f, (float)vw - 24.0f), fh = std::min(880.0f, (float)vh - 48.0f);
       F = {std::floor(((float)vw - fw) * 0.5f), std::floor(((float)vh - fh) * 0.5f), fw, fh};
       arribaT = 72.0f, arribaC = 288.0f;
       px = F.x, py = F.y, pw = F.w, ph = F.h;
       panelCaja_ = F;
     }
     /* el velo: no se mueve, solo se oscurece al abrirse (el de vkDaedalus es 5,7,10); en la ventana, su fondo y su filo */
-    if (!ventana) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
+    if (!ventana && !st_.depuracion) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
     /* lo demas sale de la pastilla (Rodolfo: «la herramienta desplace el resto de la interfaz hacia la pantalla»; y con
        la pastilla otra vez arriba, «quiero que presionar la herramientita saque el menu»): baja desde arriba y se hace
        opaco */
@@ -1819,6 +1822,23 @@ void Hud::dibujaPanel(int vw, int vh) {
       if (radio <= 0.0f) solid(r.x, r.y, r.w, r.h, hex(c, 0), hex(c, 1), hex(c, 2), al);
       else mask9(r, 1, radio, hex(c, 0), hex(c, 1), hex(c, 2), al);
     };
+    /* (v1.16) la vista de depuracion (Rodolfo: «once clicked move both lists to the left side of the overlay, half on top
+       and the other on the bottom and disappear the settings while the debug button is active»): sin velo, sin barra,
+       sin teselas ni tarjeta; una columna a la izquierda con sus filas (la casilla de la vista y lo que rinde la red
+       arriba, las redes de siempre en la mitad de arriba y las de video en la de abajo) y el pie. Lo demas deja ver el
+       video, y la region de entrada (panelCaja_) se queda en la columna: fuera de ella el raton va a lo de debajo */
+    if (st_.depuracion && !ventana) {
+      const float m = 16.0f * s, cw = std::min(500.0f * s, (float)vw * 0.42f);
+      const Rect col{m, m, cw, (float)vh - 2.0f * m};
+      panelCaja_ = col;
+      panelCerrar_ = panelVolver_ = panelActualizar_ = fuera;
+      panelPestanas_.assign(st_.pestanas.size(), fuera);
+      panelTeselas_.assign(st_.teselas.size(), fuera);
+      relleno(col, 8.0f * s, pal_.filo, 1.0f);
+      relleno({col.x + 1.0f, col.y + 1.0f, col.w - 2.0f, col.h - 2.0f}, 7.0f * s, pal_.tarjeta, 0.95f);
+      panelCuerpo_ = {col.x + 6.0f * s, col.y + 8.0f * s, col.w - 12.0f * s, col.h - 8.0f * s - 44.0f};
+      pieCaja = {col.x, col.y + col.h - 44.0f, col.w, 44.0f};
+    } else {
     /* la barra de arriba: el logo y el nombre; a la derecha, la actualizacion y el aspa */
     if (ventana) {
       relleno(F, 8.0f, pal_.filo, 1.0f);
@@ -1870,13 +1890,13 @@ void Hud::dibujaPanel(int vw, int vh) {
 
     /* las teselas: en el centro las grandes, una por pestana (las que no salen, como Juegos sobre un juego, no
        ocupan sitio); a los lados las chicas, tres y tres */
-    const float izqC = F.x + std::floor((F.w - 980.0f * s) * 0.5f), arriba = F.y + arribaT * s;
+    const float izqC = F.x + std::floor((F.w - anchoC * s) * 0.5f), arriba = F.y + arribaT * s;
     std::vector<int> vistas;
     for (size_t i = 0; i < st_.pestanas.size(); i++)
       if (i == 0 || !st_.pestanas[i].empty()) vistas.push_back((int)i);
     const int nT = std::max(1, (int)vistas.size());
-    const float sitioC = 980.0f - 2.0f * 200.0f - 2.0f * 16.0f;
-    const float anchoT = std::min(176.0f, (sitioC - 2.0f * (float)(nT - 1)) / (float)nT);
+    const float sitioC = anchoC - 2.0f * 200.0f - 2.0f * 16.0f;
+    const float anchoT = std::min(200.0f, (sitioC - 2.0f * (float)(nT - 1)) / (float)nT);
     const float centroW = (float)nT * anchoT + 2.0f * (float)(nT - 1);
     const float centroX = F.x + std::floor((F.w - centroW * s) * 0.5f);
     panelPestanas_.assign(st_.pestanas.size(), fuera);
@@ -1911,7 +1931,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     panelTeselas_.assign(st_.teselas.size(), fuera);
     for (size_t k = 0; k < st_.teselas.size() && k < 6; k++) {
       const Hud::State::Tesela &te = st_.teselas[k];
-      const float tx = k < 3 ? izqC : izqC + (980.0f - 200.0f) * s;
+      const float tx = k < 3 ? izqC : izqC + (anchoC - 200.0f) * s;
       const Rect t{tx, arriba + (float)(k % 3) * 68.0f * s, 200.0f * s, 64.0f * s};
       panelTeselas_[k] = t;
       const bool hov = t.inside(mx_, my_) && !te.id.empty();
@@ -1937,13 +1957,14 @@ void Hud::dibujaPanel(int vw, int vh) {
     }
 
     /* la tarjeta de la pestana puesta: su nombre arriba, las filas y el pie */
-    const Rect tarjeta{izqC, F.y + arribaC * s, 980.0f * s, std::max(160.0f, std::min(600.0f * s, F.h - arribaC * s - 16.0f * s))};
+    const Rect tarjeta{izqC, F.y + arribaC * s, anchoC * s, std::max(160.0f, std::min(700.0f * s, F.h - arribaC * s - 16.0f * s))};
     relleno(tarjeta, 8.0f * s, pal_.tarjeta, 0.97f);
     fuente_ = hayBarlow_ ? 2 : 0;
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
     fuente_ = hayBarlow_ ? 1 : 0;
     panelCuerpo_ = {tarjeta.x + 6.0f * s, tarjeta.y + 52.0f * s, tarjeta.w - 12.0f * s, tarjeta.h - 52.0f * s - 44.0f};
     pieCaja = {tarjeta.x, tarjeta.y + tarjeta.h - 44.0f, tarjeta.w, 44.0f};
+    }   /* (v1.16) fin de lo que no sale con la vista de depuracion */
   } else {
     mask9(panelCaja_, 1, 22.0f, 0.42f, 0.43f, 0.50f, 0.80f);                                   /* el filo */
     mask9({px + 1.0f, py + 1.0f, pw - 2.0f, ph - 2.0f}, 1, 21.0f, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov; antes gris) */
@@ -2035,11 +2056,11 @@ void Hud::dibujaPanel(int vw, int vh) {
     /* el cuerpo: las filas, recortadas contra su caja y corridas lo que diga la rueda */
     panelCuerpo_ = {px + 12.0f, py + 114.0f, pw - 24.0f, ph - 114.0f - 44.0f};
   }
-  const float izq = panelCuerpo_.x + 16.0f, der = panelCuerpo_.x + panelCuerpo_.w - 22.0f;
+  const float izq0 = panelCuerpo_.x + 16.0f, der0 = panelCuerpo_.x + panelCuerpo_.w - 22.0f;
   /* (v1.15) la caja de una Linea: lo que mide de ancho (para partirla igual al medirla y al pintarla) */
   auto anchoLinea = [&](const ItemPanel &it) {
     const float wb = it.nota.empty() ? 0.0f : textWidth(it.nota, 12.5f) + 28.0f + 12.0f;
-    return std::max(80.0f, (der - wb) - izq);
+    return std::max(80.0f, (der0 - wb) - izq0);   /* las Linea van siempre a lo ancho */
   };
   auto alto = [&](const ItemPanel &it) {
     switch (it.tipo) {
@@ -2075,8 +2096,25 @@ void Hud::dibujaPanel(int vw, int vh) {
           filaY = yy + 6.0f;
           yy += altoCarta + hueco;
         }
-        sitio[i] = {izq + (float)col * (anchoCarta + hueco), filaY, anchoCarta, altoCarta};
+        sitio[i] = {izq0 + (float)col * (anchoCarta + hueco), filaY, anchoCarta, altoCarta};
         col = (col + 1) % kCols;
+      } else if (it.lado != 0) {
+        /* (v1.16) las de media seguidas: la 1 a la izquierda y la 2 a la derecha, cada una con su altura; con la vista de
+           depuracion, en la columna entera, la 1 arriba y la 2 desde la mitad (o debajo de la 1, si esa pasa la mitad) */
+        col = 0;
+        const float x0 = panelCuerpo_.x + 4.0f, w0 = panelCuerpo_.w - 14.0f, entre = 24.0f;
+        const float wm = st_.depuracion ? w0 : (w0 - entre) * 0.5f;
+        size_t j = i;
+        while (j < st_.items.size() && st_.items[j].lado != 0) j++;
+        float yIzq = yy;
+        for (size_t k = i; k < j; k++)
+          if (st_.items[k].lado == 1) sitio[k] = {x0, yIzq, wm, alto(st_.items[k])}, yIzq += alto(st_.items[k]);
+        float yDer = st_.depuracion ? std::max(yIzq, std::max(yy, panelCuerpo_.h * 0.5f)) : yy;
+        for (size_t k = i; k < j; k++)
+          if (st_.items[k].lado != 1)
+            sitio[k] = {st_.depuracion ? x0 : x0 + wm + entre, yDer, wm, alto(st_.items[k])}, yDer += alto(st_.items[k]);
+        yy = std::max(yIzq, yDer);
+        i = j - 1;
       } else {
         col = 0;
         sitio[i] = {panelCuerpo_.x + 4.0f, yy, panelCuerpo_.w - 14.0f, alto(it)};
@@ -2091,9 +2129,13 @@ void Hud::dibujaPanel(int vw, int vh) {
   recorte_ = panelCuerpo_;
   hayRecorte_ = true;
   const bool dentro = panelCuerpo_.inside(mx_, my_);
+  Rect despCaja{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) la caja del desplegable abierto, para colgarle su lista */
   for (size_t i = 0; i < st_.items.size(); i++) {
     const ItemPanel &it = st_.items[i];
     const float h = sitio[i].h, y = panelCuerpo_.y - st_.corrida + sitio[i].y;
+    /* (v1.16) los margenes de esta fila, los de su sitio: las de media van en su mitad (las caratulas, los de siempre) */
+    const float izq = it.tipo == ItemPanel::Juego ? izq0 : sitio[i].x + 12.0f;
+    const float der = it.tipo == ItemPanel::Juego ? der0 : sitio[i].x + sitio[i].w - 12.0f;
     ZonaItem &z = zonas_[i];
     z.caja = {sitio[i].x, y, sitio[i].w, h};
     if (y + h < panelCuerpo_.y || y > panelCuerpo_.y + panelCuerpo_.h) {   /* fuera de la vista */
@@ -2160,7 +2202,9 @@ void Hud::dibujaPanel(int vw, int vh) {
         /* (v1.15) en gris: el rotulo y el interruptor apagados, y la pastilla a su izquierda */
         const float ap = it.apagado ? 0.42f : 1.0f;
         /* (v1.16) al estilo de vkDaedalus, una casilla a la izquierda del rotulo en vez del interruptor */
-        const float izqT = marco ? izq + 30.0f : izq;
+        /* (v1.16) `centrado`: la casilla y su rotulo, juntos en medio de la fila */
+        const float izqI = it.centrado ? std::floor(sitio[i].x + (sitio[i].w - 30.0f - textWidth(it.rotulo, 15.0f)) * 0.5f) : izq;
+        const float izqT = marco ? izqI + 30.0f : izqI;
         float derTexto = marco ? der : der - 46.0f - 16.0f;
         if (!it.pastilla.empty()) {
           const float wp = textWidth(it.pastilla, 11.5f) + 20.0f;
@@ -2178,7 +2222,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         textoCabe(it.rotulo, izqT, yr, 15.0f, derTexto - izqT, ink[0], ink[1], ink[2], ap);
         if (!it.nota.empty()) textoCabe(it.nota, izqT, y + 34.0f, 11.5f, derTexto - izqT, dim[0], dim[1], dim[2], 0.85f * (it.apagado ? 0.8f : 1.0f));
         if (marco) {
-          const Rect cas{izq, yr + 1.0f, 18.0f, 18.0f};
+          const Rect cas{izqI, yr + 1.0f, 18.0f, 18.0f};
           if (it.valor) {
             mask9(cas, 1, 4.0f, accent[0], accent[1], accent[2], ap);
             icono({cas.x + 2.0f, cas.y + 2.0f, 14.0f, 14.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, ap);
@@ -2192,6 +2236,28 @@ void Hud::dibujaPanel(int vw, int vh) {
         if (it.valor) mask9(sw, 0, R(13.0f), accent[0], accent[1], accent[2], 0.98f * ap);
         else mask9(sw, 0, R(13.0f), 0.28f, 0.29f, 0.33f, it.apagado ? 0.55f : 0.98f);
         mask9({it.valor ? sw.x + sw.w - 23.0f : sw.x + 3.0f, sw.y + 3.0f, 20.0f, 20.0f}, 0, R(10.0f), 0.97f, 0.97f, 0.99f, it.apagado ? 0.40f : 1.0f);
+        break;
+      }
+      case ItemPanel::Desplegable: {
+        /* (v1.16) la caja con lo elegido, su etiqueta y la flechita; abierto, la lista se pinta al final (por encima) */
+        const Rect caja{izq - 4.0f, y + (h - 34.0f) * 0.5f, der - izq + 8.0f, 34.0f};
+        z.subs.push_back(caja);
+        const bool abierto = st_.desplegado == (int)i, hc = dentro && caja.inside(mx_, my_);
+        const uint32_t fondoC = hc || abierto ? pal_.controlHov : pal_.control;
+        mask9(caja, 0, R(6.0f), Hud::canal(fondoC, 0), Hud::canal(fondoC, 1), Hud::canal(fondoC, 2), 1.0f);
+        float derT = caja.x + caja.w - 32.0f;
+        if (it.elegido >= 0 && (size_t)it.elegido < it.ayudas.size() && !it.ayudas[(size_t)it.elegido].empty()) {
+          const std::string &et = it.ayudas[(size_t)it.elegido];
+          const float wp = textWidth(et, 11.5f) + 20.0f;
+          const Rect pa{derT - wp, caja.y + 6.0f, wp, 22.0f};
+          mask9(pa, 0, R(11.0f), accent[0], accent[1], accent[2], 0.22f);
+          text(et, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, std::min(1.0f, accent[0] + 0.22f), std::min(1.0f, accent[1] + 0.22f),
+               std::min(1.0f, accent[2] + 0.22f), 1.0f, true);
+          derT = pa.x - 10.0f;
+        }
+        textoCabe(it.valorTexto, caja.x + 12.0f, caja.y + 8.0f, 14.5f, derT - caja.x - 12.0f, ink[0], ink[1], ink[2], 1.0f);
+        icono({caja.x + caja.w - 26.0f, caja.y + 9.0f, 16.0f, 16.0f}, icoBajar_, ink[0], ink[1], ink[2], hc || abierto ? 1.0f : 0.75f);
+        if (abierto) despCaja = caja;
         break;
       }
       case ItemPanel::Atajo: {
@@ -2417,7 +2483,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   hayRecorte_ = false;
   /* la ayuda de lo que hay bajo el raton (se pinta al final, por encima de todo) */
   std::string ayudaRaton;
-  if (dentro && !st_.menuIdioma && st_.arrastrando < 0)   /* (v1.16, PR #1) arrastrando, sin ayuda encima */
+  if (dentro && !st_.menuIdioma && st_.desplegado < 0 && st_.arrastrando < 0)   /* (v1.16, PR #1) arrastrando, sin ayuda encima; (v1.16) ni con un desplegable abierto */
     for (size_t i = 0; i < st_.items.size() && i < zonas_.size(); i++) {
       const ItemPanel &it = st_.items[i];
       const ZonaItem &z = zonas_[i];
@@ -2519,6 +2585,48 @@ void Hud::dibujaPanel(int vw, int vh) {
     mask9(rr, 0, 10.0f, 0.0f, 0.0f, 0.0f, 0.90f);
     text(r, rr.x + 12.0f, rr.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
   }
+  /* (v1.16) el desplegable abierto: su lista, por encima de las filas y del pie. Debajo de la caja, o encima si no cabe;
+     cada opcion con su etiqueta en azul (esta) o en gris (se baja al picarla) y la palomita en la puesta */
+  panelDespOpc_.clear();
+  panelDespCaja_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  if (st_.desplegado >= 0 && (size_t)st_.desplegado < st_.items.size() && despCaja.w > 0.0f &&
+      st_.items[(size_t)st_.desplegado].tipo == ItemPanel::Desplegable) {
+    const ItemPanel &it = st_.items[(size_t)st_.desplegado];
+    const float hOp = 36.0f, hLista = hOp * (float)it.opciones.size() + 8.0f;
+    /* dentro de la caja del panel (la region de entrada: en la vista de depuracion, la columna) */
+    float yL = despCaja.y + despCaja.h + 4.0f;
+    if (yL + hLista > panelCaja_.y + panelCaja_.h - 4.0f) yL = std::max(panelCaja_.y + 4.0f, despCaja.y - 4.0f - hLista);
+    const Rect lista{despCaja.x, yL, despCaja.w, hLista};
+    panelDespCaja_ = lista;
+    mask9(lista, 1, 8.0f, Hud::canal(pal_.filo, 0), Hud::canal(pal_.filo, 1), Hud::canal(pal_.filo, 2), 1.0f);
+    mask9({lista.x + 1.0f, lista.y + 1.0f, lista.w - 2.0f, lista.h - 2.0f}, 1, 7.0f, Hud::canal(pal_.tarjeta, 0),
+          Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 0.99f);
+    for (size_t k = 0; k < it.opciones.size(); k++) {
+      const Rect o{lista.x + 4.0f, yL + 4.0f + (float)k * hOp, lista.w - 8.0f, hOp};
+      panelDespOpc_.push_back(o);
+      const int est = k < it.estadosOpc.size() ? it.estadosOpc[k] : 0;
+      const bool ho = o.inside(mx_, my_) && est != 2;
+      if (ho) mask9(o, 0, R(6.0f), Hud::canal(pal_.controlHov, 0), Hud::canal(pal_.controlHov, 1), Hud::canal(pal_.controlHov, 2), 1.0f);
+      if ((int)k == it.elegido)
+        icono({o.x + 10.0f, o.y + 10.0f, 16.0f, 16.0f}, icoPalomita_, accent[0], accent[1], accent[2], 1.0f);
+      float derO = o.x + o.w - 10.0f;
+      if (k < it.ayudas.size() && !it.ayudas[k].empty()) {
+        const std::string &et = it.ayudas[k];
+        const float wp = textWidth(et, 11.5f) + 20.0f;
+        const Rect pa{derO - wp, o.y + 7.0f, wp, 22.0f};
+        if (est == 0) {
+          mask9(pa, 0, R(11.0f), accent[0], accent[1], accent[2], 0.22f);
+          text(et, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, std::min(1.0f, accent[0] + 0.22f), std::min(1.0f, accent[1] + 0.22f),
+               std::min(1.0f, accent[2] + 0.22f), 1.0f, true);
+        } else {
+          mask9(pa, 0, R(11.0f), 0.30f, 0.31f, 0.36f, 0.95f);
+          text(et, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, ink[0], ink[1], ink[2], est == 2 ? 0.45f : 0.80f, true);
+        }
+        derO = pa.x - 10.0f;
+      }
+      textoCabe(it.opciones[k], o.x + 34.0f, o.y + 9.0f, 14.5f, derO - o.x - 34.0f, ink[0], ink[1], ink[2], est == 1 ? 0.6f : 1.0f);
+    }
+  }
   /* la ayuda del valor bajo el raton: una caja de hasta 460 puntos, partida en renglones */
   if (!ayudaRaton.empty()) {
     const float tam = 12.5f;
@@ -2603,6 +2711,14 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
         if (sub) *sub = (int)k;
         return HitPanelIdiomaOpcion;
       }
+  /* (v1.16) las opciones del desplegable abierto: su fila y 100 + el numero de la opcion */
+  if (st_.desplegado >= 0)
+    for (size_t k = 0; k < panelDespOpc_.size(); k++)
+      if (panelDespOpc_[k].inside(mx, my)) {
+        if (item) *item = st_.desplegado;
+        if (sub) *sub = 100 + (int)k;
+        return HitPanelItem;
+      }
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (st_.marco && panelVolver_.inside(mx, my)) return HitPanelVolver;   /* (v1.16) */
@@ -2661,6 +2777,8 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
             return HitPanelItem;
           }
         return HitPanel;
+      case ItemPanel::Desplegable:   /* (v1.16) su caja: abrir o cerrar la lista (las opciones van arriba, antes) */
+        return HitPanelItem;
       case ItemPanel::Deslizador: {
         if (it.fracDefecto >= 0.0f && !z.subs.empty() && z.subs[0].inside(mx, my)) {   /* (v1.16, PR #1) su flechita */
           if (sub) *sub = 1;

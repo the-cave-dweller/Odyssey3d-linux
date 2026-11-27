@@ -69,14 +69,22 @@ de la FP16 si está bajada: en la CPU va unas 5 veces más rápida (298 contra 1
 [Noa3](https://github.com/Noa3) en un Ryzen 9 7950X3D). Con dos tarjetas, la memoria libre se casa con cada una por
 su UUID, así que `red = N` en `serve.conf` es siempre la tarjeta CUDA N.
 
-**Solo para vídeos (experimental, desde la 1.16):** bajo la lista, *Solo para vídeos* ofrece
+**Solo para vídeos (experimental, desde la 1.16):** a la derecha de la lista, *Solo para vídeos* ofrece
 [Video Depth Anything](https://github.com/DepthAnything/Video-Depth-Anything) pequeña (117 MB, Apache-2.0, una
 exportación a ONNX de la comunidad: no hay una oficial). Mira los últimos 32 cuadros en vez de uno, así que la
 profundidad salta menos de un cuadro al siguiente: medido con dos vídeos por el camino entero, la mitad de cambios de
 cerca y lejos en un paisaje y algo menos con una persona hablando. Cuesta unas 30 veces más trabajo de la tarjeta
 (unos 140 ms por mapa en una RTX 5080 a 504×280, dentro de los 6 mapas por segundo) y 2,8 GB, y no va por la CPU.
-Marcada, vale solo con los vídeos; los juegos siguen con la red de arriba. Cualquier `.onnx` con «video» en el nombre
-sale en esa lista. Desde la terminal: `odysseyvk ctl net download video`.
+Marcada, vale solo con los vídeos; los juegos siguen con la red de siempre. Cualquier `.onnx` con «video» en el nombre
+sale en esa lista. Desde la terminal: `odysseyvk ctl net download video`. Con más de dos redes en un lado, ese lado
+pasa a ser un desplegable.
+
+**Probar las redes en vivo (desde la 1.16).** *Vista de depuración*, la casilla encima de las dos listas, pone la
+vista de depuración de la profundidad del visor (la misma de `Ctrl+Mayús+9`, más abajo) y deja el panel en una
+columna a la izquierda: las redes de siempre en la mitad de arriba, las de vídeo en la de abajo y el vídeo a la vista
+al lado. Junto a la casilla sale lo que cuesta la red que va, cada segundo: milisegundos por mapa (la red sola y en
+total), mapas y cuadros por segundo. Se elige otra red y se ve cambiar la profundidad; al quitar la casilla vuelve el
+panel entero. Hace falta un vídeo o un juego abierto en 3D.
 
 ![Primer arranque: el panel pide la red de profundidad](docs/img/es/first-run.png)
 

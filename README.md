@@ -69,14 +69,21 @@ the FP16 if it is downloaded: on a CPU it is about 5 times faster (298 vs 1,447 
 [Noa3](https://github.com/Noa3) on a Ryzen 9 7950X3D). With two GPUs, free memory is matched to each card by its
 UUID, so `red = N` in `serve.conf` always means CUDA device N.
 
-**Videos only (experimental, since 1.16):** under the list, *Videos only* offers
+**Videos only (experimental, since 1.16):** to the right of the list, *Videos only* offers
 [Video Depth Anything](https://github.com/DepthAnything/Video-Depth-Anything) Small (117 MB, Apache-2.0, a community
 ONNX export: there is no official one). It looks at the last 32 frames instead of one, so the depth jumps less from
 frame to frame: measured on two clips through the whole pipeline, about half the near/far reordering on a landscape
 and somewhat less on a talking head. It costs about 30 times more GPU work (about 140 ms per map on an RTX 5080 at
 504×280, still within the 6 maps per second) and 2.8 GB, and doesn't run on the CPU. Ticked, it's used for videos
-only; games keep the network above. Any `.onnx` with «video» in its name goes to this list. From a terminal:
-`odysseyvk ctl net download video`.
+only; games keep the regular network. Any `.onnx` with «video» in its name goes to this list. From a terminal:
+`odysseyvk ctl net download video`. With more than two networks on either side, that side turns into a drop-down.
+
+**Try networks live (since 1.16).** *Debug view*, the checkbox above the two lists, turns on the viewer's depth
+debug view (the same as `Ctrl+Shift+9`, below) and clears the panel down to a column on the left: the usual networks
+in the top half, the video ones in the bottom half, and the video visible beside it. Next to the checkbox the panel
+shows what the running network costs, refreshed every second: milliseconds per map (the network alone and in
+total), maps and frames per second. Pick another network and watch the depth change; untick the box to get the
+whole panel back. It needs a video or game open in 3D.
 
 ![First run: the panel asks for the depth network](docs/img/first-run.png)
 

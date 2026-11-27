@@ -868,80 +868,207 @@ namespace {
    una con su casilla: la puesta va marcada (una sola). La que no esta bajada sale en gris con «Descargar · 50 MB», y
    picarla la baja y la pone; las que estan, con «Descargada» (o «En la carpeta») en azul (Rodolfo: «activalas con un
    toggle, en gris la no descargada y en azul la que si»). Sin ninguna, arriba del todo y con el aviso de para que
-   hace falta. */
+   hace falta.
+   Mitad y mitad (Rodolfo: «I want a dropdown button for Depth network once the user exceeds 2 models, Add to the right
+   side, like half and half one for video only models»): las de siempre a la izquierda y las de solo videos a la
+   derecha, y un lado con mas de dos redes es un desplegable. Arriba, en medio, la casilla de la vista de depuracion
+   («a debug view on and off button for live testing in the middle top between both sides»): puesta, el panel deja
+   solo esto en una columna a la izquierda, las de siempre arriba y las de video abajo, y junto a la casilla lo que
+   rinde la red («if there is a way to see the model performance measure it on the left panel mentioned beside the
+   debug toggle»). En el panel flotante de antes (ODYSSEYVK_PANEL_VIEJO=1) van a lo ancho y sin la casilla */
+struct OpcionRed {
+  std::string nombre, etiqueta, id;
+  int estado = 0;   /* 0 = esta (azul), 1 = se baja al picarla (gris), 2 = no se puede ahora (otra bajando) */
+};
+
 void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &ids) {
-  const std::vector<RedDisco> redes = redesDelDisco(v);
+  const std::vector<RedDisco> redes = redesDelDisco(v), deVideo = redesDeVideo(v);
   const std::string puesta = redPuesta(v);
+  const bool dep = st.depuracion && st.marco;
+  const int ladoRed = st.marco ? 1 : 0, ladoVideo = st.marco ? 2 : 0;
+  const int bajando = descargaCual();
+  static const char *const kMb[] = {"50", "99", "117"};   /* lo que pesa cada descarga: la FP16, la FP32, la de video */
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
-  Hud::ItemPanel s;
-  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr(puesta.empty() ? "FALTA LA RED DE PROFUNDIDAD" : "RED DE PROFUNDIDAD");
-  pon(s, "");
-  if (puesta.empty()) {
-    Hud::ItemPanel i;
-    i.tipo = Hud::ItemPanel::Info;
-    i.rotulo = idioma::tr("Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).");
-    i.nota = idioma::tr("Depth Anything V2 pequeña, de huggingface.co/onnx-community/depth-anything-v2-small: la FP16 es la recomendada.");
-    pon(i, "");
-  }
-  const int bajando = descargaCual();
-  for (const RedDisco &r : redes) {
+  auto nombreDe = [](const RedDisco &r) {
+    return r.conocida == 1   ? std::string(idioma::tr("Depth Anything V2 pequeña · FP16 (recomendada)"))
+           : r.conocida == 2 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP32"))
+           : r.conocida == 3 ? std::string(idioma::tr("Video Depth Anything pequeña"))
+                             : r.nombre;
+  };
+  /* las notas, cortas: caben en media fila */
+  auto notaDe = [](const RedDisco &r) {
+    if (r.conocida == 1) return std::string(idioma::tr("Igual de buena, un 35 % más deprisa y con 260 MB menos."));
+    if (r.conocida == 2) return std::string(idioma::tr("Más lenta en la tarjeta, pero 5 veces más rápida por la CPU."));
+    if (r.conocida == 3) return std::string(idioma::tr("ONNX de la comunidad (no hay una oficial) · 117 MB · Apache-2.0"));
+    return idioma::trf("{} · {} MB", {r.ruta.rfind(carpetaRedes(), 0) == 0 ? r.ruta.substr(carpetaRedes().size()) : r.ruta,
+                                      std::to_string(std::max(1L, r.bytes / 1000000))});
+  };
+  /* cual se baja: 0 = la FP16, 1 = la FP32, 2 = la de video */
+  auto cualDe = [](const RedDisco &r) { return r.conocida == 3 ? 2 : (r.conocida == 2 ? 1 : 0); };
+  /* una red con su casilla; `previo` es el principio de su orden («red:» o «redvid:») */
+  auto ponCasilla = [&](const RedDisco &r, bool marcada, int lado, const char *previo) {
     Hud::ItemPanel it;
-    it.tipo = Hud::ItemPanel::Interruptor;
-    it.rotulo = r.conocida == 1 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP16 (recomendada)"))
-                                : (r.conocida == 2 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP32")) : r.nombre);
-    it.nota = r.conocida == 1 ? std::string(idioma::tr("La misma red a media precisión: el mismo mapa con un 35 % menos de tiempo y 260 MB menos en la tarjeta."))
-              : r.conocida == 2 ? std::string(idioma::tr("La misma red a precisión completa: en la tarjeta va más lenta, pero si la red va por el procesador se usa esta, unas 5 veces más rápida."))
-                                : idioma::trf("{} · {} MB", {r.ruta.rfind(carpetaRedes(), 0) == 0 ? r.ruta.substr(carpetaRedes().size()) : r.ruta,
-                                                             std::to_string(std::max(1L, r.bytes / 1000000))});
-    it.valor = r.presente && r.ruta == puesta;
+    it.tipo = Hud::ItemPanel::Interruptor, it.lado = lado;
+    it.rotulo = nombreDe(r), it.nota = notaDe(r);
+    it.valor = r.presente && marcada;
     if (r.presente) {
       it.pastilla = idioma::tr(r.conocida ? "Descargada" : "En la carpeta");
       it.pastillaAcento = true;
-      pon(it, "red:" + r.ruta);
+      pon(it, previo + r.ruta);
     } else {
-      const int cual = r.conocida == 2 ? 1 : 0;
+      const int cual = cualDe(r);
       it.apagado = true;
       it.descargable = bajando < 0;   /* una descarga a la vez: mientras baja una, la otra no se pica */
-      it.pastilla = bajando == cual ? textoDescarga() : idioma::trf("Descargar · {} MB", {cual == 1 ? "99" : "50"});
+      it.pastilla = bajando == cual ? textoDescarga() : idioma::trf("Descargar · {} MB", {kMb[cual]});
       pon(it, "red_bajar:" + std::to_string(cual));
     }
-  }
-  /* (v1.16) solo para videos (Rodolfo: «can we try this for videos only?»): Video Depth Anything mira los ultimos 32
-     cuadros a la vez. MEDIDO el 27-nov en la RTX 5080 con dos videos a 6 mapas por segundo: menos saltos de cerca y
-     lejos de un mapa al siguiente (la mitad en un paisaje), pero 123 ms por mapa contra 4 de la de siempre, y 2,8 GB.
-     Una casilla aparte: se pone o se quita (sin ninguna, los videos van con la de arriba). Los juegos, con la de arriba */
-  {
-    Hud::ItemPanel sv;
-    sv.tipo = Hud::ItemPanel::Seccion, sv.rotulo = idioma::tr("SOLO PARA VÍDEOS (EXPERIMENTAL)");
-    pon(sv, "");
-    Hud::ItemPanel nv;
-    nv.tipo = Hud::ItemPanel::Info;
-    nv.rotulo = idioma::tr("Mira los últimos 32 cuadros: menos saltos de profundidad entre uno y otro. Los juegos siguen con la de arriba.");
-    nv.nota = idioma::tr("Unas 30 veces más trabajo para la tarjeta (unos 120 ms por mapa en una RTX 5080) y 2,8 GB; no va por la CPU.");
-    pon(nv, "");
-    for (const RedDisco &r : redesDeVideo(v)) {
-      Hud::ItemPanel it;
-      it.tipo = Hud::ItemPanel::Interruptor;
-      it.rotulo = r.conocida == 3 ? std::string(idioma::tr("Video Depth Anything pequeña")) : r.nombre;
-      it.nota = r.conocida == 3 ? std::string(idioma::tr("Exportada a ONNX por la comunidad (no hay una oficial) · 117 MB · Apache-2.0"))
-                                : idioma::trf("{} · {} MB", {r.ruta.rfind(carpetaRedes(), 0) == 0 ? r.ruta.substr(carpetaRedes().size()) : r.ruta,
-                                                             std::to_string(std::max(1L, r.bytes / 1000000))});
-      it.valor = r.presente && r.ruta == v.modeloVideo;
-      if (r.presente) {
-        it.pastilla = idioma::tr(r.conocida ? "Descargada" : "En la carpeta");
-        it.pastillaAcento = true;
-        pon(it, "redvid:" + r.ruta);
+  };
+  /* un lado con mas de dos: el desplegable. Su id lleva detras de la cabeza la orden de cada opcion (la de su casilla),
+     separadas por \x1f; el panel toma la de la que se pique (panel_ajustes.cpp) */
+  auto opcionDe = [&](const RedDisco &r, const char *previo) {
+    OpcionRed o;
+    o.nombre = nombreDe(r);
+    if (r.presente) {
+      o.etiqueta = idioma::tr(r.conocida ? "Descargada" : "En la carpeta");
+      o.id = previo + r.ruta;
+    } else {
+      const int cual = cualDe(r);
+      o.estado = bajando < 0 ? 1 : 2;
+      o.etiqueta = bajando == cual ? textoDescarga() : idioma::trf("Descargar · {} MB", {kMb[cual]});
+      o.id = "red_bajar:" + std::to_string(cual);
+    }
+    return o;
+  };
+  auto ponDesplegable = [&](const std::string &cabeza, const std::vector<OpcionRed> &ops, int elegido, int lado) {
+    Hud::ItemPanel d;
+    d.tipo = Hud::ItemPanel::Desplegable, d.lado = lado, d.elegido = elegido;
+    std::string id = cabeza;
+    for (const OpcionRed &o : ops) {
+      d.opciones.push_back(o.nombre), d.ayudas.push_back(o.etiqueta), d.estadosOpc.push_back(o.estado);
+      id += '\x1f' + o.id;
+    }
+    d.valorTexto = elegido >= 0 && (size_t)elegido < ops.size() ? ops[(size_t)elegido].nombre : std::string(idioma::tr("Ninguna"));
+    pon(d, id);
+  };
+
+  /* 1) la casilla de la vista de depuracion: en medio, encima de las dos mitades. Solo con un video o un juego en 3D
+     abierto (es su mapa de profundidad, en vivo); en la vista va arriba de la columna, con lo que rinde la red */
+  if (st.marco) {
+    const auto hub = ajuste::leerEstadoHub();
+    const auto ses = hub.find("sesion");
+    const bool abierta = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
+    Hud::ItemPanel d;
+    d.tipo = Hud::ItemPanel::Interruptor;
+    d.rotulo = idioma::tr("Vista de depuración");
+    d.valor = dep;
+    d.centrado = !dep;
+    d.apagado = !abierta && !dep;
+    d.ayuda = idioma::tr(abierta ? "El mapa de profundidad en vivo (Ctrl+Mayús+9), con las dos listas a un lado: prueba las redes con el vídeo a la vista."
+                                 : "Hace falta un vídeo o un juego en 3D abierto: enseña su mapa de profundidad, en vivo.");
+    if (!dep) {
+      pon(d, "depuracion");
+    } else {
+      /* lo que cuenta el visor en su `estado` (dos veces por segundo; el panel lo vuelve a leer cada segundo) */
+      const auto e = ajuste::leerEstado();
+      auto de = [&](const char *k) {
+        const auto it = e.find(k);
+        return it == e.end() || it->second.empty() ? std::string("-") : it->second;
+      };
+      auto coma = [](std::string t) {
+        for (char &c : t)
+          if (c == '.') c = idioma::decimal();
+        return t;
+      };
+      const bool conv = de("conversor") == "puesto";
+      const std::string pj = de("prof_juego");
+      const bool dlss = conv && pj != "-";
+      std::string modelo = de("modelo");
+      if (const size_t b = modelo.rfind('/'); b != std::string::npos) modelo = modelo.substr(b + 1);
+      if (dlss) {
+        d.nota = idioma::tr("sin usar: la profundidad viene de DLSS");
+      } else if (conv) {
+        d.nota = modelo + " · " + de("tarjeta");
+        d.pastilla = idioma::trf("{} ms por mapa", {coma(de("red_ms"))});
+        d.pastillaAcento = true;
       } else {
-        it.apagado = true;
-        it.descargable = bajando < 0;
-        it.pastilla = bajando == 2 ? textoDescarga() : idioma::trf("Descargar · {} MB", {"117"});
-        pon(it, "red_bajar:2");
+        d.nota = idioma::tr("Sin red ahora: el vídeo dividido ya trae sus dos vistas.");
+      }
+      pon(d, "depuracion");
+      if (conv && !dlss) {
+        auto fila = [&](const std::string &que, const std::string &cuanto) {
+          Hud::ItemPanel f;
+          f.tipo = Hud::ItemPanel::Fila, f.rotulo = que, f.valorTexto = cuanto;
+          pon(f, "");
+        };
+        /* la red sola y con lo de antes y despues (preparar la foto, limpiar y subir el mapa) */
+        fila(idioma::tr("Tiempo por mapa"), idioma::trf("{} ms la red · {} ms en total", {coma(de("red_ms")), coma(de("mapa_ms"))}));
+        fila(idioma::tr("Mapas por segundo"), coma(de("mapas_s")));
+        fila(idioma::tr("Cuadros por segundo"), coma(de("fps")));
       }
     }
   }
+
+  /* 2) las de siempre: a la izquierda (arriba en la vista de depuracion) */
+  Hud::ItemPanel s;
+  s.tipo = Hud::ItemPanel::Seccion, s.lado = ladoRed;
+  s.rotulo = idioma::tr(puesta.empty() ? "FALTA LA RED DE PROFUNDIDAD" : "RED DE PROFUNDIDAD");
+  pon(s, "");
+  if (puesta.empty() && !dep) {
+    Hud::ItemPanel i;
+    i.tipo = Hud::ItemPanel::Info, i.lado = ladoRed;
+    i.rotulo = idioma::tr("Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).");
+    i.nota = idioma::tr("Depth Anything V2 pequeña (huggingface.co/onnx-community): la FP16 es la recomendada.");
+    pon(i, "");
+  }
+  if (redes.size() > 2 && st.marco) {
+    std::vector<OpcionRed> ops;
+    int elegido = -1;
+    for (const RedDisco &r : redes) {
+      if (r.presente && r.ruta == puesta) elegido = (int)ops.size();
+      ops.push_back(opcionDe(r, "red:"));
+    }
+    ponDesplegable("lista:red", ops, elegido, ladoRed);
+  } else {
+    for (const RedDisco &r : redes) ponCasilla(r, r.ruta == puesta, ladoRed, "red:");
+  }
+
+  /* 3) solo para videos (Rodolfo: «can we try this for videos only?»): Video Depth Anything mira los ultimos 32 cuadros a
+     la vez. MEDIDO el 27-nov en la RTX 5080 con dos videos a 6 mapas por segundo: menos saltos de cerca y lejos de un
+     mapa al siguiente (la mitad en un paisaje), pero 123 ms por mapa contra 4 de la de siempre, y 2,8 GB. Se pone o se
+     quita (sin ninguna, los videos van con la de siempre); los juegos, siempre con la de siempre. A la derecha (abajo
+     en la vista de depuracion) */
+  Hud::ItemPanel sv;
+  sv.tipo = Hud::ItemPanel::Seccion, sv.lado = ladoVideo, sv.rotulo = idioma::tr("SOLO PARA VÍDEOS (EXPERIMENTAL)");
+  pon(sv, "");
+  if (!dep) {
+    Hud::ItemPanel nv;
+    nv.tipo = Hud::ItemPanel::Info, nv.lado = ladoVideo;
+    nv.rotulo = idioma::tr("Mira los últimos 32 cuadros: menos saltos de profundidad. Los juegos no la usan.");
+    nv.nota = idioma::tr("Unos 120 ms por mapa y 2,8 GB en una RTX 5080 (no va por la CPU).");
+    pon(nv, "");
+  }
+  if (deVideo.size() > 2 && st.marco) {
+    /* la primera, ninguna: los videos con la de siempre */
+    std::vector<OpcionRed> ops;
+    OpcionRed nada;
+    nada.nombre = idioma::tr("Ninguna: los vídeos con la de siempre");
+    nada.id = "redvid:";
+    ops.push_back(nada);
+    int elegido = 0;
+    for (const RedDisco &r : deVideo) {
+      if (r.presente && r.ruta == v.modeloVideo) elegido = (int)ops.size();
+      ops.push_back(opcionDe(r, "redvid:"));
+    }
+    ponDesplegable("lista:redvid", ops, elegido, ladoVideo);
+  } else {
+    for (const RedDisco &r : deVideo) ponCasilla(r, r.ruta == v.modeloVideo, ladoVideo, "redvid:");
+  }
+
+  /* 4) a lo ancho, debajo de las dos (en la vista de depuracion no sale) */
+  if (dep) return;
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
   /* la carpeta con ~ (la de cada usuario; en la de Rodolfo, /home/rodolfo/.local/share/odysseyvk/models): entera no
@@ -1592,6 +1719,11 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
                                   : idioma::trf("Actualizar a {}", {st.actualizacion}),
          false, 5},
         {"menu_idioma", idioma::tr("Idioma"), idioma::nombre(idioma::actual()), false, 6}};
+  }
+  /* (v1.16) la vista de depuracion: solo las dos listas de redes, en la columna de la izquierda (vkui.cpp) */
+  if (st.depuracion && st.marco) {
+    filasDeLaRed(st, v, ids);
+    return;
   }
   if (st.pestana == 3) {
     /* Ajustes (antes Programa, v0.95): arriba el rendimiento (el visor 3D, la red y las tarjetas), luego

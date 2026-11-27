@@ -3181,7 +3181,13 @@ static int cmdHudSelfTest(int argc, char **argv) {
       const size_t ig = t.find('=');
       if (ig != std::string::npos) prefs::probarEdicion(t.substr(0, ig), t.substr(ig + 1));
     }
+    /* (v1.16) ODYSSEYVK_HUD_DEPURACION=1: la vista de depuracion (las dos listas de redes en una columna a la izquierda) */
+    hud.state().depuracion = std::getenv("ODYSSEYVK_HUD_DEPURACION") != nullptr;
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
+    /* (v1.16) ODYSSEYVK_HUD_DESPLEGADO=lista:red (o lista:redvid): ese desplegable abierto */
+    if (const char *dp = std::getenv("ODYSSEYVK_HUD_DESPLEGADO"))
+      for (size_t k = 0; k < ids.size(); k++)
+        if (ids[k].substr(0, ids[k].find('\x1f')) == dp) hud.state().desplegado = (int)k;
     hud.state().fijado = panelFijado();   /* el pin, como lo dejo el panel (rama experimental) */
     colorResaltadoKde(hud.state().acentoPanel);   /* el acento de KDE; ODYSSEYVK_HUD_ACENTO=r,g,b lo fija a mano */
     if (const char *ac = std::getenv("ODYSSEYVK_HUD_ACENTO")) {
@@ -3323,7 +3329,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
     std::printf("  panel de ajustes: %.0f x %.0f px en %.0f,%.0f (escala %.2f) · aspa %d celdas · pestanas %d / %d\n",
                 (double)bw, (double)bh, (double)bx, (double)by, (double)hud.scale(), cerrar, pestanas[0], pestanas[1]);
     static const char *kTipo[] = {"seccion", "interruptor", "opciones", "deslizador", "fila", "juego",
-                                  "nota",    "boton",       "info",     "atajo",      "texto", "linea"};
+                                  "nota",    "boton",       "info",     "atajo",      "texto", "linea", "desplegable"};
     for (size_t i = 0; i < porFila.size(); i++) {
       const Hud::ItemPanel &it = hud.state().items[i];
       const Cuenta &c = porFila[i];

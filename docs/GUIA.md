@@ -178,8 +178,10 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
   `~/.local/share/odysseyvk/models/` (hasta la 1.15, `modelos/`: la 1.16 le cambia el nombre al arrancar). Desde la
   1.16 la pestaña 3D lista las redes con su casilla: la FP16 (50 MB, la recomendada), la FP32 (99 MB, las dos de
   Hugging Face) y cualquier `.onnx` que se ponga en esa carpeta; aparte, *Solo para vídeos* (experimental): Video
-  Depth Anything pequeña, que mira los últimos 32 cuadros (solo con vídeos, solo en la tarjeta). Hace falta descargar
-  alguna una vez:
+  Depth Anything pequeña, que mira los últimos 32 cuadros (solo con vídeos, solo en la tarjeta). Las dos listas van lado
+  a lado y un lado con más de dos redes es un desplegable; la casilla *Vista de depuración*, encima, deja solo las listas
+  en una columna a la izquierda, con la profundidad en vivo (lo de `Ctrl+Mayús+9`) y lo que tarda la red, para
+  probarlas viendo el vídeo. Hace falta descargar alguna una vez:
   mientras falte, el servicio abre el panel de ajustes al arrancar (y el visor también, si se le pide
   el 3D de vídeo normal), que explica que sin ella no hay datos de profundidad y trae el botón
   **Descargar (95 MB)**. Al acabar, el vídeo que esté abierto pasa a 3D solo y el panel se cierra.
