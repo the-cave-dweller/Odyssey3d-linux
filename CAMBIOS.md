@@ -3,30 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
-## Versión 1.14: la profundidad de DLSS, el HUD del juego plano y el cuadrito de FPS (v1.14)
+## Versión 1.15: la pestaña Integraciones, el tope de FPS de la capa y las carátulas (v1.15)
 
-- Rodolfo: «Sí, prepárala». El actualizador solo compara el número de `VERSION`, y desde la 1.13 publicada
-  (`4c17842`) hay más de 25 cambios con el mismo número: con 1.14 se ofrecen.
+- Rodolfo: «Sí, prepárala». Desde la 1.14 publicada (`f980cae`) van tres cambios con el mismo número: con 1.15 el
+  actualizador los ofrece.
 - **Lo que trae** (cada cosa en su entrada, abajo):
-  - **La profundidad de DLSS sin Neural Forge**: la capa de Vulkan de OdysseyVK, con `ODYSSEYVK=1` en las
-    opciones de lanzamiento del juego, copia la profundidad que el juego le da a DLSS y el visor la usa en vez de
-    la red: exacta, en vivo, con su propio plano de la pantalla, 7 ms por mapa, en cualquier modo de DLSS.
-  - **El HUD del juego plano en la pantalla**, con su máscara exacta: la imagen donde el juego dibuja el HUD
-    (medida en Cyberpunk), reducida en la tarjeta del juego; los menús también.
-  - **DLSS a la vista**: Ajustes → Visor 3D dice de dónde viene la profundidad (y los FPS del juego y de la capa,
-    y cuánto tapa el HUD); un cuadrito junto a la pastilla con los FPS («DLSS»: juego y capa; «Modelo de serie»:
-    el juego); Ajustes → Juegos con DLSS apaga cada cosa; y en medio del pie de la pestaña Juegos, el parámetro de
-    Steam (`ODYSSEYVK=1 %command%`) con un botón Copiar.
-  - **Arreglos**: el visor ya no se cae con una profundidad del juego a medio escribir; Cyberpunk ya no se cae al
-    entrar y salir del menú (lo que la tarjeta del juego lee por la capa ya no se suelta antes de leerlo); /dev/shm
-    ya no se llena (7,8 GB de lienzos); el actualizador, probado de punta a punta.
-- **Probado en Cyberpunk** (Rodolfo, 17:47, DLSS en Ultra Performance, entrando y saliendo del menú): sin caídas,
-  con 32 imágenes de profundidad apartadas que antes eran 32 caídas. **Sin probar**: otros juegos con DLSS (la
-  regla del HUD solo se midió en Cyberpunk; si un juego dibuja su HUD de otra forma, no cambia nada) y la capa
-  junto a Neural Forge.
-- README: la sección de DLSS dice «desde la 1.14», y sus capturas se rehicieron (`tools/capturas-readme.py`: la de
-  Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
-  las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
+  - **La pestaña Integraciones**: las opciones de lanzamiento de Steam por piezas, para todos los juegos y para cada
+    uno (el engranaje que sale en su carátula): `ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`, `NEURAL_FORGE_ENABLE` (con
+    su `NEURAL_FORGE_TARGET_EXE` sacado de Neural Forge) y `ENABLE_VKBASALT`, otros parámetros, `vkdaedalus-run` y un
+    comando propio delante del juego, sus opciones detrás, y gamescope (la resolución de renderizado y la de salida
+    por abreviatura, stretch o fit, `-f`, el cursor y el reescalado FSR o NIS, que lo enciende). La línea entera se
+    escribe en Steam con copia del fichero: con Steam cerrado al momento; abierto, en cuanto se cierra. Lo que los
+    juegos ya tenían, y lo que se cambie luego por fuera, se lee y queda como propio de cada juego.
+  - **Campos de texto en el panel**: con acentos y AltGr, Ctrl+V, y la tecla pulsada que se repite.
+  - **El tope de FPS de la capa** (Ajustes → Fluidez): cuántas veces por segundo copia la capa de DLSS la
+    profundidad y el HUD dentro del juego, como media exacta (con 50 de tope salen 50, no 30).
+  - **Arreglo**: las carátulas de Juegos ya no tapan la ayuda del panel.
+- **Probado** (cada entrada lo cuenta): Integraciones sobre una copia del `localconfig.vdf` de Rodolfo y con el panel
+  en un KWin aparte; el tope, en un vkcube de prueba. **Sin probar**: Integraciones con el Steam y el teclado de
+  verdad, y el tope dentro de un juego.
+- Para el tope hay que reiniciar el juego después de instalar (la capa y el visor hablan el protocolo v6).
+- README y README.es: la sección Integraciones, con su captura, y el tope en la de DLSS; las capturas se rehicieron
+  (`tools/capturas-readme.py`: la pestaña nueva sale en la fila de pestañas). La guía ya llevaba la sección
+  Integraciones y la orden `odysseyvk integraciones`.
 
 ## La pestaña Integraciones: las opciones de lanzamiento de Steam por piezas, para todos y para cada juego (v1.15)
 
@@ -80,7 +79,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   con Steam y el teclado de verdad, y el botón Copiar con Klipper (en el KWin aparte no hay ni Klipper ni wl-copy:
   sale el aviso).
 
-## Tope de FPS de la capa, en Ajustes → Fluidez, y como media exacta (v1.14)
+## Tope de FPS de la capa, en Ajustes → Fluidez, y como media exacta (v1.15)
 
 - Rodolfo: «en ajustes en fluidez añade una casilla de Layer FPS cap, y limítala como te digan», y al ver la primera
   medida: «compensate the displayed frames to the loss, for example if you cap 15 and it shows 13 then if someone
@@ -108,7 +107,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - `tools/simula-capa.py` (versión 6) dice lo que pide el visor (la máscara y el tope). Cuatro textos nuevos en los
   siete idiomas; la guía lleva la clave `capa_fps_tope`.
 
-## Las carátulas ya no tapan la ayuda del panel (v1.14)
+## Las carátulas ya no tapan la ayuda del panel (v1.15)
 
 - Rodolfo, con una captura: la ayuda del botón Copiar (la que sale al pasar el ratón) quedaba **debajo** de las
   carátulas de los juegos; la de Red Dead Redemption 2 tapaba media frase. El panel se pinta en la CPU
@@ -119,6 +118,31 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   la carátula solo van el nombre y el interruptor 3D | 2D, que no la pisan.
 - Probado con la biblioteca de Steam de Rodolfo (enlazada, sin tocarla, en un HOME aparte) y el puntero quieto
   sobre Copiar (`ODYSSEYVK_HUD_RATON`): la ayuda sale entera por encima de las carátulas de Yakuza y de Red Dead.
+
+## Versión 1.14: la profundidad de DLSS, el HUD del juego plano y el cuadrito de FPS (v1.14)
+
+- Rodolfo: «Sí, prepárala». El actualizador solo compara el número de `VERSION`, y desde la 1.13 publicada
+  (`4c17842`) hay 25 cambios con el mismo número: con 1.14 se ofrecen.
+- **Lo que trae** (cada cosa en su entrada, abajo):
+  - **La profundidad de DLSS sin Neural Forge**: la capa de Vulkan de OdysseyVK, con `ODYSSEYVK=1` en las
+    opciones de lanzamiento del juego, copia la profundidad que el juego le da a DLSS y el visor la usa en vez de
+    la red: exacta, en vivo, con su propio plano de la pantalla, 7 ms por mapa, en cualquier modo de DLSS.
+  - **El HUD del juego plano en la pantalla**, con su máscara exacta: la imagen donde el juego dibuja el HUD
+    (medida en Cyberpunk), reducida en la tarjeta del juego; los menús también.
+  - **DLSS a la vista**: Ajustes → Visor 3D dice de dónde viene la profundidad (y los FPS del juego y de la capa,
+    y cuánto tapa el HUD); un cuadrito junto a la pastilla con los FPS («DLSS»: juego y capa; «Modelo de serie»:
+    el juego); Ajustes → Juegos con DLSS apaga cada cosa; y en medio del pie de la pestaña Juegos, el parámetro de
+    Steam (`ODYSSEYVK=1 %command%`) con un botón Copiar.
+  - **Arreglos**: el visor ya no se cae con una profundidad del juego a medio escribir; Cyberpunk ya no se cae al
+    entrar y salir del menú (lo que la tarjeta del juego lee por la capa ya no se suelta antes de leerlo); /dev/shm
+    ya no se llena (7,8 GB de lienzos); el actualizador, probado de punta a punta.
+- **Probado en Cyberpunk** (Rodolfo, 17:47, DLSS en Ultra Performance, entrando y saliendo del menú): sin caídas,
+  con 32 imágenes de profundidad apartadas que antes eran 32 caídas. **Sin probar**: otros juegos con DLSS (la
+  regla del HUD solo se midió en Cyberpunk; si un juego dibuja su HUD de otra forma, no cambia nada) y la capa
+  junto a Neural Forge.
+- README: la sección de DLSS dice «desde la 1.14», y sus capturas se rehicieron (`tools/capturas-readme.py`: la de
+  Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
+  las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
 
 ## El parámetro de Steam en el pie de la pestaña Juegos, con un botón Copiar (v1.14)
 

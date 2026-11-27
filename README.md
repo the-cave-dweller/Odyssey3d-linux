@@ -99,9 +99,10 @@ The settings panel opens from the gear on the pill, the OdysseyVK entry in the a
 taskbar icon or the system-tray icon (click: settings, middle click: games). The header has two
 rows. On the first, the OdysseyVK logo and name open the
 main page (video, screen, keyboard shortcuts, apps that don't ask); the **Neural | Performance** switch
-lives on the pill (in 1.12 it was here too). On the second, centred: **Games** and **Settings** (the
+lives on the pill (in 1.12 it was here too). On the second, centred: **Games**, **Integrations** (each game's Steam
+launch options, since 1.15; see below) and **Settings** (the
 performance figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D,
-the drag cap and the viewer's GPU priority; *Head tracking*: following your head with the camera and
+the drag cap, the viewer's GPU priority and, since 1.15, the DLSS layer's FPS cap; *Head tracking*: following your head with the camera and
 head anticipation in milliseconds; *App*: the installed version, what GitHub has and the check/update
 button in one row, updates, language, taskbar and tray; and **Uninstall** folded under its arrow).
 Each option takes one row: its explanation shows when the mouse rests on it. Over a video
@@ -170,7 +171,8 @@ Launch from the tab and the game enters 3D on its own when it goes fullscreen. G
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
 game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
 OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a
-4-second countdown on its button).
+4-second countdown on its button). Since 1.15, hovering a cover shows a gear in its top-right corner: it
+opens that game's [integrations](#integrations-steam-launch-options).
 
 ![Games tab](docs/img/games.png)
 
@@ -267,7 +269,29 @@ transparent every frame) and hands its alpha to the viewer: the minimap, ammo, m
 stay flat on the screen instead of taking the depth of whatever is behind them. If a game draws its HUD
 some other way nothing changes. Next to the pill a small box shows the game's FPS (frames it presents)
 and the layer's (depths it sends; with DLSS frame generation the game's are double). Settings → Games
-with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box.
+with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box. Since 1.15,
+Settings → Smoothness → *Layer FPS cap* limits how many depths and HUD masks per second the layer copies
+inside the game (the viewer makes 6 depth maps a second by default), so the game spends less on copies
+nobody uses; it applies at once, as an exact average.
+
+## Integrations: Steam launch options
+
+Since 1.15 the panel's **Integrations** tab puts together each game's Steam launch options from pieces
+instead of typing them: the layers (`ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`, `NEURAL_FORGE_ENABLE`,
+`ENABLE_VKBASALT`), other variables, `vkdaedalus-run` or any command in front of the game, options after
+it, and gamescope (render and output resolution by abbreviation, stretch or fit, fullscreen, cursor grab,
+and FSR or NIS upscaling, which turns gamescope on). What you set on the tab applies to every installed
+game; the gear on a cover (Games tab) opens that game's own settings, marked with a dot. With Neural Forge
+on, the game's `NEURAL_FORGE_TARGET_EXE` is taken from Neural Forge itself.
+
+![A game's integrations](docs/img/integrations.png)
+
+OdysseyVK writes the whole line into Steam's configuration. Steam only reads it at startup and rewrites it
+when it quits, so with Steam open the change waits and the service writes it as soon as Steam closes, after
+saving a copy of Steam's file in `~/.local/state/odysseyvk/steam/`. The lines your games already have are
+read first, and so are later changes made in Steam or by Neural Forge: they become that game's own
+settings, so nothing is lost. A line that can't be split into pieces (with `;`, pipes or redirections) is
+left alone. Details in the [guide](docs/GUIDE.md#integrations-steam-launch-options-since-115).
 
 ## Games and the cursor
 

@@ -89,6 +89,11 @@ def interfaz(lengua, destino):
             f.write("modelo = %s\n" % red)
         im = pinta(casa, estado, lengua, "juegos", ODYSSEYVK_HUD_PANEL=1)
         guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "games.png"), 1400)
+        # (v1.15) las integraciones de un juego (Cyberpunk, con lo suyo marcado con un punto), con el panel alto: sus
+        # opciones de lanzamiento se leen, sin tocarlas, del localconfig.vdf de Steam por el enlace (nada se escribe)
+        im = pinta(casa, estado, lengua, "integraciones", ODYSSEYVK_HUD_PANEL=2, ODYSSEYVK_HUD_INTEG=1091500,
+                   ODYSSEYVK_HUD_TAMANO="820x1070")
+        guarda(sobre(im, caja_alfa(im, (W // 2 - 1000, 0, W // 2 + 1000, H))), os.path.join(destino, "integrations.png"), 1400)
         # (v1.12) la pestana Ajustes entera, con el panel alto: rendimiento, fluidez, cabeza y programa
         im = pinta(casa, estado, lengua, "programa", ODYSSEYVK_HUD_PANEL=3, ODYSSEYVK_HUD_TAMANO="820x1070")
         programa = sobre(im, caja_alfa(im, (W // 2 - 1000, 0, W // 2 + 1000, H)))

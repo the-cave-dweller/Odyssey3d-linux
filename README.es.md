@@ -101,9 +101,11 @@ icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic 
 La cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
 abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); el
 interruptor **Neural | Rendimiento** vive en la pastilla (en la 1.12
-también estaba aquí). En la segunda, centradas: **Juegos** y **Ajustes** (arriba los
+también estaba aquí). En la segunda, centradas: **Juegos**, **Integraciones** (las opciones de
+lanzamiento de Steam de cada juego, desde la 1.15; ver más abajo) y **Ajustes** (arriba los
 datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
-variable durante el 3D, el tope de arrastre y la prioridad del visor en la tarjeta; *Seguimiento de la
+variable durante el 3D, el tope de arrastre, la prioridad del visor en la tarjeta y, desde la 1.15, el tope de
+FPS de la capa de DLSS; *Seguimiento de la
 cabeza*: seguir la cabeza con la cámara y la anticipación en milisegundos; *Programa*: la versión
 instalada, lo que hay en GitHub y el botón de buscar o actualizar en una fila, actualizaciones, idioma,
 barra de tareas y bandeja; y **Desinstalar** plegado bajo su flechita). Cada opción ocupa una fila: su
@@ -177,7 +179,9 @@ interruptor 2D | 3D. Arráncalo desde ahí y el juego entra solo en 3D al poners
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
 a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
 visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego
-tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón).
+tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón). Desde la 1.15, al pasar el
+ratón por una carátula sale un engranaje arriba a la derecha: abre las
+[integraciones](#integraciones-las-opciones-de-lanzamiento-de-steam) de ese juego.
 
 ![La pestaña Juegos](docs/img/es/games.png)
 
@@ -277,7 +281,30 @@ de misión y los menús se quedan planos en la pantalla en vez de tomar la profu
 detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Junto a la pastilla, un cuadro pequeño
 dice los FPS del juego (los cuadros que presenta) y los de la capa (las profundidades que manda; con la
 generación de cuadros de DLSS, los del juego son el doble). En Ajustes → Juegos con DLSS se apaga cada
-una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS.
+una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS. Desde la 1.15, Ajustes →
+Fluidez → *Tope de FPS de la capa* limita cuántas profundidades y máscaras del HUD copia la capa por segundo
+dentro del juego (el visor hace 6 mapas de profundidad por segundo de fábrica): el juego gasta menos en
+copias que nadie usa. Se aplica al momento, como media exacta.
+
+## Integraciones: las opciones de lanzamiento de Steam
+
+Desde la 1.15, la pestaña **Integraciones** del panel arma las opciones de lanzamiento de Steam de cada
+juego por piezas, en vez de escribirlas: las capas (`ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`,
+`NEURAL_FORGE_ENABLE`, `ENABLE_VKBASALT`), otras variables, `vkdaedalus-run` o cualquier comando delante del
+juego, opciones detrás, y gamescope (la resolución de renderizado y la de salida por abreviatura, stretch o
+fit, pantalla completa, atrapar el cursor, y el reescalado FSR o NIS, que enciende gamescope). Lo que se
+pone en la pestaña vale para todos los juegos instalados; el engranaje de una carátula (pestaña Juegos) abre
+lo propio de ese juego, marcado con un punto. Con Neural Forge puesto, el `NEURAL_FORGE_TARGET_EXE` del juego
+se toma del propio Neural Forge.
+
+![Las integraciones de un juego](docs/img/es/integrations.png)
+
+OdysseyVK escribe la línea entera en la configuración de Steam. Steam solo la lee al arrancar y la
+reescribe al salir, así que con Steam abierto el cambio espera y el servicio lo escribe en cuanto Steam se
+cierra, después de guardar una copia de su fichero en `~/.local/state/odysseyvk/steam/`. Las líneas que tus
+juegos ya tienen se leen antes, y también lo que se cambie luego en Steam o desde Neural Forge: pasa a ser
+lo propio de ese juego, así que nada se pierde. Una línea que no se puede poner por piezas (con `;`,
+tuberías o redirecciones) se deja como está. Más detalle en la [guía](docs/GUIDE.md#integrations-steam-launch-options-since-115) (en inglés).
 
 ## Los juegos y el cursor
 
