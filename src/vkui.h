@@ -126,6 +126,9 @@ public:
     /* (v1.16) en el escritorio el marco va en una ventana que se mueve por su barra (Rodolfo: «en la vista de escritorio
        hazlo movible, y con boton de cierre»); sobre un juego o el 3D, a pantalla completa */
     bool marcoVentana = false;
+    /* (v1.16) abierto desde la pastilla (su engranaje): junto al aspa, la flecha de volver a ella (Rodolfo: «beside the
+       closing button after accessing the overlay from the pill add a back button to just return to the pill») */
+    bool desdePastilla = false;
     /* (v1.16) las pestanas que se ven pero no se pueden abrir (Integraciones dentro de un juego): en gris */
     std::vector<bool> pestanaGris;
     std::vector<std::string> pestanasNota;
@@ -261,7 +264,8 @@ public:
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem,      /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
     HitPanelCopiar,    /* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam */
-    HitPanelTesela     /* (v1.16) una tesela chica de los lados: `sub` = cual (State::teselas) */
+    HitPanelTesela,    /* (v1.16) una tesela chica de los lados: `sub` = cual (State::teselas) */
+    HitPanelVolver     /* (v1.16) la flecha de volver a la pastilla, junto al aspa */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -414,6 +418,7 @@ private:
   /* (v1.16) los de las teselas al estilo de vkDaedalus: el cubo del 3D, el mando de Juegos, el enchufe de
      Integraciones, los deslizadores de Ajustes, la cabeza del seguimiento, las barras de los FPS y las capas del HUD */
   Rect icoCubo_, icoMando_, icoEnchufe_, icoDeslizadores_, icoCabeza_, icoBarras_, icoCapas_;
+  Rect icoAtras_;   /* (v1.16) la flecha de volver a la pastilla: ← con su palo, como la de actualizar */
   const Rect &iconoTesela(int k) const;
   /* (v1.16) la paleta del modo (Rodolfo: «make the rest of the ui follow the yellow and blue tint on the currently
      purple parts, also adapt the background to an almost black but tinted version of each»): con la red, el azul de
@@ -500,6 +505,7 @@ private:
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelPestanas_;
   std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */
+  Rect panelVolver_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) la flecha de volver a la pastilla */
   std::vector<ZonaItem> zonas_;
   float contenidoAlto_ = 0.0f;
 };

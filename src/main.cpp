@@ -3110,12 +3110,13 @@ static int cmdAjustes(int argc, char **argv) {
       }
     }
   }
-  bool enJuegos = false, forzarGrande = false;
+  bool enJuegos = false, forzarGrande = false, desdePastilla = false;
   std::string volcado, pista;
   for (int i = 0; i < argc; i++) {
     const std::string a = argv[i];
     if (a == "--juegos") enJuegos = true;
     else if (a == "--grande") forzarGrande = true;   /* para probar el tamano del 3D sin video */
+    else if (a == "--desde-pastilla") desdePastilla = true;   /* (v1.16) lo abrio el engranaje de la pastilla del visor */
     else if (a == "--dump" && i + 1 < argc) volcado = argv[++i];
     else if (a == "--pantalla" && i + 1 < argc) pista = argv[++i];
   }
@@ -3146,6 +3147,7 @@ static int cmdAjustes(int argc, char **argv) {
   Hud::State &st = ov.hud().state();
   st.pestana = enJuegos ? 1 : 0;
   st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+  st.desdePastilla = desdePastilla || entornoOdyssey("ODYSSEYVK_DESDE_PASTILLA");   /* (v1.16) la flecha de volver */
   /* (v1.16) al estilo de vkDaedalus, a pantalla completa; ODYSSEYVK_PANEL_VIEJO=1 deja el panel flotante de antes */
   st.marco = !(entornoOdyssey("ODYSSEYVK_PANEL_VIEJO") && entornoOdyssey("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
   st.aparicion = st.marco ? 0.0f : 1.0f;
@@ -3410,6 +3412,14 @@ static int cmdAjustes(int argc, char **argv) {
         repintar = true;
       }
       if (g.tipo == (int)Hud::HitPanelCerrar) {
+        g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelVolver) {
+        /* (v1.16) volver a la pastilla: el panel se cierra y el visor la vuelve a poner (lo de `ctl capa mostrar`) */
+        std::string e;
+        if (!ajuste::escribir(std::map<std::string, double>(), std::string(), {{"capa", "mostrar"}}, &e))
+          std::fprintf(stderr, "[ajustes] volver a la pastilla: %s\n", e.c_str());
+        std::printf("[ajustes] volver a la pastilla\n");
+        std::fflush(stdout);
         g_cierraPanel = 1;
       } else if (g.tipo == (int)Hud::HitPanelTesela && !idTesela.empty()) {
         std::string aviso;
@@ -3720,6 +3730,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
      1 = Juegos), con lo que hay de verdad en serve.conf y en la biblioteca de Steam */
   hud.state().engranaje = true;
   hud.state().marco = !(std::getenv("ODYSSEYVK_PANEL_VIEJO") && std::getenv("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
+  hud.state().desdePastilla = std::getenv("ODYSSEYVK_DESDE_PASTILLA") != nullptr;
   /* (v1.16) a pantalla completa; en la ventana del escritorio con ODYSSEYVK_PANEL_VENTANA=1 (sin ODYSSEYVK_HUD_SESION) */
   hud.state().marcoVentana = hud.state().marco && !std::getenv("ODYSSEYVK_HUD_SESION") && std::getenv("ODYSSEYVK_PANEL_VENTANA");
   /* ODYSSEYVK_HUD_APARICION=0..1: el panel a media aparicion (cuanto ha subido) */

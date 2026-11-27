@@ -1211,6 +1211,7 @@ struct Overlay::Impl {
         h == Hud::HitPanelIdiomaOpcion || h == Hud::HitPanelActualizar || h == Hud::HitPanelFijar ||
         h == Hud::HitPanelModoRed || h == Hud::HitPanelTesela ||   /* (v1.16) las teselas chicas del panel nuevo */
         h == Hud::HitPanelCopiar ||   /* (v1.16) el Copiar del pie de Juegos: desde la 1.14 no llegaba */
+        h == Hud::HitPanelVolver ||   /* (v1.16) la flecha de volver a la pastilla */
         (hud.state().menuIdioma && (h == Hud::HitPanel || h == Hud::HitPanelTitulo)))
       golpes.push_back({(int)h, item, sub, fr, true});
   }

@@ -40,6 +40,21 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## Volver a la pastilla desde el panel (v1.16)
+
+- Rodolfo: «beside the closing button after accessing the overlay from the pill add a back button to just return to
+  the pill».
+- El visor abre el panel con `--desde-pastilla` (desde su engranaje o su atajo). Así abierto, el panel lleva una
+  flecha ← a la izquierda del aspa, y la actualización pasa a la izquierda de la flecha. Al pasar el ratón dice
+  «Volver a la pastilla».
+- **Al picarla**: el panel se cierra y le manda al visor que ponga la pastilla (lo mismo que
+  `odysseyvk ctl capa mostrar`). La pastilla, que se oculta sola a los 5 s, suele estar oculta para entonces. El
+  aspa sigue cerrando sin más.
+- Su golpe (`HitPanelVolver`) entra en la lista de la capa, para que no le pase lo de las teselas.
+  `ODYSSEYVK_DESDE_PASTILLA=1` la pone en `ctl hud` y en el panel, para pruebas.
+- Probado en el KWin aparte: con `clic` en la flecha, el panel se cierra («volver a la pastilla», salida 0) y deja
+  `capa = mostrar` para el visor. Sin probar: el visor de verdad poniendo la pastilla.
+
 ## Toda la interfaz, en azul o ámbar según el modo, con fondos casi negros teñidos (v1.16)
 
 - Rodolfo: «make the rest of the ui follow the yellow and blue tint on the currently purple parts, also adapt the
