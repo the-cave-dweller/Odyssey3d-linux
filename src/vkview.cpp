@@ -20,6 +20,7 @@
 #include "mpris.h"
 #include "atajos.h"
 #include "util.h"
+#include "capasajenas.h"
 #ifdef HAVE_ORT
 #include "depth.h"
 #include "profjuego.h"
@@ -213,6 +214,32 @@ static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, 
 /* (v1.13) la profundidad de DLSS, para el `estado` (la ventana de ajustes) y el cuadrito junto a la pastilla: los
    FPS del juego y de la capa (0 = no llega), lo que se lee y la parte del mapa del HUD del juego (< 0 = sin el) */
 static float g_fpsJuego = 0.0f, g_fpsCapa = 0.0f, g_hudJuego = -1.0f;
+/* (v1.15) lo que dibujan otras capas encima del juego (capasajenas.h: el menu y el HUD de vkDaedalus, MangoHud).
+   El hilo principal lo mira; sus trozos los aplana el hilo del mapa, y con el menu abierto la pastilla se aparta */
+static std::mutex g_ajenasMx;
+static std::vector<ajenas::Zona> g_zonasAjenas;
+static ajenas::Estado g_ajenas;
+
+/* esos trozos (de 0 a 1) al plano de apoyo en el mapa (n x n, el cuadro aplastado a cuadrado), con un borde suave
+   de dos puntos del mapa; el lado que toca el canto de la imagen, sin borde */
+static void aplanarZonas(std::vector<uint8_t> &m, int n, float plano, const std::vector<ajenas::Zona> &zs) {
+  if (n < 2 || m.size() != (size_t)n * n) return;
+  const float destino = plano * 255.0f, borde = 2.0f, lejos = 1e9f;
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      const float px = (float)x + 0.5f, py = (float)y + 0.5f;
+      float w = 0.0f;
+      for (const ajenas::Zona &z : zs) {
+        const float d = std::min(std::min(z.x0 <= 0.0f ? lejos : px - z.x0 * n, z.x1 >= 1.0f ? lejos : z.x1 * n - px),
+                                 std::min(z.y0 <= 0.0f ? lejos : py - z.y0 * n, z.y1 >= 1.0f ? lejos : z.y1 * n - py));
+        w = std::max(w, std::max(0.0f, std::min(1.0f, d / borde + 0.5f)));
+      }
+      if (w > 0.0f) {
+        uint8_t &v = m[(size_t)y * n + x];
+        v = (uint8_t)std::lround((float)v + (destino - (float)v) * w);
+      }
+    }
+}
 static std::string g_profJuego;
 /* el cuadrito de FPS: `fps_juego = no` en serve.conf (ODYSSEYVK_FPS_JUEGO=0) lo quita; la ventana de ajustes lo
    cambia en marcha con la orden `fps_juego` */
@@ -1958,6 +1985,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              hudPuesto = hay;
              hudAviso = ahoraS;
            }
+         }
+         /* (v1.15) lo de otras capas encima del juego (el menu de vkDaedalus entero, la esquina de MangoHud o del HUD
+            de vkDaedalus): al plano de la pantalla, como el HUD; si no, tomarian el relieve de la escena */
+         if (ok && t.juego && m.size() == (size_t)t.red->size() * t.red->size()) {
+           std::vector<ajenas::Zona> zs;
+           {
+             std::lock_guard<std::mutex> g(g_ajenasMx);
+             zs = g_zonasAjenas;
+           }
+           if (!zs.empty()) aplanarZonas(m, t.red->size(), t.red->focusPlane(), zs);
          }
          /* y el reparto por ojo con los huecos rellenos (antes lo hacia el hilo que dibuja) */
          std::vector<uint8_t> rg;
@@ -3988,6 +4025,45 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        (por eso esa bandera pide el apoyo escrito: no hay red que lo saque de la escena). */
     if (!opts.mapaFijo.empty() && wv.hasDepthMap())
       wv.setConverter(gananciaRelieve(st.popout), (float)(opts.apoyo >= 0.0 ? opts.apoyo : 0.5), true);
+    /* (v1.15) las otras capas, cuatro veces por segundo sobre un juego (Rodolfo: «que no choquen los overlay, que
+       solo uno esté al frente a la vez»): con el menu de vkDaedalus abierto la pastilla se aparta (lo que el usuario
+       quiera de ella, Ctrl+Shift+F1 incluido, se guarda para cuando se cierre); y el cuadrito de FPS no sale si
+       MangoHud o el HUD de vkDaedalus ya los ensenan */
+    {
+      static double tAjenas = 0.0;
+      static bool apartada = false, queria = false;
+      const double ahoraA = glfwGetTime();
+      if (ahoraA - tAjenas >= 0.25) {
+        tAjenas = ahoraA;
+        ajenas::Estado e;
+        if (sobreJuego(ui)) {
+          pid_t pid = 0;
+#ifdef HAVE_WAYLAND_WM
+          WindowInfo w{};
+          if (ui.opts && !ui.opts->captureUuid.empty() && monitorVentanas(ui) && ui.wm.find(ui.opts->captureUuid, w))
+            pid = (pid_t)w.pid;
+#endif
+          e = ajenas::mirar(pid);
+        }
+        Hud::State &hsA = ui.hud.state();
+        if (e.menuVkd && !apartada) {
+          apartada = true, queria = hsA.overlayOn, hsA.overlayOn = false, ui.inputChanged = true;
+          std::printf("[ajenas] el menu de vkDaedalus esta abierto: la pastilla se aparta y el 3D va plano\n");
+        } else if (e.menuVkd && hsA.overlayOn) {
+          queria = true, hsA.overlayOn = false, ui.inputChanged = true;   /* la pidieron con el menu abierto: luego */
+        } else if (!e.menuVkd && apartada) {
+          apartada = false, hsA.overlayOn = queria, ui.inputChanged = true;
+          std::printf("[ajenas] el menu de vkDaedalus se cerro: la pastilla vuelve%s\n", queria ? "" : " (estaba oculta: sigue oculta)");
+        }
+        if (!(e == g_ajenas))
+          std::printf("[ajenas] MangoHud %s · HUD de vkDaedalus %s%s · menu de vkDaedalus %s\n", e.mangohud ? "si" : "no",
+                      e.hudVkd ? "si" : "no", e.fpsVkd ? " (con FPS)" : "", e.menuVkd ? "abierto" : "cerrado");
+        std::fflush(stdout);
+        g_ajenas = e;
+        std::lock_guard<std::mutex> g(g_ajenasMx);
+        g_zonasAjenas = e.planas;
+      }
+    }
     /* (v1.13) la profundidad de DLSS: el cuadrito de FPS junto a la pastilla y el `estado`. La pastilla solo se
        vuelve a pintar cuando cambia un numero entero (una vez por segundo como mucho) */
     {
@@ -4007,7 +4083,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         tTasas = ahoraT, fuente0 = cuentaFuente;
       }
       const bool dlss = red.usandoJuego();
-      const int modo = dlss ? 1 : (sobreJuego(ui) && wv.converterOn() ? 2 : 0);
+      const int modo = g_ajenas.hayFpsAjeno() || g_ajenas.menuVkd ? 0 : (dlss ? 1 : (sobreJuego(ui) && wv.converterOn() ? 2 : 0));
       const float vj = dlss ? fj : fuenteFps, vs = dlss ? fc : 0.0f;
       if ((int)std::lround(vj) != (int)std::lround(hs.fpsJuego) || (int)std::lround(vs) != (int)std::lround(hs.fpsCapa) ||
           hs.fpsCuadro != g_fpsCuadro || hs.fpsModo != modo)

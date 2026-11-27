@@ -97,6 +97,20 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   redirections, `$(...)`) is left alone until you choose "Use OdysseyVK's".
 - Stored in `~/.config/odysseyvk/integraciones.conf`: `[todos]` for every game, `[appid]` for each game's own.
 
+## With MAKO, vkDaedalus and MangoHud (since 1.15)
+
+- MAKO's frame generation works alongside the OdysseyVK layer when it is enabled with `ENABLE_MAKO=1` or through
+  `vkdaedalus-run`. The OdysseyVK layer sits above MAKO, so it sees the game's real frames. **Don't use
+  `mako-launch`**: it sets `VK_IMPLICIT_LAYER_PATH` to MAKO's own folder, which leaves out the OdysseyVK layer (and
+  Neural Forge).
+- Only one overlay in front at a time:
+  - while the vkDaedalus menu is open (End), the OdysseyVK pill steps aside and the 3D goes flat, so the menu
+    reads right. Its state is read from the file vkDaedalus's input hook keeps in `$XDG_RUNTIME_DIR`, so it needs
+    a Wine game started with `vkdaedalus-run`;
+  - if MangoHud or the vkDaedalus HUD shows FPS, OdysseyVK's FPS box doesn't;
+  - the corner where MangoHud (its `position`) or the vkDaedalus HUD (top left) draws goes to the screen plane, like
+    the game's own HUD.
+
 ## Configuration keys (serve.conf)
 
 | Key | Default | Meaning |

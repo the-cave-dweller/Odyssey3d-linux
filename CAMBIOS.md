@@ -15,6 +15,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     por abreviatura, stretch o fit, `-f`, el cursor y el reescalado FSR o NIS, que lo enciende). La línea entera se
     escribe en Steam con copia del fichero: con Steam cerrado al momento; abierto, en cuanto se cierra. Lo que los
     juegos ya tenían, y lo que se cambie luego por fuera, se lee y queda como propio de cada juego.
+  - **Con MAKO y vkDaedalus**: la capa de OdysseyVK carga con ellos (no con `mako-launch`); con el menú de vkDaedalus
+    abierto la pastilla se aparta y el 3D va plano; un solo contador de FPS; los HUD de las otras capas, planos.
   - **Lo que no está instalado, en gris** con la pastilla «No instalada», y `ENABLE_VKDAEDALUS` y `vkdaedalus-run`,
     uno u otro. La pestaña solo se rehace si algo cambió.
   - **Campos de texto en el panel**: con acentos y AltGr, Ctrl+V, y la tecla pulsada que se repite.
@@ -28,6 +30,51 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - README y README.es: la sección Integraciones, con su captura, y el tope en la de DLSS; las capturas se rehicieron
   (`tools/capturas-readme.py`: la pestaña nueva sale en la fila de pestañas). La guía ya llevaba la sección
   Integraciones y la orden `odysseyvk integraciones`.
+
+## Con MAKO y vkDaedalus: las otras capas no chocan con la de OdysseyVK, y solo una al frente (v1.15)
+
+- Rodolfo: «Voy a usar el frame generation de MAKO en vkdaedalus, checa que no te de problemas y procura que no
+  choquen los overlay, que solo uno esté al frente a la vez». Al preguntarle cuáles, las tres: el menú de vkDaedalus
+  contra la pastilla, un solo contador de FPS y lo de las otras capas plano en el 3D.
+- **MAKO con la capa de OdysseyVK** (mako-render 5.0.0, medido con `VK_LOADER_DEBUG=layer`). Con `ENABLE_MAKO=1`
+  el orden, del juego al controlador, es Neural Forge, OdysseyVK, MangoHud, MAKO. La capa de OdysseyVK queda por
+  encima de MAKO: ve los cuadros de verdad del juego, la profundidad de DLSS no cambia y el cuadrito de FPS cuenta
+  los del juego, no los generados. En un vkcube dentro de un gamescope aparte, con MAKO cargado, la capa crea su
+  dispositivo y ve la cadena igual que sin MAKO.
+  - **`mako-launch` no vale** con OdysseyVK: pone `VK_IMPLICIT_LAYER_PATH` solo en la carpeta de MAKO y deja fuera
+    la capa de OdysseyVK y la de Neural Forge. `vkdaedalus-run` no lo usa (pone `ENABLE_MAKO=1` y sus capas de
+    orden en `VK_ADD_IMPLICIT_LAYER_PATH`), así que con él sí carga.
+  - **Sin probar**: la generación de cuadros de MAKO de verdad. Para MAKO FG falta `mako-fg-host` y para MAKO LSFG
+    el `Lossless.dll` de Lossless Scaling (se le pidió a Steam que lo instale). Tampoco el orden con
+    `vkdaedalus-run`, porque vkDaedalus no está instalado.
+- **Las otras capas** (`src/capasajenas.cpp`). Dibujan sobre el cuadro ya hecho, después del HUD del juego. La
+  máscara del HUD no las ve, así que en el 3D tomaban el relieve de la escena. El visor las mira cuatro veces por
+  segundo, sobre un juego, y sin tocarlas:
+  - **el menú de vkDaedalus** (End). Mientras está abierto, el gancho de entrada que precarga `vkdaedalus-run` (en
+    un juego de Wine) escribe en `$XDG_RUNTIME_DIR/vkdaedalus-input-<dev>-<ino>` el proceso que lo tiene abierto:
+    8 bytes, el arranque del proceso por 2^32 más su pid. Lo hace para retener la entrada de todo el prefijo, y lo
+    borra al cerrarlo. Se da por abierto si ese proceso vive con ese mismo arranque, que es lo que comprueba
+    vkDaedalus. El menú ocupa la pantalla entera con un velo oscuro;
+  - **su HUD**: `libvkdaedalus.so` cargada en el juego (su `/proc/<pid>/maps`) y `hud = true` en
+    `~/.config/vkdaedalus/settings.conf` (con FPS si `hudItems` lleva `fps`). Va arriba a la izquierda;
+  - **MangoHud**: `libMangoHud` cargada en el juego, salvo `no_display` en su `MANGOHUD_CONFIG` o en su fichero
+    (`MANGOHUD_CONFIGFILE` o `~/.config/MangoHud/MangoHud.conf`). Va en su `position`.
+  - El juego es el proceso de la ventana capturada (KWin lo da). Las bibliotecas y los ajustes se releen cada 3 s.
+- **Solo una al frente**:
+  - Con el menú de vkDaedalus abierto, la pastilla se aparta y el 3D va entero al plano de la pantalla, para que
+    el menú se lea bien. Lo que el usuario pida de la pastilla mientras tanto (Ctrl+Mayús+F1) se guarda y vale al
+    cerrarse. El menú de vkDaedalus no se puede cerrar desde fuera, así que gana mientras está abierto.
+  - Si MangoHud o el HUD de vkDaedalus enseñan los FPS, el cuadrito de FPS de OdysseyVK no sale.
+  - La esquina de cada HUD va al plano de la pantalla como el del juego, con un borde suave de dos puntos del mapa:
+    0,22 × 0,30 de la imagen para MangoHud y 0,20 × 0,12 para el de vkDaedalus, medidos a ojo y con holgura.
+- **Probado**:
+  - La detección, con procesos de prueba: el menú abierto y cerrado, un arranque que no cuadra, MangoHud arriba a
+    la derecha y con `no_display`, y el HUD de vkDaedalus con FPS, sin FPS y apagado. Para el HUD, una biblioteca
+    cualquiera copiada como `libvkdaedalus.so` y precargada.
+  - En el visor, en el compositor aparte, con un menú falso (`ODYSSEYVK_AJENAS_DIR`, para pruebas): la pastilla se
+    oculta y el mapa de profundidad sale plano entero (desviación 0; sin el menú, 73).
+  - El aplanado de una esquina, aparte.
+- **Sin probar** con vkDaedalus, MangoHud y un juego de verdad.
 
 ## Integraciones: lo no instalado en gris, vkDaedalus uno u otro y menos trabajo mirando Steam (v1.15)
 

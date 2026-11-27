@@ -174,6 +174,7 @@ add_executable(odysseyvk
   src/barra.cpp
   src/preferencias.cpp
   src/integraciones.cpp
+  src/capasajenas.cpp
   src/idioma.cpp
   src/depth.cpp
   src/hoyos.cpp
