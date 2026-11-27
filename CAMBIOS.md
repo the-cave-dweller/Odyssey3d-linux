@@ -3,6 +3,37 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La red en la CUDA 1 ya no deja un contexto de 386 MiB en la CUDA 0 (v1.16)
+
+- Cada proceso que abría la red en la 5080 (CUDA 1) se quedaba además con **386 MiB en la 4090** (CUDA 0), por eso
+  los `capture3d` salían con C+G en la GPU 0. MEDIDO el 27-nov con onnxruntime-cuda 1.29, una sonda paso a paso y un
+  rastreo de las llamadas a cudart: al **añadir CUDA** a la sesión (las dos vías, la V2 y la vieja), el complemento
+  hace un `cudaMalloc(1)` + `cudaFree` de prueba (para ver si hay que compilar los núcleos al vuelo) en la tarjeta
+  actual del hilo, que sin más es la 0 aunque `device_id` diga 1.
+- Ahora `DepthNet::init` deja la tarjeta elegida como la actual del hilo justo antes (`tarjetaActualCuda`: su
+  contexto primario por libcuda, `cuDevicePrimaryCtxRetain` + `cuCtxSetCurrent`; por libcuda y no por libcudart, para
+  que valga sea cual sea el CUDA con que se compiló ONNX Runtime). Si no se puede, todo sigue como antes.
+- `odysseyvk mapa depth-map.png ×30 --red 1` con un HOME aparte, dos corridas de cada binario:
+
+  | | CUDA 0 (4090) | CUDA 1 (5080) | por cuadro |
+  |---|---|---|---|
+  | antes | 386 MiB | 636 MiB | 10,8-11,4 ms |
+  | ahora | **0** | 636 MiB | 10,9-11,4 ms |
+
+  El registro sigue diciendo CUDA 1 y los mapas salen iguales (máx. 1/255, lo mismo que entre dos corridas del mismo
+  binario). En la sonda, por la vía vieja: 386 → 0 en la 0 y 666 MiB en la 1, igual que antes.
+
+## `tools/prueba-aparte.sh` ya no deja visores de prueba vivos (v1.16)
+
+- Rodolfo: «remove the running cyberpunk tests you found, always make the program end tests after closure». Había dos
+  `odysseyvk test` de otra prueba con casi 10 h vivos (606 + 738 MiB de VRAM cada uno): `timeout` mataba gamescope,
+  pero su `gamescopereaper` y el visor quedaban huérfanos bajo `systemd --user`, y el visor ya no hacía caso a
+  SIGTERM ni a SIGINT (hubo que matarlos con SIGKILL). El cuelgue al cerrar no se repitió en tres pruebas (sin red,
+  con `--conver` y con el mismo entorno que aquellas): las tres cerraron bien.
+- Ahora todo lo que arranca la prueba lleva la marca `ODYSSEYVK_APARTE` en su entorno y, al acabar por el tope, por
+  Ctrl+C o por una señal, se mata todo lo marcado que siga vivo: SIGTERM y, a los 3 s, SIGKILL (probado con un
+  proceso que no hace caso a SIGTERM: muerto a los ~5 s).
+
 ## La pestaña 3D: las redes en dos mitades, desplegables y la vista de depuración en vivo (v1.16)
 
 - Rodolfo: «I want a dropdown button for Depth network once the user exceeds 2 models, Add to the right side, like

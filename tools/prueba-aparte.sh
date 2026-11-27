@@ -34,9 +34,41 @@ command -v gamescope >/dev/null || { echo "falta gamescope (es el compositor apa
 [ -n "$estado" ] || estado=$(mktemp -d "${TMPDIR:-/tmp}/odysseyvk-aparte.XXXXXX")
 mkdir -p "$estado"
 
+# (v1.16) Al acabar (por el tope, por Ctrl+C o por una senal) no queda nada vivo: todo lo que arranca esta prueba
+# lleva la marca ODYSSEYVK_APARTE en su entorno y se mata todo lo marcado que siga ahi (SIGTERM, y SIGKILL a los 3 s).
+# Antes `timeout` solo mataba gamescope: visto el 27-nov, dos visores de prueba con casi 10 h vivos (606 + 738 MiB de
+# VRAM cada uno), huerfanos bajo systemd --user con su gamescopereaper, y que ya no hacian caso a SIGTERM ni a SIGINT
+marca="$$-$RANDOM$RANDOM"
+barrer() {
+  local i p vivos
+  for i in 1 2 3 4 5 6; do
+    vivos=()
+    for p in /proc/[0-9]*; do
+      p=${p#/proc/}
+      [ "$p" = "$$" ] && continue
+      grep -qxzF "ODYSSEYVK_APARTE=$marca" "/proc/$p/environ" 2>/dev/null && vivos+=("$p")
+    done
+    [ ${#vivos[@]} -eq 0 ] && return 0
+    if [ "$i" -eq 1 ]; then
+      kill -TERM "${vivos[@]}" 2>/dev/null || true
+    elif [ "$i" -ge 4 ]; then
+      echo "prueba-aparte: ${vivos[*]} siguen vivos despues de SIGTERM: SIGKILL" >&2
+      kill -KILL "${vivos[@]}" 2>/dev/null || true
+    fi
+    sleep 1
+  done
+}
+trap barrer EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
 # La guarda de dentro: si por lo que sea el visor no fuera a conectarse al compositor aparte (y si
 # al escritorio de verdad), no se lanza.
-exec timeout -k 3 "$tope" gamescope --backend headless -W 3840 -H 2160 --expose-wayland -- \
+ODYSSEYVK_APARTE="$marca" timeout -k 3 "$tope" gamescope --backend headless -W 3840 -H 2160 --expose-wayland -- \
   env XDG_STATE_HOME="$estado" "${ambiente[@]}" \
   sh -c 'case "$WAYLAND_DISPLAY" in gamescope-*) ;; *) echo "esto NO es el compositor aparte: no se lanza nada" >&2; exit 9 ;; esac; exec "$0" "$@"' \
-  "$bin" test --windowed --no-panel --no-lens --no-scaler "$@"
+  "$bin" test --windowed --no-panel --no-lens --no-scaler "$@" &
+rc=0
+wait "$!" || rc=$?
+exit "$rc"

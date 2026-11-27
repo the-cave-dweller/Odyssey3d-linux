@@ -436,6 +436,30 @@ static std::vector<TarjetaGpu> tarjetasCuda() {
   return tarjetas;
 }
 
+/* (v1.16) Deja la tarjeta `gpu` como la actual de CUDA en este hilo (su contexto primario, por libcuda) antes de
+   anadir CUDA a la sesion. MEDIDO el 27-nov con onnxruntime-cuda 1.29: al anadir CUDA, el complemento hace un
+   cudaMalloc de prueba (para ver si hay que compilar los nucleos al vuelo) en la tarjeta actual del hilo, que sin esto
+   es la 0 aunque device_id diga otra: cada proceso con la red en la CUDA 1 se quedaba ademas con 386 MiB en la 4090.
+   Con la 1 puesta antes, en la 0 no queda nada y en la 1 sigue igual (636 MiB por la via V2, 666 por la vieja). Por
+   libcuda y no por libcudart: vale sea cual sea el CUDA con que se compilo ONNX Runtime. La biblioteca no se suelta y
+   el contexto se retiene una vez por tarjeta: es el mismo que usa ONNX Runtime y vive lo que el proceso */
+static void tarjetaActualCuda(int gpu) {
+  static void *lib = dlopen("libcuda.so.1", RTLD_NOW | RTLD_LOCAL);
+  static void *retenidos[64] = {};
+  if (!lib || gpu < 0 || gpu >= 64) return;
+  auto init = (int (*)(unsigned))dlsym(lib, "cuInit");
+  auto disp = (int (*)(int *, int))dlsym(lib, "cuDeviceGet");
+  auto retener = (int (*)(void **, int))dlsym(lib, "cuDevicePrimaryCtxRetain");
+  auto poner = (int (*)(void *))dlsym(lib, "cuCtxSetCurrent");
+  if (!init || !disp || !retener || !poner || init(0) != 0) return;
+  int d = 0;
+  if (!retenidos[gpu] && (disp(&d, gpu) != 0 || retener(&retenidos[gpu], d) != 0)) {
+    retenidos[gpu] = nullptr;
+    return;   /* si no se pudo (tarjeta llena), todo sigue como antes y la sesion dira lo suyo */
+  }
+  poner(retenidos[gpu]);
+}
+
 /* (v1.16) lo mismo con AMD (ROCm): el motor de MIGraphX recibe el numero de HIP, que no tiene por que ir en el orden de
    /sys/class/drm (y puede contar la grafica integrada del procesador). Se le pregunta a libamdhip64 la direccion PCI de
    cada una y se casa con lo que dice amdgpu en sysfs (memoria, nombre). La biblioteca no se suelta: HIP arranca hilos
@@ -712,6 +736,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
        ella el techo es de 3,5 GB, por las dos vias */
     const bool redVideo = esRedDeVideo(path);
     const unsigned long long techo = redVideo ? 3500ull << 20 : 550000000ull;
+    tarjetaActualCuda(gpu_);   /* (v1.16) si no, el complemento deja un contexto de 386 MiB en la CUDA 0 */
     try {
       Ort::CUDAProviderOptions co;
       co.Update({{"device_id", std::to_string(gpu_)},
