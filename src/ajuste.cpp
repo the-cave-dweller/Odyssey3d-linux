@@ -434,6 +434,44 @@ std::string rutaRecordar() { return rutaEstadoOdyssey("recordar"); }
 std::string rutaBarra() { return rutaEstadoOdyssey("barra"); }
 std::string rutaPanel() { return rutaEstadoOdyssey("panel.pid"); }
 
+/* (v1.18) el aviso pendiente: «hora\ncuenta\ntitulo\nlinea...», escrito entero de una vez (rename) */
+bool pedirAviso(const std::string &titulo, const std::vector<std::string> &lineas, int cuenta, std::string *err) {
+  const std::string destino = rutaEstadoOdyssey("aviso"), temporal = destino + ".tmp";
+  FILE *f = std::fopen(temporal.c_str(), "we");
+  if (!f) {
+    if (err) *err = "no se pudo escribir " + temporal + ": " + std::strerror(errno);
+    return false;
+  }
+  std::fprintf(f, "%ld\n%d\n%s\n", (long)std::time(nullptr), cuenta, titulo.c_str());
+  for (const std::string &l : lineas) std::fprintf(f, "%s\n", l.c_str());
+  std::fclose(f);
+  if (std::rename(temporal.c_str(), destino.c_str()) != 0) {
+    if (err) *err = "no se pudo dejar en su sitio " + destino + ": " + std::strerror(errno);
+    return false;
+  }
+  return true;
+}
+
+bool tomarAviso(std::string &titulo, std::vector<std::string> &lineas, int &cuenta) {
+  const std::string ruta = rutaEstadoOdyssey("aviso");
+  std::string txt;
+  if (!readSmallFile(ruta, txt)) return false;
+  ::unlink(ruta.c_str());
+  std::vector<std::string> l;
+  size_t ini = 0;
+  while (ini < txt.size()) {
+    size_t fin = txt.find('\n', ini);
+    if (fin == std::string::npos) fin = txt.size();
+    l.push_back(txt.substr(ini, fin - ini));
+    ini = fin + 1;
+  }
+  if (l.size() < 3 || std::time(nullptr) - std::atol(l[0].c_str()) > 600) return false;
+  cuenta = std::atoi(l[1].c_str());
+  titulo = l[2];
+  lineas.assign(l.begin() + 3, l.end());
+  return !titulo.empty();
+}
+
 bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err) {
   if (app.empty()) {
     if (err) *err = "no se sabe de que aplicacion es la ventana";

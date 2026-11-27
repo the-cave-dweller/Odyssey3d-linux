@@ -2164,6 +2164,10 @@ bool pngLoadRGBA(const std::string &path, int &w, int &h, std::vector<uint8_t> &
    ventana), deja apuntada la sesion 3D que haya para que el servicio nuevo la reabra, y reinicia el
    servicio. Corre en su propia unidad de systemd (lo lanza el panel o la tarjeta con systemd-run), asi
    que el reinicio no se lo lleva. Todo lo que dice queda en ~/.local/state/odysseyvk/actualizar.log. */
+static std::string conCasa(const std::string &ruta) {
+  const char *home = std::getenv("HOME");
+  return home && *home && ruta.rfind(std::string(home) + "/", 0) == 0 ? "~" + ruta.substr(std::strlen(home)) : ruta;
+}
 static void avisoEscritorio(const std::string &titulo, const std::string &cuerpo) {
   const pid_t p = ::fork();
   if (p == 0) {
@@ -2174,6 +2178,16 @@ static void avisoEscritorio(const std::string &titulo, const std::string &cuerpo
     int st = 0;
     ::waitpid(p, &st, 0);
   }
+}
+/* (v1.18) los avisos del actualizador con la tarjeta de OdysseyVK (Rodolfo: «que la notificación de la app ... también
+   tenga el estilo propio»): se dejan para el servicio, que los ensena (el de «instalado», el servicio nuevo al arrancar).
+   Si el servicio no corre o no se pudo dejar, la notificacion del escritorio de antes */
+static void avisoPropio(const std::string &titulo, const std::vector<std::string> &lineas, int cuenta) {
+  const bool sirve = std::system("systemctl --user is-active --quiet odysseyvk-serve.service") == 0;
+  if (sirve && ajuste::pedirAviso(titulo, lineas, cuenta)) return;
+  std::string cuerpo;
+  for (const std::string &l : lineas) cuerpo += (cuerpo.empty() ? "" : " ") + l;
+  avisoEscritorio(titulo, cuerpo);
 }
 static std::string comilla(const std::string &s) {
   std::string o = "'";
@@ -2193,7 +2207,7 @@ static int cmdActualizar(int argc, char **argv) {
   const char *home = std::getenv("HOME");
   const std::string fuente = std::string(home ? home : "/tmp") + "/.local/share/odysseyvk/fuente";
   std::printf("[actualizar] OdysseyVK %s · fuente en %s\n", ODYSSEYVK_VERSION, fuente.c_str());
-  avisoEscritorio(idioma::tr("Actualizando OdysseyVK"), idioma::tr("Se baja de GitHub y se compila; luego se pide tu clave para instalar."));
+  avisoPropio(idioma::tr("Actualizando OdysseyVK"), {idioma::tr("Se baja de GitHub y se compila; luego se pide tu clave para instalar.")}, 8);
   std::string orden;
   if (fileExists(fuente + "/.git/HEAD"))
     orden = "git -C " + comilla(fuente) + " fetch -q origin main && git -C " + comilla(fuente) + " reset -q --hard origin/main";
@@ -2201,7 +2215,8 @@ static int cmdActualizar(int argc, char **argv) {
     orden = "git clone -q --depth 1 " + std::string(prefs::kRepoGitHub) + " " + comilla(fuente);
   std::printf("[actualizar] %s\n", orden.c_str());
   if (std::system(orden.c_str()) != 0) {
-    avisoEscritorio(idioma::tr("OdysseyVK: la actualización falló"), idioma::trf("No se pudo bajar el repositorio (¿hay conexión y git?). Detalle en {}", {registro}));
+    avisoPropio(idioma::tr("La actualización falló"), {idioma::tr("No se pudo bajar el repositorio (¿hay conexión y git?)."),
+                                                         idioma::trf("Detalle en {}", {conCasa(registro)})}, 0);
     return 1;
   }
   std::string nueva;
@@ -2233,12 +2248,14 @@ static int cmdActualizar(int argc, char **argv) {
   }
   std::printf("[actualizar] %s\n", orden.c_str());
   if (std::system(orden.c_str()) != 0) {
-    avisoEscritorio(idioma::tr("OdysseyVK: la actualización falló"), idioma::trf("No se pudo compilar o instalar. Detalle en {}", {registro}));
+    avisoPropio(idioma::tr("La actualización falló"), {idioma::tr("No se pudo compilar o instalar."), idioma::trf("Detalle en {}", {conCasa(registro)})}, 0);
     return 1;
   }
   /* install.sh ya reinicio el servicio (v0.97); aqui solo se comprueba que corre */
   const int rc = std::system("systemctl --user is-active --quiet odysseyvk-serve.service");
-  avisoEscritorio(idioma::trf("OdysseyVK {} instalado", {nueva}), idioma::tr(rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no corre: systemctl --user restart odysseyvk-serve"));
+  avisoPropio(idioma::trf("OdysseyVK {} instalado", {nueva}),
+              {idioma::tr(rc == 0 ? "El servicio se ha reiniciado con la versión nueva." : "Instalado, pero el servicio no corre: systemctl --user restart odysseyvk-serve")},
+              10);
   std::printf("[actualizar] hecho (%d)\n", rc);
   return rc == 0 ? 0 : 1;
 }
@@ -5714,13 +5731,23 @@ static int cmdServe(int argc, char **argv) {
                         " de F11, con la trama sobre la pagina). Cerramos y avisamos: al volver a poner el"
                         " video a pantalla completa arranca bien\n", motivo);
             std::fflush(stdout);
-            static Notifier avisoCaida;
-            static bool avisoCaidaAbierto = false;
-            if (!avisoCaidaAbierto) avisoCaidaAbierto = avisoCaida.open(nullptr);
-            if (avisoCaidaAbierto)
-              avisoCaida.send("odysseyvk-caida", "El 3D no llegó a empezar",
-                              "Al cambiar el monitor, el escritorio sacó el video de pantalla completa."
-                              " Vuelve a ponerlo a pantalla completa y ya entra.", {}, nullptr);
+            /* (v1.18) con la tarjeta de OdysseyVK (y traducido); sin capa o con otra tarjeta, la notificacion de antes */
+            auto texto = [](std::string &t, std::vector<std::string> &l) {
+              t = idioma::tr("El 3D no llegó a empezar");
+              l = {idioma::tr("Al cambiar el monitor, el escritorio sacó el vídeo de pantalla completa."),
+                   idioma::tr("Vuelve a ponerlo a pantalla completa y ya entra.")};
+            };
+            if (hayTarjeta && ov && !ov->askVisible()) {
+              mostrarAviso(texto, now, 10.0);
+            } else {
+              static Notifier avisoCaida;
+              static bool avisoCaidaAbierto = false;
+              if (!avisoCaidaAbierto) avisoCaidaAbierto = avisoCaida.open(nullptr);
+              std::string t;
+              std::vector<std::string> l;
+              texto(t, l);
+              if (avisoCaidaAbierto) avisoCaida.send("odysseyvk-caida", t, l[0] + " " + l[1], {}, nullptr);
+            }
           } else if (enCambioDeModo && cambioPanel && !cerrandoSesion && sinEstado && reafirmadas < 3 && now - reacomodoDesde >= 0.6) {
             reacomodoDesde = now;
             ++reafirmadas;
@@ -6007,6 +6034,14 @@ static int cmdServe(int argc, char **argv) {
     {
       static double miradaInteg = 0.0;
       static integ::Vigia vigia;
+      /* (v1.18) un aviso dejado por otro proceso (el actualizador) se ensena con la tarjeta, en cuanto no haya otra */
+      if (hayTarjeta && ov && !ov->askVisible()) {
+        std::string t;
+        std::vector<std::string> l;
+        int cuenta = 0;
+        if (ajuste::tomarAviso(t, l, cuenta))
+          mostrarAviso([t, l](std::string &tt, std::vector<std::string> &ll) { tt = t, ll = l; }, now, (double)cuenta);
+      }
       /* (v1.16) el servicio ya no escribe las lineas por su cuenta (Rodolfo: «stop putting the odyssey parameter by
          yourself»): solo lo que quedo pendiente de un cambio hecho con Steam abierto, al cerrarse (abajo) */
       if (now - miradaInteg >= 2.0) {

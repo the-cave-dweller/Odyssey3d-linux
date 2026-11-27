@@ -145,6 +145,11 @@ std::string rutaRecordar();
 std::string rutaBarra();
 /* el proceso del panel de ajustes abierto (`odysseyvk ajustes`): abrirlo otra vez lo cierra */
 std::string rutaPanel();
+/* (v1.18) un aviso para la tarjeta del servicio, dejado por otro proceso (el actualizador, que corre aparte y durante
+   el que el servicio se reinicia): `cuenta` > 0 = se cierra solo a esos segundos. `tomarAviso` lo lee y lo borra; uno
+   de mas de 10 minutos no vale (se borra igual) */
+bool pedirAviso(const std::string &titulo, const std::vector<std::string> &lineas, int cuenta, std::string *err = nullptr);
+bool tomarAviso(std::string &titulo, std::vector<std::string> &lineas, int &cuenta);
 bool pedirRecordar(const std::string &app, const std::string &modo, std::string *err = nullptr);
 bool tomarRecordar(std::string &app, std::string &modo);
 bool fijarAutoEnServeConf(const std::string &app, const std::string &modo, std::string *err = nullptr);

@@ -38,7 +38,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **La tarjeta de «el juego se cerró»**, solo en los primeros 20 s;
   - **`install.sh`** en silencio (el detalle en `build/compilacion.log`) y 0 avisos del compilador;
   - **El panel**: sin la flecha de volver a la pastilla; la nota de la carpeta de las redes al pie de cada lista;
-  - **El aviso de las opciones de lanzamiento escritas en Steam**, con la tarjeta propia.
+  - **Los avisos con la tarjeta propia**: el de las opciones de lanzamiento escritas en Steam, los del actualizador y
+    el de «el 3D no llegó a empezar».
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
@@ -49,8 +50,15 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   es la tarjeta de OdysseyVK, la de los avisos: «Opciones de lanzamiento escritas en Steam», cuántos juegos y que hay
   una copia de lo de antes; se cierra sola a los 8 s (la cuenta en el botón). Si ya hay otra tarjeta a la vista o no
   hay capa, la del escritorio como antes, para no perderla. `ctl hud`: `ODYSSEYVK_HUD_AVISO=steam`.
-- Siguen con la del escritorio los del actualizador y el desinstalador (corren aparte y el servicio se reinicia o se
-  va) y el de «el 3D no llegó a empezar».
+- Rodolfo, a si también los demás: «lo que sea». **Los del actualizador** («Actualizando OdysseyVK», «La actualización
+  falló» con el registro, «OdysseyVK N instalado») corren aparte y el servicio se reinicia en medio: los deja en
+  `~/.local/state/odysseyvk/aviso` (hora, cuenta, título y renglones, escrito de una vez) y el servicio los enseña con
+  la tarjeta en cuanto no haya otra; el de «instalado», el servicio nuevo al arrancar. Uno de más de 10 minutos no
+  vale. Si el servicio no corre, la notificación del escritorio. Probado: se toma una vez, la segunda no hay nada, y
+  uno de hace 700 s se descarta y se borra.
+- **«El 3D no llegó a empezar»** (el navegador sacado de pantalla completa al cambiar el monitor), con la tarjeta y ya
+  traducido (iba siempre en español); se cierra a los 10 s.
+- **El desinstalador** sigue con la del escritorio: el servicio se quita y no queda quién pinte la tarjeta.
 
 ## El visor ya no se minimiza al abrir o cerrar el panel (lo que «recargaba la imagen» y pausaba el vídeo), y «DLSS» solo con su profundidad (v1.18)
 
