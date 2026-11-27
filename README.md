@@ -166,7 +166,9 @@ soft and dimmed behind them; when the bar hides, the cut goes away with it.
 ![The player bar over a split video](docs/img/player-bar.png)
 
 **Games.** The Games tab lists your Steam library with covers; each game has a 2D | 3D switch.
-Launch from the tab and the game enters 3D on its own when it goes fullscreen. Games must run in
+Set `modo = flat` in `~/.config/odysseyvk/serve.conf` to leave unconfigured
+fullscreen windows and new games in 2D. Enable a game's switch to opt it in.
+Launch an enabled game from the tab and it enters 3D when it goes fullscreen. Games must run in
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
 game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
 OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a

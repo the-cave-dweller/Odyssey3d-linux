@@ -6372,8 +6372,8 @@ static int cmdServe(int argc, char **argv) {
         } else if (fija != cfg.porApp.end() && fija->second == "flat") {
           std::printf("[serve] %s esta marcada como 2D plano: no se hace nada\n", app.c_str());
           std::fflush(stdout);
-        } else if (!esJuego(w.appId) && !dry) {
-          /* rama experimental: siempre automatico (Rodolfo: «it should override, will always be auto now»).
+        } else if (!esJuego(w.appId) && cfg.modo != "flat" && !dry) {
+          /* Salvo con la politica explicita «flat», los videos se detectan automaticamente.
              Ni tarjeta ni el modo guardado para la aplicacion: el visor arranca como video normal, mira los
              primeros segundos y, si es un video dividido, se cambia solo. Los juegos siguen por su camino. */
           hijo = spawnViewer(exe, w.uuid, "detectar", cfg.red, cfg.cada, redActiva, cfg.pantalla, redOtra, cfg.rastreo,

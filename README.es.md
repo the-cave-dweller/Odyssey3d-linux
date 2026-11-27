@@ -172,6 +172,10 @@ que sigue suave y atenuado detrás; cuando la barra se esconde, el corte se va c
 
 ![La barra del reproductor sobre un vídeo dividido](docs/img/es/player-bar.png)
 
+Con `modo = flat` en `~/.config/odysseyvk/serve.conf`, las ventanas a pantalla
+completa y los juegos sin configurar quedan en 2D. Activa el interruptor de un
+juego para que pase a 3D al abrirlo.
+
 **Juegos.** La pestaña Juegos lista tu biblioteca de Steam con carátulas; cada juego tiene su
 interruptor 2D | 3D. Arráncalo desde ahí y el juego entra solo en 3D al ponerse a pantalla
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):

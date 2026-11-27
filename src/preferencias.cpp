@@ -119,6 +119,13 @@ bool esHerramienta(const std::string &nombre) {
   return nombre == "Proton" || nombre.empty();
 }
 
+bool juegoEn3D(const Valores &v, const std::string &id) {
+  const std::string app = "steam_app_" + id;
+  for (auto it = v.recordadas.rbegin(); it != v.recordadas.rend(); ++it)
+    if (it->first == app) return it->second != "flat";
+  return v.modo != "flat";
+}
+
 bool si(const std::string &v, bool porDefecto) {
   const std::string s = strLower(v);
   if (s.empty()) return porDefecto;
@@ -281,7 +288,7 @@ Valores leer() {
     return it == c.end() ? std::string() : it->second;
   };
   const std::string modo = strLower(de("modo"));
-  v.modo = (modo == "conv" || modo == "sbs" || modo == "suave") ? (modo == "suave" ? "sbs" : modo) : "ask";
+  v.modo = (modo == "conv" || modo == "sbs" || modo == "flat") ? modo : (modo == "suave" ? "sbs" : "ask");
   {
     const std::string ds = strLower(de("dividido_suavizado"));
     v.suavizar = (ds == "auto" || ds == "automatico") ? 2 : (si(ds, true) ? 1 : 0);
@@ -976,10 +983,7 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       Hud::ItemPanel fila;
       fila.tipo = Hud::ItemPanel::Juego, fila.rotulo = j.nombre;
       fila.img = j.cara, fila.imgW = j.caraW, fila.imgH = j.caraH;
-      /* 3D salvo que este apuntado como «sin 3D»: su ventana se llama steam_app_<id> */
-      fila.valor = true;
-      for (const auto &par : v.recordadas)
-        if (par.first == "steam_app_" + j.id && par.second == "flat") fila.valor = false;
+      fila.valor = juegoEn3D(v, j.id);
       pon(fila, "juego:" + j.id);
     }
     Hud::ItemPanel n;
@@ -1249,9 +1253,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id.rfind("juego:", 0) == 0) {
     const std::string ap = id.substr(6);
-    bool en3d = true;
-    for (const auto &par : v.recordadas)
-      if (par.first == "steam_app_" + ap && par.second == "flat") en3d = false;
+    const bool en3d = juegoEn3D(v, ap);
     if (sub == 1) {
       /* la pastillita: ese juego entra en 3D solo (conversor) o se deja en 2D sin preguntar */
       if (!ajuste::fijarAutoEnServeConf("steam_app_" + ap, en3d ? "flat" : "conv", &e)) {
