@@ -218,6 +218,7 @@ add_executable(odysseyvk
   src/integraciones.cpp
   src/efectos.cpp
   src/efectos_vk.cpp
+  src/efectos_fuentes.cpp
   src/capasajenas.cpp
   src/panel_ajustes.cpp
   src/idioma.cpp

@@ -1821,6 +1821,17 @@ int tomarPestana() {
 
 void integracionesDe(const std::string &appid) { g_integJuego = appid; }
 
+/* (v1.18) lo de las fuentes de efectos: cambia mientras se comprueba o se baja (el panel rehace la pestana) */
+std::string firmaEfectos() {
+  std::string f;
+  for (const char *n : {"efectos-fuentes", "efectos-bajada", "efectos-comprobando"}) {
+    struct stat sb {};
+    if (::stat(rutaEstadoOdyssey(n).c_str(), &sb) == 0) f += std::to_string((long long)sb.st_mtim.tv_sec) + "." + std::to_string(sb.st_mtim.tv_nsec);
+    f += "|";
+  }
+  return f + (efectos::comprobando() ? "c" : "") + (efectos::leerBajada().enMarcha ? "b" : "");
+}
+
 std::string firmaIntegraciones() {
   /* (v1.18) y la instalacion de MAKO FG: lo que lleva (su fichero cambia mientras baja) y si ya esta */
   std::string mfg;
@@ -2115,6 +2126,7 @@ namespace {
 std::string g_efectosDe;               /* los efectos que ensena la pestana: vacio o "*" = los de todos los juegos, o un appid */
 bool g_efectosDesdeJuegos = false;     /* se abrio desde una caratula: Volver lleva a Juegos */
 std::string g_juegoDelPanel;           /* el juego sobre el que se abrio el panel (un boton a sus efectos) */
+bool g_fuentesSolas = false;           /* (v1.18) el panel de verdad mira las fuentes solo (la prueba del HUD, no: sin red) */
 
 std::string numeroEfecto(float v, const efectos::Control &c) {
   if (c.tipo == efectos::Control::Entero || c.tipo == efectos::Control::Lista) return std::to_string((long)std::lround(v));
@@ -2278,12 +2290,15 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   pon(sa, "");
   Hud::ItemPanel dsp;
   dsp.tipo = Hud::ItemPanel::Desplegable, dsp.elegido = -1, dsp.valorTexto = idioma::tr("Elige uno…");
+  /* (v1.18) en dos grupos, los que usan la profundidad y los que no, en la tarjeta entera (ver ItemPanel::grupos) */
+  dsp.grupos = {idioma::tr("Usan la profundidad"), idioma::tr("Sin profundidad")};
   std::string idd = "lista:efx-anadir";
   for (const auto &[n, r] : disp) {
     bool ya = false;
     for (const efectos::Efecto &e : a.lista) ya = ya || e.nombre == n;
     if (ya) continue;
     dsp.opciones.push_back(n), dsp.ayudas.push_back(""), dsp.estadosOpc.push_back(0);
+    dsp.grupoOpc.push_back(efectos::usaProfundidad(r) ? 0 : 1);
     idd += '\x1f' + std::string("efx:anadir:") + n;
   }
   pon(dsp, idd);
@@ -2297,12 +2312,102 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     n2.rotulo = idioma::tr("Los efectos (.fx) de ReShade corren en el visor 3D sobre cada cuadro del juego, con la profundidad del 3D. Cada juego puede tener los suyos: el icono de efectos de su carátula, en Juegos.");
     pon(n2, "");
   }
+  /* (v1.18) las fuentes publicas (efectos.h): en la de todos los juegos, con su boton de bajar solo lo que falta. Se mira
+     sola al abrir si la ultima vez fue hace mas de 12 horas, como lo de la version */
+  if (!app.empty() || carpeta.empty()) return;
+  const bool mirando = efectos::comprobando();
+  const long hora = efectos::horaComprobacion();
+  static bool pedida = false;
+  if (g_fuentesSolas && !pedida && !mirando && (long)std::time(nullptr) - hora > 12 * 3600) {
+    pedida = true;
+    efectos::lanzarOrden({"fuentes"});
+  }
+  Hud::ItemPanel sf;
+  sf.tipo = Hud::ItemPanel::Seccion, sf.rotulo = idioma::tr("FUENTES PÚBLICAS");
+  pon(sf, "");
+  Hud::ItemPanel bm;
+  bm.tipo = Hud::ItemPanel::Boton, bm.rotulo = idioma::tr("Buscar cambios en GitHub");
+  if (mirando) {
+    bm.nota = idioma::tr("Mirando lo que falta de cada una…");
+  } else if (hora > 0) {
+    char cuando[32];
+    const time_t t = (time_t)hora;
+    std::strftime(cuando, sizeof cuando, "%d/%m %H:%M", std::localtime(&t));
+    bm.nota = idioma::trf("Mirado el {}: solo se baja lo que no tienes, comparado por su contenido", {cuando});
+  } else {
+    bm.nota = idioma::tr("Solo se baja lo que no tienes, comparado por su contenido");
+  }
+  bm.valorTexto = idioma::tr("Buscar"), bm.valor = !mirando;
+  pon(bm, "efx:fuentes");
+  const auto estados = efectos::leerFuentes();
+  const efectos::Bajada baj = efectos::leerBajada();
+  auto tamano = [](long long b) {
+    char t[32];
+    if (b < 1024 * 1024) std::snprintf(t, sizeof t, "%lld KB", std::max(1LL, (b + 1023) / 1024));
+    else std::snprintf(t, sizeof t, "%.1f MB", (double)b / (1024.0 * 1024.0));
+    return std::string(t);
+  };
+  for (const efectos::Fuente &f : efectos::fuentesPublicas()) {
+    Hud::ItemPanel r;
+    r.tipo = Hud::ItemPanel::Boton, r.rotulo = idioma::tr(f.nombre);
+    r.nota = std::string(f.repo) + " · " + idioma::tr(f.nota);
+    const auto it = estados.find(f.id);
+    const bool bajando = baj.enMarcha && baj.id == f.id;
+    if (bajando) {
+      r.valorTexto = baj.total > 0 ? idioma::trf("Bajando {} de {}", {std::to_string(baj.hecho), std::to_string(baj.total)})
+                                   : std::string(idioma::tr("Mirando…"));
+      r.valor = false;
+    } else if (it == estados.end()) {
+      r.valorTexto = idioma::tr("Descargar"), r.valor = !mirando && !baj.enMarcha;
+    } else if (it->second.error == "no-encontrada") {
+      r.valorTexto = idioma::tr("No está en GitHub"), r.valor = false;
+    } else if (!it->second.error.empty()) {
+      r.nota += " · " + std::string(it->second.error == "limite" ? idioma::tr("GitHub no respondió por ahora") : it->second.error);
+      r.valorTexto = idioma::tr("Reintentar"), r.valor = !mirando && !baj.enMarcha;
+    } else if (it->second.nuevos + it->second.cambian == 0) {
+      r.valorTexto = idioma::tr("Ya la tienes"), r.valor = false;   /* en gris: nada que bajar */
+    } else {
+      const int n = it->second.nuevos + it->second.cambian;
+      r.valorTexto = idioma::trf("Descargar · {} · {}", {n == 1 ? std::string(idioma::tr("1 archivo")) : idioma::trf("{} archivos", {std::to_string(n)}),
+                                                        tamano(it->second.bytes)});
+      r.valor = !mirando && !baj.enMarcha;
+      r.nota += " · " + idioma::trf("{} nuevos, {} cambiados", {std::to_string(it->second.nuevos), std::to_string(it->second.cambian)});
+    }
+    if (it != estados.end() && it->second.conflictos > 0)
+      r.nota += " · " + idioma::trf("{} con el nombre de uno tuyo: no se duplican", {std::to_string(it->second.conflictos)});
+    if (!bajando && baj.id == f.id && !baj.error.empty())
+      r.nota += " · " + idioma::trf("no se pudo: {}", {baj.error == "cortada" ? std::string(idioma::tr("se cortó a medias")) : baj.error});
+    pon(r, std::string("efx:fuente:") + f.id);
+  }
 }
 
 static bool aplicarEfectos(const std::string &que, int sub, float frac, std::string *aviso) {
   if (que.rfind("abrir:", 0) == 0) {
     g_efectosDe = que.substr(6), g_efectosDesdeJuegos = false;
     g_pestanaPedida = 5;
+    return true;
+  }
+  /* (v1.18) las fuentes publicas: buscar cambios, o bajar lo que falta de una (o volver a mirarla si dio error) */
+  if (que == "fuentes" || que.rfind("fuente:", 0) == 0) {
+    if (efectos::comprobando() || efectos::leerBajada().enMarcha) {
+      if (aviso) *aviso = idioma::tr("ya hay una en marcha: espera a que acabe");
+      return false;
+    }
+    std::string err;
+    if (que == "fuentes") {
+      if (!efectos::lanzarOrden({"fuentes"}, &err)) return false;
+      if (aviso) *aviso = idioma::tr("buscando cambios en GitHub…");
+      return true;
+    }
+    const std::string id = que.substr(7);
+    const auto est = efectos::leerFuentes();
+    const auto it = est.find(id);
+    const bool remirar = it != est.end() && !it->second.error.empty();
+    if (!efectos::lanzarOrden(remirar ? std::vector<std::string>{"fuentes", id} : std::vector<std::string>{"bajar", id}, &err)) {
+      if (aviso) *aviso = idioma::trf("no se pudo: {}", {err});
+      return false;
+    }
+    if (aviso) *aviso = idioma::tr(remirar ? "mirándola otra vez…" : "bajando solo lo que falta…");
     return true;
   }
   if (que == "volver") {   /* a los de todos, o a Juegos si se vino de una caratula */
@@ -2415,6 +2520,7 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
 }
 
 void juegoDelPanel(const std::string &appid) { g_juegoDelPanel = appid; }
+void fuentesSolas(bool si) { g_fuentesSolas = si; }
 void efectosDe(const std::string &que) { g_efectosDe = que; }
 
 static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {

@@ -85,6 +85,10 @@ struct Descripcion {
   bool usaProfundidad = false;   /* tiene una textura DEPTH */
   bool computo = false;          /* tiene pases de computo: aqui no corren */
 };
+/* (v1.18) si el .fx usa la profundidad: lo dice su texto (GetLinearizedDepth, DepthBuffer, `: DEPTH`, la de qUINT...).
+   ReShade.fxh declara la textura DEPTH para todos, asi que el modulo no sirve. Sin compilar: rapido para las 139 de la
+   lista de añadir. MEDIDO en la carpeta de Rodolfo: 39 de 139 */
+bool usaProfundidad(const std::string &ruta);
 /* compila el .fx (sin SPIR-V) y saca sus controles; se guarda por ruta y hora de cambio */
 Descripcion describir(const std::string &ruta);
 /* el valor de un control: el de los ajustes o, si no lo dicen, el del .fx */
@@ -103,5 +107,43 @@ std::shared_ptr<Compilado> compilar(const std::string &ruta, int ancho, int alto
                                     const std::vector<std::pair<std::string, std::string>> &defs);
 /* una textura de un .fx (su anotacion `source`): busca en las carpetas de texturas */
 std::string rutaTextura(const std::string &nombre);
+
+/* ---- (v1.18) fuentes publicas de efectos: los repositorios de ReShade mas conocidos, con su boton de bajar ----
+   Rodolfo: «add some public shader sources to the list with their download button» y «gray out already downloaded one
+   unless the files differ, never duplicate files, always download the difference». No se baja el repositorio entero: se
+   pide su arbol a GitHub (la API de arboles: cada archivo con su SHA-1 de git) y se compara con lo que ya hay en la
+   carpeta de ReShade, por contenido. Lo que ya esta (en cualquier sitio) no se baja; lo que esta en el mismo sitio y es
+   distinto se pone en su lugar (con copia en ~/.local/state/odysseyvk/efectos-copia/); lo que falta pero se llama como
+   otro archivo tuyo en otro sitio no se baja (seria un duplicado: «conflicto»); lo demas se baja. Solo lo de Shaders/ y
+   Textures/ del repositorio, cada uno a la de la carpeta; ReShade.fxh y ReShadeUI.fxh solo de los de crosire. Cada
+   archivo bajado se comprueba con su SHA-1 de git antes de ponerlo. Lo hace `odysseyvk efectos fuentes` (comprobar) y
+   `odysseyvk efectos bajar ID` (efectos_fuentes.cpp, con libcrypto); el panel los arranca aparte y lee como van */
+struct Fuente {
+  const char *id, *nombre, *repo, *nota;
+};
+const std::vector<Fuente> &fuentesPublicas();
+/* lo que dijo la ultima comprobacion de una (~/.local/state/odysseyvk/efectos-fuentes) */
+struct EstadoFuente {
+  bool comprobada = false;
+  int nuevos = 0, cambian = 0, conflictos = 0, total = 0;
+  long long bytes = 0;
+  long hora = 0;
+  std::string error;   /* «no-encontrada», «limite» (GitHub dijo que no por ahora) u otro */
+};
+std::map<std::string, EstadoFuente> leerFuentes();
+long horaComprobacion();            /* la de la ultima comprobacion completa, 0 si nunca */
+bool comprobando();                 /* hay una `odysseyvk efectos fuentes` en marcha */
+/* la bajada en marcha o la ultima (~/.local/state/odysseyvk/efectos-bajada) */
+struct Bajada {
+  bool enMarcha = false, lista = false;
+  std::string id, error;
+  long hecho = 0, total = 0, hora = 0;
+};
+Bajada leerBajada();
+/* `odysseyvk efectos ARGS...`, aparte y suelto (como mako::lanzarOrden) */
+bool lanzarOrden(const std::vector<std::string> &args, std::string *err = nullptr);
+/* (efectos_fuentes.cpp, solo en `odysseyvk`) comprobar unas (todas si `ids` va vacio) y bajar una */
+int comprobarFuentes(const std::vector<std::string> &ids, bool decir);
+bool bajarFuente(const std::string &id, std::string *err);
 
 }  // namespace efectos

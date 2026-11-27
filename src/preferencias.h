@@ -196,6 +196,10 @@ void juegoDelPanel(const std::string &appid);
 void efectosDe(const std::string &que);
 /* (v1.15) lo que, si cambia, hay que rehacer la pestana Integraciones (integ::firma y el «Copiado» del boton) */
 std::string firmaIntegraciones();
+/* (v1.18) que la pestana de efectos mire sola las fuentes publicas en GitHub (solo el panel de verdad; la prueba del HUD no) */
+void fuentesSolas(bool si);
+/* (v1.18) lo de las fuentes publicas de efectos (lo que se comprueba o se baja aparte) */
+std::string firmaEfectos();
 /* para ctl hud: como si se estuviera escribiendo `texto` en el campo `clave` */
 void probarEdicion(const std::string &clave, const std::string &texto);
 

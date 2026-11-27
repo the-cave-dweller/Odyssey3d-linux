@@ -122,7 +122,39 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     mueven los deslizadores.
   - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
-## Teclas de juego, la generación de cada juego en Integraciones y Neural Forge fuera tras un fallo (v1.18)
+## Efectos: añadir por grupos en toda la pantalla, y las fuentes públicas bajando solo la diferencia (v1.18)
+
+- Rodolfo: «make the add effect option on the main tab show a list that is classified by depth and not depth, use the
+  space on the screen more appropiately, and show scroll buttons that autoscrool on hover, just not extremely quick»,
+  «add some public shader sources to the list with their download button» y «gray out already downloaded one unless the
+  files differ, never duplicate files, always download the difference».
+- **Añadir un efecto**: ya no cuelga una lista de 137 nombres de su caja (salía de 4.900 puntos de alto, sin correr).
+  Abierto ocupa el panel de orilla a orilla y hasta abajo con dos grupos lado a lado, «Usan la profundidad» (39 en la
+  carpeta de Rodolfo) y «Sin profundidad» (93), cada uno en las columnas que quepan y con un aspa para cerrarlo; en la
+  vista previa, dentro de la columna, uno encima del otro. Lo de la profundidad lo dice el texto de cada .fx
+  (`GetLinearizedDepth`, `DepthBuffer`, `: DEPTH`, la de qUINT...): ReShade.fxh declara la textura DEPTH para todos.
+- **Correr**: si un grupo no cabe, sus botones de arriba y abajo corren solos con el ratón encima, sin prisa: empiezan
+  a ~140 puntos por segundo (unos 4 renglones) y llegan a ~320 en 1,5 s; se paran al final y el botón se va. La rueda
+  corre el grupo que tenga debajo. MEDIDO con `ODYSSEYVK_HUD_AUTOCORRER`: 140 puntos en 1 s, y se para en los 174 que
+  le sobraban al grupo.
+- **Fuentes públicas** (en los efectos de todos los juegos): ReShade (crosire), SweetFX, qUINT, iMMERSE, prod80,
+  AstrayFX, Depth3D, FXShaders, fubax, OtisFX, CShade, Insane-Shaders y DH, cada una con su botón. No se baja el
+  repositorio: `odysseyvk efectos fuentes` pide a GitHub su árbol (cada archivo con su SHA-1 de git) y lo compara por
+  contenido con lo que hay en la carpeta de ReShade (Shaders/ y Textures/). Lo que ya está, en cualquier sitio, no se
+  baja; lo que está en el mismo sitio y es distinto se cambia (el de antes, en `~/.local/state/odysseyvk/efectos-copia/`);
+  lo que se llama como uno tuyo en otro sitio no se baja (no se duplica: «con el nombre de uno tuyo»); ReShade.fxh y
+  ReShadeUI.fxh solo de los de crosire. `odysseyvk efectos bajar ID` baja solo eso, comprueba cada archivo con su SHA-1
+  y, si uno no cuadra, no pone ninguno. Una fuente sin nada que bajar sale en gris, «Ya la tienes». Se mira sola al abrir
+  la pestaña si la última vez fue hace más de 12 h (como lo de la versión), y con «Buscar».
+- **La profundidad en el registro**: «[efectos] con la profundidad del 3D (WxH)» cuando empieza a llegar y «sin
+  profundidad del 3D» si no hay (Rodolfo: «no tiene sentido que ninguno tenga profundidad, les diste acceso?»: los cinco
+  de su lista no la leen; la reciben los que la usan).
+- **Probado sin red**, con un árbol y unos archivos falsos (`ODYSSEYVK_EFECTOS_API` y `ODYSSEYVK_EFECTOS_RAW` a `file://`)
+  y una carpeta de prueba: SweetFX con 8 archivos dio 6 que cuentan, 2 nuevos, 1 cambiado y 1 con tu nombre; bajó solo
+  esos 3 (con la copia del cambiado), nada duplicado, una ruta con espacios bien, y después 0 que bajar; uno que no
+  cuadra con su SHA-1 para la bajada sin poner nada; la de crosire, en gris; las que no están, «No está en GitHub». Sin
+  probar contra GitHub de verdad (los nombres de los repositorios no se han comprobado: el que no exista lo dirá).
+
 
 - Rodolfo: «only show fps overlay once the hub pill is hidden, remember generation preferences per game and include them in
   their parameter list, enabling game frame time also implies that non dlss model counter show real, generated and on

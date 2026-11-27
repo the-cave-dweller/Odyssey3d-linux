@@ -798,10 +798,15 @@ void CadenaEfectos::grabar(VkCommandBuffer cb, VkImage fuente, int w, int h, VkI
     bp.srcOffsets[1] = {pw, ph, 1};
     bp.dstOffsets[1] = {(int32_t)prof_.w, (int32_t)prof_.h, 1};
     vkCmdBlitImage(cb, prof, VK_IMAGE_LAYOUT_GENERAL, prof_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bp, VK_FILTER_LINEAR);
+    /* (v1.18) en el registro, cuando empieza o deja de llegar (Rodolfo: «no tiene sentido que ninguno tenga profundidad, les
+       diste acceso?»): asi se ve si los efectos que la leen la tienen */
+    if (!profPuesta_) std::printf("[efectos] con la profundidad del 3D (%dx%d)\n", pw, ph), std::fflush(stdout);
     profPuesta_ = true;
   } else if (profPuesta_ || cuadros_ == 1) {
     VkClearColorValue c{};
     vkCmdClearColorImage(cb, prof_.img, VK_IMAGE_LAYOUT_GENERAL, &c, 1, &todoRango);
+    std::printf("[efectos] sin profundidad del 3D: la de ReShade queda lejos en todo el cuadro\n");
+    std::fflush(stdout);
     profPuesta_ = false;
   }
   barreraTodo(cb);

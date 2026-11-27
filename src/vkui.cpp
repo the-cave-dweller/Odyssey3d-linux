@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -2841,8 +2842,98 @@ void Hud::dibujaPanel(int vw, int vh) {
      cada opcion con su etiqueta en azul (esta) o en gris (se baja al picarla) y la palomita en la puesta */
   panelDespOpc_.clear();
   panelDespCaja_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  /* (v1.18) el desplegable por grupos (ItemPanel::grupos): en vez de colgar de su caja ocupa el cuerpo de la tarjeta, los
+     grupos lado a lado (en la columna de la vista previa, uno encima del otro: la columna es la region de entrada), cada
+     uno con su titulo y cuantas lleva, sus opciones en las columnas de ~200 puntos que quepan y, si no caben, los botones
+     de correr arriba y abajo, que corren solos con el raton encima (autodesplazar) */
+  {
+    const Rect nada{-10.0f, -10.0f, 0.0f, 0.0f};
+    int grupoRaton = -1, dirRaton = 0;
+    for (int g = 0; g < 2; g++) despGrupo_[g] = despBoton_[g][0] = despBoton_[g][1] = nada;
+    despCerrar_ = nada;
+    const bool porGrupos = st_.desplegado >= 0 && (size_t)st_.desplegado < st_.items.size() &&
+                           st_.items[(size_t)st_.desplegado].tipo == ItemPanel::Desplegable && !st_.items[(size_t)st_.desplegado].grupos.empty();
+    if (porGrupos) {
+      const ItemPanel &it = st_.items[(size_t)st_.desplegado];
+      const bool columna = st_.depuracion || st_.vistaPrevia;
+      /* en el panel, de orilla a orilla y hasta abajo (la region de entrada es la pantalla entera: hay sitio para mas
+         columnas que en la tarjeta); en la columna, la columna */
+      const Rect zona = columna ? Rect{panelCuerpo_.x, panelCuerpo_.y, panelCuerpo_.w - 4.0f, panelCuerpo_.h}
+                                : Rect{panelCaja_.x + 24.0f, panelCuerpo_.y, panelCaja_.w - 48.0f,
+                                       std::max(panelCuerpo_.h, panelCaja_.y + panelCaja_.h - panelCuerpo_.y - 24.0f)};
+      panelDespCaja_ = zona;
+      mask9(zona, 1, 8.0f, Hud::canal(pal_.filo, 0), Hud::canal(pal_.filo, 1), Hud::canal(pal_.filo, 2), 1.0f);
+      mask9({zona.x + 1.0f, zona.y + 1.0f, zona.w - 2.0f, zona.h - 2.0f}, 1, 7.0f, Hud::canal(pal_.tarjeta, 0),
+            Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 1.0f);
+      panelDespOpc_.assign(it.opciones.size(), nada);
+      /* el aspa: lo cierra (en la columna no hay fuera donde picar) */
+      despCerrar_ = {zona.x + zona.w - 34.0f, zona.y + 8.0f, 26.0f, 26.0f};
+      {
+        const bool hc = despCerrar_.inside(mx_, my_);
+        if (hc) mask9(despCerrar_, 0, R(13.0f), Hud::canal(pal_.controlHov, 0), Hud::canal(pal_.controlHov, 1), Hud::canal(pal_.controlHov, 2), 1.0f);
+        icono({despCerrar_.x + 4.0f, despCerrar_.y + 4.0f, 18.0f, 18.0f}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.75f);
+      }
+      const int nG = std::min<int>(2, (int)it.grupos.size());
+      const float pad = 12.0f, entre = 16.0f, hTit = 30.0f, hBot = 26.0f, hCel = 32.0f;
+      for (int g = 0; g < nG; g++) {
+        const Rect pane = columna ? Rect{zona.x + pad, zona.y + pad + (float)g * ((zona.h - 2.0f * pad - entre * (float)(nG - 1)) / (float)nG + entre),
+                                         zona.w - 2.0f * pad, (zona.h - 2.0f * pad - entre * (float)(nG - 1)) / (float)nG}
+                                  : Rect{zona.x + pad + (float)g * ((zona.w - 2.0f * pad - entre * (float)(nG - 1)) / (float)nG + entre),
+                                         zona.y + pad, (zona.w - 2.0f * pad - entre * (float)(nG - 1)) / (float)nG, zona.h - 2.0f * pad};
+        despGrupo_[g] = pane;
+        std::vector<size_t> ks;
+        for (size_t k = 0; k < it.opciones.size(); k++)
+          if (k < it.grupoOpc.size() && it.grupoOpc[k] == g) ks.push_back(k);
+        fuente_ = hayBarlow_ ? 2 : 0;
+        textoCabe(it.grupos[(size_t)g], pane.x + 4.0f, pane.y + 5.0f, 15.0f, pane.w - 60.0f, 1.0f, 1.0f, 1.0f, 0.95f);
+        fuente_ = hayBarlow_ ? 1 : 0;
+        const std::string cuantas = std::to_string(ks.size());
+        const float bajoAspa = (columna ? g == 0 : g == nG - 1) ? 34.0f : 0.0f;   /* el grupo de arriba a la derecha deja sitio al aspa */
+        text(cuantas, pane.x + pane.w - 4.0f - bajoAspa - textWidth(cuantas, 12.5f), pane.y + 7.0f, 12.5f, dim[0], dim[1], dim[2], 0.9f);
+        const Rect rejilla{pane.x, pane.y + hTit + hBot, pane.w, std::max(hCel, pane.h - hTit - 2.0f * hBot)};
+        const int cols = std::max(1, (int)(rejilla.w / 200.0f));
+        const float wCel = rejilla.w / (float)cols;
+        const float alto = (float)((ks.size() + (size_t)cols - 1) / (size_t)cols) * hCel;
+        despTope_[g] = std::max(0.0f, alto - rejilla.h);
+        float &corr = st_.despCorrida[g];
+        corr = std::max(0.0f, std::min(despTope_[g], corr));
+        /* los botones de correr: solo si se puede ir para ese lado */
+        auto boton = [&](const Rect &b, int dir, bool puede) {
+          if (!puede) return;
+          despBoton_[g][dir > 0 ? 1 : 0] = b;
+          const bool hb = b.inside(mx_, my_);
+          if (hb) grupoRaton = g, dirRaton = dir;
+          const uint32_t c = hb ? pal_.controlHov : pal_.control;
+          mask9(b, 0, R(6.0f), Hud::canal(c, 0), Hud::canal(c, 1), Hud::canal(c, 2), 1.0f);
+          icono({b.x + b.w * 0.5f - 8.0f, b.y + (b.h - 16.0f) * 0.5f, 16.0f, 16.0f}, dir < 0 ? icoFlecha_ : icoBajar_, ink[0], ink[1],
+                ink[2], hb ? 1.0f : 0.75f);
+        };
+        boton({pane.x, pane.y + hTit, pane.w, hBot - 4.0f}, -1, corr > 0.5f);
+        boton({pane.x, rejilla.y + rejilla.h + 4.0f, pane.w, hBot - 4.0f}, 1, corr < despTope_[g] - 0.5f);
+        /* las opciones, recortadas a su rejilla */
+        const Rect antes = recorte_;
+        const bool habia = hayRecorte_;
+        recorte_ = rejilla, hayRecorte_ = true;
+        for (size_t j = 0; j < ks.size(); j++) {
+          const size_t k = ks[j];
+          const Rect o{rejilla.x + (float)(j % (size_t)cols) * wCel + 2.0f, rejilla.y + (float)(j / (size_t)cols) * hCel - corr + 2.0f,
+                       wCel - 4.0f, hCel - 4.0f};
+          if (o.y + o.h < rejilla.y || o.y > rejilla.y + rejilla.h) continue;
+          const float y0 = std::max(o.y, rejilla.y), y1 = std::min(o.y + o.h, rejilla.y + rejilla.h);
+          panelDespOpc_[k] = {o.x, y0, o.w, y1 - y0};
+          const bool ho = panelDespOpc_[k].inside(mx_, my_) && dirRaton == 0;
+          if (ho) mask9(o, 0, R(6.0f), Hud::canal(pal_.controlHov, 0), Hud::canal(pal_.controlHov, 1), Hud::canal(pal_.controlHov, 2), 1.0f);
+          textoCabe(it.opciones[k], o.x + 10.0f, o.y + 7.0f, 14.0f, o.w - 20.0f, ink[0], ink[1], ink[2], ho ? 1.0f : 0.92f);
+        }
+        recorte_ = antes, hayRecorte_ = habia;
+      }
+    }
+    if (grupoRaton != autoGrupo_ || dirRaton != autoDir_)
+      autoDesde_ = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    autoGrupo_ = grupoRaton, autoDir_ = dirRaton;
+  }
   if (st_.desplegado >= 0 && (size_t)st_.desplegado < st_.items.size() && despCaja.w > 0.0f &&
-      st_.items[(size_t)st_.desplegado].tipo == ItemPanel::Desplegable) {
+      st_.items[(size_t)st_.desplegado].tipo == ItemPanel::Desplegable && st_.items[(size_t)st_.desplegado].grupos.empty()) {
     const ItemPanel &it = st_.items[(size_t)st_.desplegado];
     const float hOp = 36.0f, hLista = hOp * (float)it.opciones.size() + 8.0f;
     /* dentro de la caja del panel (la region de entrada: en la vista de depuracion, la columna) */
@@ -3013,6 +3104,20 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
         if (sub) *sub = 100 + (int)k;
         return HitPanelItem;
       }
+  /* (v1.18) el resto de un desplegable por grupos (su fondo, sus titulos, sus botones de correr): el sub 50, que no hace
+     nada (ni lo cierra) */
+  if (st_.desplegado >= 0 && (size_t)st_.desplegado < st_.items.size() && !st_.items[(size_t)st_.desplegado].grupos.empty() &&
+      panelDespCaja_.inside(mx, my)) {
+    if (item) *item = st_.desplegado;
+    /* el aspa 51; cada boton de correr el suyo (52 a 55: el panel repinta al cambiar lo que hay bajo el raton, y asi
+       empieza a correr), y el fondo 50 */
+    int s = despCerrar_.inside(mx, my) ? 51 : 50;
+    for (int g = 0; g < 2; g++)
+      for (int d = 0; d < 2; d++)
+        if (despBoton_[g][d].inside(mx, my)) s = 52 + g * 2 + d;
+    if (sub) *sub = s;
+    return HitPanelItem;
+  }
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (st_.marco && panelVolver_.inside(mx, my)) return HitPanelVolver;   /* (v1.16) */
@@ -3123,7 +3228,24 @@ float Hud::fracDeslizador(int item, float mxa) const {
   return std::max(0.0f, std::min(1.0f, (mxa / sc_ - p.x) / std::max(1.0f, p.w)));
 }
 
+bool Hud::autodesplazar(float dt) {
+  if (autoDir_ == 0 || autoGrupo_ < 0 || autoGrupo_ > 1) return false;
+  const double t = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count() - autoDesde_;
+  /* ni muy deprisa (Rodolfo: «just not extremely quick»): empieza a ~4 renglones por segundo y llega a ~10 */
+  const float v = 140.0f + 180.0f * (float)std::min(1.0, std::max(0.0, t) / 1.5);
+  float &c = st_.despCorrida[autoGrupo_];
+  const float antes = c;
+  c = std::max(0.0f, std::min(despTope_[autoGrupo_], c + (float)autoDir_ * v * std::max(0.0f, std::min(dt, 0.1f))));
+  return c != antes;
+}
+
 void Hud::correr(float cuanto) {
+  /* (v1.18) con un desplegable por grupos abierto, la rueda corre el grupo que tenga debajo (y la lista de detras, no) */
+  if (st_.desplegado >= 0 && (size_t)st_.desplegado < st_.items.size() && !st_.items[(size_t)st_.desplegado].grupos.empty()) {
+    for (int g = 0; g < 2; g++)
+      if (despGrupo_[g].inside(mx_, my_)) st_.despCorrida[g] = std::max(0.0f, std::min(despTope_[g], st_.despCorrida[g] + cuanto));
+    return;
+  }
   const float tope = std::max(0.0f, contenidoAlto_ - panelCuerpo_.h);
   st_.corrida = std::max(0.0f, std::min(tope, st_.corrida + cuanto));
 }

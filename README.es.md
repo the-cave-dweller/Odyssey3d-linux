@@ -58,7 +58,10 @@ Lo que tienes:
   la profundidad del 3D como bufer de profundidad de ReShade (así los de profundidad valen en cualquier juego). Cada
   efecto con su pastilla y sus deslizadores; todos los juegos comparten unos y cualquiera puede tener los suyos
   (`~/.config/odysseyvk/effects/`). *Vista previa*, junto al nombre
-  de la pestaña, deja la lista en una columna a la izquierda y quita lo demás, para ajustarlos con el juego a la vista. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
+  de la pestaña, deja la lista en una columna a la izquierda y quita lo demás, para ajustarlos con el juego a la vista. *Añadir un efecto* abre un selector a lo ancho de la pantalla con los que usan
+  la profundidad y los que no, que corre solo con el ratón sobre sus botones. Las *fuentes públicas* (ReShade, SweetFX,
+  qUINT, prod80, AstrayFX...) bajan solo los archivos que no tienes, comparados por contenido con GitHub y sin duplicar
+  ninguno; la que no tiene nada nuevo sale en gris. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
 - **Teclas de juego.** Solo sobre un juego: `Insert` oculta o muestra la pastilla, `Supr` cambia la profundidad entre
   DLSS y el modelo elegido, `Fin` enciende o apaga la generación de cuadros de MAKO, `RePág` / `AvPág` dan x2 → x3 → x4 y
   al revés (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda

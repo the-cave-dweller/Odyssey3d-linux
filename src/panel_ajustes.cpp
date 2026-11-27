@@ -160,6 +160,7 @@ int cmdAjustes(int argc, char **argv) {
   std::vector<std::string> ids;
   std::vector<std::string> menuClaves;   /* (v1.17) lo de cada opcion del menu de la tesela del cuadrito */
   Hud::State &st = ov.hud().state();
+  prefs::fuentesSolas(true);   /* (v1.18) la pestana de efectos mira las fuentes publicas sola cada 12 h */
   st.pestana = enJuegos ? 1 : 0;
   st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
   st.desdePastilla = desdePastilla || entornoOdyssey("ODYSSEYVK_DESDE_PASTILLA");   /* (v1.16) la flecha de volver */
@@ -351,9 +352,21 @@ int cmdAjustes(int argc, char **argv) {
   /* (v1.16) la aparicion: la interfaz sale de la pastilla y se hace opaca (ver abajo) */
   const double t0Aparicion = reloj();
   while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
-    ov.waitAndDispatch(st.aparicion < 1.0f ? 8 : (guion.empty() ? 100 : 20));
+    /* (v1.18) y mientras corre solo un desplegable por grupos, a ~60 cuadros por segundo */
+    ov.waitAndDispatch(st.aparicion < 1.0f ? 8 : (ov.hud().autodesplazando() ? 16 : (guion.empty() ? 100 : 20)));
     Overlay::Golpe g;
     bool repintar = false;
+    /* (v1.18) el raton encima de un boton de correr del desplegable por grupos: corre solo, por el tiempo que paso */
+    {
+      static double tAuto = -1.0;
+      if (ov.hud().autodesplazando()) {
+        const double ahora = reloj();
+        if (tAuto > 0.0 && ov.hud().autodesplazar((float)(ahora - tAuto))) repintar = true;
+        tAuto = ahora;
+      } else {
+        tAuto = -1.0;
+      }
+    }
     if (st.aparicion < 1.0f) {
       /* (v1.16) en 0,16 s y saliendo deprisa (1 - (1 - t)^3): enseguida se ve casi entera */
       const double t = std::min(1.0, (reloj() - t0Aparicion) / 0.16);
@@ -649,8 +662,11 @@ int cmdAjustes(int argc, char **argv) {
         bool seguir = true;
         if (id.rfind("lista:", 0) == 0) {
           repintar = true;
-          if (g.sub < 100) {
+          if (g.sub >= 50 && g.sub < 100 && g.sub != 51) {
+            seguir = false;   /* (v1.18) el fondo o un boton de correr del desplegable por grupos: nada (el 51, su aspa, lo cierra) */
+          } else if (g.sub < 100) {
             st.desplegado = st.desplegado == g.item ? -1 : g.item;
+            st.despCorrida[0] = st.despCorrida[1] = 0.0f;   /* (v1.18) por grupos: abre desde arriba */
             std::printf("[ajustes] %s %s\n", id.substr(0, id.find('\x1f')).c_str(), st.desplegado >= 0 ? "abierto" : "cerrado");
             std::fflush(stdout);
             seguir = false;
@@ -749,6 +765,17 @@ int cmdAjustes(int argc, char **argv) {
       miradaRend = reloj();
       rellenar();
       repintar = true;
+    }
+    /* (v1.18) Efectos, cada segundo: lo de las fuentes publicas que se comprueban o se bajan aparte */
+    if (st.pestana == 5 && reloj() - miradaRend >= 1.0) {
+      static std::string firmaEfx;
+      miradaRend = reloj();
+      std::string f = prefs::firmaEfectos();
+      if (f != firmaEfx) {
+        firmaEfx = std::move(f);
+        rellenar();
+        repintar = true;
+      }
     }
     /* (v1.15) Integraciones, cada dos segundos: si Steam se abrio o se cerro, lo que falta escribir, el «Copiado».
        Solo se rehace si cambio algo (integ::firma: unas fechas de ficheros y el steam.pid); rehacerla entera es leer

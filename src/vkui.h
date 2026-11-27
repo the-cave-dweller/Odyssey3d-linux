@@ -99,6 +99,13 @@ public:
     /* (v1.18) un Interruptor `plegable`: la flechita a la izquierda del rotulo (Rodolfo: «que el dropdown este a la
        izquierda de cada nombre»); `desplegada` = abierta. Picar la flechita o el rotulo es el sub 1 */
     bool desplegada = false;
+    /* (v1.18) un Desplegable por grupos (Rodolfo: «make the add effect option ... show a list that is classified by depth
+       and not depth, use the space on the screen more appropiately, and show scroll buttons that autoscrool on hover»):
+       `grupos`, el titulo de cada uno, y `grupoOpc[k]`, el de cada opcion. Abierto no cuelga de su caja: ocupa la tarjeta
+       con los grupos lado a lado (en la columna de la vista previa, uno encima del otro), cada uno en las columnas que
+       quepan y con sus botones de correr, que corren solos con el raton encima */
+    std::vector<std::string> grupos;
+    std::vector<int> grupoOpc;
   };
 
   struct State {
@@ -176,6 +183,7 @@ public:
     /* (v1.16) el desplegable abierto (su fila, -1 = ninguno) y la vista de depuracion del panel: solo las dos listas de
        redes en una columna a la izquierda, para probarlas en vivo con la profundidad a la vista (Rodolfo) */
     int desplegado = -1;
+    float despCorrida[2] = {0.0f, 0.0f};   /* (v1.18) cuanto ha corrido cada grupo de un desplegable por grupos */
     bool depuracion = false;
     /* (v1.17) el menu abierto de una tesela (su numero, -1 = ninguno), sus opciones y cuales van marcadas */
     int teselaMenu = -1;
@@ -428,6 +436,10 @@ public:
   float fracDeslizador(int item, float mx) const;
   /* la rueda del raton sobre la lista del panel (positivo = bajar) */
   void correr(float cuanto);
+  /* (v1.18) con el raton encima de un boton de correr de un desplegable por grupos: lo corre `dt` segundos (empieza
+     despacio y acelera un poco: de ~140 a ~320 puntos por segundo en 1,5 s). Verdadero si se movio: hay que repintar */
+  bool autodesplazar(float dt);
+  bool autodesplazando() const { return autoDir_ != 0; }
   /* Cuanto mide una etiqueta con la fuente de la interfaz: para comprobar que el texto de un boton
      cabe en su caja sin mirar la pantalla (con la letra mal medida los rotulos se salian del recuadro). */
   float mideTexto(const std::string &s, float px) const { return textWidth(s, px); }
@@ -610,6 +622,14 @@ private:
   std::vector<Rect> panelTeselaFlecha_, panelMenuOpc_;   /* (v1.17) las flechitas de las teselas y su menu abierto */
   Rect panelMenuAncla_{-10.0f, -10.0f, 0.0f, 0.0f};
   Rect panelDespCaja_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) y su caja entera */
+  /* (v1.18) el desplegable por grupos: cada grupo (para la rueda), sus botones de correr, lo que le sobra y el boton de
+     correr que esta bajo el raton (su grupo y -1 arriba / 1 abajo; 0 = ninguno), desde cuando */
+  Rect despGrupo_[2] = {{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}};
+  Rect despBoton_[2][2] = {{{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}}, {{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}}};
+  float despTope_[2] = {0.0f, 0.0f};
+  Rect despCerrar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* su aspa (el sub 51: lo cierra) */
+  int autoGrupo_ = -1, autoDir_ = 0;
+  double autoDesde_ = 0.0;
   std::vector<Rect> panelPestanas_;
   std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */
   Rect panelVolver_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) la flecha de volver a la pastilla */

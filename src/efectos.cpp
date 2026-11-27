@@ -9,10 +9,14 @@
 #include "effect_parser.hpp"
 #include "effect_preprocessor.hpp"
 
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -395,6 +399,35 @@ static bool deTexto(const std::string &s, Descripcion &d) {
   return true;
 }
 
+bool usaProfundidad(const std::string &ruta) {
+  static std::mutex m;
+  static std::map<std::string, std::pair<long long, bool>> memoria;
+  struct stat st{};
+  if (::stat(ruta.c_str(), &st) != 0) return false;
+  const long long marca = (long long)st.st_mtim.tv_sec * 1000003LL + st.st_size;
+  {
+    std::lock_guard<std::mutex> l(m);
+    if (auto it = memoria.find(ruta); it != memoria.end() && it->second.first == marca) return it->second.second;
+  }
+  std::string t;
+  {
+    std::ifstream f(ruta, std::ios::binary);
+    t.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+  }
+  bool usa = false;
+  for (const char *k : {"GetLinearizedDepth", "DepthBuffer", "linear_depth", "get_depth", "LinearizeDepth", "GetDepth(", "BUFFER_DEPTH"})
+    usa = usa || t.find(k) != std::string::npos;
+  /* la semantica `: DEPTH` (con o sin espacios) */
+  for (size_t p = t.find("DEPTH"); !usa && p != std::string::npos; p = t.find("DEPTH", p + 5)) {
+    size_t q = p;
+    while (q > 0 && (t[q - 1] == ' ' || t[q - 1] == '\t')) q--;
+    usa = q > 0 && t[q - 1] == ':';
+  }
+  std::lock_guard<std::mutex> l(m);
+  memoria[ruta] = {marca, usa};
+  return usa;
+}
+
 Descripcion describir(const std::string &ruta) {
   static std::mutex m;
   static std::map<std::string, std::pair<long long, Descripcion>> memoria;
@@ -405,7 +438,7 @@ Descripcion describir(const std::string &ruta) {
     return d;
   }
   /* la firma: el archivo y la version de este formato */
-  const long long marca = (long long)st.st_mtim.tv_sec * 1000003LL + st.st_size * 7 + 3;
+  const long long marca = (long long)st.st_mtim.tv_sec * 1000003LL + st.st_size * 7 + 4;
   {
     std::lock_guard<std::mutex> l(m);
     if (auto it = memoria.find(ruta); it != memoria.end() && it->second.first == marca) return it->second.second;
@@ -434,11 +467,7 @@ Descripcion describir(const std::string &ruta) {
     } else {
       const reshadefx::effect_module &mod = *c->modulo;
       d.ok = true;
-      /* ReShade.fxh declara la textura DEPTH para todos: si la usa lo dice su .fx (GetLinearizedDepth, DepthBuffer, la
-         profundidad de qUINT...) */
-      std::string fuente;
-      if (readSmallFile(ruta, fuente))
-        d.usaProfundidad = fuente.find("Depth") != std::string::npos || fuente.find("depth(") != std::string::npos;
+      d.usaProfundidad = usaProfundidad(ruta);   /* lo que dice su texto (ver efectos.h) */
       for (const auto &tq : mod.techniques)
         for (const auto &p : tq.passes)
           if (!p.cs_entry_point.empty()) d.computo = true;
@@ -489,6 +518,129 @@ Descripcion describir(const std::string &ruta) {
   std::lock_guard<std::mutex> l(m);
   memoria[ruta] = {marca, d};
   return d;
+}
+
+/* ---- (v1.18) las fuentes publicas (ver efectos.h) ---- */
+const std::vector<Fuente> &fuentesPublicas() {
+  /* las de la lista del instalador de ReShade y las mas usadas; si GitHub no la encuentra (cambio de nombre), lo dice */
+  static const std::vector<Fuente> f = {
+      {"reshade-shaders", "ReShade (los de siempre)", "crosire/reshade-shaders", "Los efectos de la instalación de ReShade"},
+      {"sweetfx", "SweetFX", "CeeJayDK/SweetFX", "LumaSharpen, Vibrance, Curves, DPX, Tonemap..."},
+      {"quint", "qUINT", "martymcmodding/qUINT", "MXAO, Lightroom, SSR, Bloom..."},
+      {"immerse", "iMMERSE", "martymcmodding/iMMERSE", "Lo gratuito de iMMERSE: MXAO, Sharpen, SMAA..."},
+      {"prod80", "prod80", "prod80/prod80-ReShade-Repository", "Color, LUT, curvas, grano"},
+      {"astrayfx", "AstrayFX", "BlueSkyDefender/AstrayFX", "Clarity, Smart Sharp, nitidez y AA"},
+      {"depth3d", "Depth3D", "BlueSkyDefender/Depth3D", "3D estereoscópico y su vista de profundidad"},
+      {"fxshaders", "FXShaders", "luluco250/FXShaders", "Bloom, desenfoque, grano, NeoBloom..."},
+      {"fubax", "fubax", "Fubaxiusz/fubax-shaders", "Perfect Perspective, Chromakey, Filmic"},
+      {"otisfx", "OtisFX", "FransBouma/OtisFX", "CinematicDOF, AdaptiveFog, Emphasize"},
+      {"cshade", "CShade", "papadanku/CShade", "Bloom, AA, flujo óptico y más"},
+      {"insane", "Insane-Shaders", "LordOfLunacy/Insane-Shaders", "Oilify, ReVeil, Halftone..."},
+      {"dh", "DH", "AlucardDH/dh-reshade-shaders", "RTGI, UBR, color..."},
+  };
+  return f;
+}
+
+namespace {
+std::map<std::string, std::string> pares(const std::string &ruta) {
+  std::map<std::string, std::string> v;
+  std::string txt;
+  if (!readSmallFile(ruta, txt)) return v;
+  std::istringstream in(txt);
+  std::string l;
+  while (std::getline(in, l)) {
+    const size_t ig = l.find('=');
+    if (ig != std::string::npos) v[strTrim(l.substr(0, ig))] = strTrim(l.substr(ig + 1));
+  }
+  return v;
+}
+bool vivo(long pid, const char *palabra) {
+  std::string cmd;
+  return pid > 0 && ::kill((pid_t)pid, 0) == 0 && readSmallFile("/proc/" + std::to_string(pid) + "/cmdline", cmd) &&
+         cmd.find(palabra) != std::string::npos;
+}
+}  // namespace
+
+std::map<std::string, EstadoFuente> leerFuentes() {
+  /* una linea por fuente: id, nuevos, cambian, conflictos, total, bytes, hora, error (separados por tabuladores) */
+  std::map<std::string, EstadoFuente> m;
+  std::ifstream f(rutaEstadoOdyssey("efectos-fuentes"));
+  std::string l;
+  while (std::getline(f, l)) {
+    if (l.empty() || l[0] == '#') continue;
+    std::vector<std::string> c;
+    std::stringstream ss(l);
+    std::string x;
+    while (std::getline(ss, x, '\t')) c.push_back(x);
+    if (c.size() < 7) continue;
+    EstadoFuente e;
+    e.comprobada = true;
+    e.nuevos = std::atoi(c[1].c_str()), e.cambian = std::atoi(c[2].c_str()), e.conflictos = std::atoi(c[3].c_str());
+    e.total = std::atoi(c[4].c_str()), e.bytes = std::atoll(c[5].c_str()), e.hora = std::atol(c[6].c_str());
+    if (c.size() > 7) e.error = c[7];
+    m[c[0]] = e;
+  }
+  return m;
+}
+
+long horaComprobacion() { return std::atol(pares(rutaEstadoOdyssey("efectos-comprobando"))["hora"].c_str()); }
+
+bool comprobando() {
+  const auto v = pares(rutaEstadoOdyssey("efectos-comprobando"));
+  return v.count("estado") && v.at("estado") == "comprobando" && vivo(std::atol(v.count("pid") ? v.at("pid").c_str() : "0"), "efectos");
+}
+
+Bajada leerBajada() {
+  Bajada b;
+  auto v = pares(rutaEstadoOdyssey("efectos-bajada"));
+  b.id = v["id"], b.hecho = std::atol(v["hecho"].c_str()), b.total = std::atol(v["total"].c_str()), b.hora = std::atol(v["hora"].c_str());
+  if (v["estado"] == "bajando") {
+    b.enMarcha = vivo(std::atol(v["pid"].c_str()), "efectos");
+    if (!b.enMarcha) b.error = "cortada";
+  } else if (v["estado"] == "lista") {
+    b.lista = true;
+  } else if (v["estado"] == "fallo") {
+    b.error = v["error"].empty() ? std::string("fallo") : v["error"];
+  }
+  return b;
+}
+
+bool lanzarOrden(const std::vector<std::string> &args, std::string *err) {
+  /* el programa: este mismo si es `odysseyvk`; si no (el panel), el de su carpeta o el del PATH */
+  std::string bin;
+  {
+    std::error_code ec;
+    const fs::path yo = fs::read_symlink("/proc/self/exe", ec);
+    if (!ec && yo.filename() == "odysseyvk") bin = yo.string();
+    else if (!ec && fileExists((yo.parent_path() / "odysseyvk").string())) bin = (yo.parent_path() / "odysseyvk").string();
+    else bin = "odysseyvk";
+  }
+  const std::string registro = rutaEstadoOdyssey("efectos-fuentes.log");
+  const pid_t p = ::fork();
+  if (p < 0) {
+    if (err) *err = std::string("no se pudo arrancar: ") + std::strerror(errno);
+    return false;
+  }
+  if (p == 0) {
+    ::setsid();
+    if (::fork() != 0) ::_exit(0);
+    const int nulo = ::open("/dev/null", O_RDONLY);
+    const int log = ::open(registro.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (nulo >= 0) ::dup2(nulo, 0);
+    if (log >= 0) ::dup2(log, 1), ::dup2(log, 2);
+    for (int fd = 3; fd < 1024; fd++) ::close(fd);
+    std::vector<char *> av;
+    av.push_back((char *)bin.c_str());
+    av.push_back((char *)"efectos");
+    for (const std::string &a : args) av.push_back((char *)a.c_str());
+    av.push_back(nullptr);
+    ::execvp(bin.c_str(), av.data());
+    ::_exit(127);
+  }
+  int st = 0;
+  while (::waitpid(p, &st, 0) < 0 && errno == EINTR) {
+  }
+  return true;
 }
 
 }  // namespace efectos

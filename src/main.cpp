@@ -3199,7 +3199,20 @@ static int cmdEfectos(int argc, char **argv) {
                   c.opciones.empty() ? "" : (" · " + std::to_string(c.opciones.size()) + " opciones").c_str());
     return d.ok ? 0 : 1;
   }
-  std::fprintf(stderr, "uso: odysseyvk efectos [lista | describir NOMBRE | compilar NOMBRE | ajustes [APPID]]\n");
+  /* (v1.18) las fuentes publicas: comprobar lo que falta de cada una y bajar solo eso (efectos_fuentes.cpp) */
+  if (que == "fuentes") {
+    std::vector<std::string> ids(argv + 1, argv + argc);
+    return efectos::comprobarFuentes(ids, true);
+  }
+  if (que == "bajar" && argc > 1) {
+    std::string err;
+    if (!efectos::bajarFuente(argv[1], &err)) {
+      std::fprintf(stderr, "no se pudo: %s\n", err.c_str());
+      return 1;
+    }
+    return 0;
+  }
+  std::fprintf(stderr, "uso: odysseyvk efectos [lista | describir NOMBRE | compilar NOMBRE | ajustes [APPID] | fuentes [ID...] | bajar ID]\n");
   return 2;
 }
 
@@ -3805,6 +3818,18 @@ static int cmdHudSelfTest(int argc, char **argv) {
     }
   }
   hud.begin(W, H);
+  /* (v1.18) ODYSSEYVK_HUD_AUTOCORRER=S: S segundos con el raton quieto (ODYSSEYVK_HUD_RATON) en un boton de correr de un
+     desplegable por grupos, a 60 cuadros por segundo, como el bucle del panel; dice cuanto corrio cada grupo */
+  if (const char *ac = std::getenv("ODYSSEYVK_HUD_AUTOCORRER")) {
+    const int cuadros = (int)(std::atof(ac) * 60.0);
+    int movidos = 0;
+    for (int k = 0; k < cuadros; k++) {
+      if (hud.autodesplazar(1.0f / 60.0f)) movidos++;
+      hud.begin(W, H);
+    }
+    std::printf("  autocorrer: %d de %d cuadros movieron · grupos corridos %.0f y %.0f puntos · corriendo %s\n", movidos, cuadros,
+                hud.state().despCorrida[0], hud.state().despCorrida[1], hud.autodesplazando() ? "si" : "no");
+  }
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
   /* ODYSSEYVK_HUD_PNG=ruta deja la interfaz pintada en un archivo (fondo transparente), con el mismo

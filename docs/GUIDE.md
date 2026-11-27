@@ -199,6 +199,12 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   Not supported: compute passes, 3D textures, stencil. Tests: `odysseyvk efectos compilar NAME`, `odysseyvk ctl
   efectos IN.png OUT.png [--prof DEPTH.png] [NAME...]`, and `ODYSSEYVK_EFECTOS_JUEGO=APPID|todos` to force a game's
   effects in a test viewer. If vkDaedalus also runs effects in the game, they apply twice.
+- Public shader sources: `odysseyvk efectos fuentes [ID...]` asks GitHub for each repository's tree
+  (`api.github.com/repos/OWNER/REPO/git/trees/HEAD?recursive=1`, one request each) and compares every file's git blob SHA-1
+  with the files under the ReShade folder's `Shaders/` and `Textures/`; the result goes to `~/.local/state/odysseyvk/efectos-fuentes`.
+  `odysseyvk efectos bajar ID` downloads only new or changed files from `raw.githubusercontent.com`, checks each SHA-1,
+  backs up replaced files under `~/.local/state/odysseyvk/efectos-copia/` and skips files named like one you already have
+  elsewhere. `ODYSSEYVK_EFECTOS_API` / `ODYSSEYVK_EFECTOS_RAW` point both at fixtures for testing.
 - Only one overlay in front at a time:
   - while the vkDaedalus menu is open (End), the OdysseyVK pill steps aside and the 3D goes flat, so the menu
     reads right. Its state is read from the file vkDaedalus's input hook keeps in `$XDG_RUNTIME_DIR`, so it needs
