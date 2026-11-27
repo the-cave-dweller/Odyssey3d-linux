@@ -67,6 +67,9 @@ public:
   /* Bombea eventos hasta que el compositor se calle (los detalles de cada ventana
      llegan en rondas sucesivas: sin esto la lista sale vacía). */
   void settle(int quietMs = 150, int maxRounds = 30);
+  /* (v1.16) una vuelta mas con el compositor: los datos de cada ventana (su app, si es la activa) llegan una vuelta
+     despues de la lista. Sin la espera fija de settle (al menos `quietMs`) */
+  void sincroniza();
 
   std::vector<WindowInfo> windows() const;
   bool find(const std::string &uuid, WindowInfo &out) const;

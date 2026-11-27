@@ -3122,6 +3122,28 @@ static int cmdAjustes(int argc, char **argv) {
   }
   std::signal(SIGTERM, alCerrarPanel);
   std::signal(SIGINT, alCerrarPanel);
+  /* (v1.16) lo que tarda en abrirse, paso a paso, en el registro (Rodolfo: «optimize the opening and closing of the
+     layer»): desde que arranco el proceso (su arranque en /proc, en centesimas) y desde aqui */
+  auto relojA = [] {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+  };
+  const double tA0 = relojA();
+  double msArranque = -1.0;
+  {
+    std::string st;
+    struct timespec tb{};
+    if (readSmallFile("/proc/self/stat", st) && clock_gettime(CLOCK_BOOTTIME, &tb) == 0) {
+      const size_t p = st.rfind(')');
+      std::istringstream in(p == std::string::npos ? std::string() : st.substr(p + 2));
+      std::string campo;
+      for (int k = 3; k <= 22 && (in >> campo); k++)
+        if (k == 22) msArranque = ((double)tb.tv_sec + 1e-9 * (double)tb.tv_nsec - std::atof(campo.c_str()) / (double)sysconf(_SC_CLK_TCK)) * 1000.0;
+    }
+  }
+  std::vector<std::pair<const char *, double>> pasos;
+  auto paso = [&](const char *que) { pasos.push_back({que, relojA()}); };
   Overlay ov;
   if (pista.empty()) {
     const auto conf = ajuste::leerServeConf();
@@ -3133,6 +3155,7 @@ static int cmdAjustes(int argc, char **argv) {
     std::fprintf(stderr, "[ajustes] no se pudo abrir la capa superpuesta: %s\n", err.c_str());
     return 1;
   }
+  paso("capa");
   if (FILE *f = std::fopen(rutaPid.c_str(), "we")) {
     std::fprintf(f, "%ld\n", (long)::getpid());
     std::fclose(f);
@@ -3142,7 +3165,15 @@ static int cmdAjustes(int argc, char **argv) {
   const auto ses = hub.find("sesion");
   const bool haySesion = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
   const bool grande = haySesion || forzarGrande;
-  const std::vector<prefs::Juego> juegos = prefs::juegosSteam();
+  /* (v1.16) las caratulas se leen al entrar en Juegos (o ya, si se abre en Juegos): para lo demas basta la lista */
+  std::vector<prefs::Juego> juegos = prefs::juegosSteam(enJuegos);
+  bool conCaratulas = enJuegos;
+  auto ponCaratulas = [&] {
+    if (conCaratulas) return;
+    juegos = prefs::juegosSteam(true);
+    conCaratulas = true;
+  };
+  paso("juegos");
   std::vector<std::string> ids;
   Hud::State &st = ov.hud().state();
   st.pestana = enJuegos ? 1 : 0;
@@ -3178,7 +3209,9 @@ static int cmdAjustes(int argc, char **argv) {
   /* al abrirse, una mirada a GitHub (v0.99): asi la pestana Programa y el boton junto al aspa estan
      al dia sin esperar a la mirada del servicio. Es un curl aparte; si no hay red, no pasa nada. */
   if (prefs::leer().avisarActualizaciones) prefs::comprobarActualizacion(nullptr);
+  paso("github");
   rellenar();
+  paso("filas");
   /* el cursor de los juegos (rama experimental): si la ventana activa es un juego, el panel le quita
      el raton mientras esta abierto (el velo) y al cerrarse se lo devuelve, volviendo a hacerla la
      ventana activa. KWin solo deja el cursor encerrado en el juego mientras el juego es la activa:
@@ -3186,7 +3219,9 @@ static int cmdAjustes(int argc, char **argv) {
   WindowMonitor wmPanel;
   std::string juegoUuid, juegoApp;
   if (wmPanel.open(nullptr)) {
-    wmPanel.settle(60, 10);
+    /* (v1.16) una vuelta con el compositor en vez de settle(60, 10): los datos de cada ventana llegan en esa vuelta.
+       MEDIDO en el escritorio de Rodolfo: las mismas 8 ventanas, con su app y la activa, en 0,2 ms en vez de 60 */
+    wmPanel.sincroniza();
     for (const WindowInfo &w : wmPanel.windows()) {
       if (!w.active() || w.pid == (uint32_t)::getpid()) continue;
       const std::string a = strLower(w.appId);
@@ -3224,7 +3259,23 @@ static int cmdAjustes(int argc, char **argv) {
   colorResaltadoKde(st.acentoPanel);
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
   /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
+  paso("ventanas");
   ov.showPanel(grande, quiereVelo && !st.fijado);
+  paso("puesto");
+  {
+    std::string t;
+    double antes = tA0;
+    for (const auto &[que, cuando] : pasos) {
+      char b[48];
+      std::snprintf(b, sizeof b, "%s%s %.0f", t.empty() ? "" : " · ", que, (cuando - antes) * 1000.0);
+      t += b;
+      antes = cuando;
+    }
+    std::printf("[ajustes] abierto en %.0f ms desde aqui%s: %s\n", (relojA() - tA0) * 1000.0,
+                msArranque >= 0.0 ? (std::string(" (") + std::to_string((int)msArranque) + " desde que arranco el proceso)").c_str() : "",
+                t.c_str());
+    std::fflush(stdout);
+  }
   if (!ov.askVisible()) {
     std::fprintf(stderr, "[ajustes] el compositor no puso el panel: %s\n", ov.lastError().c_str());
     ::unlink(rutaPid.c_str());
@@ -3291,14 +3342,16 @@ static int cmdAjustes(int argc, char **argv) {
   std::string volcadoGuion;
   const double t0Guion = reloj();
   int idiomaDelAtlas = idioma::actual();
-  /* (v1.16) la aparicion: en 0,22 s la interfaz sube desde la pastilla y se hace opaca */
+  /* (v1.16) la aparicion: la interfaz sale de la pastilla y se hace opaca (ver abajo) */
   const double t0Aparicion = reloj();
   while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
     ov.waitAndDispatch(st.aparicion < 1.0f ? 8 : (guion.empty() ? 100 : 20));
     Overlay::Golpe g;
     bool repintar = false;
     if (st.aparicion < 1.0f) {
-      st.aparicion = (float)std::min(1.0, (reloj() - t0Aparicion) / 0.22);
+      /* (v1.16) en 0,16 s y saliendo deprisa (1 - (1 - t)^3): enseguida se ve casi entera */
+      const double t = std::min(1.0, (reloj() - t0Aparicion) / 0.16);
+      st.aparicion = (float)(1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t));
       repintar = true;
     }
     while (!guion.empty() && reloj() - t0Guion >= guion.front().t) {
@@ -3489,6 +3542,7 @@ static int cmdAjustes(int argc, char **argv) {
         std::fflush(stdout);
       } else if (g.tipo == (int)Hud::HitPanelPestana) {
         st.pestana = (g.sub >= 0 && g.sub <= 3) ? g.sub : 0;
+        if (st.pestana == 1) ponCaratulas();   /* (v1.16) la primera vez que se entra */
         if (st.pestana == 2) prefs::integracionesDe("");   /* (v1.15) la pildora: lo de todos los juegos */
         st.corrida = 0.0f;
         st.pie.clear();
@@ -3637,6 +3691,19 @@ static int cmdAjustes(int argc, char **argv) {
       const auto h2 = ajuste::leerEstadoHub();
       const auto s2 = h2.find("sesion");
       if (s2 == h2.end() || s2->second.empty() || s2->second == "ninguna") break;
+    }
+  }
+  /* (v1.16) al cerrarse, lo mismo al reves y mas corto: en 0,10 s vuelve hacia la pastilla y se desvanece (con la
+     conexion viva; si la cerro el compositor, se va sin mas) */
+  if (st.marco && !ov.conexionCaida() && !ov.entradaCerrada()) {
+    const double t0Cierre = reloj();
+    const float desde = st.aparicion;
+    for (;;) {
+      const double t = std::min(1.0, (reloj() - t0Cierre) / 0.10);
+      st.aparicion = desde * (float)((1.0 - t) * (1.0 - t));
+      ov.repaint();
+      if (t >= 1.0) break;
+      ov.waitAndDispatch(8);
     }
   }
   /* (v1.15) se cierra a medio escribir en un campo de Integraciones: lo escrito se guarda */

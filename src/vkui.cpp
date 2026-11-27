@@ -630,6 +630,7 @@ void Hud::quad(Rect r, Rect uv, float cr, float cg, float cb, float ca) {
   /* (v1.16) la interfaz que sube y se hace opaca al abrirse (dibujaPanel lo pone y lo quita) */
   r.y += desplazY_;
   ca *= alfaGlobal_;
+  if (ca <= 0.001f) return;   /* invisible: el primer cuadro de la aparicion (todo a 0) no recorre la pantalla entera */
   /* dos triángulos en forma de tira: 6 vértices */
   const float X[6] = {r.x, r.x + r.w, r.x, r.x + r.w, r.x, r.x + r.w};
   const float Y[6] = {r.y, r.y, r.y + r.h, r.y + r.h, r.y + r.h, r.y};

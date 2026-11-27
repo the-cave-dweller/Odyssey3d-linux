@@ -366,6 +366,10 @@ int WindowMonitor::waitAndDispatch(int timeoutMs) {
   return wl_display_dispatch(d->dpy);
 }
 
+void WindowMonitor::sincroniza() {
+  if (d && d->dpy) wl_display_roundtrip(d->dpy);
+}
+
 void WindowMonitor::settle(int quietMs, int maxRounds) {
   for (int i = 0; i < maxRounds; ++i)
     if (waitAndDispatch(quietMs) <= 0) break;

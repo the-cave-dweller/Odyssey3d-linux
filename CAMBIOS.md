@@ -40,6 +40,30 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## El panel se abre en 14-25 ms en vez de 87-100, y se cierra con su animación (v1.16)
+
+- Rodolfo: «optimize the opening and closing of the layer to your best».
+- **Medido primero**: el panel apunta ahora en su registro lo que tarda en abrirse, paso a paso («[ajustes] abierto
+  en N ms ... capa · juegos · github · filas · ventanas · puesto»). En el KWin aparte, en 4K al 150 %:
+  - capa 8 ms, juegos 12, ventanas 60, puesto 17: 100 ms desde que empieza el panel;
+  - y unos 47 ms antes, que tarda en arrancar el programa con todas sus bibliotecas;
+  - cerrar, unos 10 ms.
+- **Lo que se quitó**:
+  - **ventanas, 60 → 0 ms**: `settle(60, 10)` esperaba al menos 60 ms a que el compositor dejara de mandar
+    ventanas. Ahora es una sola vuelta con él (`WindowMonitor::sincroniza`), y en ella llegan los datos de cada
+    ventana. MEDIDO en el escritorio de Rodolfo (solo leyendo la lista): las mismas 8 ventanas, con su app y la
+    activa, en 0,2 ms;
+  - **juegos, 12 → 0 ms**: las carátulas se leen la primera vez que se entra en Juegos (o al abrir en Juegos);
+    para lo demás basta la lista;
+  - **puesto, 17 → 15 ms en 4K (6 → 4 en 1080p)**: el primer cuadro de la aparición es todo transparente y no se
+    pinta. Lo que no se ve (opacidad 0) no recorre la pantalla. Comprobado que la imagen sale idéntica, píxel a
+    píxel.
+- **La animación**: al abrir, 0,16 s en vez de 0,22, saliendo deprisa (1 − (1 − t)³). Al cerrar (aspa, Esc,
+  volver o el visor), lo mismo al revés en 0,10 s. Antes desaparecía de golpe.
+- **Resultado**: abierto en 14 ms en 1080p y en 25 ms en 4K al 150 % (desde que empieza el panel).
+- **Queda**: los ~47 ms de arrancar el programa. El panel carga las bibliotecas del visor (onnxruntime, OpenCV,
+  mpv y ffmpeg, ICU) aunque no las use. Solo se quitan con un ejecutable aparte para el panel.
+
 ## Volver a la pastilla desde el panel (v1.16)
 
 - Rodolfo: «beside the closing button after accessing the overlay from the pill add a back button to just return to
