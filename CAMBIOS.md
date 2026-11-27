@@ -96,6 +96,9 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   nueva, `ODYSSEYVK_FUENTE_CUADROS` y `ODYSSEYVK_FUENTE_FPS`): 24 reales y 24 generados por segundo en pantalla a 60 Hz,
   la tarjeta a 3,6 ms por cuadro con la trama; con x3 caben 24 de los 48 generados en 60 Hz (en el panel, a 165, caben
   todos); y con un host que no existe, «apagada para esta sesión» y el 3D sigue a 60.
+- **El visor se caía al cambiar el multiplicador** con el vídeo en marcha (Rodolfo, dos veces el 27-nov: de x4 a x2 y de
+  x4 a x3): al reabrir, el anillo de los generados cambia de tamaño (10 imágenes con x4, 4 con x2) y su posición no volvía
+  a cero; se escribía fuera. Ahora `cerrar()` la pone a cero.
 - Dos fallos que salieron probando: el envío calculaba su valla con la dirección de una copia (se caía al primer
   cuadro) y el destructor volvía a cerrar con el dispositivo ya destruido (abortaba al salir). El dispositivo del visor
   pide ahora los semáforos de línea de tiempo y `VK_KHR_external_semaphore_fd`.

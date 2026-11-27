@@ -176,6 +176,9 @@ void FgVideo::cerrar() {
   fuente_.clear(), destino_.clear(), anillo_.clear(), cbs_.clear(), vallas_.clear(), plan_.clear();
   pool_ = VK_NULL_HANDLE, tl_ = VK_NULL_HANDLE, ultimaVista_ = VK_NULL_HANDLE;
   valor_ = 1, ultimoFin_ = 0, lote_ = 0, w_ = h_ = 0, n_ = 0;
+  /* las posiciones del anillo y de los buffers, a cero: al cambiar de multiplicador el anillo cambia de tamano. MEDIDO el
+     27-nov: de x4 (10 imagenes) a x2 (4) se seguia escribiendo en la 7 y el visor se caia */
+  anilloSig_ = 0, cbSig_ = 0;
   dev_ = nullptr;
 }
 
