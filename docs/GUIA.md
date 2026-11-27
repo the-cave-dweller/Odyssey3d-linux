@@ -34,7 +34,8 @@ lente con `rampa_x` y `rampa_y` (ver «Calibrar el paso contra la lente»).
   para la interfaz. Para el servicio de ventanas y la captura: `wayland`,
   `plasma-wayland-protocols`, `libpipewire`, `systemd-libs`. `mpv` es opcional (sólo `play`).
   Para el conversor de vídeo normal a 3D hacen falta además `onnxruntime-cuda` (o `onnxruntime` a
-  secas, que va por CPU y mucho más lento) y, en tiempo de ejecución, `cuda` y `cudnn`.
+  secas, que va por CPU y mucho más lento) y, en tiempo de ejecución, `cuda` y `cudnn`. Desde la 1.16, con una
+  tarjeta AMD, `onnxruntime-rocm` en su lugar (trae ROCm y el motor MIGraphX; aún sin probar en una AMD de verdad).
   En CachyOS/Arch:
 
   ```sh

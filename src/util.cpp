@@ -215,6 +215,66 @@ std::string carpetaRedes() {
 std::string rutaRedLigera() { return carpetaRedes() + "depth_anything_v2_small_fp16.onnx"; }
 std::string rutaRedVieja() { return carpetaRedes() + "depth_anything_v2_small.onnx"; }
 
+/* (v1.16) ver util.h. Solo los cardN (no sus conectores, cardN-DP-1) del fabricante 0x1002 con amdgpu */
+std::vector<TarjetaAmd> tarjetasAmd() {
+  std::vector<TarjetaAmd> v;
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  std::vector<std::string> cards;
+  for (const fs::directory_entry &e : fs::directory_iterator("/sys/class/drm", ec)) {
+    const std::string n = e.path().filename().string();
+    if (n.rfind("card", 0) == 0 && n.size() > 4 && n.find('-') == std::string::npos) cards.push_back(e.path().string());
+  }
+  std::sort(cards.begin(), cards.end());
+  auto lee = [](const std::string &ruta) {
+    std::string t;
+    return readSmallFile(ruta, t) ? strTrim(t) : std::string();
+  };
+  for (const std::string &c : cards) {
+    const std::string dev = c + "/device";
+    if (strLower(lee(dev + "/vendor")) != "0x1002") continue;
+    std::error_code e2;
+    if (fs::path(fs::read_symlink(dev + "/driver", e2)).filename() != "amdgpu") continue;
+    TarjetaAmd t;
+    t.pci = strLower(fs::path(fs::canonical(dev, e2)).filename().string());
+    const std::string total = lee(dev + "/mem_info_vram_total"), usada = lee(dev + "/mem_info_vram_used");
+    if (!total.empty()) t.totalMiB = std::atol(total.c_str()) / (1024L * 1024L);
+    if (!usada.empty()) t.usadaMiB = std::atol(usada.c_str()) / (1024L * 1024L);
+    const std::string ocupada = lee(dev + "/gpu_busy_percent");
+    if (!ocupada.empty()) t.ocupada = std::atoi(ocupada.c_str());
+    for (const fs::directory_entry &h : fs::directory_iterator(dev + "/hwmon", e2)) {
+      const std::string temp = lee(h.path().string() + "/temp1_input");
+      if (!temp.empty()) {
+        t.tempC = std::atof(temp.c_str()) / 1000.0;
+        break;
+      }
+    }
+    t.nombre = lee(dev + "/product_name");
+    if (t.nombre.empty()) {
+      /* pci.ids: «\t13c0  Granite Ridge [Radeon 610M]» bajo «1002  Advanced Micro Devices...»: lo de los corchetes */
+      std::string id = strLower(lee(dev + "/device"));
+      if (id.rfind("0x", 0) == 0) id = id.substr(2);
+      std::ifstream ids("/usr/share/hwdata/pci.ids");
+      std::string l;
+      bool enAmd = false;
+      while (std::getline(ids, l)) {
+        if (!l.empty() && l[0] != '\t' && l[0] != '#') {
+          if (enAmd) break;
+          enAmd = l.rfind("1002 ", 0) == 0;
+        } else if (enAmd && l.size() > 7 && l[0] == '\t' && l[1] != '\t' && strLower(l.substr(1, 4)) == id) {
+          std::string nom = strTrim(l.substr(5));
+          const size_t a = nom.find('['), b = nom.rfind(']');
+          t.nombre = a != std::string::npos && b != std::string::npos && b > a + 1 ? nom.substr(a + 1, b - a - 1) : nom;
+          break;
+        }
+      }
+      if (t.nombre.empty()) t.nombre = "AMD " + lee(dev + "/device");
+    }
+    v.push_back(t);
+  }
+  return v;
+}
+
 namespace {
 /* segundos desde el arranque del sistema en que empezo este proceso (campo 22 de /proc/self/stat,
    en tics de reloj); -1 si no se pudo leer */

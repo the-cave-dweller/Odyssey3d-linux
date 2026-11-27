@@ -402,3 +402,4 @@
 {"¿Ver en 3D?", {"View in 3D?", "Voir en 3D ?", "In 3D ansehen?", "以 3D 观看？", "3D で見ますか？", "Смотреть в 3D?"}},
 {"Recordar para esta aplicación", {"Remember for this app", "Mémoriser pour cette application", "Für diese App merken", "为此应用记住", "このアプリで記憶する", "Запомнить для этого приложения"}},
 {"se cambia en 3D → Aplicaciones que no preguntan", {"change it in 3D → Apps that don't ask", "modifiable dans 3D → Applis qui ne demandent pas", "änderbar unter 3D → Apps ohne Nachfrage", "可在 3D → 不再询问的应用 中更改", "3D → 確認しないアプリ で変更", "меняется в 3D → Приложения без вопроса"}},
+{"Ni nvidia-smi ni amdgpu dieron datos de las tarjetas.", {"Neither nvidia-smi nor amdgpu gave any graphics card data.", "Ni nvidia-smi ni amdgpu n'ont donné de données sur les cartes.", "Weder nvidia-smi noch amdgpu lieferten Daten zu den Grafikkarten.", "nvidia-smi 和 amdgpu 都没有提供显卡数据。", "nvidia-smi も amdgpu もグラフィックカードの情報を返しませんでした。", "Ни nvidia-smi, ни amdgpu не дали данных о видеокартах."}},

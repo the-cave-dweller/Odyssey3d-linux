@@ -2200,7 +2200,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #else
   if (opts.conver)
     std::fprintf(stderr, "[conversor] este programa se compiló sin ONNX Runtime: no puede convertir "
-                         "video normal a 3D (paquete onnxruntime-cuda)\n");
+                         "video normal a 3D (paquete onnxruntime-cuda, u onnxruntime-rocm con AMD)\n");
   /* (v1.16) sin ONNX Runtime no hay conversor: lo poco que se le pregunta fuera de su bloque, con lo que valdria
      apagado (el bucle del cuadro lo mira para la pastilla, el plano de apoyo y el paralaje) */
   constexpr bool convActivo = false;

@@ -3,6 +3,36 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La red de profundidad también en tarjetas AMD, con ROCm (v1.16)
+
+- Rodolfo: «can you implement rocm apart from cuda?, not sure if i talk nonsense». No lo era: la red va con ONNX
+  Runtime, que tiene motores para AMD.
+- **Lo MEDIDO antes**: Arch trae `onnxruntime-rocm` 1.29.0 (la misma versión que `onnxruntime-cuda`), y su motor es
+  MIGraphX (`libonnxruntime_providers_migraphx.so`, depende de `rocm-hip-sdk` y `migraphx`), no el ROCm de antes. Las
+  cabeceras de la 1.29 declaran los dos, así que el mismo código compila con cualquiera de los paquetes.
+  `Ort::GetAvailableProviders()` dice qué motores trae la que esté instalada (aquí: CUDA, DNNL y CPU).
+- **Cómo elige** (`DepthNet::init`): CUDA si lo trae (como siempre); si no, MIGraphX; si no, ROCm (compilaciones
+  viejas); si no, la CPU, diciéndolo. `ODYSSEYVK_PROVEEDOR=cuda|migraphx|rocm|cpu` lo fuerza. Con AMD:
+  - la tarjeta: MIGraphX recibe el número de HIP, que no va en el orden de sysfs. Se le pregunta a `libamdhip64` (sin
+    soltarla: HIP arranca hilos suyos) la dirección PCI de cada una y se casa con lo de amdgpu: memoria libre y
+    nombre. Con eso valen las mismas cuentas de memoria que con NVIDIA;
+  - la gráfica integrada del procesador (un Ryzen 7000 o 9000 la trae; en el de Rodolfo, una Radeon 610M de 2 GB)
+    puede salir la primera: si la pedida tiene menos de la cuarta parte de memoria que la más grande, se usa la
+    grande, y se dice. `HIP_VISIBLE_DEVICES` deja ver solo una;
+  - un fallo al abrir la red en la tarjeta corta igual que con CUDA (sin reintento en el mismo proceso), y el
+    registro dice el motor, la tarjeta y cuánto tardó en prepararse («lista en N s»).
+  - El caché de lo compilado de MIGraphX no se usa: su código ya no está en el repositorio de ONNX Runtime (404 en
+    la 1.29 y en main) y sin saber si espera un fichero o una carpeta, ni qué hace si no existe, un error dejaría a
+    las AMD siempre en la CPU. Así, la primera vez de cada sesión la red se prepara para la tarjeta y puede tardar.
+- **Las tarjetas AMD en Ajustes** (`tarjetasAmd()`, en util): de `/sys/class/drm/cardN/device` con amdgpu, el uso,
+  la memoria, la temperatura y el nombre (el `product_name` del conductor o lo de los corchetes de `pci.ids`), junto
+  a las de nvidia-smi.
+- **Probado** en el equipo de Rodolfo (dos NVIDIA y la integrada AMD, sin ROCm): CUDA sigue igual (`mapa --red 1`,
+  la 5080 con su UUID); forzando MIGraphX y ROCm, los dos fallan limpios («Failed to load library», «not enabled in
+  this build») y la red va por la CPU con la FP32; en Ajustes sale «Radeon 610M · 0 % · 0,0 / 2 GB · 52 °C». **Sin
+  probar**: la red en una tarjeta AMD de verdad (haría falta `onnxruntime-rocm`, que sustituye al de CUDA, y la pila
+  de ROCm entera).
+
 ## OdysseyVK compila otra vez sin ONNX Runtime (v1.16)
 
 - Rodolfo: «Haz esta tarea aquí: “Make OdysseyVK build without ONNX Runtime”». CMake dice que sin

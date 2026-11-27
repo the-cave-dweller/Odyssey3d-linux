@@ -282,7 +282,7 @@ if(ORT_DIR AND ORT_LIB)
   target_compile_definitions(odysseyvk PRIVATE HAVE_ORT=1)
   message(STATUS "ONNX Runtime encontrado (${ORT_LIB}): el conversor 2D a 3D se compilara")
 else()
-  message(STATUS "Sin ONNX Runtime: el conversor 2D a 3D no estara disponible (paquete onnxruntime-cuda)")
+  message(STATUS "Sin ONNX Runtime: el conversor 2D a 3D no estara disponible (paquete onnxruntime-cuda, u onnxruntime-rocm con AMD)")
 endif()
 
 # --- la ventana de ajustes (opcional): Qt6, proceso APARTE --------------------------------

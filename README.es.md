@@ -20,12 +20,18 @@ Lo que tienes:
 
 ## Instalar
 
-Arch / CachyOS, todo de una vez (una NVIDIA con CUDA para el conversor 2D→3D; lo demás va en
-cualquier tarjeta con Vulkan 1.3):
+Arch / CachyOS, todo de una vez (una NVIDIA con CUDA, o desde la 1.16 una AMD con ROCm, para el conversor 2D→3D; lo
+demás va en cualquier tarjeta con Vulkan 1.3):
 
 ```bash
 sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
 ```
+
+Con una tarjeta **AMD**, cambia `onnxruntime-cuda cuda cudnn` por `onnxruntime-rocm` (desde la 1.16; aún sin probar en
+una AMD de verdad): el conversor va entonces en la tarjeta con ROCm, con el motor MIGraphX de ONNX Runtime. La primera
+vez de cada sesión la red se prepara para la tarjeta y puede tardar. Si el procesador trae gráfica Radeon integrada,
+la red va a la tarjeta con más memoria (`HIP_VISIBLE_DEVICES` fija una). Sin motor para la tarjeta, la red va por la
+CPU. La profundidad de DLSS de los juegos es solo de NVIDIA.
 
 ```bash
 git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh

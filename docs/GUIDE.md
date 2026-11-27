@@ -59,6 +59,13 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   blue tag. The ticked one goes to `modelo =` in `serve.conf` and a running viewer switches to it at once. From the
   terminal: `odysseyvk ctl red descargar` (FP16) or `odysseyvk ctl red descargar fp32`. If the Odyssey 3D Hub's own
   `mde_large.onnx` is in that folder it is used when nothing is ticked (key `1`/`2` switches).
+- GPU engine (since 1.16): whatever the installed ONNX Runtime offers, in this order: CUDA (`onnxruntime-cuda`,
+  NVIDIA), MIGraphX (`onnxruntime-rocm`, AMD), the older ROCm engine, else the CPU (where the FP32 is used if
+  present). `ODYSSEYVK_PROVEEDOR=cuda|migraphx|rocm|cpu` forces one. With AMD, ONNX Runtime's HIP device numbers are
+  matched to the amdgpu cards by PCI address; if the requested card has under a quarter of the memory of the
+  biggest one (an integrated Radeon, typically), the biggest is used, and `HIP_VISIBLE_DEVICES` pins one. MIGraphX
+  prepares the network for the card at the start of each session, which can take a while. The AMD path is not yet
+  tested on AMD hardware.
 - A map is computed 6 times per second on the GPU (`mapas_por_segundo`); the panel's Performance
   tab shows the time per map and the frame rate (120 or 165 fps).
 - Edges are refined per pixel against the image colour (v0.89), the subject is placed on the

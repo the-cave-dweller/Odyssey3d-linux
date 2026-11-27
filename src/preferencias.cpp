@@ -965,9 +965,26 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
     }
     ::pclose(f);
   }
+  /* (v1.16) y las de AMD, de lo que cuenta amdgpu en sysfs (con ROCm la red tambien puede ir en ellas) */
+  for (const TarjetaAmd &t : tarjetasAmd()) {
+    std::string txt = t.ocupada >= 0 ? std::to_string(t.ocupada) + " %" : std::string("—");
+    if (t.usadaMiB >= 0 && t.totalMiB > 0) {
+      char b[64];
+      std::snprintf(b, sizeof b, " · %.1f / %.0f GB", t.usadaMiB / 1024.0, t.totalMiB / 1024.0);
+      txt += b;
+    }
+    if (t.tempC >= 0.0) {
+      char b[32];
+      std::snprintf(b, sizeof b, " · %.0f °C", t.tempC);
+      txt += b;
+    }
+    for (char &ch : txt) if (ch == '.') ch = idioma::decimal();
+    fila(t.nombre, txt);
+    alguna = true;
+  }
   if (!alguna) {
     Hud::ItemPanel n;
-    n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("nvidia-smi no respondió: no hay datos de las tarjetas.");
+    n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("Ni nvidia-smi ni amdgpu dieron datos de las tarjetas.");
     pon(n, "");
   }
 }

@@ -20,12 +20,18 @@ What you get:
 
 ## Install
 
-Arch / CachyOS, everything in one go (an NVIDIA GPU with CUDA for the 2D→3D converter; the rest
-works on any Vulkan 1.3 GPU):
+Arch / CachyOS, everything in one go (an NVIDIA GPU with CUDA, or since 1.16 an AMD one with ROCm, for the 2D→3D
+converter; the rest works on any Vulkan 1.3 GPU):
 
 ```bash
 sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
 ```
+
+With an **AMD** card, swap `onnxruntime-cuda cuda cudnn` for `onnxruntime-rocm` (since 1.16; not yet tested on AMD
+hardware): the converter then runs on the GPU through ROCm, with ONNX Runtime's MIGraphX engine. The first time in
+each session the network is prepared for the card, which can take a while. If the processor has integrated Radeon
+graphics, the network goes to the card with more memory (`HIP_VISIBLE_DEVICES` pins one). Without a GPU engine the
+network runs on the CPU. The DLSS depth of games is NVIDIA-only.
 
 ```bash
 git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh

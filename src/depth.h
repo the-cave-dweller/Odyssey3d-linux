@@ -143,7 +143,7 @@ public:
      cosa aparte. */
   int entradaAncho() const { return inW_; }
   int entradaAlto() const { return inH_; }
-  const std::string &device() const { return dev_; }  /* "NVIDIA" o "CPU" */
+  const std::string &device() const { return dev_; }  /* "NVIDIA", "AMD" (v1.16) o "CPU" */
   double lastMs() const { return ms_; }               /* lo que tardo la ultima estimacion */
   double lastMsRed() const { return msRed_; }          /* solo la pasada de la red */
   double lastMsPost() const { return msPost_; }        /* limpiar, dilatar, apoyo, subir la textura */

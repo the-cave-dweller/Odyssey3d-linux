@@ -380,12 +380,13 @@ static std::string resumenOrt(const std::string &m) {
    ni hace falta el SDK para compilar. MEDIDO en el equipo de Rodolfo (27-nov): CUDA 0 = la 4090 y 1 = la 5080, igual
    que nvidia-smi; en otros equipos con dos tarjetas no tiene por que. Sin libcuda o sin nvidia-smi, vacio: no se mira
    nada. Sirve para no abrir la red donde no cabe: con la tarjeta reventada la sesion revienta. */
-struct TarjetaCuda {
-  std::string uuid;
-  long libreMiB = -1;
+/* (v1.16) una tarjeta por el numero que le da su motor (CUDA o HIP): `id`, su UUID (NVIDIA) o su direccion PCI (AMD) */
+struct TarjetaGpu {
+  std::string id, nombre;
+  long libreMiB = -1, totalMiB = -1;
 };
-static std::vector<TarjetaCuda> tarjetasCuda() {
-  std::vector<TarjetaCuda> tarjetas;
+static std::vector<TarjetaGpu> tarjetasCuda() {
+  std::vector<TarjetaGpu> tarjetas;
   void *lib = dlopen("libcuda.so.1", RTLD_NOW | RTLD_LOCAL);
   if (!lib) return tarjetas;
   struct Uuid { unsigned char bytes[16]; };
@@ -408,7 +409,7 @@ static std::vector<TarjetaCuda> tarjetasCuda() {
         id += hex[u.bytes[k] >> 4];
         id += hex[u.bytes[k] & 15];
       }
-      tarjetas[(size_t)i].uuid = id;
+      tarjetas[(size_t)i].id = id;
     }
   }
   dlclose(lib);
@@ -421,10 +422,49 @@ static std::vector<TarjetaCuda> tarjetasCuda() {
     long ml = -1;
     if (std::sscanf(linea, " %95[^,], %ld", id, &ml) != 2 || ml < 0) continue;
     const std::string clave = strLower(strTrim(id));
-    for (TarjetaCuda &t : tarjetas)
-      if (t.uuid == clave) t.libreMiB = ml;
+    for (TarjetaGpu &t : tarjetas)
+      if (t.id == clave) t.libreMiB = ml;
   }
   pclose(p);
+  return tarjetas;
+}
+
+/* (v1.16) lo mismo con AMD (ROCm): el motor de MIGraphX recibe el numero de HIP, que no tiene por que ir en el orden de
+   /sys/class/drm (y puede contar la grafica integrada del procesador). Se le pregunta a libamdhip64 la direccion PCI de
+   cada una y se casa con lo que dice amdgpu en sysfs (memoria, nombre). La biblioteca no se suelta: HIP arranca hilos
+   suyos y el motor de MIGraphX la usa igual. Sin ROCm instalado, vacio: no se mira nada. Sin probar con una tarjeta
+   AMD de verdad (en el equipo de Rodolfo solo esta la integrada, y sin ROCm) */
+static bool mismaPci(const std::string &a, const std::string &b) {
+  unsigned d1 = 0, b1 = 0, s1 = 0, f1 = 0, d2 = 0, b2 = 0, s2 = 0, f2 = 0;
+  return std::sscanf(a.c_str(), "%x:%x:%x.%x", &d1, &b1, &s1, &f1) == 4 && std::sscanf(b.c_str(), "%x:%x:%x.%x", &d2, &b2, &s2, &f2) == 4 &&
+         d1 == d2 && b1 == b2 && s1 == s2 && f1 == f2;
+}
+static std::vector<TarjetaGpu> tarjetasHip() {
+  std::vector<TarjetaGpu> tarjetas;
+  static void *lib = [] {
+    for (const char *n : {"libamdhip64.so", "libamdhip64.so.7", "libamdhip64.so.6", "/opt/rocm/lib/libamdhip64.so"})
+      if (void *l = dlopen(n, RTLD_NOW | RTLD_LOCAL)) return l;
+    return (void *)nullptr;
+  }();
+  if (!lib) return tarjetas;
+  auto cuenta = (int (*)(int *))dlsym(lib, "hipGetDeviceCount");
+  auto bus = (int (*)(char *, int, int))dlsym(lib, "hipDeviceGetPCIBusId");
+  int n = 0;
+  if (!cuenta || !bus || cuenta(&n) != 0 || n <= 0) return tarjetas;
+  const std::vector<TarjetaAmd> amd = tarjetasAmd();
+  for (int i = 0; i < n; ++i) {
+    TarjetaGpu t;
+    char pci[64] = {};
+    if (bus(pci, (int)sizeof pci, i) == 0) {
+      t.id = strLower(pci);
+      for (const TarjetaAmd &a : amd)
+        if (mismaPci(a.pci, t.id)) {
+          t.nombre = a.nombre, t.totalMiB = a.totalMiB;
+          if (a.totalMiB >= 0 && a.usadaMiB >= 0) t.libreMiB = a.totalMiB - a.usadaMiB;
+        }
+    }
+    tarjetas.push_back(t);
+  }
   return tarjetas;
 }
 #endif
@@ -531,11 +571,48 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     gpu_ = std::atoi(g);
   if (gpu_ < 0)
     sinGpu = true;
-  const std::vector<TarjetaCuda> tarjetas = sinGpu ? std::vector<TarjetaCuda>{} : tarjetasCuda();
+  /* (v1.16) el motor de la tarjeta, segun lo que traiga este ONNX Runtime (Rodolfo: «can you implement rocm apart from
+     cuda?»): CUDA (NVIDIA, el paquete onnxruntime-cuda), MIGraphX (AMD, onnxruntime-rocm: desde la 1.29 de Arch ese es
+     su motor) o ROCm (AMD, el de antes, en compilaciones viejas). ODYSSEYVK_PROVEEDOR=cuda|migraphx|rocm|cpu lo fuerza
+     (para probar el camino de cada uno) */
+  enum class Motor { Cpu, Cuda, Migraphx, Rocm };
+  Motor motor = Motor::Cpu;
+  const std::vector<std::string> provs = Ort::GetAvailableProviders();
+  auto hay = [&](const char *nombre) { return std::find(provs.begin(), provs.end(), nombre) != provs.end(); };
+  const std::string forzado = entornoOdyssey("ODYSSEYVK_PROVEEDOR") ? strLower(entornoOdyssey("ODYSSEYVK_PROVEEDOR")) : std::string();
+  if (forzado == "cuda" || (forzado.empty() && hay("CUDAExecutionProvider"))) motor = Motor::Cuda;
+  else if (forzado == "migraphx" || (forzado.empty() && hay("MIGraphXExecutionProvider"))) motor = Motor::Migraphx;
+  else if (forzado == "rocm" || (forzado.empty() && hay("ROCMExecutionProvider"))) motor = Motor::Rocm;
+  const bool amd = motor == Motor::Migraphx || motor == Motor::Rocm;
+  const char *nombreMotor = motor == Motor::Cuda ? "CUDA" : (motor == Motor::Migraphx ? "MIGraphX" : "ROCm");
+  if (motor == Motor::Cpu && !sinGpu) {
+    std::string lista;
+    for (const std::string &pv : provs) lista += (lista.empty() ? "" : ", ") + pv;
+    std::printf("[conversor] este ONNX Runtime no trae CUDA, MIGraphX ni ROCm (%s): la red va por la CPU\n", lista.c_str());
+    std::fflush(stdout);
+    sinGpu = true;
+  }
+  const std::vector<TarjetaGpu> tarjetas = sinGpu ? std::vector<TarjetaGpu>{} : (amd ? tarjetasHip() : tarjetasCuda());
   if (!tarjetas.empty()) {
     if ((size_t)gpu_ >= tarjetas.size()) {
-      std::printf("[conversor] CUDA %d no se ve (hay %zu): se prueba la 0\n", gpu_, tarjetas.size());
+      std::printf("[conversor] %s %d no se ve (hay %zu): se prueba la 0\n", amd ? "HIP" : "CUDA", gpu_, tarjetas.size());
       gpu_ = 0;
+    }
+    /* (v1.16) con AMD, la grafica integrada del procesador puede salir la primera (un Ryzen 7000 o 9000 la trae, y con
+       solo 0,5 a 2 GB): si la pedida tiene menos de la cuarta parte de memoria que la mas grande, se usa la grande.
+       HIP_VISIBLE_DEVICES deja ver solo una */
+    if (amd) {
+      size_t grande = 0;
+      for (size_t i = 0; i < tarjetas.size(); i++)
+        if (tarjetas[i].totalMiB > tarjetas[grande].totalMiB) grande = i;
+      const TarjetaGpu &pedida = tarjetas[(size_t)gpu_], &g = tarjetas[grande];
+      if (pedida.totalMiB >= 0 && g.totalMiB > 0 && pedida.totalMiB * 4 < g.totalMiB) {
+        std::printf("[conversor] la HIP %d (%s, %ld MB) es mucho mas chica que la %zu (%s, %ld MB): la red va a esa "
+                    "(HIP_VISIBLE_DEVICES fija una)\n", gpu_, pedida.nombre.c_str(), pedida.totalMiB, grande, g.nombre.c_str(),
+                    g.totalMiB);
+        std::fflush(stdout);
+        gpu_ = (int)grande;
+      }
     }
     const long mia = tarjetas[(size_t)gpu_].libreMiB;
     int mejor = gpu_;
@@ -580,6 +657,28 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
        que era lo que pasaba (el aviso decia "se hara con la CPU" y despues se abria CUDA igual, y
        ahi abortaba ONNX Runtime). */
     dev_ = "CPU";
+  } else if (amd) {
+    /* (v1.16) AMD: MIGraphX compila la red al abrir la sesion (la primera vez de cada sesion puede tardar); el limite de
+       memoria, sin poner (la estructura vieja lo deja en 0, que no es «sin limite») */
+    try {
+      if (motor == Motor::Migraphx) {
+        OrtMIGraphXProviderOptions o{};
+        o.device_id = gpu_;
+        o.migraphx_mem_limit = SIZE_MAX;
+        im->so.AppendExecutionProvider_MIGraphX(o);
+      } else {
+        OrtROCMProviderOptions o;
+        o.device_id = gpu_;
+        im->so.AppendExecutionProvider_ROCM(o);
+      }
+      dev_ = "AMD";
+      std::printf("[conversor] con %s en la HIP %d: la primera vez de cada sesion la red se prepara para la tarjeta y puede "
+                  "tardar\n", nombreMotor, gpu_);
+      std::fflush(stdout);
+    } catch (const std::exception &e) {
+      std::printf("[conversor] %s no se pudo usar (%s): se hara con la CPU, mas despacio\n", nombreMotor, resumenOrt(e.what()).c_str());
+      dev_ = "CPU";
+    }
   } else {
     try {
       std::unordered_map<std::string, std::string> co;
@@ -653,6 +752,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     q->ses->Run(Ort::RunOptions{nullptr}, &inN, &tin, 1, &outN, 1);   /* el primero vale para calentar */
   };
   std::string fallo;
+  const auto t0Abrir = std::chrono::steady_clock::now();
   try {
     abrir(im, path, inW_, inH_);
   } catch (const std::exception &e) {
@@ -665,12 +765,12 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
        libonnxruntime (la pila entera dentro de la libreria), el visor moria sin tiempo de devolver
        el panel y el monitor se quedaba con la rejilla 3D sobre el escritorio. Sin reintento el
        video se ve normal, sin relieve, y el panel se devuelve bien. */
-    if (donde == "NVIDIA") quemada_ = true;   /* con CUDA tocado, otra sesion en este proceso revienta */
+    if (donde != "CPU") quemada_ = true;   /* con CUDA tocado, otra sesion en este proceso revienta (con AMD, por si acaso) */
     if (err)
       *err = (donde == "CPU")
                  ? "el modelo no abrio en la CPU: " + fallo
                  : ("el modelo no abrio en la grafica " + std::to_string(gpu_) + " (" + fallo +
-                    "). No se reintenta: despues de un intento CUDA fallido ONNX Runtime aborta por "
+                    "). No se reintenta: despues de un intento fallido en la grafica ONNX Runtime aborta por "
                     "dentro y el visor se quedaba sin tiempo de devolver el panel. El video se ve sin "
                     "relieve; suelta memoria de la grafica y en la siguiente sesion vuelve a convertir");
     return false;
@@ -681,8 +781,14 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   std::printf("[conversor] modelo %s (entrada %d x %d · mapa %d x %d%s) con %s%s\n", path.c_str(), inW_, inH_, sz_, sz_,
               topeArrastre_ ? " · tope de arrastre" : "", dev_.c_str(),
               dev_ == "NVIDIA" ? (" (CUDA " + std::to_string(gpu_) +
-                                  ((size_t)gpu_ < tarjetas.size() ? " " + tarjetas[(size_t)gpu_].uuid : std::string()) + ")").c_str()
-                               : "");
+                                  ((size_t)gpu_ < tarjetas.size() ? " " + tarjetas[(size_t)gpu_].id : std::string()) + ")").c_str()
+              : dev_ == "AMD"
+                  ? (" (" + std::string(nombreMotor) + " · HIP " + std::to_string(gpu_) +
+                     ((size_t)gpu_ < tarjetas.size() && !tarjetas[(size_t)gpu_].nombre.empty() ? " " + tarjetas[(size_t)gpu_].nombre : std::string()) +
+                     " · lista en " +
+                     std::to_string((int)std::lround(std::chrono::duration<double>(std::chrono::steady_clock::now() - t0Abrir).count())) + " s)")
+                        .c_str()
+                  : "");
   return true;
 #else
   (void)path;
@@ -716,7 +822,7 @@ bool DepthNet::cambiar(const std::string &model, std::string *err, bool forzar) 
 #ifdef HAVE_ORT
   if (esRedDeSamsung(nueva)) {
     long mejor = -1;
-    for (const TarjetaCuda &t : tarjetasCuda()) mejor = std::max(mejor, t.libreMiB);
+    for (const TarjetaGpu &t : tarjetasCuda()) mejor = std::max(mejor, t.libreMiB);
     const long falta = requisitoMiB(nueva);
     if (mejor >= 0 && mejor < falta)
       std::printf("[conversor] la grafica esta justa (%ld MB libres en la mejor, esta red pide %ld): si "

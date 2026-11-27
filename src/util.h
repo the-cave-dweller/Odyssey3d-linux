@@ -50,6 +50,17 @@ std::string rutaRedNuestra();
 std::string carpetaRedes();
 std::string rutaRedLigera();
 std::string rutaRedVieja();
+/* (v1.16) las tarjetas de AMD (el conductor amdgpu), leidas de /sys/class/drm/cardN/device: para elegir donde va la red con
+   ROCm (MIGraphX) y para la pestana Ajustes. `pci` es la direccion PCI en minusculas («0000:03:00.0»); `nombre`, el
+   product_name que da el conductor o, si no lo da, lo de entre corchetes de pci.ids («Radeon 610M»); lo que no se pueda
+   leer queda en -1 */
+struct TarjetaAmd {
+  std::string pci, nombre;
+  long totalMiB = -1, usadaMiB = -1;
+  int ocupada = -1;       /* % (gpu_busy_percent) */
+  double tempC = -1.0;
+};
+std::vector<TarjetaAmd> tarjetasAmd();
 /* Marcas del arranque del visor (v1.12): cada paso, en ms desde que arranco el proceso (de
    /proc/self/stat, no del reloj del registro, que agrupa las lineas por tandas). `resumenArranque`
    da la linea con lo que tardo cada paso. */
