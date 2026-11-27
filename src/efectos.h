@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "haz.h"   /* (v1.18) ShaderBeam: sus ajustes van con los de los efectos */
+
 namespace reshadefx {
 struct effect_module;
 }
@@ -53,6 +55,7 @@ struct Ajustes {
   bool puestos = false;          /* el interruptor de todos */
   std::vector<Efecto> lista;     /* en el orden en que se aplican */
   bool propio = false;           /* (al leer) vienen del archivo del juego, no de los de todos */
+  haz::Ajustes haz;              /* (v1.18) ShaderBeam (haz.h): no es un efecto de ReShade, corre en la trama a cada refresco */
   Efecto *buscar(const std::string &nombre);
   bool algoQueAplicar() const;
 };

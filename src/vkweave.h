@@ -6,6 +6,7 @@
 #define ODYSSEY_VKWEAVE_H
 
 #include "frame.h"
+#include "haz.h"
 #include "vkdev.h"
 #include "efectos_vk.h"
 #include "vkui.h"
@@ -26,8 +27,9 @@
    estan en kOff... dentro del .cpp, con un static_assert que avisa si crece mas. */
 /* v0.62: noveno vec4 (tun8, el agrandado guiado del mapa): 320 -> 336.
    v0.67: decimo vec4 (tun9, el paralaje de movimiento): 336 -> 352.
-   v0.83: tun10 (video dividido suavizado): 352 -> 368. v0.90: tun11 (la franja de la barra): 368 -> 384. */
-constexpr size_t kUboBytes = 384;
+   v0.83: tun10 (video dividido suavizado): 352 -> 368. v0.90: tun11 (la franja de la barra): 368 -> 384.
+   v1.18: tun12 y tun13 (ShaderBeam, haz.h): 384 -> 416. */
+constexpr size_t kUboBytes = 416;
 
 class VkWeave {
 public:
@@ -153,6 +155,17 @@ public:
   }
   float rampaBase(bool ejeX) const { return ejeX ? rampaBaseX_ : rampaBaseY_; }
 
+  /* (v1.18) ShaderBeam (haz.h): el simulador del haz de un CRT (o el BFI simple) al final de la trama, a cada refresco.
+     `hzPanel` es el del panel (165 en el G90XF). Con el puesto, `frame` cuenta los refrescos y pinta el que toca */
+  void ponerHaz(const haz::Ajustes &a, double hzPanel);
+  bool hazPuesto() const { return haz_.puesto && haz_.modo != haz::Apagado; }
+  float hazRefrescos() const { return hazN_; }   /* refrescos del panel por cada refresco del CRT (2,75 a 165/60) */
+  /* el proximo `frame` empieza un refresco del CRT: es cuando el visor toma el cuadro nuevo del juego (asi el haz no
+     pinta medio cuadro de uno y medio de otro; el NewInputRequired de ShaderBeam). Sin el haz, siempre */
+  bool hazTomaCuadro() const { return !hazPuesto() || haz::fase(hazCuenta_, hazN_).cicloNuevo; }
+  /* para la medida del volcado: el refresco que pinta el proximo `frame` o `grab` (-1 = el que toca) */
+  void hazFijarRefresco(long long k) { hazFijo_ = k; }
+  uint64_t hazCuenta() const { return hazCuenta_; }
   /* un cuadro completo: adquirir, dibujar trama + interfaz, presentar */
   bool frame(std::string *err);
   /* Donde se va el tiempo de presentar (rama experimental, tirones): en la CPU, esperar a que la
@@ -252,6 +265,11 @@ private:
   bool efectosEnPantalla_ = true;                  /* (v1.18) */
   /* (v1.18) la vista de los efectos: el hueco del panel, si el intercambio deja copiar en sus imagenes, y el blanco de la raya */
   float vista_[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  haz::Ajustes haz_;                               /* (v1.18) ShaderBeam */
+  float hazN_ = 1.0f;                              /* refrescos del panel por refresco del CRT, con el desliz del LCD */
+  uint64_t hazCuenta_ = 0;                         /* refrescos presentados con el haz desde que se encendio */
+  long long hazFijo_ = -1;                         /* (la medida) el refresco que se pinta, -1 = hazCuenta_ */
+  void hazAlUbo(uint8_t *dst) const;
   bool swapCopiable_ = false;
   VkImg blanco_{};
   void pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo, const VkImg &fuente, VkImage conEfectos);

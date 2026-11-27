@@ -2159,6 +2159,109 @@ std::string nombreDeJuego(const std::vector<Juego> &juegos, const std::string &a
 }
 }  // namespace
 
+/* (v1.18) ShaderBeam (haz.h). Rodolfo, señalando https://github.com/mausimus/ShaderBeam: «create this one too». Va en la
+   pestana Efectos, con el ambito de los efectos (todos los juegos o uno), pero no es un efecto de ReShade: corre en la trama a
+   cada refresco del panel. Su pastilla y, puesta, sus ajustes (los de ShaderBeam que hacen falta aqui) */
+static std::string numeroHaz(float v, int decimales) {
+  char t[32];
+  std::snprintf(t, sizeof t, "%.*f", decimales, (double)v);
+  return t;
+}
+static std::vector<std::string> nombresBarrido() {
+  return {idioma::tr("Ninguno (todo a la vez)"), idioma::tr("De arriba abajo"), idioma::tr("De abajo arriba"),
+          idioma::tr("De izquierda a derecha"), idioma::tr("De derecha a izquierda")};
+}
+template <class Pon> static void filasHaz(const haz::Ajustes &h, Pon &&pon) {
+  Hud::ItemPanel s;
+  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("SHADERBEAM · NITIDEZ EN MOVIMIENTO"), s.talCual = true;
+  pon(s, "");
+  Hud::ItemPanel p;
+  p.tipo = Hud::ItemPanel::Interruptor, p.rotulo = "ShaderBeam", p.valor = h.puesto, p.pildora = true;
+  p.nota = idioma::tr("Mucha menos estela al moverse, a cambio de brillo. Parpadea: cuidado si eres fotosensible");
+  p.ayuda = idioma::tr("Blur Busters CRT Beam Simulator (Mark Rejhon y Timothy Lottes), como en ShaderBeam (mausimus). Va bien con un juego fijo a 60 cuadros; con la generación de cuadros o a más de 100 no hace falta.");
+  pon(p, "haz:puesto");
+  if (!h.puesto) return;
+  Hud::ItemPanel m;
+  m.tipo = Hud::ItemPanel::Opciones, m.rotulo = idioma::tr("Modo");
+  m.opciones = {idioma::tr("Haz del CRT"), idioma::tr("BFI simple")};
+  m.elegido = h.modo == haz::BfiSimple ? 1 : 0;
+  m.ayuda = idioma::tr("BFI simple: un refresco con imagen y los demás en negro. Más oscuro y parpadea más; el haz del CRT reparte la luz.");
+  pon(m, "haz:modo");
+  Hud::ItemPanel z;
+  z.tipo = Hud::ItemPanel::Deslizador, z.rotulo = idioma::tr("Hz del CRT");
+  z.frac = (h.hz - haz::kHzMin) / (haz::kHzMax - haz::kHzMin);
+  z.fracDefecto = (60.0f - haz::kHzMin) / (haz::kHzMax - haz::kHzMin);
+  z.valorTexto = numeroHaz(h.hz, 0) + " Hz";
+  z.ayuda = idioma::tr("Los cuadros por segundo del juego: pon el juego fijo a esos cuadros. A 165 Hz, 60 son 2,75 refrescos por cuadro y 55 son 3.");
+  pon(z, "haz:hz");
+  if (h.modo == haz::BfiSimple) return;
+  Hud::ItemPanel g;
+  g.tipo = Hud::ItemPanel::Deslizador, g.rotulo = idioma::tr("Brillo contra estela");
+  g.frac = (h.ganancia - haz::kGananciaMin) / (haz::kGananciaMax - haz::kGananciaMin);
+  g.fracDefecto = (0.5f - haz::kGananciaMin) / (haz::kGananciaMax - haz::kGananciaMin);
+  g.valorTexto = numeroHaz(h.ganancia, 2);
+  g.ayuda = idioma::tr("1 es el brillo de siempre, pero los colores claros no pierden estela; 0,5 es la mitad de brillo y menos estela en todos.");
+  pon(g, "haz:ganancia");
+  Hud::ItemPanel a;
+  a.tipo = Hud::ItemPanel::Deslizador, a.rotulo = idioma::tr("Gamma del panel");
+  a.frac = (h.gamma - haz::kGammaMin) / (haz::kGammaMax - haz::kGammaMin);
+  a.fracDefecto = (2.2f - haz::kGammaMin) / (haz::kGammaMax - haz::kGammaMin);
+  a.valorTexto = numeroHaz(h.gamma, 2);
+  a.ayuda = idioma::tr("Si se ven franjas horizontales que bajan despacio, muévela hasta que se vayan.");
+  pon(a, "haz:gamma");
+  Hud::ItemPanel b;
+  b.tipo = Hud::ItemPanel::Desplegable, b.rotulo = idioma::tr("Barrido");
+  const std::vector<std::string> dirs = nombresBarrido();
+  b.elegido = std::clamp(h.barrido, 0, 4);
+  b.valorTexto = idioma::trf("Barrido: {}", {dirs[(size_t)b.elegido]});   /* el desplegable no lleva rotulo aparte */
+  b.ayuda = idioma::tr("Por donde pasa el haz. Ninguno quita las franjas, pero se ve peor.");
+  std::string idl = "lista:haz-barrido";
+  for (size_t o = 0; o < dirs.size(); o++) {
+    b.opciones.push_back(dirs[o]), b.ayudas.push_back(""), b.estadosOpc.push_back(0);
+    idl += '\x1f' + std::string("haz:barrido:") + std::to_string(o);
+  }
+  pon(b, idl);
+}
+
+static bool aplicarHaz(const std::string &que, int sub, float frac, std::string *aviso) {
+  const std::string app = g_efectosDe == "*" ? std::string() : g_efectosDe;
+  efectos::Ajustes a = efectos::cargar(app);
+  haz::Ajustes &h = a.haz;
+  std::string dicho;
+  const float f = std::clamp(frac, 0.0f, 1.0f);
+  if (que == "puesto") {
+    h.puesto = !h.puesto;
+    dicho = idioma::tr(h.puesto ? "ShaderBeam encendido" : "ShaderBeam apagado");
+  } else if (que == "modo") {
+    if (sub < 0 || sub > 1) return false;
+    h.modo = sub == 1 ? haz::BfiSimple : haz::Crt;
+    dicho = idioma::tr(sub == 1 ? "ShaderBeam: BFI simple" : "ShaderBeam: haz del CRT");
+  } else if (que == "hz") {
+    h.hz = std::round(haz::kHzMin + f * (haz::kHzMax - haz::kHzMin));
+    dicho = std::string(idioma::tr("Hz del CRT")) + " " + numeroHaz(h.hz, 0);
+  } else if (que == "ganancia") {
+    h.ganancia = std::round((haz::kGananciaMin + f * (haz::kGananciaMax - haz::kGananciaMin)) * 100.0f) / 100.0f;
+    dicho = std::string(idioma::tr("Brillo contra estela")) + " " + numeroHaz(h.ganancia, 2);
+  } else if (que == "gamma") {
+    h.gamma = std::round((haz::kGammaMin + f * (haz::kGammaMax - haz::kGammaMin)) * 100.0f) / 100.0f;
+    dicho = std::string(idioma::tr("Gamma del panel")) + " " + numeroHaz(h.gamma, 2);
+  } else if (que.rfind("barrido:", 0) == 0) {
+    const int o = std::atoi(que.substr(8).c_str());
+    if (o < 0 || o > 4) return false;
+    h.barrido = o;
+    dicho = idioma::trf("Barrido: {}", {nombresBarrido()[(size_t)o]});
+  } else {
+    return false;
+  }
+  std::string err;
+  if (!efectos::guardar(app, a, &err)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {err});
+    return false;
+  }
+  if (aviso) *aviso = dicho;
+  return true;
+}
+
 static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const std::vector<Juego> &juegos) {
   /* (v1.18) en dos mitades (Rodolfo: «divide the effect space at the bottom half into two parts, in half», «el menu normal
      se queda asi mitad y mitad»): a la izquierda los efectos de la lista con sus ajustes; a la derecha, añadir y las
@@ -2323,6 +2426,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   }
   pon(dsp, idd);
   if (previa) return;   /* en la columna, solo lo que se prueba con el juego a la vista */
+  filasHaz(a.haz, pon);   /* (v1.18) ShaderBeam, en la mitad de la derecha */
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
   n.rotulo = carpeta.empty() ? std::string() : idioma::trf("{} efectos en {}", {std::to_string(disp.size()), carpeta});
@@ -3037,6 +3141,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     g_pestanaPedida = 5;
     return true;
   }
+  if (id.rfind("haz:", 0) == 0) return aplicarHaz(id.substr(4), sub, frac, aviso);   /* (v1.18) ShaderBeam */
   if (id.rfind("efx:", 0) == 0) return aplicarEfectos(id.substr(4), sub, frac, aviso);
   if (id.rfind("juego:", 0) == 0 && sub == 2) {
     g_integJuego = id.substr(6);

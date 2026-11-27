@@ -2015,6 +2015,96 @@ static std::string estadoVentana(const std::string &uuid, bool *viva) {
 }
 #endif
 
+/* (v1.18) ShaderBeam, la medida del volcado (con --dump y el haz puesto): pinta con el sombreador de verdad, uno a uno, los
+   refrescos de unos cuantos ciclos del CRT que acaben justo en un refresco (2,75 → 4 ciclos = 11 refrescos), y dice por
+   franjas de la pantalla cuanta luz da cada refresco y cuanta dan todos juntos, en luz lineal, frente a la trama sin el haz.
+   Lo que tiene que salir (la cuenta del original): cada refresco enciende sobre todo la franja por donde va el haz, y la
+   media de los refrescos es la ganancia por la luz de siempre, PAREJA de arriba abajo (sin franjas: «seamless»). Guarda
+   los tres primeros refrescos como -shaderbeam-K.png */
+static void medirHaz(VkWeave &wv, const std::string &base, int fbW, int fbH, const haz::Ajustes &aj) {
+  const float N = wv.hazRefrescos();
+  int ciclos = 1;
+  double mejor = 1e9;
+  for (int c = 1; c <= 8; c++) {
+    const double d = std::fabs((double)c * N - std::floor((double)c * N + 0.5));
+    if (d < mejor - 1e-6) mejor = d, ciclos = c;
+  }
+  const int K = std::max(1, (int)std::floor((double)ciclos * N + 0.5));
+  const int B = 8;   /* franjas de arriba abajo */
+  const double g = aj.gamma;
+  auto lineal = [g](uint8_t v) {
+    const double c = v / 255.0;
+    return c > 0.04045 ? std::pow(c / 1.055 + 0.055 / 1.055, g) : c / 12.92;
+  };
+  auto franjas = [&](const std::vector<uint8_t> &px, std::vector<double> &out) {
+    out.assign(B, 0.0);
+    std::vector<long> n(B, 0);
+    for (int y = 0; y < fbH; y += 3)
+      for (int x = 0; x < fbW; x += 5) {
+        const size_t q = ((size_t)y * fbW + x) * 4;
+        out[(size_t)(y * B / fbH)] += (lineal(px[q]) + lineal(px[q + 1]) + lineal(px[q + 2])) / 3.0;
+        n[(size_t)(y * B / fbH)]++;
+      }
+    for (int b = 0; b < B; b++) out[b] /= std::max(1L, n[b]);
+  };
+  std::string err;
+  /* la de siempre: la misma trama sin el haz */
+  haz::Ajustes sin = aj;
+  sin.puesto = false;
+  wv.ponerHaz(sin, 0.0);
+  std::vector<uint8_t> px;
+  std::vector<double> fSin, f, suma(B, 0.0);
+  if (!wv.grab(px, &err)) {
+    std::fprintf(stderr, "[shaderbeam] medida: %s\n", err.c_str());
+    return;
+  }
+  franjas(px, fSin);
+  wv.ponerHaz(aj, (double)N * aj.hz);
+  std::printf("[shaderbeam] medida: %d refrescos (%d ciclos del CRT de %.3f), %d franjas de arriba abajo, luz lineal\n", K,
+              ciclos, (double)N, B);
+  for (int k = 0; k < K; k++) {
+    wv.hazFijarRefresco(k);
+    if (!wv.grab(px, &err)) {
+      std::fprintf(stderr, "[shaderbeam] medida: %s\n", err.c_str());
+      break;
+    }
+    if (k < 3) glPngSave(base + "-shaderbeam-" + std::to_string(k) + ".png", fbW, fbH, px.data());
+    franjas(px, f);
+    std::string fila;
+    char t[32];
+    for (int b = 0; b < B; b++) {
+      suma[b] += f[b];
+      std::snprintf(t, sizeof t, " %5.2f", fSin[b] > 1e-6 ? f[b] / fSin[b] : 0.0);
+      fila += t;
+    }
+    std::printf("[shaderbeam]   refresco %2d (haz en %.2f):%s\n", k, (double)haz::fase((uint64_t)k, N).raster, fila.c_str());
+  }
+  wv.hazFijarRefresco(-1);
+  std::string fila;
+  double peor = 0.0, media = 0.0;
+  for (int b = 0; b < B; b++) {
+    const double r = fSin[b] > 1e-6 ? suma[b] / K / fSin[b] : 0.0;
+    char t[32];
+    std::snprintf(t, sizeof t, " %5.3f", r);
+    fila += t;
+    media += r / B;
+  }
+  for (int b = 0; b < B; b++) {
+    const double r = fSin[b] > 1e-6 ? suma[b] / K / fSin[b] : 0.0;
+    peor = std::max(peor, std::fabs(r - media));
+  }
+  /* lo que tiene que salir: la ganancia con el haz; con el BFI simple, los refrescos encendidos entre todos */
+  double esperado = aj.ganancia;
+  if (aj.modo == haz::BfiSimple) {
+    int encendidos = 0;
+    for (int k = 0; k < K; k++) encendidos += haz::fase((uint64_t)k, N).cicloNuevo ? 1 : 0;
+    esperado = (double)encendidos / K;
+  }
+  std::printf("[shaderbeam]   media de los %d:%s · media %.3f (tiene que dar %.3f) · la franja que mas se aparta %.3f\n", K,
+              fila.c_str(), media, esperado, peor);
+  std::fflush(stdout);
+}
+
 int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   marcaArranque("hasta el visor");
   std::string sock = ensureWaylandEnv();
@@ -4181,6 +4271,33 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
     }
 
+    /* (v1.18) ShaderBeam (haz.h): sus ajustes van con los de los efectos del juego de debajo (los suyos o los de todos),
+       mirados cada medio segundo como los efectos. Sobre lo que no es un juego, apagado */
+    {
+      static double tHaz = -1.0;
+      if (glfwGetTime() - tHaz >= 0.5) {
+        tHaz = glfwGetTime();
+        static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
+        const bool esJuego = forzado || ui.esJuego == 1;
+        const std::string app = forzado ? (std::string(forzado) == "todos" ? std::string() : std::string(forzado)) : ui.appJuego;
+        static long long firmaHaz = -2;
+        static haz::Ajustes hazLeido;
+        const long long f = esJuego ? efectos::firma(app) : -1;
+        if (f != firmaHaz) {
+          firmaHaz = f;
+          hazLeido = esJuego ? efectos::cargar(app).haz : haz::Ajustes{};
+        }
+        /* ODYSSEYVK_SHADERBEAM_HZ_PANEL=165 (taller): los Hz del panel para el haz, para medirlo en el compositor aparte
+           (que va a los suyos) con las cuentas del G90XF */
+        static const double kHzPanelHaz = [] {
+          const char *e = entornoOdyssey("ODYSSEYVK_SHADERBEAM_HZ_PANEL");
+          const double v = e ? std::atof(e) : 0.0;
+          return (v >= 30.0 && v <= 1000.0) ? v : 0.0;
+        }();
+        wv.ponerHaz(hazLeido, kHzPanelHaz > 0.0 ? kHzPanelHaz : (hz > 0 ? (double)hz : 60.0));
+      }
+    }
+
     /* la fuente de este cuadro */
     bool newSource = false;
     if (kind == SourceKind::Test) {
@@ -4267,7 +4384,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_CAPTURE
     } else if (kind == SourceKind::Capture && haveCap) {
       cap.pump();
-      if (cap.frameCount() != lastFrameCount) {
+      /* (v1.18) con ShaderBeam, el cuadro nuevo del juego se toma solo al empezar un refresco del CRT: si entra a media
+         pasada, el haz pinta arriba uno y abajo otro (un corte que se ve al moverse). Lo de ShaderBeam */
+      if (cap.frameCount() != lastFrameCount && wv.hazTomaCuadro()) {
         if (lastFrameCount == 0) marcaArranque("primer cuadro capturado");
         lastFrameCount = cap.frameCount();
         ultimoNuevo = now;
@@ -4466,6 +4585,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_OPENCV
     if (rastreoVivo) algoNuevo = true;
 #endif
+    if (wv.hazPuesto()) algoNuevo = true;   /* (v1.18) ShaderBeam pinta una franja distinta en cada refresco del panel */
     if (!opts.alwaysRender && kind == SourceKind::Capture && !algoNuevo &&
         now - ultimoPresente < 1.0 / 30.0)
       continue;
@@ -5915,6 +6035,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                        trama.second, trama.first, fbW, fbH, a.c_str());
         if (kind == SourceKind::Test && !testPx.empty())
           glPngSave(opts.dumpPath + "-origen.png", fbW, fbH, testPx.data());
+        if (wv.hazPuesto()) {   /* (v1.18) ShaderBeam: la medida de sus refrescos */
+          static const char *forzadoHaz = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
+          const std::string appHaz = forzadoHaz ? (std::string(forzadoHaz) == "todos" ? std::string() : std::string(forzadoHaz)) : ui.appJuego;
+          medirHaz(wv, opts.dumpPath, fbW, fbH, efectos::cargar(appHaz).haz);
+        }
 #ifdef HAVE_CAPTURE
         if (kind == SourceKind::Capture)
           std::printf("[captura] fotogramas recibidos del compositor: %llu · %s\n",
@@ -5974,6 +6099,15 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                     "ms (%ld cuadros) · cola %s\n",
                     tc.vallaMax, tc.adquirirMax, tc.presentarMax, tc.gpuMedia, tc.gpuMax, tc.gpuN,
                     dev.prioridad().c_str());
+        {   /* (v1.18) ShaderBeam: cuantos refrescos pinto el haz desde la ultima vez (tienen que ser los del panel) */
+          static uint64_t hazAntes = 0;
+          static double tHazAntes = 0.0;
+          const double tH = glfwGetTime();
+          if (wv.hazPuesto() && tHazAntes > 0.0 && wv.hazCuenta() >= hazAntes)
+            std::printf("[shaderbeam] %.1f refrescos por segundo con el haz (el panel va a %d Hz)\n",
+                        (double)(wv.hazCuenta() - hazAntes) / (tH - tHazAntes), hz);
+          hazAntes = wv.hazCuenta(), tHazAntes = tH;
+        }
         tirFuenteMax = tirTrabajoMax = tirPresentaMax = tirPresentaHueco = 0.0;
         tirFuenteN = tirFuenteHuecos = tirTrabajoLargos = tirPresentaLargas = 0;
         medLeeMax = medSubeMax = 0.0;

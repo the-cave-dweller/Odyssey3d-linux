@@ -50,6 +50,68 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## ShaderBeam en el visor: el haz de un CRT a cada refresco del panel, para ver nítido lo que se mueve (v1.18)
+
+- Rodolfo, señalando https://github.com/mausimus/ShaderBeam: «create this one too», y luego «tambien analiza como puede
+  servirme mejor».
+- **Qué es ShaderBeam** (leído en su repositorio, sin bajarlo; MIT, de mausimus): un programa de Windows que captura el
+  escritorio y lo vuelve a pintar a pantalla completa en cada refresco del monitor con el *Blur Busters CRT Beam
+  Simulator* de Mark Rejhon y Timothy Lottes (MIT 2024), o con un BFI simple. Un panel LCD deja cada cuadro quieto todo su
+  tiempo y el ojo, que sigue lo que se mueve, lo ve corrido (a 60 cuadros, 16,7 ms de estela). El simulador enciende en
+  cada refresco solo la franja por donde pasaría el haz de un CRT y reparte lo que no cabe (los píxeles claros) en los
+  refrescos siguientes, como el fósforo: mucha menos estela, a cambio de brillo.
+- **Dónde va**: no en la cadena de efectos de ReShade, que corre una vez por cuadro del juego, sino al final de la trama
+  (`shaders/weave.frag`, `haz()`), que corre una vez por refresco del panel (165 en el G90XF): después de tramar, por
+  subpíxel (cada canal por su lado, como en el original), y antes de la interfaz, que no parpadea. Las cuentas son las del
+  original, sin tocar, en su modo *frame-ahead* (los tres cuadros que mira son el último). `src/haz.h`: los ajustes, los
+  refrescos por cuadro del CRT (`165/60 = 2,75`; no hace falta que sea entero) con el desliz de ShaderBeam contra la
+  retención de los LCD cuando son un entero par (82,5 Hz → 2,001), y en qué refresco va el haz (en dobles, como el
+  original).
+- **El visor** (`vkview.cpp`, `vkweave.cpp`): con el haz puesto presenta en cada refresco (como con el rastreo de la
+  cabeza), cuenta los refrescos, y toma el cuadro nuevo del juego solo al empezar cada refresco del CRT (el
+  `NewInputRequired` de ShaderBeam): si entrara a media pasada, el haz pintaría arriba uno y abajo otro.
+- **El panel**: en la pestaña Efectos, en la mitad de la derecha, la sección *ShaderBeam · nitidez en movimiento* con su
+  pastilla y, puesta, el modo (*Haz del CRT* o *BFI simple*), los *Hz del CRT* (los cuadros del juego, 30 a 120), *Brillo
+  contra estela* (la ganancia, 0,1 a 1), la *Gamma del panel* (1,5 a 3) y el *Barrido* (ninguno, ↓, ↑, →, ←). Va con el
+  ámbito de los efectos: los de todos los juegos o los de uno (`shaderbeam = si`, `shaderbeam.hz = 60`... en
+  `~/.config/odysseyvk/effects/all.conf` o `APPID.conf`), pero no depende del interruptor de los efectos. Sobre lo que no
+  es un juego, apagado. 25 textos nuevos en los seis idiomas (`revisar`: 0 sin traducir).
+- **Medido** (en el compositor aparte, sin ventanas, con `ODYSSEYVK_SHADERBEAM_HZ_PANEL=165` para las cuentas del G90XF;
+  `--dump` pinta con el sombreador de verdad los refrescos de 4 ciclos del CRT y da la luz por franjas):
+
+  | | Resultado |
+  |---|---|
+  | Gris medio (128), CRT a 60 sobre 165, ganancia 0,5 | cada refresco enciende ~3 de 8 franjas, que bajan 0,36 de pantalla por refresco; la media de los 11 refrescos, **0,499** de la luz de siempre en las 8 franjas (se aparta 0,000: sin franjas) |
+  | Blanco, lo mismo | pico 1,00 por refresco (lo que no cabe pasa al siguiente); media **0,500** en las 8 |
+  | BFI simple a 55 (3 refrescos) | 1 refresco entero y 2 en negro: media 0,333 |
+  | Tarjeta por refresco a 3840x2160 | 0,53 ms con el haz y 0,44 sin él (+0,09 ms, un 1,5 % de un refresco a 165 Hz) |
+  | Refrescos pintados con el haz | todos los del compositor (60 de 60 por segundo) |
+  | `tools/prueba_haz.cpp` (las cuentas en la CPU, 55/60/72/82,5/100 Hz) | la luz de un ciclo se aparta menos de un 1 % desde el gris 32; el cuadro nuevo, uno por ciclo del CRT |
+
+  Por debajo del gris 16/255, a gamma 2,2, el paso a sRGB del original (pensado para 2,4) aplasta un poco los casi negros
+  (el 8/255 da un 27 % menos de muy poco): es de ShaderBeam y no se toca.
+- **Cómo te sirve mejor** (lo pedido):
+  - **Para qué sí**: los juegos que van fijos a 55 o 60 cuadros. A 60 sobre 165 un gris medio queda encendido del orden de un
+    refresco (6 ms) en vez de 16,7: unas 2,75 veces menos estela, sin la latencia ni los artefactos de la generación de
+    cuadros. Mejor aún **fijar el juego a 55 y poner 55 Hz**: 3 refrescos justos por cuadro (Blur Busters recomienda
+    divisores enteros) y, al ser impar, sin desliz contra la retención del LCD.
+  - **Para qué no**: con MAKO FG o a más de 100 cuadros (el panel ya da cada refresco un cuadro nuevo: el haz tiraría los
+    que no caen al empezar su ciclo), ni en vídeos (sobre lo que no es un juego no se enciende).
+  - **El brillo**: a 0,5 queda la mitad, y en 3D la lente ya quita luz. Si se ve oscuro, *Brillo contra estela* a 0,6-0,7:
+    los colores oscuros y medios siguen sin estela y solo los claros pierden algo.
+  - **Las franjas**: si se ven bandas horizontales que bajan despacio, mover la *Gamma del panel* (2,2 a 2,4); *Barrido:
+    Ninguno* las quita del todo, pero se ve peor.
+  - **Lo que lo estropea**: un refresco perdido se ve como un destello. El rastreo de la cabeza ya presenta a 165 y la red
+    va en la otra tarjeta, así que debería aguantar; el registro dice `[shaderbeam] N refrescos por segundo con el haz`
+    cada 5 s (tienen que ser ~165) y `[tirones]` lo demás.
+  - **Ojo**: parpadea a la frecuencia del CRT (60 Hz). A 165 Hz el panel está en lo justo (Blur Busters pide 240 o más
+    para que se vea como un CRT); a quien le moleste el parpadeo de 60 Hz, mejor no.
+- **Lo que no está probado**: en un juego de verdad con la captura (el cambio de cuadro al empezar cada ciclo solo se
+  probó en la CPU) y en el panel a 165 Hz, a la vista. Falta la instalación de Rodolfo.
+- Lo de ShaderBeam que no se trae: su captura (aquí la imagen ya está en el visor), la cámara lenta, el banco de pruebas y
+  la segunda tarjeta. Se cita a Blur Busters (Mark Rejhon y Timothy Lottes), como pide el original, y a ShaderBeam, en el
+  README y en el panel.
+
 ## El contador de MAKO ya no se pone con Neural Forge: Stray y el orden de las capas (v1.18)
 
 - Rodolfo: «diagnose stray crash as it did not happened before» y «layering issues it seems, please help me fix».

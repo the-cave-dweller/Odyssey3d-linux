@@ -26,11 +26,11 @@ constexpr size_t kMaxHudVerts = 65536;
    y el octavo las capas por profundidad (cuanto se estira el fondo y cuanto el frente). */
 constexpr size_t kOffV2 = 0, kOffV3 = 64, kOffV4 = 128, kOffRes = 192, kOffTun1 = 208, kOffTun2 = 224,
                  kOffTun3 = 240, kOffTun4 = 256, kOffTun5 = 272, kOffTun6 = 288, kOffTun7 = 304,
-                 kOffTun8 = 320, kOffTun9 = 336, kOffTun10 = 352, kOffTun11 = 368;
+                 kOffTun8 = 320, kOffTun9 = 336, kOffTun10 = 352, kOffTun11 = 368, kOffTun12 = 384, kOffTun13 = 400;
 /* kUboBytes esta declarado en vkweave.h para que el almacen en CPU use el mismo numero. Si se
    anade otro vec4 al sombreador, hay que subir kUboBytes de 16 en 16 Y anadir su kOff... aqui:
    este aviso salta en la compilacion si los desfases se salen del bloque. */
-static_assert(kOffTun11 + 16 == kUboBytes, "el ultimo bloque del UBO no cuadra con kUboBytes");
+static_assert(kOffTun13 + 16 == kUboBytes, "el ultimo bloque del UBO no cuadra con kUboBytes");
 
 /* esquinas del campo en el mismo orden que la ruta OpenGL: TL, TR, BL, BR */
 const double kNdc[4][2] = {{-1.0, -1.0}, {1.0, -1.0}, {-1.0, 1.0}, {1.0, 1.0}};
@@ -966,6 +966,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   t11[0] = franjaEntera_ ? 1.0f : 0.0f;
   t11[1] = verProfundidad_ ? 1.0f : 0.0f;   /* la vista de depuracion (v1.12) */
   t11[2] = t11[3] = 0.0f;
+  hazAlUbo(dst);   /* (v1.18) ShaderBeam: tun12 y tun13 */
   /* Red de seguridad contra NaN y infinito. Un solo numero que no sea un numero dentro de los
      parametros vuelve loco al sombreador: `clamp`, `mix` y hasta la coordenada de una textura con
      NaN no estan definidos, y en la practica el resultado es una pantalla GRIS pareja (el neutro
@@ -976,7 +977,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
   {
     static const char *kMiembro[] = {"campo v2", "campo v3", "rampa v4", "res",      "tun1",
                                      "tun2",      "tun3",       "tun4",       "tun5", "tun6",
-                                     "tun7",      "tun8",       "tun9", "tun10"};   /* uno por vec4: si falta, un NaN ahi leia fuera */
+                                     "tun7",      "tun8",       "tun9", "tun10", "tun11", "tun12", "tun13"};   /* uno por vec4: si falta, un NaN ahi leia fuera */
     const float *fl = (float *)dst;
     int malos = 0, primero = -1;
     for (int i = 0; i < (int)(kUboBytes / 4); i++)
@@ -1298,6 +1299,7 @@ bool VkWeave::frame(std::string *err) {
   r = vkQueuePresentKHR(dev_->queue(), &pi);
   tiempos_.presentarMax = std::max(tiempos_.presentarMax, msDesde(tPre0));
   tiempos_.n++;
+  if (hazPuesto()) hazCuenta_++;   /* (v1.18) ShaderBeam: el siguiente refresco, la siguiente franja */
   if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
     lost_ = true;
     return false;
@@ -1363,6 +1365,42 @@ void VkWeave::uboDelAfinado(uint8_t *dst) const {
   res[0] = (float)finoW_, res[1] = (float)finoH_;
   ((float *)(dst + kOffTun4))[3] = 3.0f;
   ((float *)(dst + kOffTun10))[2] = 0.0f;
+  ((float *)(dst + kOffTun12))[0] = 0.0f;   /* (v1.18) el haz solo en la salida: el afinado escribe la profundidad */
+}
+
+/* (v1.18) ShaderBeam (haz.h) */
+void VkWeave::ponerHaz(const haz::Ajustes &a, double hzPanel) {
+  const float n = haz::refrescosPorCrt(hzPanel, a.hz);
+  const bool antes = hazPuesto();
+  if (a == haz_ && n == hazN_) return;
+  haz_ = a;
+  hazN_ = n;
+  if (hazPuesto() && !antes) hazCuenta_ = 0;   /* se empieza por arriba */
+  if (hazPuesto())
+    std::printf("[shaderbeam] %s: CRT a %.1f Hz sobre el panel a %.0f Hz = %.3f refrescos por cuadro%s · ganancia %.2f · "
+                "gamma %.2f · barrido %d\n",
+                haz_.modo == haz::BfiSimple ? "BFI simple" : "haz del CRT", (double)haz_.hz, hzPanel, (double)hazN_,
+                std::fabs(hzPanel / haz_.hz - hazN_) > 1e-4 ? " (con el desliz contra la retencion del LCD)" : "",
+                (double)haz_.ganancia, (double)haz_.gamma, haz_.barrido);
+  else if (antes)
+    std::printf("[shaderbeam] apagado\n");
+  std::fflush(stdout);
+}
+
+void VkWeave::hazAlUbo(uint8_t *dst) const {
+  float *t12 = (float *)(dst + kOffTun12), *t13 = (float *)(dst + kOffTun13);
+  t12[0] = t12[1] = t12[2] = t12[3] = 0.0f;
+  t13[0] = t13[1] = t13[2] = t13[3] = 0.0f;
+  if (!hazPuesto()) return;
+  const uint64_t k = hazFijo_ >= 0 ? (uint64_t)hazFijo_ : hazCuenta_;
+  const haz::Fase f = haz::fase(k, hazN_);
+  t12[0] = (float)haz_.modo;
+  t12[1] = hazN_;
+  t12[2] = f.raster;
+  t12[3] = haz_.ganancia;
+  t13[0] = haz_.gamma;
+  t13[1] = (float)haz_.barrido;
+  t13[2] = f.cicloNuevo ? 1.0f : 0.0f;   /* BFI simple: el primer refresco de cada cuadro, encendido */
 }
 
 void VkWeave::pasoFino(VkCommandBuffer cb, VkDescriptorSet set) {
@@ -1422,6 +1460,7 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
     /* el pase de copia del sombreador saca la fuente tal cual, sin campo de la lente ni trama:
        asi se ve si un cuadro plano viene de la imagen que entra o de los calculos de la trama */
     ((float *)(uboData_ + kOffTun4))[3] = 1.0f;
+    ((float *)(uboData_ + kOffTun12))[0] = 0.0f;   /* (v1.18) y sin el haz de ShaderBeam */
   }
   cornersDirty_ = false;
 

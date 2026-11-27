@@ -76,6 +76,22 @@ What you get:
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the
   log.
+- **ShaderBeam: motion clarity in the 3D viewer.** What [ShaderBeam](https://github.com/mausimus/ShaderBeam) does on
+  Windows, inside OdysseyVK: the Blur Busters CRT Beam Simulator runs at the end of the 3D weave on **every refresh of the
+  panel**, lighting only the band a CRT's beam would be drawing and spreading bright pixels over the next refreshes like
+  phosphor. A game locked at 60 fps on the 165 Hz G90XF (2.75 refreshes per frame) keeps a mid-grey point lit for about
+  one refresh (6 ms) instead of 16.7 ms: much less blur when things move, at the cost of brightness, and without frame
+  generation's latency. It is a switch in the **Effects** tab (all games or one game) with its mode (*CRT beam* or
+  *Simple BFI*), the *CRT Hz* (the game's locked frame rate; 55 gives exactly 3 refreshes per frame), *Brightness vs
+  blur*, the *Panel gamma* (move it if slow horizontal bands show) and the *Scan* direction. It is not a ReShade effect:
+  those run once per game frame. The game frame changes only at the start of each simulated CRT refresh, as in
+  ShaderBeam, and the pill and panel don't flicker. Not useful with MAKO frame generation or above ~100 fps. **It
+  flickers at the CRT's rate: take care if you are photosensitive.**
+
+| ShaderBeam, measured (4K, CRT at 60 Hz on 165 Hz, gain 0.5) | |
+|---|---|
+| Light of each of 8 screen bands, averaged over 4 CRT refreshes | 0.499 of normal in all of them (mid grey), 0.500 (white): no banding |
+| GPU per refresh | 0.53 ms, 0.44 ms without (+0.09 ms) |
 
 | | Before | 1.18 |
 |---|---|---|
@@ -466,6 +482,10 @@ Built on the work of [macdissey-3d](https://github.com/Fulviuus/macdissey-3d) (m
 [Linux_3D_SBS_Player](https://github.com/m-j-tilley/Linux_3D_SBS_Player) (lens model), with
 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) for depth and
 [YuNet](https://github.com/opencv/opencv_zoo) for face detection. MIT license.
+
+The motion clarity mode is the [Blur Busters CRT Beam Simulator](https://github.com/blurbusters/crt-beam-simulator) by
+Mark Rejhon (@BlurBusters) and Timothy Lottes (MIT), as adapted in [ShaderBeam](https://github.com/mausimus/ShaderBeam)
+by mausimus (MIT).
 
 The panel is styled after [vkDaedalus](https://github.com/Daaboulex/vkDaedalus), so both feel the same in a game,
 and uses its typeface, [Barlow](https://github.com/jpt/barlow) (SIL Open Font License 1.1, see

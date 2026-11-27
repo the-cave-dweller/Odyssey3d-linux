@@ -177,6 +177,16 @@ static std::vector<std::string> partir(const std::string &s, char sep) {
   return v;
 }
 
+/* (v1.18) un numero del archivo, con punto o con coma; `si_no` si no lo es */
+static float numeroDe(const std::string &v, float si_no) {
+  std::string t = v;
+  for (char &c : t)
+    if (c == ',') c = '.';
+  char *fin = nullptr;
+  const float x = std::strtof(t.c_str(), &fin);
+  return (fin && fin != t.c_str()) ? x : si_no;
+}
+
 static bool leerArchivo(const std::string &ruta, Ajustes &a) {
   std::ifstream f(ruta);
   if (!f) return false;
@@ -191,6 +201,13 @@ static bool leerArchivo(const std::string &ruta, Ajustes &a) {
     if (ig == std::string::npos) continue;
     const std::string k = strTrim(l.substr(0, ig)), v = strTrim(l.substr(ig + 1));
     if (k == "puestos") a.puestos = v == "si" || v == "1" || v == "true";
+    /* (v1.18) ShaderBeam (haz.h), antes de lo de «Efecto.Valor» */
+    else if (k == "shaderbeam") a.haz.puesto = v == "si" || v == "1" || v == "true";
+    else if (k == "shaderbeam.modo") a.haz.modo = v == "bfi" ? haz::BfiSimple : haz::Crt;
+    else if (k == "shaderbeam.hz") a.haz.hz = haz::topar(numeroDe(v, a.haz.hz), haz::kHzMin, haz::kHzMax);
+    else if (k == "shaderbeam.ganancia") a.haz.ganancia = haz::topar(numeroDe(v, a.haz.ganancia), haz::kGananciaMin, haz::kGananciaMax);
+    else if (k == "shaderbeam.gamma") a.haz.gamma = haz::topar(numeroDe(v, a.haz.gamma), haz::kGammaMin, haz::kGammaMax);
+    else if (k == "shaderbeam.barrido") a.haz.barrido = (int)haz::topar(numeroDe(v, (float)a.haz.barrido), 0.0f, 4.0f);
     else if (k == "effects") orden = partir(v, ':');
     else if (k == "disabledEffects") apagados = partir(v, ':');
     else if (const size_t at = k.find('@'); at != std::string::npos && at > 0) porNombre[k.substr(0, at)].defs.push_back({k.substr(at + 1), v});
@@ -224,6 +241,15 @@ bool guardar(const std::string &appid, const Ajustes &a, std::string *err) {
   o << "# OdysseyVK: los efectos de ReShade " << (appid.empty() ? std::string("de todos los juegos") : "del juego " + appid)
     << " (los escribe el panel; como los de vkBasalt)\n";
   o << "puestos = " << (a.puestos ? "si" : "no") << "\n";
+  /* (v1.18) ShaderBeam (haz.h) */
+  {
+    char t[200];
+    std::snprintf(t, sizeof t, "shaderbeam = %s\nshaderbeam.modo = %s\nshaderbeam.hz = %.1f\nshaderbeam.ganancia = %.2f\n"
+                               "shaderbeam.gamma = %.2f\nshaderbeam.barrido = %d\n",
+                  a.haz.puesto ? "si" : "no", a.haz.modo == haz::BfiSimple ? "bfi" : "crt", (double)a.haz.hz,
+                  (double)a.haz.ganancia, (double)a.haz.gamma, a.haz.barrido);
+    o << t;
+  }
   std::string orden, apagados;
   for (const Efecto &e : a.lista) {
     orden += (orden.empty() ? "" : ":") + e.nombre;

@@ -79,6 +79,22 @@ Lo que tienes:
 - **Una prueba en cada cambio de capa**: otra red, la profundidad de DLSS que llega o se va, u otro preset de DLSS en
   el juego, y el registro apunta 3 segundos de lo que corre (FPS del juego, mapas por segundo, refrescos perdidos y lo
   ocupada que va cada tarjeta).
+- **ShaderBeam: nitidez en movimiento en el visor 3D.** Lo que hace [ShaderBeam](https://github.com/mausimus/ShaderBeam)
+  en Windows, dentro de OdysseyVK: el simulador del haz de un CRT de Blur Busters corre al final de la trama en **cada
+  refresco del panel**, enciende solo la franja por donde pasaría el haz y reparte los píxeles claros en los refrescos
+  siguientes, como el fósforo. Un juego fijo a 60 cuadros en el G90XF a 165 Hz (2,75 refrescos por cuadro) deja un gris
+  medio encendido del orden de un refresco (6 ms) en vez de 16,7 ms: mucha menos estela al moverse, a cambio de brillo, y
+  sin la latencia de la generación de cuadros. Es un interruptor en la pestaña **Efectos** (todos los juegos o uno) con su
+  modo (*Haz del CRT* o *BFI simple*), los *Hz del CRT* (los cuadros a los que va fijo el juego; con 55 son 3 refrescos
+  justos), *Brillo contra estela*, la *Gamma del panel* (muévela si se ven franjas horizontales que bajan despacio) y el
+  *Barrido*. No es un efecto de ReShade: esos corren una vez por cuadro del juego. El cuadro del juego solo cambia al
+  empezar cada refresco del CRT, como en ShaderBeam, y la pastilla y el panel no parpadean. No sirve con la generación de
+  cuadros de MAKO ni a más de ~100 cuadros. **Parpadea a la frecuencia del CRT: cuidado si eres fotosensible.**
+
+| ShaderBeam, medido (4K, CRT a 60 Hz sobre 165 Hz, ganancia 0,5) | |
+|---|---|
+| Luz de cada una de 8 franjas de la pantalla, media de 4 refrescos del CRT | 0,499 de la de siempre en todas (gris medio), 0,500 (blanco): sin franjas |
+| Tarjeta por refresco | 0,53 ms, 0,44 ms sin él (+0,09 ms) |
 
 | | Antes | 1.18 |
 |---|---|---|
@@ -483,6 +499,10 @@ Hecho sobre el trabajo de [macdissey-3d](https://github.com/Fulviuus/macdissey-3
 [Linux_3D_SBS_Player](https://github.com/m-j-tilley/Linux_3D_SBS_Player) (modelo de la lente), con
 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) para la profundidad y
 [YuNet](https://github.com/opencv/opencv_zoo) para detectar caras. Licencia MIT.
+
+El modo de nitidez en movimiento es el [Blur Busters CRT Beam Simulator](https://github.com/blurbusters/crt-beam-simulator)
+de Mark Rejhon (@BlurBusters) y Timothy Lottes (MIT), tal como lo adapta [ShaderBeam](https://github.com/mausimus/ShaderBeam)
+de mausimus (MIT).
 
 El panel sigue el estilo de [vkDaedalus](https://github.com/Daaboulex/vkDaedalus), para que los dos se sientan
 iguales en un juego, y usa su letra, [Barlow](https://github.com/jpt/barlow) (SIL Open Font License 1.1, ver

@@ -55,6 +55,13 @@ layout(set = 0, binding = 3) uniform WeaveParams {
     vec4 tun11;    /* x = 1: las filas de la barra del reproductor se ensenan enteras y tal cual, como
                       de la v0.81 a la v0.89 (`barra_2d = entera`), en vez de la franja nueva (v0.90) ·
                       y = 1: la vista de depuracion de la profundidad (v1.12, ver mas abajo) */
+    vec4 tun12;    /* (v1.18) ShaderBeam, el simulador del haz de un CRT (ver haz() al final): x modo (0 apagado,
+                      1 haz del CRT, 2 BFI simple) · y refrescos del panel por cada refresco del CRT (165/60 = 2,75;
+                      puede no ser entero) · z donde va el haz en este refresco, de 0 a 1 · w ganancia contra
+                      desenfoque (0,5 = mitad de brillo y menos estela) */
+    vec4 tun13;    /* x gamma del panel (2,2) · y direccion del barrido (0 ninguna, 1 de arriba abajo, 2 de abajo
+                      arriba, 3 de izquierda a derecha, 4 de derecha a izquierda) · z = 1 en BFI simple: este
+                      refresco va encendido */
 } P;
 
 layout(location = 0) in vec2 fuv;
@@ -745,7 +752,7 @@ vec3 franjaBarra(vec2 uv, float fundido) {
     return mix(fondo, cuadroEntero(uv), mando(uv, -1.0) * fundido);
 }
 
-void main()
+void tramar()
 {
     vec2 px = gl_FragCoord.xy;                 /* en Vulkan (0,0) también está arriba a la izquierda */
     float u = px.x / P.res.x;
@@ -1079,4 +1086,57 @@ void main()
         outc[c] = mix(Rp[c], Lp[c], w);
     }
     o = vec4(outc, 1.0);
+}
+
+/* ------------------------------------------------------------------------------------------------------------------
+   (v1.18) ShaderBeam en el visor. Rodolfo, señalando https://github.com/mausimus/ShaderBeam: «create this one too».
+   ShaderBeam (mausimus, MIT) pasa por encima del escritorio de Windows el «Blur Busters CRT Beam Simulator» de Mark
+   Rejhon (@BlurBusters) y Timothy Lottes (@NOTimothyLottes), MIT 2024: a cada refresco del panel se enciende solo la
+   franja por donde pasaria el haz de un CRT, y lo que no cabe en esa franja (los pixeles claros) se reparte en los
+   refrescos siguientes, como el fosforo que tarda en apagarse. El ojo integra el brillo de todo un refresco del CRT
+   y deja de ver la estela que pone un panel de muestra y retencion: menos desenfoque al moverse, a cambio de brillo.
+   Aqui va al final de la trama (despues de tramar, por subpixel: cada canal va por su lado, igual que en el original)
+   y antes de la interfaz, que no parpadea. Es el modo «frame-ahead» de ShaderBeam: los tres cuadros que mira el
+   original son el mismo, el ultimo; el visor solo cambia de cuadro al empezar cada refresco del CRT (vkview.cpp).
+   Las cuentas son las del original (CRTBeamSimulator.hlsl de ShaderBeam), sin tocar.
+   ------------------------------------------------------------------------------------------------------------------ */
+float hazALineal(float c, float g)
+{
+    return c > 0.04045 ? pow(c * (1.0 / 1.055) + 0.055 / 1.055, g) : c * (1.0 / 12.92);
+}
+float hazASrgb(float c, float g)
+{
+    /* el clamp(j.x, c*j.y, ...) del original, con min/max: en GLSL un clamp con el tope de abajo por encima del
+       de arriba no esta definido, y en HLSL da esto */
+    return min(max(0.0031308 * 12.92, c * 12.92), pow(c, 1.0 / g) * 1.055 - 0.055);
+}
+vec3 haz(vec3 c)
+{
+    const float g = P.tun13.x;
+    const float N = P.tun12.y;                  /* refrescos del panel por refresco del CRT */
+    float tubo = 0.0;                           /* donde cae este pixel en el barrido, de 0 a 1 */
+    const int dir = int(P.tun13.y + 0.5);
+    if (dir == 1) tubo = fuv.y;                 /* fuv.y = 0 es arriba */
+    else if (dir == 2) tubo = 1.0 - fuv.y;
+    else if (dir == 3) tubo = fuv.x;
+    else if (dir == 4) tubo = 1.0 - fuv.x;
+    const vec3 L = vec3(hazALineal(c.r, g), hazALineal(c.g, g), hazALineal(c.b, g)) * (N * P.tun12.w);
+    const float tuboCuadro = tubo * N;
+    const float fIni = P.tun12.z * N, fFin = fIni + 1.0;
+    /* los tres refrescos del CRT de atras a delante (el de antes de antes, el de antes y el que viene), cada uno con
+       su presupuesto de fotones L desde que pasa el haz; lo que cae dentro de este refresco del panel */
+    vec3 r = vec3(0.0);
+    for (int k = -1; k <= 1; k++) {
+        const float ini = tuboCuadro + float(k) * N;
+        r += max(vec3(0.0), min(vec3(ini) + L, vec3(fFin)) - max(vec3(ini), vec3(fIni)));
+    }
+    r = mix(r, vec3(0.0), lessThanEqual(L, vec3(0.0)));
+    return clamp(vec3(hazASrgb(r.r, g), hazASrgb(r.g, g), hazASrgb(r.b, g)), 0.0, 1.0);
+}
+
+void main()
+{
+    tramar();
+    if (P.tun12.x == 1.0) o.rgb = haz(o.rgb);
+    else if (P.tun12.x == 2.0 && P.tun13.z == 0.0) o.rgb = vec3(0.0);   /* BFI simple: un refresco encendido y el resto negro */
 }
