@@ -4142,14 +4142,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
 #ifdef HAVE_WAYLAND_WM
       if (ui.wmAbierto) ui.wm.waitAndDispatch(0);
 #endif
-      if (!ui.presentacionHecha && now - desde >= 6.0) {
-        const bool juego = sobreJuego(ui);
-        if (juego && ui.hud.overlayVisible() && !ui.robando && !ui.hud.state().menuRendimiento) {
-          cambioCapa(ui, false, "se ensenaron los atajos al entrar al juego");
-        } else if (ui.esJuego >= 0 || now - desde >= 12.0) {
-          ui.presentacionHecha = true;
-        }
+      /* (v1.16) la pastilla sale al empezar y se oculta sola (Rodolfo: «que el pill inicie y se auto oculte en unos
+         segundos»), en un juego o en un video: a los 5 s sin el raton cerca ni un menu suyo abierto. Vuelve al pasar
+         el raton por donde estaba (el tramo de abajo en el centro), y se vuelve a ir igual. Antes solo se iba una
+         vez, al entrar a un juego. ODYSSEYVK_PASTILLA_FIJA=1 (pruebas) la deja puesta */
+      {
+        static const bool fija = entornoOdyssey("ODYSSEYVK_PASTILLA_FIJA") != nullptr;
+        static double usada = -1.0;
+        if (usada < 0.0) usada = now;
+        const Hud::State &hsP = ui.hud.state();
+        float px = 0, py = 0, pw = 0, ph = 0;
+        const float holgura = 24.0f * ui.hud.scale();
+        const bool cerca = ui.mx >= 0.0 && ui.hud.pillBounds(&px, &py, &pw, &ph) && ui.mx >= px - holgura &&
+                           ui.mx <= px + pw + holgura && ui.my >= py - holgura && ui.my <= py + ph + holgura;
+        if (fija || !ui.hud.overlayVisible() || cerca || hsP.menuRendimiento || hsP.menuNormal || hsP.panel) usada = now;
+        else if (now - usada >= 5.0) cambioCapa(ui, false, "se oculto sola a los 5 s sin usarla");
       }
+      (void)desde;
 #ifdef HAVE_WAYLAND_WM
       if (ui.robando && ui.robadoMirar > 0.0 && now >= ui.robadoMirar) {
         ui.robadoMirar = -1.0;

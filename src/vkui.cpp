@@ -798,10 +798,12 @@ void Hud::begin(int w, int h, float altoLogico) {
     const char *nombrePre[3] = {idioma::tr("Suave"), idioma::tr("Medio"), idioma::tr("Intenso")};
     const std::string nombreRend = st_.preajuste >= 0 && st_.preajuste < 3 ? nombrePre[st_.preajuste] : idioma::tr("A mano");
     float anchoRendimiento = 0.0f;
-    if (st_.rendimiento) anchoRendimiento = 12.0f + 22.0f + 8.0f + textWidth(nombreRend, 13.0f) + 10.0f + 12.0f + 12.0f;
+    /* (v1.16) la segunda capsula, sin icono (Rodolfo: «solo manten los iconos de la izquierda, no los repitas en la
+       segunda capsula»): el texto y la flechita */
+    if (st_.rendimiento) anchoRendimiento = 14.0f + textWidth(nombreRend, 13.0f) + 10.0f + 12.0f + 12.0f;
     /* v1.07: en chino o japones la casilla es corta y los dos botones no cabian: el bloque mide al menos 128 */
     const float anchoBloque = st_.rendimiento ? anchoRendimiento
-                              : hubNormal ? 12.0f + 22.0f + 8.0f + textWidth(nombreFoco, 13.0f) + 10.0f + 12.0f + 12.0f
+                              : hubNormal ? 14.0f + textWidth(nombreFoco, 13.0f) + 10.0f + 12.0f + 12.0f
                               : (st_.recordarVisible ? std::max(anchoRec, hayModo ? 128.0f : 0.0f) : (hayModo ? 128.0f : 0.0f));
     /* (v1.12) a la izquierda, el boton redondo de encendido (antes el interruptor ON/OFF) y, en la pastilla
        del video normal (con la red o en rendimiento), el interruptor Neural | Rendimiento del panel: el
@@ -1006,12 +1008,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (abierto) mask9(btnRayo_, 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
       else mask9(btnRayo_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
       const float t[3] = {abierto ? 0.10f : ink[0], abierto ? 0.08f : ink[1], abierto ? 0.04f : ink[2]};
-      if (abierto)
-        icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, icoRayo_, t[0], t[1], t[2], 1.0f);
-      else
-        icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, icoRayo_, std::min(1.0f, accent[0] + 0.05f),
-              std::min(1.0f, accent[1] + 0.1f), accent[2] + 0.1f, 1.0f);
-      text(nombreRend, bloqueX + 42.0f, by + 6.5f, 13.0f, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.90f);
+      text(nombreRend, bloqueX + 14.0f, by + 6.5f, 13.0f, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnRayo_.x + btnRayo_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.80f);
     }
     /* ---- el hub normal: el boton del chip «AI» (rama experimental) ----
@@ -1023,9 +1020,8 @@ void Hud::begin(int w, int h, float altoLogico) {
       const bool abierto = st_.menuNormal, hov = btnFoco_.inside(mx_, my_);
       if (abierto) mask9(btnFoco_, 0, 15.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
       else mask9(btnFoco_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
-      /* Auto lleva el chip; Manual, una llave */
-      icono({bloqueX + 12.0f, by + 4.0f, 22.0f, 22.0f}, autoPuesto ? icoChip_ : icoLlave_, 0.62f, 0.85f, 1.0f, 1.0f);
-      text(nombreFoco, bloqueX + 42.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
+      /* (v1.16) sin el chip ni la llave: el icono va solo en la capsula de la izquierda */
+      text(nombreFoco, bloqueX + 14.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnFoco_.x + btnFoco_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.80f);
     }
 

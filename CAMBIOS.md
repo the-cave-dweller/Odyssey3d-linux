@@ -13,6 +13,16 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   hacia arriba, centrados encima de ella. La tarjeta de aviso, que ya iba
   abajo a la derecha, sube encima de la pastilla si está a la vista. El cuadrito de FPS sigue a su izquierda, y el
   tramo que la trae de vuelta cuando está oculta es el del medio de donde estaba.
+- **Se oculta sola y sin iconos repetidos** (Rodolfo: «que el pill inicie y se auto oculte en unos segundos, y en
+  los pill solo manten los iconos de la izquierda, no los repitas en la segunda capsula»):
+  - sale al empezar, en un juego o en un vídeo, y se oculta sola a los 5 s sin el ratón cerca (24 px de holgura)
+    ni un menú suyo abierto. Vuelve al pasar el ratón por donde estaba y se va otra vez igual. Antes se iba solo una
+    vez, al entrar a un juego. Al irse le devuelve el cursor al juego, como al ocultarla a mano.
+    `ODYSSEYVK_PASTILLA_FIJA=1` (pruebas) la deja puesta;
+  - la segunda cápsula (Auto/Manual, o el preajuste en el modo rendimiento) va sin el chip, la llave ni el rayo,
+    que ya salen en la de la izquierda. Es más estrecha.
+  - Probado en el compositor aparte: «la pastilla ocultada (se ocultó sola a los 5 s sin usarla)», y su región de
+    entrada abajo en el centro.
 - **Integraciones, solo en el escritorio** (Rodolfo: «sin menu de integraciones cuando la interfaz esta sobre un
   juego, unicamente fuera en ajustes, en el escritorio»). Con una sesión 3D (vídeo o juego), o con un juego como
   ventana activa al abrir el panel, la pestaña Integraciones no sale. Tampoco el engranaje de las carátulas que la
