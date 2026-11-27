@@ -935,6 +935,7 @@ void Hud::begin(int w, int h, float altoLogico) {
                            : std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
   const int vw = (int)std::lround((float)w / sc_), vh = (int)std::lround((float)h / sc_);
   if (!st_.overlayOn && !st_.ask && !st_.panel) return;
+  pal_ = paleta();   /* (v1.16) la del modo, para todo lo de este cuadro */
 
   /* v0.79: el acento es el morado del paisaje de la tarjeta (antes verde) y el fondo de la pastilla
      es el gris casi negro de la tarjeta: las dos piezas se ven de la misma familia. */
@@ -1040,7 +1041,7 @@ void Hud::begin(int w, int h, float altoLogico) {
        izquierda redonda. Sus menus se abren hacia abajo */
     const float x0 = (float)vw - pw, y0 = 0.0f;
     pillPanel_ = {x0, y0, pw, ph};
-    mask9({x0, y0 - 8.0f, pw + 8.0f, ph + 8.0f}, 1, 8.0f, 0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f, 0.94f);
+    mask9({x0, y0 - 8.0f, pw + 8.0f, ph + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.94f);
 
     /* (v1.13) el cuadrito de DLSS a la izquierda de la pastilla (Rodolfo: «junto al HUB quiero que en un cuadro
        pequeño indiques los FPS del layer y los del juego»): los cuadros que presenta el juego y las profundidades
@@ -1064,7 +1065,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const float bx = x0 - 10.0f - bw;
       if (bx >= 8.0f) {
         /* (v1.16) del mismo alto y color que la pastilla, pegado arriba */
-        mask9({bx, y0 - 8.0f, bw, ph + 8.0f}, 1, 8.0f, 0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f, 0.94f);
+        mask9({bx, y0 - 8.0f, bw, ph + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.94f);
         text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
         const float colFps = bx + bw - borde - wFps;
         float filas[2] = {y0 + (compacta ? 20.0f : 28.0f), y0 + (compacta ? 36.0f : 50.0f)};
@@ -1191,13 +1192,13 @@ void Hud::begin(int w, int h, float altoLogico) {
     if (modosEnPastilla) {
       const float bw = 44.0f, bh = 32.0f, by = y0 + (ph - bh) * 0.5f;   /* del alto del encendido */
       const float derM = st_.engranaje ? btnEngranaje_.x - 12.0f : x0 + pw - aire;
-      static const float barra[3] = {0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f};
+      const float barra[3] = {Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2)};
       dibujaModos({derM - 2.0f * bw - 6.0f, by, bw, bh}, {derM - bw, by, bw, bh}, barra);
     }
     if (cabeBloque && hayModo) {
       const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
       const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
-      static const float barra[3] = {0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f};
+      const float barra[3] = {Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2)};
       dibujaModos({bloqueX, by, bw, bh}, {bloqueX + bw + 8.0f, by, bw, bh}, barra);
     }
 
@@ -1209,7 +1210,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       btnRayo_ = {bloqueX, by, anchoBloque, bh};
       const bool abierto = st_.menuRendimiento, hov = btnRayo_.inside(mx_, my_);
       if (abierto) mask9(btnRayo_, 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
-      else mask9(btnRayo_, 0, 4.0f, hov ? 0x2A / 255.0f : 0x20 / 255.0f, hov ? 0x26 / 255.0f : 0x1D / 255.0f, hov ? 0x35 / 255.0f : 0x29 / 255.0f, 1.0f);
+      else mask9(btnRayo_, 0, 4.0f, Hud::canal(hov ? pal_.controlHov : pal_.control, 0), Hud::canal(hov ? pal_.controlHov : pal_.control, 1), Hud::canal(hov ? pal_.controlHov : pal_.control, 2), 1.0f);
       const float t[3] = {abierto ? 0.10f : ink[0], abierto ? 0.08f : ink[1], abierto ? 0.04f : ink[2]};
       text(nombreRend, bloqueX + 14.0f, by + 6.5f, 13.0f, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnRayo_.x + btnRayo_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.80f);
@@ -1222,7 +1223,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       btnFoco_ = {bloqueX, by, anchoBloque, bh};
       const bool abierto = st_.menuNormal, hov = btnFoco_.inside(mx_, my_);
       if (abierto) mask9(btnFoco_, 0, 4.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
-      else mask9(btnFoco_, 0, 4.0f, hov ? 0x2A / 255.0f : 0x20 / 255.0f, hov ? 0x26 / 255.0f : 0x1D / 255.0f, hov ? 0x35 / 255.0f : 0x29 / 255.0f, 1.0f);
+      else mask9(btnFoco_, 0, 4.0f, Hud::canal(hov ? pal_.controlHov : pal_.control, 0), Hud::canal(hov ? pal_.controlHov : pal_.control, 1), Hud::canal(hov ? pal_.controlHov : pal_.control, 2), 1.0f);
       /* (v1.16) sin el chip ni la llave: el icono va solo en la capsula de la izquierda */
       text(nombreFoco, bloqueX + 14.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnFoco_.x + btnFoco_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.80f);
@@ -1279,7 +1280,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
       const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;   /* (v1.16) otra vez debajo, pegado a su orilla derecha */
       menuRend_ = {mx0, my0, mw, mh};
-      mask9({mx0, my0, mw, mh}, 1, 8.0f, 0x12 / 255.0f, 0x11 / 255.0f, 0x17 / 255.0f, 0.97f);   /* (v1.16) la tarjeta de vkDaedalus */
+      mask9({mx0, my0, mw, mh}, 1, 8.0f, Hud::canal(pal_.tarjeta, 0), Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 0.97f);   /* (v1.16) la tarjeta de vkDaedalus */
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
       text(idioma::tr("MODO RENDIMIENTO"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
       std::string ayuda;
@@ -1370,7 +1371,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       alto += 8.0f;
       const float my0 = y0 + ph + 6.0f;
       menuRend_ = {mx0, my0, mw, alto};
-      mask9({mx0, my0, mw, alto}, 1, 8.0f, 0x12 / 255.0f, 0x11 / 255.0f, 0x17 / 255.0f, 0.97f);   /* (v1.16) la tarjeta de vkDaedalus */
+      mask9({mx0, my0, mw, alto}, 1, 8.0f, Hud::canal(pal_.tarjeta, 0), Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 0.97f);   /* (v1.16) la tarjeta de vkDaedalus */
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
       text(idioma::tr("RELIEVE"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
       std::string ayuda;
@@ -1420,7 +1421,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (st_.modoVisible && !modosEnPastilla) {
         text(idioma::tr("Tipo de vídeo"), mx0 + pad, y + 13.0f, 12.0f, dim[0], dim[1], dim[2], dim[3]);
         const float bw2 = 64.0f, bh2 = 30.0f;
-        static const float tarjetaM[3] = {0x12 / 255.0f, 0x11 / 255.0f, 0x17 / 255.0f};
+        const float tarjetaM[3] = {Hud::canal(pal_.tarjeta, 0), Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2)};
         dibujaModos({mx0 + mw - pad - 2.0f * bw2 - 8.0f, y + 6.0f, bw2, bh2}, {mx0 + mw - pad - bw2, y + 6.0f, bw2, bh2}, tarjetaM);
         y += 46.0f;
       }
@@ -1447,12 +1448,12 @@ void Hud::begin(int w, int h, float altoLogico) {
   const bool estiloD = st_.marco;
   auto hexD = [](uint32_t c, int k) { return (float)((c >> (16 - 8 * k)) & 0xFFu) / 255.0f; };
   if (estiloD)
-    for (int k = 0; k < 3; k++) accent[k] = hexD(0xA88FD0u, k), ink[k] = hexD(0xE9ECEFu, k), dim[k] = hexD(0xA3ACB6u, k);
+    for (int k = 0; k < 3; k++) accent[k] = hexD(pal_.acento, k), ink[k] = hexD(0xE9ECEFu, k), dim[k] = hexD(0xA3ACB6u, k);
   auto Rd = [estiloD](float rr) { return estiloD ? std::min(rr, 4.0f) : rr; };
   auto fondoTarjeta = [&](float ax, float ay, float aw, float ah) {
     if (estiloD) {
-      mask9({ax, ay, aw, ah}, 1, 8.0f, hexD(0x343C46u, 0), hexD(0x343C46u, 1), hexD(0x343C46u, 2), 1.0f);
-      mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 7.0f, hexD(0x121117u, 0), hexD(0x121117u, 1), hexD(0x121117u, 2), 0.97f);
+      mask9({ax, ay, aw, ah}, 1, 8.0f, hexD(pal_.filo, 0), hexD(pal_.filo, 1), hexD(pal_.filo, 2), 1.0f);
+      mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 7.0f, hexD(pal_.tarjeta, 0), hexD(pal_.tarjeta, 1), hexD(pal_.tarjeta, 2), 0.97f);
     } else {
       mask9({ax, ay, aw, ah}, 1, 18.0f, 0.34f, 0.35f, 0.38f, 0.90f);
       mask9({ax + 1.0f, ay + 1.0f, aw - 2.0f, ah - 2.0f}, 1, 17.0f, 0.0f, 0.0f, 0.0f, 0.85f);
@@ -1460,8 +1461,8 @@ void Hud::begin(int w, int h, float altoLogico) {
   };
   /* un boton: el principal en el morado fuerte (6E4E8C) con letra blanca, el otro en el gris de los controles */
   auto botonD = [&](const Rect &b, bool principal, bool hov) {
-    if (principal) mask9(b, 0, 4.0f, hov ? 0x7E / 255.0f : 0x6E / 255.0f, hov ? 0x5E / 255.0f : 0x4E / 255.0f, hov ? 0x9C / 255.0f : 0x8C / 255.0f, 1.0f);
-    else mask9(b, 0, 4.0f, hexD(hov ? 0x2A2635u : 0x201D29u, 0), hexD(hov ? 0x2A2635u : 0x201D29u, 1), hexD(hov ? 0x2A2635u : 0x201D29u, 2), 1.0f);
+    if (principal) mask9(b, 0, 4.0f, Hud::canal(hov ? pal_.fuerteHov : pal_.fuerte, 0), Hud::canal(hov ? pal_.fuerteHov : pal_.fuerte, 1), Hud::canal(hov ? pal_.fuerteHov : pal_.fuerte, 2), 1.0f);
+    else mask9(b, 0, 4.0f, hexD(hov ? pal_.controlHov : pal_.control, 0), hexD(hov ? pal_.controlHov : pal_.control, 1), hexD(hov ? pal_.controlHov : pal_.control, 2), 1.0f);
   };
   fuente_ = estiloD && hayBarlow_ ? 1 : 0;
   const int fuenteTitulo = estiloD && hayBarlow_ ? 2 : 0;
@@ -1624,7 +1625,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const bool hov = t.inside(mx_, my_);
       float fondo[3] = {hov ? 0.27f : 0.195f, hov ? 0.28f : 0.20f, hov ? 0.315f : 0.225f};
       if (estiloD)   /* como las teselas del panel: 1E1B26, y al pasar el raton el filo del acento */
-        for (int k = 0; k < 3; k++) fondo[k] = hexD(hov ? 0x241F30u : 0x1E1B26u, k);
+        for (int k = 0; k < 3; k++) fondo[k] = hexD(hov ? pal_.suave : pal_.elevado, k);
       if (hov) {
         if (estiloD) mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 7.5f, accent[0], accent[1], accent[2], 1.0f);
         else mask9({t.x - 1.5f, t.y - 1.5f, t.w + 3.0f, t.h + 3.0f}, 1, 13.5f, ink[0], ink[1], ink[2], 0.75f);
@@ -1660,8 +1661,8 @@ void Hud::begin(int w, int h, float altoLogico) {
         mask9(caja, 1, 4.0f, accent[0], accent[1], accent[2], 1.0f);
         icono({caja.x + 2.0f, caja.y + 2.0f, 16.0f, 16.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, 1.0f);
       } else {
-        mask9(caja, 1, 4.0f, hexD(hd ? 0x5A6270u : 0x3A424Cu, 0), hexD(hd ? 0x5A6270u : 0x3A424Cu, 1), hexD(hd ? 0x5A6270u : 0x3A424Cu, 2), 1.0f);
-        mask9({caja.x + 1.5f, caja.y + 1.5f, caja.w - 3.0f, caja.h - 3.0f}, 1, 3.0f, hexD(0x0C0F13u, 0), hexD(0x0C0F13u, 1), hexD(0x0C0F13u, 2), 1.0f);
+        mask9(caja, 1, 4.0f, hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 0), hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 1), hexD(hd ? pal_.filoCasillaHov : pal_.filoCasilla, 2), 1.0f);
+        mask9({caja.x + 1.5f, caja.y + 1.5f, caja.w - 3.0f, caja.h - 3.0f}, 1, 3.0f, hexD(pal_.pozo, 0), hexD(pal_.pozo, 1), hexD(pal_.pozo, 2), 1.0f);
       }
     } else {
       mask9(caja, 1, 5.0f, c, c, c + 0.02f, 1.0f);
@@ -1779,7 +1780,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
   if (marco)
-    for (int k = 0; k < 3; k++) accent[k] = hex(0xA88FD0u, k), ink[k] = hex(0xE9ECEFu, k), dim[k] = hex(0xA3ACB6u, k);
+    for (int k = 0; k < 3; k++) accent[k] = hex(pal_.acento, k), ink[k] = hex(0xE9ECEFu, k), dim[k] = hex(0xA3ACB6u, k);
   const bool acentoClaro = 0.299f * accent[0] + 0.587f * accent[1] + 0.114f * accent[2] > 0.62f;
   const float tinta[3] = {acentoClaro ? 0.08f : ink[0], acentoClaro ? 0.09f : ink[1], acentoClaro ? 0.11f : ink[2]};
   fuente_ = marco && hayBarlow_ ? 1 : 0;
@@ -1828,12 +1829,12 @@ void Hud::dibujaPanel(int vw, int vh) {
     };
     /* la barra de arriba: el logo y el nombre; a la derecha, la actualizacion y el aspa */
     if (ventana) {
-      relleno(F, 8.0f, 0x343C46u, 1.0f);
-      relleno({F.x + 1.0f, F.y + 1.0f, F.w - 2.0f, F.h - 2.0f}, 7.0f, 0x0E0D12u, 0.98f);
-      relleno({F.x + 1.0f, F.y + 1.0f, F.w - 2.0f, 56.0f}, 7.0f, 0x0B0A0Eu, 1.0f);   /* la barra, con las esquinas de arriba */
-      relleno({F.x + 1.0f, F.y + 28.0f, F.w - 2.0f, 29.0f}, 0.0f, 0x0B0A0Eu, 1.0f);
+      relleno(F, 8.0f, pal_.filo, 1.0f);
+      relleno({F.x + 1.0f, F.y + 1.0f, F.w - 2.0f, F.h - 2.0f}, 7.0f, pal_.ventana, 0.98f);
+      relleno({F.x + 1.0f, F.y + 1.0f, F.w - 2.0f, 56.0f}, 7.0f, pal_.barra, 1.0f);   /* la barra, con las esquinas de arriba */
+      relleno({F.x + 1.0f, F.y + 28.0f, F.w - 2.0f, 29.0f}, 0.0f, pal_.barra, 1.0f);
     } else {
-      relleno({0.0f, 0.0f, (float)vw, 56.0f * s}, 0.0f, 0x0B0A0Eu, 0.97f);
+      relleno({0.0f, 0.0f, (float)vw, 56.0f * s}, 0.0f, pal_.barra, 0.97f);
     }
     {
       const Rect baldosa{F.x + 16.0f * s, F.y + 17.0f * s, 22.0f * s, 22.0f * s};
@@ -1846,7 +1847,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     panelCerrar_ = {F.x + F.w - 16.0f * s - 32.0f * s, F.y + 12.0f * s, 32.0f * s, 32.0f * s};
     {
       const bool hc = panelCerrar_.inside(mx_, my_);
-      if (hc) relleno(panelCerrar_, 4.0f * s, 0x201D29u, 1.0f);
+      if (hc) relleno(panelCerrar_, 4.0f * s, pal_.control, 1.0f);
       icono({panelCerrar_.x + 8.0f * s, panelCerrar_.y + 8.0f * s, 16.0f * s, 16.0f * s}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
     }
     if (!st_.actualizacion.empty()) {
@@ -1855,9 +1856,9 @@ void Hud::dibujaPanel(int vw, int vh) {
       const float w = 16.0f * s + 14.0f * s + 8.0f * s + textWidth(r, 14.0f * s) + 16.0f * s;
       panelActualizar_ = {panelCerrar_.x - 8.0f * s - w, panelCerrar_.y, w, 32.0f * s};
       ha = panelActualizar_.inside(mx_, my_);
-      relleno(panelActualizar_, 4.0f * s, 0x343C46u, 1.0f);
+      relleno(panelActualizar_, 4.0f * s, pal_.filo, 1.0f);
       relleno({panelActualizar_.x + 1.0f, panelActualizar_.y + 1.0f, panelActualizar_.w - 2.0f, panelActualizar_.h - 2.0f}, 4.0f * s,
-              ha ? 0x201D29u : 0x0B0A0Eu, 1.0f);
+              ha ? pal_.control : pal_.barra, 1.0f);
       icono({panelActualizar_.x + 16.0f * s, panelActualizar_.y + 9.0f * s, 14.0f * s, 14.0f * s}, icoFlecha_, hex(0xDEAA7Cu, 0),
             hex(0xDEAA7Cu, 1), hex(0xDEAA7Cu, 2), 1.0f);
       text(r, panelActualizar_.x + 38.0f * s, panelActualizar_.y + 8.0f * s, 14.0f * s, ink[0], ink[1], ink[2], 1.0f);
@@ -1865,7 +1866,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     } else {
       panelActualizar_ = {panelCerrar_.x - 8.0f * s - 32.0f * s, panelCerrar_.y, 32.0f * s, 32.0f * s};
       ha = panelActualizar_.inside(mx_, my_);
-      if (ha) relleno(panelActualizar_, 4.0f * s, 0x201D29u, 1.0f);
+      if (ha) relleno(panelActualizar_, 4.0f * s, pal_.control, 1.0f);
       const float c[3] = {st_.alDia ? hex(0xC6E8AAu, 0) : ink[0], st_.alDia ? hex(0xC6E8AAu, 1) : ink[1], st_.alDia ? hex(0xC6E8AAu, 2) : ink[2]};
       icono({panelActualizar_.x + 9.0f * s, panelActualizar_.y + 9.0f * s, 14.0f * s, 14.0f * s}, icoFlecha_, c[0], c[1], c[2],
             st_.alDia ? (ha ? 1.0f : 0.85f) : (ha ? 0.8f : 0.45f));
@@ -1895,8 +1896,8 @@ void Hud::dibujaPanel(int vw, int vh) {
       const bool puesta = i == st_.pestana, hov = t.inside(mx_, my_) && !gris;
       const float tenueT = gris ? 0.38f : 1.0f;
       /* solo las esquinas de fuera de la fila van redondas, como en vkDaedalus: aqui todas con poco radio */
-      relleno(t, 6.0f * s, gris ? 0x17151Du : (puesta ? 0x241F30u : (hov ? 0x201D29u : 0x1E1B26u)), 0.97f);
-      if (puesta) relleno({t.x, t.y + t.h - 3.0f * s, t.w, 3.0f * s}, 0.0f, 0xA88FD0u, 1.0f);
+      relleno(t, 6.0f * s, gris ? pal_.gris : (puesta ? pal_.suave : (hov ? pal_.control : pal_.elevado)), 0.97f);
+      if (puesta) relleno({t.x, t.y + t.h - 3.0f * s, t.w, 3.0f * s}, 0.0f, pal_.acento, 1.0f);
       fuente_ = hayBarlow_ ? 2 : 0;
       textoCabe(nombrePest(i), t.x + t.w * 0.5f - std::min(t.w - 12.0f * s, textWidth(nombrePest(i), 18.0f * s)) * 0.5f, t.y + 16.0f * s,
                 18.0f * s, t.w - 12.0f * s, 1.0f, 1.0f, 1.0f, (puesta || hov ? 1.0f : 0.92f) * tenueT);
@@ -1920,7 +1921,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const Rect t{tx, arriba + (float)(k % 3) * 68.0f * s, 200.0f * s, 64.0f * s};
       panelTeselas_[k] = t;
       const bool hov = t.inside(mx_, my_) && !te.id.empty();
-      relleno(t, 6.0f * s, hov ? 0x201D29u : 0x1E1B26u, 0.97f);
+      relleno(t, 6.0f * s, hov ? pal_.control : pal_.elevado, 0.97f);
       icono({t.x + 16.0f * s, t.y + 22.0f * s, 20.0f * s, 20.0f * s}, iconoTesela(te.icono), hex(0xC9D0D7u, 0), hex(0xC9D0D7u, 1),
             hex(0xC9D0D7u, 2), hov ? 1.0f : 0.85f);
       textoCabe(te.titulo, t.x + 48.0f * s, t.y + 13.0f * s, 12.0f * s, t.w - 56.0f * s, dim[0], dim[1], dim[2], 1.0f);
@@ -1931,7 +1932,7 @@ void Hud::dibujaPanel(int vw, int vh) {
 
     /* la tarjeta de la pestana puesta: su nombre arriba, las filas y el pie */
     const Rect tarjeta{izqC, F.y + arribaC * s, 980.0f * s, std::max(160.0f, std::min(600.0f * s, F.h - arribaC * s - 16.0f * s))};
-    relleno(tarjeta, 8.0f * s, 0x121117u, 0.97f);
+    relleno(tarjeta, 8.0f * s, pal_.tarjeta, 0.97f);
     fuente_ = hayBarlow_ ? 2 : 0;
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
     fuente_ = hayBarlow_ ? 1 : 0;
@@ -2140,7 +2141,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         /* `valor` apagado = boton que no se puede picar ahora (una descarga en marcha): sale gris */
         if (!it.valor) mask9(b, 0, R(15.0f), 0.28f, 0.29f, 0.33f, 0.98f);
         else if (it.peligro) mask9(b, 0, R(15.0f), 0.82f, 0.33f, 0.36f, hb ? 1.0f : 0.90f);
-        else if (marco) mask9(b, 0, R(15.0f), hb ? 0x7E / 255.0f : 0x6E / 255.0f, hb ? 0x5E / 255.0f : 0x4E / 255.0f, hb ? 0x9C / 255.0f : 0x8C / 255.0f, 1.0f);
+        else if (marco) mask9(b, 0, R(15.0f), Hud::canal(hb ? pal_.fuerteHov : pal_.fuerte, 0), Hud::canal(hb ? pal_.fuerteHov : pal_.fuerte, 1), Hud::canal(hb ? pal_.fuerteHov : pal_.fuerte, 2), 1.0f);
         else mask9(b, 0, R(15.0f), accent[0], accent[1], accent[2], hb ? 1.0f : 0.92f);
         {
           const bool sobreAcento = it.valor && !it.peligro && !marco;   /* (v1.16) en el morado fuerte, letra blanca */
@@ -2219,7 +2220,7 @@ void Hud::dibujaPanel(int vw, int vh) {
           z.subs.push_back(o);
           const bool puesta = (int)k == it.elegido, ho = dentro && o.inside(mx_, my_);
           /* (v1.16) la puesta, como la de vkDaedalus: un fondo mas claro y letra blanca, no el acento */
-          if (puesta && marco) mask9(o, 0, R(14.0f), 0x3A / 255.0f, 0x31 / 255.0f, 0x50 / 255.0f, 1.0f);
+          if (puesta && marco) mask9(o, 0, R(14.0f), Hud::canal(pal_.suave, 0), Hud::canal(pal_.suave, 1), Hud::canal(pal_.suave, 2), 1.0f);
           else if (puesta) mask9(o, 0, R(14.0f), accent[0], accent[1], accent[2], 0.98f);
           else if (ho) mask9(o, 0, R(14.0f), 1.0f, 1.0f, 1.0f, 0.10f);
           const bool sobreAc = puesta && !marco;

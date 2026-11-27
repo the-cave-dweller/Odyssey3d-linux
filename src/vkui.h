@@ -415,6 +415,24 @@ private:
      Integraciones, los deslizadores de Ajustes, la cabeza del seguimiento, las barras de los FPS y las capas del HUD */
   Rect icoCubo_, icoMando_, icoEnchufe_, icoDeslizadores_, icoCabeza_, icoBarras_, icoCapas_;
   const Rect &iconoTesela(int k) const;
+  /* (v1.16) la paleta del modo (Rodolfo: «make the rest of the ui follow the yellow and blue tint on the currently
+     purple parts, also adapt the background to an almost black but tinted version of each»): con la red, el azul de
+     la capsula Neural; en el modo rendimiento (o con «sin red» en los ajustes), el ambar. Los fondos, casi negros
+     con un toque de cada uno. Sustituye a la paleta soft (morada) de vkDaedalus */
+  struct Paleta {
+    uint32_t acento, fuerte, fuerteHov, suave;               /* resaltes; boton principal; fondo de lo elegido */
+    uint32_t barra, tarjeta, ventana, elevado, gris;          /* barra, tarjeta, fondo de la ventana, teselas, en gris */
+    uint32_t control, controlHov, filo, filoCasilla, filoCasillaHov, pozo;
+  };
+  Paleta paleta() const {
+    if (st_.sinRedPanel || st_.rendimiento)
+      return {0xDEAA7Cu, 0xB87A3Au, 0xC88A4Au, 0x3A2E22u, 0x0E0B08u, 0x15110Du, 0x110E0Bu, 0x231C15u, 0x1B1611u,
+              0x282018u, 0x32281Eu, 0x463A2Eu, 0x4C4034u, 0x6A5A48u, 0x0F0C09u};
+    return {0x66B8FFu, 0x2F6FDEu, 0x3F7FEEu, 0x1C2A42u, 0x090B0Fu, 0x0F1218u, 0x0C0F14u, 0x18202Bu, 0x141920u,
+            0x1B2430u, 0x22303Fu, 0x2E3A4Au, 0x38465Au, 0x506276u, 0x0A0D12u};
+  }
+  static float canal(uint32_t c, int k) { return (float)((c >> (16 - 8 * k)) & 0xFFu) / 255.0f; }
+  Paleta pal_{};
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la

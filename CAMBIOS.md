@@ -40,6 +40,20 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## Toda la interfaz, en azul o ámbar según el modo, con fondos casi negros teñidos (v1.16)
+
+- Rodolfo: «make the rest of the ui follow the yellow and blue tint on the currently purple parts, also adapt the
+  background to an almost black but tinted version of each»; y «same for the notice cards».
+- `Hud::paleta()` sustituye a la paleta soft (morada) de vkDaedalus. Vale para el panel, las teselas, las tarjetas
+  de aviso, la pastilla, sus menús y el cuadrito de FPS:
+  - **con la red**: el azul de la cápsula Neural (acento 66B8FF, botón principal 2F6FDE, lo elegido 1C2A42) y
+    fondos casi negros azulados (barra 090B0F, tarjeta 0F1218, teselas 18202B, controles 1B2430);
+  - **en el modo rendimiento** (en el visor, o con «sin red» en los ajustes para el panel): el ámbar (DEAA7C, B87A3A,
+    3A2E22) y fondos casi negros cálidos (0E0B08, 15110D, 231C15, 282018).
+- Se calcula una vez por cuadro, al empezar a pintar. El círculo amarillo de la actualización sigue amarillo: es el
+  aviso de que hay algo. El panel de antes (`ODYSSEYVK_PANEL_VIEJO=1`) no cambia.
+- Probado: pintado con `ctl hud` en los dos modos (el panel, la pastilla y la tarjeta de la actualización).
+
 ## El panel, otra vez a pantalla completa en el escritorio (v1.16)
 
 - Rodolfo: «make the desktop version fullscreen again by default». La ventana movible del escritorio queda detrás
