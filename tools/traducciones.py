@@ -430,6 +430,19 @@ T = {
 "vista de depuración: prueba las redes con el vídeo a la vista": ("debug view: try the networks with the video in view", "vue de débogage : essayez les réseaux avec la vidéo à l'écran", "Debug-Ansicht: Netze ausprobieren, während das Video zu sehen ist", "调试视图：边看视频边试用网络", "デバッグ表示：動画を見ながらネットワークを試せます"),
 "vista de depuración quitada": ("debug view off", "vue de débogage désactivée", "Debug-Ansicht aus", "已关闭调试视图", "デバッグ表示をオフにしました"),
 "Las de esa carpeta con «video» en el nombre salen en esta lista.": ("Those in that folder with «video» in their name show up in this list.", "Ceux de ce dossier avec « video » dans le nom apparaissent dans cette liste.", "Die aus diesem Ordner mit „video“ im Namen erscheinen in dieser Liste.", "该文件夹中名称含「video」的会出现在这个列表里。", "そのフォルダーで名前に「video」が入るものはこのリストに出ます。"),
+"Cuadro": ("Frame", "Image", "Bild", "帧", "フレーム"),
+"Tarjeta {}": ("GPU {}", "GPU {}", "GPU {}", "显卡 {}", "GPU {}"),
+"Temperatura de las tarjetas": ("GPU temperature", "Température des GPU", "GPU-Temperatur", "显卡温度", "GPU 温度"),
+"Memoria de las tarjetas": ("GPU memory", "Mémoire des GPU", "GPU-Speicher", "显存", "GPU メモリ"),
+"Consumo de las tarjetas": ("GPU power", "Consommation des GPU", "GPU-Leistungsaufnahme", "显卡功耗", "GPU 消費電力"),
+"Uso del procesador": ("CPU usage", "Utilisation du CPU", "CPU-Auslastung", "CPU 占用", "CPU 使用率"),
+"Temperatura del procesador": ("CPU temperature", "Température du CPU", "CPU-Temperatur", "CPU 温度", "CPU 温度"),
+"Memoria del sistema": ("System memory", "Mémoire système", "Arbeitsspeicher", "系统内存", "システムメモリ"),
+"Tiempo por cuadro del juego": ("Game frame time", "Temps par image du jeu", "Frametime des Spiels", "游戏帧时间", "ゲームのフレーム時間"),
+"el cuadrito ya no vigila nada más": ("the FPS box no longer monitors anything else", "le cadre des FPS ne surveille plus rien d'autre", "das FPS-Kästchen überwacht nichts weiter", "FPS 小框不再监视其他内容", "FPS ボックスは他に何も表示しません"),
+"el cuadrito vigila {} cosas": ("the FPS box monitors {} items", "le cadre des FPS surveille {} éléments", "das FPS-Kästchen überwacht {} Werte", "FPS 小框监视 {} 项", "FPS ボックスは {} 項目を表示"),
+"{} · {} más": ("{} · {} more", "{} · {} de plus", "{} · {} mehr", "{} · 另 {} 项", "{} · 他 {} 件"),
+"Monitor": ("Monitor", "Moniteur", "Monitor", "监视", "モニター"),
 }
 
 from traducciones_ru import RU

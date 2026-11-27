@@ -238,7 +238,7 @@ los juegos sin el interruptor puesto se quedan en 2D, y los interruptores lo dic
 entra solo en 3D al ponerse a pantalla
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
 a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
-visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego
+visor o se cierra en los 20 segundos de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego
 tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón). Al pasar el
 ratón por una carátula sale un engranaje arriba a la derecha: abre las
 [integraciones](#integraciones-las-opciones-de-lanzamiento-de-steam) de ese juego.
@@ -345,7 +345,10 @@ de misión y los menús se quedan planos en la pantalla en vez de tomar la profu
 detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Junto a la pastilla, un cuadro pequeño
 dice los FPS del juego (los cuadros que presenta) y los de la capa (las profundidades que manda; con la
 generación de cuadros de DLSS, los del juego son el doble); cuando la pastilla se oculta, el cuadro se queda en la
-esquina de arriba a la derecha. En Ajustes → Juegos con DLSS se apaga cada
+esquina de arriba a la derecha. La flechita de la tesela *Cuadrito de FPS* elige qué más enseña, como MangoHud:
+cada tarjeta en su fila (el uso y, si se marcan, su temperatura, su memoria y su consumo), el uso y la temperatura
+del procesador, la memoria del sistema y el tiempo por cuadro del juego. Con algo marcado, el cuadro sale también
+sobre los vídeos. En Ajustes → Juegos con DLSS se apaga cada
 una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS. Ajustes →
 Fluidez → *Tope de FPS de la capa* limita cuántas profundidades y máscaras del HUD copia la capa por segundo
 dentro del juego (el visor hace 6 mapas de profundidad por segundo de fábrica): el juego gasta menos en

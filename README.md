@@ -229,7 +229,7 @@ Launch from the tab and the game enters 3D on its own when it goes fullscreen. W
 `~/.config/odysseyvk/serve.conf`, fullscreen windows and games that aren't switched on stay in 2D (the
 switches show it). Games must run in
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
-game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
+game above the 3D. If a game in 3D covers the viewer or closes within 20 seconds of entering 3D,
 OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a
 4-second countdown on its button). Hovering a cover shows a gear in its top-right corner: it
 opens that game's [integrations](#integrations-steam-launch-options).
@@ -333,7 +333,9 @@ transparent every frame) and hands its alpha to the viewer: the minimap, ammo, m
 stay flat on the screen instead of taking the depth of whatever is behind them. If a game draws its HUD
 some other way nothing changes. Next to the pill a small box shows the game's FPS (frames it presents)
 and the layer's (depths it sends; with DLSS frame generation the game's are double); when the pill hides, the box
-stays in the top-right corner. Settings → Games
+stays in the top-right corner. The arrow on the *FPS box* tile picks more to show in it, MangoHud-style: each
+GPU on its own row (usage, plus its temperature, memory and power if ticked), CPU usage and temperature, system
+memory and the game's frame time. With any of them ticked, the box also shows over videos. Settings → Games
 with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box.
 Settings → Smoothness → *Layer FPS cap* limits how many depths and HUD masks per second the layer copies
 inside the game (the viewer makes 6 depth maps a second by default), so the game spends less on copies

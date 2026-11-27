@@ -3139,6 +3139,13 @@ static int cmdHudSelfTest(int argc, char **argv) {
   /* (v1.17) ODYSSEYVK_HUD_FPS=1|2: el cuadrito de los FPS (1 = con DLSS, 2 = con la red sobre un juego) */
   if (const char *fp = std::getenv("ODYSSEYVK_HUD_FPS"))
     hud.state().fpsModo = std::atoi(fp), hud.state().fpsJuego = 118.0f, hud.state().fpsCapa = 59.0f;
+  /* (v1.17) ODYSSEYVK_HUD_MONITOR=1: el cuadrito con filas vigiladas de ejemplo (lo medido aqui el 27-nov) */
+  if (std::getenv("ODYSSEYVK_HUD_MONITOR"))
+    hud.state().monitor = {{"RTX 4090", {{"95", "%"}, {"73", "°C"}, {"8,3", "GB"}, {"366", "W"}}},
+                           {"RTX 5080", {{"12", "%"}, {"38", "°C"}, {"1,2", "GB"}, {"28", "W"}}},
+                           {"CPU", {{"40", "%"}, {"79", "°C"}}},
+                           {"RAM", {{"38,9", "GB"}}},
+                           {idioma::tr("Cuadro"), {{"8,5", "ms"}}}};
   hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
   hud.state().hud = 3;
@@ -3187,6 +3194,14 @@ static int cmdHudSelfTest(int argc, char **argv) {
     /* (v1.16) ODYSSEYVK_HUD_DEPURACION=1: la vista de depuracion (las dos listas de redes en una columna a la izquierda) */
     hud.state().depuracion = std::getenv("ODYSSEYVK_HUD_DEPURACION") != nullptr;
     prefs::llenar(hud.state(), prefs::leer(), prefs::juegosSteam(), ids);
+    /* (v1.17) ODYSSEYVK_HUD_MENU_TESELA=fps_juego: el menu de esa tesela abierto */
+    if (const char *mt = std::getenv("ODYSSEYVK_HUD_MENU_TESELA"))
+      for (size_t k = 0; k < hud.state().teselas.size(); k++)
+        if (hud.state().teselas[k].id == mt) {
+          std::vector<std::string> claves;
+          prefs::opcionesMonitor(hud.state().menuOpciones, hud.state().menuMarcadas, claves);
+          hud.state().teselaMenu = (int)k;
+        }
     /* (v1.16) ODYSSEYVK_HUD_DESPLEGADO=lista:red (o lista:redvid): ese desplegable abierto */
     if (const char *dp = std::getenv("ODYSSEYVK_HUD_DESPLEGADO"))
       for (size_t k = 0; k < ids.size(); k++)
@@ -5703,9 +5718,13 @@ static int cmdServe(int argc, char **argv) {
             std::printf("[ventana] %s (%s): cerramos la sesion 3D y devolvemos el panel a 2D\n",
                         motivo, hijoUuid.c_str());
             std::fflush(stdout);
-            /* un juego cuya ventana desaparece a los pocos minutos de entrar en 3D: lo mas probable es
-               que se haya caido (v1.00). Se avisa con lo que suele arreglarlo. */
-            if (esJuego(hijoApp) && std::string(motivo) == "la ventana del video ya no esta" && hijoDesde > 0.0 && now - hijoDesde < 300.0) {
+            /* un juego cuya ventana desaparece a los pocos segundos de entrar en 3D: lo mas probable es
+               que se haya caido (v1.00). Se avisa con lo que suele arreglarlo. (v1.17) Antes valia hasta los 5 minutos
+               y salia tambien al cerrar el juego a mano (Rodolfo, con la tarjeta de «se cerró a los 112 s»: «que esto
+               solo se abra a los pocos segundos, como para crashes»); la caida que avisa, la de la pantalla completa
+               exclusiva al cambiar de modo, es al empezar: 20 s */
+            constexpr double kCaidaHasta = 20.0;
+            if (esJuego(hijoApp) && std::string(motivo) == "la ventana del video ya no esta" && hijoDesde > 0.0 && now - hijoDesde < kCaidaHasta) {
               const std::string segundos = std::to_string((long)std::lround(now - hijoDesde));
               mostrarAviso([segundos](std::string &t, std::vector<std::string> &l) {
                 t = idioma::trf("El juego se cerró a los {} s de entrar en 3D", {segundos});

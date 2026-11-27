@@ -2,6 +2,7 @@
 
 #include <array>
 #include <algorithm>
+#include <map>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -256,6 +257,10 @@ std::vector<TarjetaAmd> tarjetasAmd() {
       }
     }
     t.nombre = lee(dev + "/product_name");
+    /* (v1.17) el nombre sacado de pci.ids, guardado: el monitor del cuadrito lee las tarjetas cada segundo */
+    static std::map<std::string, std::string> nombres;
+    if (t.nombre.empty())
+      if (const auto it = nombres.find(t.pci); it != nombres.end()) t.nombre = it->second;
     if (t.nombre.empty()) {
       /* pci.ids: «\t13c0  Granite Ridge [Radeon 610M]» bajo «1002  Advanced Micro Devices...»: lo de los corchetes */
       std::string id = strLower(lee(dev + "/device"));
@@ -275,6 +280,7 @@ std::vector<TarjetaAmd> tarjetasAmd() {
         }
       }
       if (t.nombre.empty()) t.nombre = "AMD " + lee(dev + "/device");
+      nombres[t.pci] = t.nombre;
     }
     v.push_back(t);
   }

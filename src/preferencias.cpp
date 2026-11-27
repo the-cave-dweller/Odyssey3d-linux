@@ -1,6 +1,8 @@
 /* preferencias.cpp — ver preferencias.h. */
 #include "preferencias.h"
 
+#include "monitor.h"
+
 #include <stdexcept>
 #include "idioma.h"
 
@@ -706,6 +708,48 @@ bool ponerRedVideo(const std::string &ruta, std::string *aviso) {
   if (aviso)
     *aviso = ruta.empty() ? std::string(idioma::tr("red de vídeo quitada: los vídeos vuelven a la de siempre"))
                           : std::string(idioma::tr("red de vídeo puesta: vale con los vídeos (la cambia el visor abierto, o el siguiente vídeo)"));
+  return true;
+}
+
+/* ---- (v1.17) lo que vigila el cuadrito de los FPS ---------------------------------------------------- */
+namespace {
+std::set<std::string> monitorElegido() {
+  const auto conf = ajuste::leerServeConf();
+  const auto it = conf.find("monitor");
+  return it == conf.end() ? std::set<std::string>() : monitor::deTexto(it->second);
+}
+}  // namespace
+
+void opcionesMonitor(std::vector<std::string> &rotulos, std::vector<bool> &marcadas, std::vector<std::string> &claves) {
+  rotulos.clear(), marcadas.clear(), claves.clear();
+  const std::set<std::string> el = monitorElegido();
+  auto pon = [&](const std::string &rot, const std::string &clave) {
+    rotulos.push_back(rot), claves.push_back(clave), marcadas.push_back(el.count(clave) > 0);
+  };
+  for (const monitor::Tarjeta &t : monitor::leer().tarjetas) pon(idioma::trf("Tarjeta {}", {t.nombre}), t.clave);
+  pon(idioma::tr("Temperatura de las tarjetas"), monitor::kTemp);
+  pon(idioma::tr("Memoria de las tarjetas"), monitor::kVram);
+  pon(idioma::tr("Consumo de las tarjetas"), monitor::kVatios);
+  pon(idioma::tr("Uso del procesador"), monitor::kCpu);
+  pon(idioma::tr("Temperatura del procesador"), monitor::kCpuTemp);
+  pon(idioma::tr("Memoria del sistema"), monitor::kRam);
+  pon(idioma::tr("Tiempo por cuadro del juego"), monitor::kMs);
+}
+
+bool alternarMonitor(const std::string &clave, std::string *aviso) {
+  std::set<std::string> el = monitorElegido();
+  const bool quitar = el.erase(clave) > 0;
+  if (!quitar) el.insert(clave);
+  const std::string texto = monitor::aTexto(el);
+  std::string e;
+  if (!ajuste::fijarEnServeConf("monitor", texto, &e)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+    return false;
+  }
+  ajuste::escribir(std::map<std::string, double>(), std::string(), {{"monitor", texto.empty() ? std::string("no") : texto}}, &e);
+  if (aviso)
+    *aviso = el.empty() ? std::string(idioma::tr("el cuadrito ya no vigila nada más"))
+                        : idioma::trf("el cuadrito vigila {} cosas", {std::to_string(el.size())});
   return true;
 }
 
@@ -1724,6 +1768,13 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
                                   : idioma::trf("Actualizar a {}", {st.actualizacion}),
          false, 5},
         {"menu_idioma", idioma::tr("Idioma"), idioma::nombre(idioma::actual()), false, 6}};
+    /* (v1.17) la del cuadrito de los FPS lleva su menu de lo que se vigila; si hay algo, lo dice */
+    for (Hud::State::Tesela &t : st.teselas)
+      if (t.id == "fps_juego") {
+        t.menu = true;
+        const size_t n = monitorElegido().size();
+        if (v.fpsJuego && n > 0) t.valor = idioma::trf("{} · {} más", {t.valor, std::to_string(n)});
+      }
   }
   /* (v1.16) la vista de depuracion: solo las dos listas de redes, en la columna de la izquierda (vkui.cpp) */
   if (st.depuracion && st.marco) {

@@ -29,6 +29,7 @@
 #endif
 #include "idioma.h"
 #include "rendimiento.h"
+#include "monitor.h"
 #include "vkui.h"
 #include "vkweave.h"
 
@@ -252,6 +253,57 @@ static bool g_fpsCuadro = [] {
   const char *e = std::getenv("ODYSSEYVK_FPS_JUEGO");
   return !(e && e[0] == '0');
 }();
+/* (v1.17) lo que vigila el cuadrito ademas de los FPS: `monitor = ...` en serve.conf y la orden `monitor` del panel */
+static std::set<std::string> g_monitor = [] {
+  const auto conf = ajuste::leerServeConf();
+  const auto it = conf.find("monitor");
+  return it == conf.end() ? std::set<std::string>() : monitor::deTexto(it->second);
+}();
+/* las filas del cuadrito con lo vigilado: cada tarjeta elegida (su uso y, si se pidio, temperatura, memoria y consumo),
+   el procesador, la memoria del sistema y el tiempo por cuadro del juego */
+static std::vector<Hud::State::FilaMonitor> filasMonitor(const monitor::Lectura &l, const std::set<std::string> &el,
+                                                         float fpsJuego) {
+  auto num = [](double v, int dec) {
+    char b[32];
+    std::snprintf(b, sizeof b, "%.*f", dec, v);
+    std::string s = b;
+    for (char &c : s)
+      if (c == '.') c = idioma::decimal();
+    return s;
+  };
+  const std::string nada = "—";
+  std::vector<Hud::State::FilaMonitor> f;
+  for (const monitor::Tarjeta &t : l.tarjetas) {
+    if (!el.count(t.clave)) continue;
+    Hud::State::FilaMonitor r;
+    r.rotulo = t.nombre;
+    r.valores.push_back({t.uso >= 0 ? std::to_string(t.uso) : nada, "%"});
+    if (el.count(monitor::kTemp)) r.valores.push_back({t.tempC >= 0.0 ? num(t.tempC, 0) : nada, "°C"});
+    if (el.count(monitor::kVram)) r.valores.push_back({t.usadaMiB >= 0 ? num(t.usadaMiB / 1024.0, 1) : nada, "GB"});
+    if (el.count(monitor::kVatios)) r.valores.push_back({t.vatios >= 0.0 ? num(t.vatios, 0) : nada, "W"});
+    f.push_back(r);
+  }
+  if (el.count(monitor::kCpu) || el.count(monitor::kCpuTemp)) {
+    Hud::State::FilaMonitor r;
+    r.rotulo = "CPU";
+    if (el.count(monitor::kCpu)) r.valores.push_back({l.cpu >= 0.0 ? num(l.cpu, 0) : nada, "%"});
+    if (el.count(monitor::kCpuTemp)) r.valores.push_back({l.cpuTempC >= 0.0 ? num(l.cpuTempC, 0) : nada, "°C"});
+    f.push_back(r);
+  }
+  if (el.count(monitor::kRam)) {
+    Hud::State::FilaMonitor r;
+    r.rotulo = "RAM";
+    r.valores.push_back({l.ramUsadaMiB >= 0 ? num(l.ramUsadaMiB / 1024.0, 1) : nada, "GB"});
+    f.push_back(r);
+  }
+  if (el.count(monitor::kMs) && fpsJuego > 0.5f) {
+    Hud::State::FilaMonitor r;
+    r.rotulo = idioma::tr("Cuadro");
+    r.valores.push_back({num(1000.0 / fpsJuego, 1), "ms"});
+    f.push_back(r);
+  }
+  return f;
+}
 /* (v1.14) el tope de FPS de la capa: `capa_fps_tope` en serve.conf (ODYSSEYVK_CAPA_TOPE) y la orden `capa_fps_tope`
    de la ventana de ajustes, al momento; se le pasa a la capa con el latido (protocolo v6) */
 static const bool g_topeCapaPuesto = [] {
@@ -2683,6 +2735,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             g_fpsCuadro = !(v == "no" || v == "0" || v == "apagar");
             ui.inputChanged = true;
           }
+          /* (v1.17) `monitor = a,b,...|no`: lo que vigila el cuadrito, elegido en el menu de su tesela */
+          if (const auto om = palabras.find("monitor"); om != palabras.end()) {
+            g_monitor = monitor::deTexto(om->second);
+            ui.inputChanged = true;
+          }
           /* `preajuste = 0|1|2` (rama experimental): el panel eligio un preajuste del modo rendimiento */
           if (const auto op = palabras.find("preajuste"); op != palabras.end()) {
             const int k = std::atoi(op->second.c_str());
@@ -4186,6 +4243,25 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       g_profJuego = red.descJuego();
     }
 #endif
+    /* (v1.17) lo vigilado: el muestreo lee en su hilo una vez por segundo (NVML, sysfs, /proc: nada de procesos) y aqui
+       solo se arman las filas cuando hay una lectura nueva o cambia lo elegido */
+    {
+      static monitor::Muestreo muestreo;
+      static long vueltaVista = -1;
+      static std::string elegidoVisto;
+      Hud::State &hs = ui.hud.state();
+      const bool vigilar = g_fpsCuadro && !g_monitor.empty();
+      muestreo.pedir(vigilar);
+      const std::string elegido = monitor::aTexto(g_monitor);
+      if (!vigilar) {
+        if (!hs.monitor.empty()) hs.monitor.clear(), ui.inputChanged = true;
+        elegidoVisto.clear();
+      } else if (muestreo.vuelta() != vueltaVista || elegido != elegidoVisto) {
+        vueltaVista = muestreo.vuelta(), elegidoVisto = elegido;
+        hs.monitor = filasMonitor(muestreo.ultima(), g_monitor, hs.fpsModo != 0 ? hs.fpsJuego : 0.0f);
+        ui.inputChanged = true;
+      }
+    }
     /* la vista de depuracion de la profundidad (v1.12): el atajo la cambia en `ui` y aqui pasa a la
        trama; bajo la pastilla, que es cada color (o que hace falta el conversor para verla) */
     if (wv.verProfundidad() != ui.verProfundidad) {

@@ -1241,7 +1241,7 @@ struct Overlay::Impl {
         h == Hud::HitPanelCopiar ||   /* (v1.16) el Copiar del pie de Juegos: desde la 1.14 no llegaba */
         h == Hud::HitPanelVolver ||   /* (v1.16) la flecha de volver a la pastilla */
         (hud.state().menuIdioma && (h == Hud::HitPanel || h == Hud::HitPanelTitulo)) ||
-        (hud.state().desplegado >= 0 && h == Hud::HitPanel))   /* (v1.16) un clic al lado cierra el desplegable de redes */
+        ((hud.state().desplegado >= 0 || hud.state().teselaMenu >= 0) && h == Hud::HitPanel))   /* (v1.16) un clic al lado cierra el desplegable de redes */
       golpes.push_back({(int)h, item, sub, fr, true});
   }
   static void ptrMotion(void *data, wl_pointer *, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {

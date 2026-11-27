@@ -193,6 +193,7 @@ add_executable(odysseyvk
   src/atajos.cpp
   src/barra.cpp
   src/preferencias.cpp
+  src/monitor.cpp
   src/integraciones.cpp
   src/capasajenas.cpp
   src/panel_ajustes.cpp
@@ -332,7 +333,7 @@ install(TARGETS odysseyvk RUNTIME DESTINATION bin)
 # xkbcommon, sd-bus): sin onnxruntime, OpenCV, mpv ni ffmpeg, que cargaban ~45 ms en cada apertura. Quien abre el
 # panel lo usa si esta junto a `odysseyvk`; si no, `odysseyvk ajustes`.
 if(WAYLAND_CLIENT_FOUND)
-  add_executable(odysseyvk-panel src/panel_main.cpp src/panel_ajustes.cpp src/overlay.cpp src/vkui.cpp src/preferencias.cpp
+  add_executable(odysseyvk-panel src/panel_main.cpp src/panel_ajustes.cpp src/overlay.cpp src/vkui.cpp src/preferencias.cpp src/monitor.cpp
                  src/integraciones.cpp src/wm.cpp src/ajuste.cpp src/idioma.cpp src/util.cpp src/atajos.cpp src/pngsave.cpp
                  ${PROTO_GEN})
   add_dependencies(odysseyvk-panel fuentes)

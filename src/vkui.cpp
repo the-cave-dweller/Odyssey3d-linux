@@ -952,33 +952,60 @@ void Hud::nudgePopout(int d) { st_.popout = std::max(-50, std::min(50, st_.popou
 void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, const float accent[3], const float ink[4],
                           const float dim[4]) {
   const float y0 = 0.0f;
-    const bool dlss = st_.fpsModo == 1;
-    const int nFilas = dlss ? 2 : 1;
-    char nj[16], nc[16];
-    std::snprintf(nj, sizeof nj, "%d", (int)std::lround(st_.fpsJuego));
-    std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
-    const char *rJ = idioma::tr("Juego"), *rC = idioma::tr("Capa");
-    const std::string titulo = dlss ? std::string("DLSS") : std::string(idioma::tr("Modelo de serie"));
-    const float tamR = 12.0f, tamN = 14.0f, tamF = 10.5f, borde = 14.0f;
-    const float wRot = dlss ? std::max(textWidth(rJ, tamR), textWidth(rC, tamR)) : textWidth(rJ, tamR);
-    const float wNum = textWidth("000", tamN), wFps = textWidth("fps", tamF);
-    const float bw = std::max(borde + wRot + 14.0f + wNum + 4.0f + wFps + borde, borde + textWidth(titulo, 10.0f) + borde);
-    const float bx = xDer - bw;
-    if (bx >= 8.0f) {
-      /* (v1.16) del mismo alto y color que la pastilla, pegado arriba */
-      mask9({bx, y0 - 8.0f, bw + (orilla ? 8.0f : 0.0f), ph + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.94f);
-      text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
-      const float colFps = bx + bw - borde - wFps;
-      float filas[2] = {y0 + (compacta ? 20.0f : 28.0f), y0 + (compacta ? 36.0f : 50.0f)};
-      if (!dlss) filas[0] = y0 + (compacta ? 27.0f : 39.0f);
-      const char *rot[2] = {rJ, rC};
-      const char *num[2] = {nj, nc};
-      for (int k = 0; k < nFilas; k++) {
-        text(rot[k], bx + borde, filas[k] + 1.5f, tamR, dim[0], dim[1], dim[2], dim[3]);
-        text(num[k], colFps - 4.0f - textWidth(num[k], tamN), filas[k], tamN, ink[0], ink[1], ink[2], ink[3]);
-        text("fps", colFps, filas[k] + 3.0f, tamF, dim[0], dim[1], dim[2], dim[3]);
+  /* (v1.17) filas: las de los FPS (si hay un juego) y luego lo que se eligio vigilar en la tesela del cuadrito; cada una
+     con su rotulo y sus valores en columnas (el numero en blanco, la unidad chica y gris, como siempre) */
+  struct Seg { std::string num, uni; };
+  struct Fila { std::string rot; std::vector<Seg> segs; };
+  std::vector<Fila> filas;
+  const bool dlss = st_.fpsModo == 1;
+  char nj[16], nc[16];
+  std::snprintf(nj, sizeof nj, "%d", (int)std::lround(st_.fpsJuego));
+  std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
+  if (st_.fpsModo != 0) {
+    filas.push_back({idioma::tr("Juego"), {{nj, "fps"}}});
+    if (dlss) filas.push_back({idioma::tr("Capa"), {{nc, "fps"}}});
+  }
+  for (const State::FilaMonitor &m : st_.monitor) {
+    Fila f{m.rotulo, {}};
+    for (const auto &v : m.valores) f.segs.push_back({v.first, v.second});
+    filas.push_back(f);
+  }
+  if (filas.empty()) return;
+  const std::string titulo = dlss ? std::string("DLSS")
+                             : std::string(idioma::tr(st_.fpsModo == 2 ? "Modelo de serie" : "Monitor"));
+  const float tamR = 12.0f, tamN = 14.0f, tamF = 10.5f, borde = 14.0f, hueco = 10.0f;
+  float wRot = 0.0f;
+  size_t nCol = 0;
+  for (const Fila &f : filas) wRot = std::max(wRot, textWidth(f.rot, tamR)), nCol = std::max(nCol, f.segs.size());
+  std::vector<float> wNum(nCol, textWidth("000", tamN)), wUni(nCol, 0.0f);
+  for (const Fila &f : filas)
+    for (size_t j = 0; j < f.segs.size(); j++)
+      wNum[j] = std::max(wNum[j], textWidth(f.segs[j].num, tamN)), wUni[j] = std::max(wUni[j], textWidth(f.segs[j].uni, tamF));
+  float wCols = 0.0f;
+  for (size_t j = 0; j < nCol; j++) wCols += wNum[j] + 4.0f + wUni[j] + (j + 1 < nCol ? hueco : 0.0f);
+  const float bw = std::max(borde + wRot + 14.0f + wCols + borde, borde + textWidth(titulo, 10.0f) + borde);
+  const float paso = compacta ? 16.0f : 22.0f, y1 = compacta ? 20.0f : 28.0f;
+  const float alto = std::max(ph, y1 + paso * (float)filas.size() + (compacta ? 4.0f : 6.0f));
+  const float bx = xDer - bw;
+  if (bx < 8.0f) return;
+  /* (v1.16) del mismo alto y color que la pastilla, pegado arriba (v1.17: mas alto si hay mas filas) */
+  mask9({bx, y0 - 8.0f, bw + (orilla ? 8.0f : 0.0f), alto + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1),
+        Hud::canal(pal_.barra, 2), 0.94f);
+  text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
+  for (size_t i = 0; i < filas.size(); i++) {
+    /* una sola fila (los FPS sin DLSS), a media altura como antes */
+    const float y = filas.size() == 1 ? y0 + (compacta ? 27.0f : 39.0f) : y0 + y1 + paso * (float)i;
+    text(filas[i].rot, bx + borde, y + 1.5f, tamR, dim[0], dim[1], dim[2], dim[3]);
+    float x = bx + bw - borde - wCols;
+    for (size_t j = 0; j < nCol; j++) {
+      if (j < filas[i].segs.size()) {
+        const Seg &sg = filas[i].segs[j];
+        text(sg.num, x + wNum[j] - textWidth(sg.num, tamN), y, tamN, ink[0], ink[1], ink[2], ink[3]);
+        text(sg.uni, x + wNum[j] + 4.0f, y + 3.0f, tamF, dim[0], dim[1], dim[2], dim[3]);
       }
+      x += wNum[j] + 4.0f + wUni[j] + hueco;
     }
+  }
 }
 
 void Hud::begin(int w, int h, float altoLogico) {
@@ -1846,6 +1873,8 @@ void Hud::dibujaPanel(int vw, int vh) {
       panelCerrar_ = panelVolver_ = panelActualizar_ = fuera;
       panelPestanas_.assign(st_.pestanas.size(), fuera);
       panelTeselas_.assign(st_.teselas.size(), fuera);
+      panelTeselaFlecha_.assign(st_.teselas.size(), fuera);
+      panelMenuAncla_ = fuera;
       relleno(col, 8.0f * s, pal_.filo, 1.0f);
       relleno({col.x + 1.0f, col.y + 1.0f, col.w - 2.0f, col.h - 2.0f}, 7.0f * s, pal_.tarjeta, 0.95f);
       panelCuerpo_ = {col.x + 6.0f * s, col.y + 8.0f * s, col.w - 12.0f * s, col.h - 8.0f * s - 44.0f};
@@ -1927,6 +1956,8 @@ void Hud::dibujaPanel(int vw, int vh) {
       }
     }
     panelTeselas_.assign(st_.teselas.size(), fuera);
+    panelTeselaFlecha_.assign(st_.teselas.size(), fuera);
+    panelMenuAncla_ = fuera;
     for (size_t k = 0; k < st_.teselas.size() && k < 6; k++) {
       const Hud::State::Tesela &te = st_.teselas[k];
       const float tx = k < 3 ? izqC : izqC + (anchoC - 200.0f) * s;
@@ -1948,8 +1979,19 @@ void Hud::dibujaPanel(int vw, int vh) {
       }
       icono({t.x + 16.0f * s, t.y + 22.0f * s, 20.0f * s, 20.0f * s}, iconoTesela(te.icono), nueva ? hex(0xDEAA7Cu, 0) : hex(0xC9D0D7u, 0),
             nueva ? hex(0xDEAA7Cu, 1) : hex(0xC9D0D7u, 1), nueva ? hex(0xDEAA7Cu, 2) : hex(0xC9D0D7u, 2), hov || nueva ? 1.0f : 0.85f);
-      textoCabe(te.titulo, t.x + 48.0f * s, t.y + 13.0f * s, 12.0f * s, t.w - 56.0f * s, dim[0], dim[1], dim[2], 1.0f);
-      textoCabe(te.valor, t.x + 48.0f * s, t.y + 31.0f * s, 15.0f * s, t.w - 56.0f * s, te.puesta ? accent[0] : ink[0],
+      /* (v1.17) con menu (el cuadrito de los FPS): una flechita a la derecha que lo abre */
+      const float wFlecha = te.menu ? 30.0f * s : 0.0f;
+      if (te.menu) {
+        const Rect fl{t.x + t.w - wFlecha, t.y, wFlecha, t.h};
+        if (k < panelTeselaFlecha_.size()) panelTeselaFlecha_[k] = fl;
+        const bool hf = fl.inside(mx_, my_) || st_.teselaMenu == (int)k;
+        if (hf) relleno({fl.x + 2.0f * s, fl.y + 8.0f * s, fl.w - 6.0f * s, fl.h - 16.0f * s}, 4.0f * s, pal_.controlHov, 1.0f);
+        icono({fl.x + (fl.w - 14.0f * s) * 0.5f - 2.0f * s, fl.y + (fl.h - 14.0f * s) * 0.5f, 14.0f * s, 14.0f * s}, icoBajar_,
+              ink[0], ink[1], ink[2], hf ? 1.0f : 0.70f);
+        if (st_.teselaMenu == (int)k) panelMenuAncla_ = t;
+      }
+      textoCabe(te.titulo, t.x + 48.0f * s, t.y + 13.0f * s, 12.0f * s, t.w - 56.0f * s - wFlecha, dim[0], dim[1], dim[2], 1.0f);
+      textoCabe(te.valor, t.x + 48.0f * s, t.y + 31.0f * s, 15.0f * s, t.w - 56.0f * s - wFlecha, te.puesta ? accent[0] : ink[0],
                 te.puesta ? accent[1] : ink[1], te.puesta ? accent[2] : ink[2], 1.0f);
       if (te.id == "menu_idioma") panelIdioma_ = t;   /* la lista de idiomas cuelga de ella */
     }
@@ -2625,6 +2667,41 @@ void Hud::dibujaPanel(int vw, int vh) {
       textoCabe(it.opciones[k], o.x + 34.0f, o.y + 9.0f, 14.5f, derO - o.x - 34.0f, ink[0], ink[1], ink[2], est == 1 ? 0.6f : 1.0f);
     }
   }
+  /* (v1.17) el menu de una tesela (el del cuadrito de los FPS): lo que se puede vigilar, con su casilla. Cuelga de la
+     tesela, pegado a su orilla derecha si es de las de la derecha; se queda abierto al marcar */
+  panelMenuOpc_.clear();
+  if (st_.teselaMenu >= 0 && panelMenuAncla_.w > 0.0f && !st_.menuOpciones.empty()) {
+    const float hOp = 34.0f;
+    float wL = 0.0f;
+    for (const std::string &o : st_.menuOpciones) wL = std::max(wL, textWidth(o, 14.0f));
+    wL = std::max(panelMenuAncla_.w, 12.0f + 18.0f + 12.0f + wL + 18.0f);
+    const float hL = hOp * (float)st_.menuOpciones.size() + 8.0f;
+    const bool derecha = panelMenuAncla_.x + panelMenuAncla_.w * 0.5f > (float)vw * 0.5f;
+    float xL = derecha ? panelMenuAncla_.x + panelMenuAncla_.w - wL : panelMenuAncla_.x;
+    xL = std::max(8.0f, std::min(xL, (float)vw - 8.0f - wL));
+    const float yL = std::min(panelMenuAncla_.y + panelMenuAncla_.h + 4.0f, std::max(8.0f, (float)vh - 8.0f - hL));
+    const Rect lista{xL, yL, wL, hL};
+    mask9(lista, 1, 8.0f, Hud::canal(pal_.filo, 0), Hud::canal(pal_.filo, 1), Hud::canal(pal_.filo, 2), 1.0f);
+    mask9({lista.x + 1.0f, lista.y + 1.0f, lista.w - 2.0f, lista.h - 2.0f}, 1, 7.0f, Hud::canal(pal_.tarjeta, 0),
+          Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 0.99f);
+    for (size_t k = 0; k < st_.menuOpciones.size(); k++) {
+      const Rect o{lista.x + 4.0f, yL + 4.0f + (float)k * hOp, lista.w - 8.0f, hOp};
+      panelMenuOpc_.push_back(o);
+      if (o.inside(mx_, my_))
+        mask9(o, 0, R(6.0f), Hud::canal(pal_.controlHov, 0), Hud::canal(pal_.controlHov, 1), Hud::canal(pal_.controlHov, 2), 1.0f);
+      const bool marcada = k < st_.menuMarcadas.size() && st_.menuMarcadas[k];
+      const Rect cas{o.x + 8.0f, o.y + (hOp - 18.0f) * 0.5f, 18.0f, 18.0f};
+      if (marcada) {
+        mask9(cas, 1, 4.0f, accent[0], accent[1], accent[2], 1.0f);
+        icono({cas.x + 2.0f, cas.y + 2.0f, 14.0f, 14.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, 1.0f);
+      } else {
+        mask9(cas, 1, 4.0f, 0.55f, 0.57f, 0.62f, 1.0f);
+        mask9({cas.x + 1.5f, cas.y + 1.5f, cas.w - 3.0f, cas.h - 3.0f}, 1, 3.0f, Hud::canal(pal_.tarjeta, 0),
+              Hud::canal(pal_.tarjeta, 1), Hud::canal(pal_.tarjeta, 2), 1.0f);
+      }
+      textoCabe(st_.menuOpciones[k], cas.x + 30.0f, o.y + 9.0f, 14.0f, o.w - 46.0f, ink[0], ink[1], ink[2], 1.0f);
+    }
+  }
   /* la ayuda del valor bajo el raton: una caja de hasta 460 puntos, partida en renglones */
   if (!ayudaRaton.empty()) {
     const float tam = 12.5f;
@@ -2709,6 +2786,13 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
         if (sub) *sub = (int)k;
         return HitPanelIdiomaOpcion;
       }
+  /* (v1.17) el menu de una tesela: 2000 + la opcion */
+  if (st_.teselaMenu >= 0)
+    for (size_t k = 0; k < panelMenuOpc_.size(); k++)
+      if (panelMenuOpc_[k].inside(mx, my)) {
+        if (sub) *sub = 2000 + (int)k;
+        return HitPanelTesela;
+      }
   /* (v1.16) las opciones del desplegable abierto: su fila y 100 + el numero de la opcion */
   if (st_.desplegado >= 0)
     for (size_t k = 0; k < panelDespOpc_.size(); k++)
@@ -2739,7 +2823,8 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (st_.marco)
     for (size_t k = 0; k < panelTeselas_.size() && k < st_.teselas.size(); k++)
       if (panelTeselas_[k].inside(mx, my) && !st_.teselas[k].id.empty()) {
-        if (sub) *sub = (int)k;
+        /* (v1.17) su flechita abre o cierra su menu: 1000 + la tesela */
+        if (sub) *sub = k < panelTeselaFlecha_.size() && panelTeselaFlecha_[k].inside(mx, my) ? 1000 + (int)k : (int)k;
         return HitPanelTesela;
       }
   if (!st_.marco && my < panelCaja_.y + 106.0f) return HitPanelTitulo;

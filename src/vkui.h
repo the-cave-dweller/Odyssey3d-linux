@@ -153,6 +153,7 @@ public:
       std::string id, titulo, valor;
       bool puesta = false;   /* el valor, en el acento */
       int icono = 0;         /* ver Hud::iconoTesela */
+      bool menu = false;     /* (v1.17) con una flechita que abre su menu (el cuadrito de los FPS) */
     };
     std::vector<Tesela> teselas;
     float aparicion = 1.0f;
@@ -164,6 +165,10 @@ public:
        redes en una columna a la izquierda, para probarlas en vivo con la profundidad a la vista (Rodolfo) */
     int desplegado = -1;
     bool depuracion = false;
+    /* (v1.17) el menu abierto de una tesela (su numero, -1 = ninguno), sus opciones y cuales van marcadas */
+    int teselaMenu = -1;
+    std::vector<std::string> menuOpciones;
+    std::vector<bool> menuMarcadas;
     float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
     std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
     std::string version;             /* "OdysseyVK 0.84", abajo a la derecha */
@@ -235,6 +240,13 @@ public:
     float fpsJuego = 0.0f, fpsCapa = 0.0f;
     int fpsModo = 0;
     bool fpsCuadro = true;
+    /* (v1.17) lo que se eligio vigilar en el menu de la tesela del cuadrito: una fila por cosa, con sus valores (el
+       numero y su unidad). Con alguna, el cuadrito sale tambien sin juego (sobre un video), como «Monitor» */
+    struct FilaMonitor {
+      std::string rotulo;
+      std::vector<std::pair<std::string, std::string>> valores;
+    };
+    std::vector<FilaMonitor> monitor;
     /* (v1.14) en la pestana Juegos, en medio del pie del panel: el parametro de Steam para la profundidad de DLSS y
        su boton Copiar (Rodolfo: «el parametro ahi, por el centro»). `pieParametro` vacio = no sale. Recien copiado
        (`pieCopiado`), el boton dice `pieCopiadoTexto` un momento; `pieAyuda`, al pasar el raton */
@@ -345,7 +357,7 @@ public:
   /* Área útil de la ventana: lo que hay debajo de la pastilla sigue dibujando vídeo. */
   bool overlayVisible() const { return st_.overlayOn; }
   /* (v1.17) el cuadrito de los FPS del juego a la vista (sale aunque la pastilla este oculta) */
-  bool cuadroFps() const { return st_.fpsCuadro && st_.fpsModo != 0; }
+  bool cuadroFps() const { return st_.fpsCuadro && (st_.fpsModo != 0 || !st_.monitor.empty()); }
 
   /* Cuadro ocupado por el aviso / la pastilla en la disposicion actual, en pixeles
      reales de la ventana (los mismos que llevan los vertices). Lo usa la superposicion
@@ -537,6 +549,8 @@ private:
                        const float dim[4]);
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelDespOpc_;   /* (v1.16) las opciones del desplegable abierto */
+  std::vector<Rect> panelTeselaFlecha_, panelMenuOpc_;   /* (v1.17) las flechitas de las teselas y su menu abierto */
+  Rect panelMenuAncla_{-10.0f, -10.0f, 0.0f, 0.0f};
   Rect panelDespCaja_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) y su caja entera */
   std::vector<Rect> panelPestanas_;
   std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */

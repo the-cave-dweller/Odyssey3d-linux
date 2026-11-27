@@ -149,6 +149,11 @@ bool copiarParametroSteam(std::string *err);
 /* (v1.16) la casilla del pie de Juegos: pone o quita ODYSSEYVK=1 en lo de todos los juegos y lo lleva a Steam. Los
    juegos que la tienen puesta o quitada a su manera (en Integraciones) lo siguen teniendo asi */
 bool alternarOdysseyTodos(const std::vector<Juego> &juegos, std::string *aviso);
+/* (v1.17) el menu de la tesela del cuadrito de los FPS: lo que se puede vigilar (cada tarjeta por separado y lo de
+   MangoHud que tiene sentido aqui), con lo elegido marcado. `claves` va en paralelo a `rotulos` */
+void opcionesMonitor(std::vector<std::string> &rotulos, std::vector<bool> &marcadas, std::vector<std::string> &claves);
+/* marcar o quitar una: va a serve.conf (`monitor = ...`) y al visor abierto (la orden `monitor`) */
+bool alternarMonitor(const std::string &clave, std::string *aviso);
 
 /* Lo que ensena el panel: rellena pestanas y filas a partir de los valores y de la biblioteca.
    `ids` sale alineado con las filas y dice que es cada una ("modo", "rastreo", "auto:zen",

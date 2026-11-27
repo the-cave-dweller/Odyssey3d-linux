@@ -158,6 +158,7 @@ int cmdAjustes(int argc, char **argv) {
   };
   paso("juegos");
   std::vector<std::string> ids;
+  std::vector<std::string> menuClaves;   /* (v1.17) lo de cada opcion del menu de la tesela del cuadrito */
   Hud::State &st = ov.hud().state();
   st.pestana = enJuegos ? 1 : 0;
   st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
@@ -460,6 +461,38 @@ int cmdAjustes(int argc, char **argv) {
       }
       /* (v1.16) una tesela chica del panel al estilo de vkDaedalus: la del idioma y la de la version hacen lo de sus
          botones de antes; las demas son interruptores, que se aplican como su fila */
+      /* (v1.17) el menu de la tesela del cuadrito de los FPS: su flechita lo abre o lo cierra; una opcion se marca o se
+         quita y el menu se queda abierto; cualquier otro clic lo cierra */
+      if (g.tipo == (int)Hud::HitPanelTesela && g.sub >= 2000) {
+        const size_t k = (size_t)(g.sub - 2000);
+        if (k < menuClaves.size()) {
+          std::string aviso;
+          if (prefs::alternarMonitor(menuClaves[k], &aviso) && k < st.menuMarcadas.size()) st.menuMarcadas[k] = !st.menuMarcadas[k];
+          st.pie = aviso;
+          std::printf("[ajustes] monitor %s · %s\n", menuClaves[k].c_str(), aviso.c_str());
+          std::fflush(stdout);
+          rellenar();
+        }
+        repintar = true;
+        continue;
+      }
+      if (g.tipo == (int)Hud::HitPanelTesela && g.sub >= 1000) {
+        const int k = g.sub - 1000;
+        if (st.teselaMenu == k) {
+          st.teselaMenu = -1;
+        } else {
+          prefs::opcionesMonitor(st.menuOpciones, st.menuMarcadas, menuClaves);
+          st.teselaMenu = k;
+        }
+        std::printf("[ajustes] menu del cuadrito %s (%zu opciones)\n", st.teselaMenu >= 0 ? "abierto" : "cerrado", menuClaves.size());
+        std::fflush(stdout);
+        repintar = true;
+        continue;
+      }
+      if (st.teselaMenu >= 0) {
+        st.teselaMenu = -1;
+        repintar = true;
+      }
       std::string idTesela;
       if (g.tipo == (int)Hud::HitPanelTesela && g.sub >= 0 && (size_t)g.sub < st.teselas.size()) {
         idTesela = st.teselas[(size_t)g.sub].id;
@@ -670,9 +703,10 @@ int cmdAjustes(int argc, char **argv) {
             repintar = true;
           }
         } else if (combo == "Escape") {
-          if (st.menuIdioma || st.desplegado >= 0) {
+          if (st.menuIdioma || st.desplegado >= 0 || st.teselaMenu >= 0) {
             st.menuIdioma = false;
             st.desplegado = -1;
+            st.teselaMenu = -1;
             repintar = true;
           } else {
             g_cierraPanel = 1;

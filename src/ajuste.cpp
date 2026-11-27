@@ -74,7 +74,8 @@ static bool esOrdenTexto(const std::string &nombre) {
          nombre == "legado" || nombre == "vista" || nombre == "barra" || nombre == "dividido_suavizado" ||
          nombre == "cargar_red" ||   /* `cargar_red = si` (v0.94): la red de profundidad recien bajada, al visor */
          nombre == "modelo_video" ||   /* (v1.16) `modelo_video = RUTA|no`: la red de video, puesta o quitada en el panel */
-         nombre == "ver_profundidad" ||   /* (v1.16) `ver_profundidad = 1|0`: la vista de depuracion, desde el panel */
+         nombre == "ver_profundidad" ||
+         nombre == "monitor" ||   /* (v1.17) `monitor = a,b,...|no`: lo que vigila el cuadrito de los FPS */   /* (v1.16) `ver_profundidad = 1|0`: la vista de depuracion, desde el panel */
          nombre == "idioma" ||        /* `idioma = fr` (v1.07): el panel cambio el idioma; la pastilla tambien */
          nombre == "atajos" ||        /* `atajos = recargar` (v1.09): se cambio un atajo en el panel */
          nombre == "preajuste" ||     /* `preajuste = 0|1|2`: el modo rendimiento */

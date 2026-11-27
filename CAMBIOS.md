@@ -27,6 +27,30 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
   (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
 
+## El cuadrito de los FPS vigila lo que elijas, como MangoHud, y la tarjeta de «se cerró» solo en los primeros 20 s (v1.17)
+
+- Rodolfo: «añade una flechita ahí, donde también dé un dropdown de otras cosas que se puedan monitorear, como uso de
+  cada gpu (listada por separado), y algunas como las de mangohud, pero mantén la estética de nuestro proyecto».
+- **La tesela «Cuadrito de FPS»** lleva una flechita a la derecha que abre un menú con casillas: cada tarjeta por
+  separado (con su nombre: «Tarjeta RTX 4090», «Tarjeta RTX 5080», «Tarjeta Radeon 610M»), su temperatura, su memoria
+  y su consumo, el uso y la temperatura del procesador, la memoria del sistema y el tiempo por cuadro del juego. Se
+  queda abierto al marcar; cualquier otro clic o Esc lo cierra. Lo elegido va a `serve.conf` (`monitor = ...`) y al
+  visor abierto (la orden `monitor`); la tesela dice «Encendido · N más».
+- **El cuadrito**: debajo de los FPS, una fila por cosa, con el número en blanco y la unidad chica y gris en columnas,
+  del alto que haga falta. Con algo elegido sale también sobre un vídeo (titulado «Monitor»).
+- **Cómo se mide** (`src/monitor.cpp`): las NVIDIA por NVML (libnvidia-ml cargada al vuelo: sin contexto de CUDA), las
+  AMD por sysfs, el procesador por /proc/stat y hwmon (k10temp, zenpower o coretemp), la memoria por /proc/meminfo;
+  nada lanza procesos. En el visor, un hilo lee una vez por segundo y solo mientras haya algo elegido. MEDIDO aquí: las
+  tres tarjetas, el procesador y la memoria en 0,86 ms por lectura. El nombre de la Radeon sacado de pci.ids se guarda
+  (antes se buscaba en cada lectura).
+- **Probado**: `ctl hud` con filas de ejemplo (con la pastilla y en la esquina) y con el menú abierto
+  (`ODYSSEYVK_HUD_MONITOR=1`, `ODYSSEYVK_HUD_MENU_TESELA=fps_juego`), y en un KWin aparte con clics en su sitio: la
+  flechita lo abre (10 opciones), marcar la 5080 escribe `monitor = gpu:GPU-…` en serve.conf y en el ajuste, y un clic
+  fuera lo cierra. Sin probar aún con el visor en un juego.
+- **La tarjeta de «el juego se cerró a los N s»** salía hasta los 5 minutos, también al cerrar el juego a mano
+  (Rodolfo, con la de 112 s: «que esto solo se abra a los pocos segundos, como para crashes»). La caída que avisa, la
+  de la pantalla completa exclusiva al cambiar de modo, es al empezar: ahora solo en los primeros 20 s.
+
 ## El cuadrito de los FPS se queda aunque se oculte la pastilla (v1.17)
 
 - Rodolfo: «cuando está prendido el counter de fps y se esconde el hub de 3d, el counter también se esconde, no quiero
