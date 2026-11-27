@@ -380,7 +380,10 @@ instead of typing them: the layers (`ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`
 it, and gamescope (render and output resolution by abbreviation, stretch or fit, fullscreen, cursor grab,
 and FSR or NIS upscaling, which turns gamescope on). What you set on the tab applies to every installed
 game; the gear on a cover (Games tab) opens that game's own settings, marked with a dot. With Neural Forge
-on, the game's `NEURAL_FORGE_TARGET_EXE` is taken from Neural Forge itself.
+on, the game's `NEURAL_FORGE_TARGET_EXE` is taken from Neural Forge itself (a game missing from Neural Forge's list
+says so: add it in its Setup tab), and a switch below it puts Neural Forge's model on the second card
+(`NEURAL_FORGE_OFFLOAD_GPU`, written with that card's PCI IDs and address), with the card's PCIe link: at x4 or
+x8 every frame crossing to it and back can make the game slower than keeping the model on the game's card.
 
 ![A game's integrations](docs/img/integrations.png)
 

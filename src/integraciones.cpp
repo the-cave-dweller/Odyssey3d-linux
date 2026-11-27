@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "ajuste.h"
 #include "util.h"
 
 namespace integ {
@@ -320,7 +321,7 @@ std::string rutaMarca() { return rutaEstadoOdyssey("integraciones-pendiente"); }
 /* ------------------------------------------------------------------------------------------------ */
 
 const std::vector<std::string> &claves() {
-  static const std::vector<std::string> k = {"odysseyvk", "mangohud",   "vkdaedalus", "neural_forge", "vkbasalt",
+  static const std::vector<std::string> k = {"odysseyvk", "mangohud",   "vkdaedalus", "neural_forge", "nf_offload", "vkbasalt",
                                              "otros",     "vkdaedalus_run", "comando", "gamescope",  "reescalado",
                                              "filtro",    "render",     "salida",     "escala",       "pantalla_completa",
                                              "cursor",    "gs_otros",   "opciones"};
@@ -331,7 +332,7 @@ const Ajustes &deFabrica() {
   /* (v1.16) ODYSSEYVK=1 estuvo puesta siempre y luego volvio a ser una opcion (Rodolfo: «stop putting the odyssey
      parameter by yourself, return it as an option»): de fabrica, apagada */
   static const Ajustes a = {{"odysseyvk", "0"},       {"mangohud", "0"},        {"vkdaedalus", "0"},
-                            {"neural_forge", "0"},    {"vkbasalt", "0"},        {"otros", ""},
+                            {"neural_forge", "0"},    {"nf_offload", "0"},      {"vkbasalt", "0"},        {"otros", ""},
                             {"vkdaedalus_run", "0"},  {"comando", ""},          {"gamescope", "0"},
                             {"reescalado", "0"},      {"filtro", "fsr"},        {"render", "2048x1536"},
                             {"salida", "3840x2160"},  {"escala", "stretch"},    {"pantalla_completa", "1"},
@@ -340,7 +341,7 @@ const Ajustes &deFabrica() {
 }
 
 bool esInterruptor(const std::string &c) {
-  return c == "odysseyvk" || c == "mangohud" || c == "vkdaedalus" || c == "neural_forge" || c == "vkbasalt" ||
+  return c == "odysseyvk" || c == "mangohud" || c == "vkdaedalus" || c == "neural_forge" || c == "nf_offload" || c == "vkbasalt" ||
          c == "vkdaedalus_run" || c == "gamescope" || c == "reescalado" || c == "pantalla_completa" || c == "cursor";
 }
 
@@ -380,6 +381,7 @@ Estado cargar() {
       if (k == ".linea_steam") j.lineaSteam = v, j.visto = true;
       else if (k == ".propia") j.propia = v == "1";
       else if (k == ".nf_exe") j.nfExe = v;
+      else if (k == ".nf_gpu") j.nfGpu = v;
       else if (deFabrica().count(k)) j.propios[k] = v;
     }
   }
@@ -403,6 +405,7 @@ bool guardar(const Estado &e, std::string *err) {
     if (j.visto) t += ".linea_steam = " + j.lineaSteam + "\n";
     if (j.propia) t += ".propia = 1\n";
     if (!j.nfExe.empty()) t += ".nf_exe = " + j.nfExe + "\n";
+    if (!j.nfGpu.empty()) t += ".nf_gpu = " + j.nfGpu + "\n";
   }
   std::error_code ec;
   std::filesystem::create_directories(std::filesystem::path(rutaConf()).parent_path(), ec);
@@ -434,6 +437,8 @@ void fijar(Estado &e, const std::string &appid, const std::string &clave, const 
     if (const char *otra = excluyente(clave); otra[0]) pon(otra, "0");   /* uno u otro */
   if (clave == "reescalado" && valor == "1") pon("gamescope", "1");
   if (clave == "gamescope" && valor == "0") pon("reescalado", "0");
+  if (clave == "nf_offload" && valor == "1") pon("neural_forge", "1");   /* (v1.18) el offloading es de Neural Forge */
+  if (clave == "neural_forge" && valor == "0") pon("nf_offload", "0");
 }
 
 void comoTodos(Estado &e, const std::string &appid) {
@@ -443,7 +448,7 @@ void comoTodos(Estado &e, const std::string &appid) {
 }
 
 /* ---- la linea ---- */
-std::string linea(const Ajustes &a, const std::string &nfExe) {
+std::string linea(const Ajustes &a, const std::string &nfExe, const std::string &nfGpu) {
   auto si = [&](const char *k) {
     const auto it = a.find(k);
     return it != a.end() && it->second == "1";
@@ -472,6 +477,12 @@ std::string linea(const Ajustes &a, const std::string &nfExe) {
     vars.push_back(std::string(v.nombre) + "=1");
     if (std::strcmp(v.clave, "neural_forge") == 0 && !strTrim(nfExe).empty())
       vars.push_back("NEURAL_FORGE_TARGET_EXE=" + citar(strTrim(nfExe)));
+    /* (v1.18) el modelo de Neural Forge en la segunda tarjeta: la que trajo su linea o la de secundariaNf */
+    if (std::strcmp(v.clave, "neural_forge") == 0 && si("nf_offload")) {
+      Secundaria s;
+      const std::string g = !strTrim(nfGpu).empty() ? strTrim(nfGpu) : (secundariaNf(s) ? s.valor() : std::string());
+      if (!g.empty()) vars.push_back("NEURAL_FORGE_OFFLOAD_GPU=" + citar(g));
+    }
   }
   if (!val("otros").empty()) vars.push_back(val("otros"));
   std::vector<std::string> delante;
@@ -494,6 +505,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
   if (!partir(lin, t)) return false;
   Ajustes &a = l.ajustes;
   for (const Variable &v : kVariables) a[v.clave] = "0";
+  a["nf_offload"] = "0";
   a["otros"] = "", a["vkdaedalus_run"] = "0", a["comando"] = "", a["gamescope"] = "0", a["opciones"] = "";
   if (t.empty()) return true;
   auto crudoDe = [&](const Pieza &p) { return lin.substr(p.ini, p.fin - p.ini); };
@@ -579,7 +591,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
     if (r < c && !t[r].texto.empty() && t[r].texto[0] == '-') return false;   /* env -u ...: no se modela */
   }
   std::vector<std::string> otrosVars;
-  std::string exe;
+  std::string exe, gpu;
   for (; r < c && esAsignacion(t[r].texto); r++) {
     const std::string &x = t[r].texto;
     const size_t ig = x.find('=');
@@ -595,11 +607,23 @@ bool leerLinea(const std::string &lin, Leida &l) {
       exe = valor;
       nuestra = true;
     }
+    if (!nuestra && nombre == "NEURAL_FORGE_OFFLOAD_GPU" && gpu.empty() && !valor.empty()) {   /* (v1.18) */
+      gpu = valor;
+      nuestra = true;
+    }
     if (!nuestra) otrosVars.push_back(crudoDe(t[r]));
   }
   /* NEURAL_FORGE_TARGET_EXE sin NEURAL_FORGE_ENABLE=1 no es nuestro: se queda con las demas */
   if (!exe.empty() && a["neural_forge"] != "1") otrosVars.push_back("NEURAL_FORGE_TARGET_EXE=" + citar(exe)), exe.clear();
   l.nfExe = exe;
+  /* (v1.18) y el offloading: de Neural Forge solo con NEURAL_FORGE_ENABLE=1. La tarjeta de secundariaNf no se guarda
+     (vacio = la nuestra, que se vuelve a mirar); otra que se puso a mano (un numero, «same»), si: no se pisa */
+  if (!gpu.empty() && a["neural_forge"] != "1") otrosVars.push_back("NEURAL_FORGE_OFFLOAD_GPU=" + citar(gpu)), gpu.clear();
+  if (!gpu.empty()) {
+    a["nf_offload"] = "1";
+    Secundaria s;
+    if (!(secundariaNf(s) && strLower(gpu) == strLower(s.valor()))) l.nfGpu = gpu;
+  }
   a["otros"] = unir(otrosVars);
   if (r < c && nombreBase(t[r].texto) == "vkdaedalus-run") {
     a["vkdaedalus_run"] = "1";
@@ -930,6 +954,99 @@ std::string exeDe(const Estado &e, const std::string &appid) {
   return {};
 }
 
+std::string gpuDe(const Estado &e, const std::string &appid) {
+  if (const auto it = e.juegos.find(appid); it != e.juegos.end()) return it->second.nfGpu;
+  return {};
+}
+
+namespace {
+std::string leeSys(const std::string &ruta) {
+  std::string s;
+  return readSmallFile(ruta, s) ? strTrim(s) : std::string();
+}
+/* «16.0 GT/s PCIe» → 4 */
+int genDe(const std::string &velocidad) {
+  const double gts = std::atof(velocidad.c_str());
+  return gts >= 60 ? 6 : gts >= 30 ? 5 : gts >= 15 ? 4 : gts >= 7 ? 3 : gts >= 4 ? 2 : gts > 0 ? 1 : 0;
+}
+/* la direccion PCI de la tarjeta del monitor 3D (ver secundariaNf) */
+std::string pciPrincipal() {
+  namespace fs = std::filesystem;
+  std::string salida;
+  for (const auto &m : {ajuste::leerServeConf(), ajuste::leerEstadoHub()}) {
+    if (const auto it = m.find("pantalla"); it != m.end() && salida.empty()) {
+      salida = it->second;
+      if (const size_t h = salida.find(" #"); h != std::string::npos) salida = salida.substr(0, h);
+      salida = strTrim(salida);
+      if (salida == "-") salida.clear();
+    }
+  }
+  std::error_code ec;
+  std::string porEdid;
+  for (const fs::directory_entry &c : fs::directory_iterator("/sys/class/drm", ec)) {
+    const std::string n = c.path().filename().string();   /* «card2-DP-4» */
+    const size_t g = n.find('-');
+    if (n.rfind("card", 0) != 0 || g == std::string::npos) continue;
+    const std::string conector = n.substr(g + 1);
+    /* el `device` del conector (card2-DP-4/device) es la tarjeta de DRM, no la PCI: la PCI es la de card2 */
+    const std::string pci = fs::canonical(fs::path("/sys/class/drm") / n.substr(0, g) / "device", ec).filename().string();
+    if (ec) continue;
+    if (!salida.empty() && conector == salida) return pci;
+    if (porEdid.empty() && leeSys(c.path().string() + "/status") == "connected") {
+      std::string edid;
+      if (readSmallFile(c.path().string() + "/edid", edid) && edid.find("G90XF") != std::string::npos) porEdid = pci;
+    }
+  }
+  if (!porEdid.empty()) return porEdid;
+  for (const fs::directory_entry &d : fs::directory_iterator("/sys/bus/pci/devices", ec))
+    if (leeSys(d.path().string() + "/boot_vga") == "1") return d.path().filename().string();
+  return {};
+}
+}  // namespace
+
+bool secundariaNf(Secundaria &fuera) {
+  static bool mirado = false, hay = false;
+  static Secundaria s;
+  if (!mirado) {
+    mirado = true;
+    namespace fs = std::filesystem;
+    const std::string principal = pciPrincipal();
+    std::vector<Secundaria> todas;
+    std::error_code ec;
+    for (const fs::directory_entry &d : fs::directory_iterator("/sys/bus/pci/devices", ec)) {
+      const std::string p = d.path().string(), pci = d.path().filename().string();
+      if (strLower(leeSys(p + "/vendor")) != "0x10de" || leeSys(p + "/class").rfind("0x03", 0) != 0 || pci == principal) continue;
+      Secundaria x;
+      x.pci = pci;
+      std::string modelo = strLower(leeSys(p + "/device"));
+      if (modelo.rfind("0x", 0) == 0) modelo = modelo.substr(2);
+      x.ids = "10de:" + modelo;
+      x.nombre = nombrePciIds("10de", modelo);
+      for (const char *q : {"GeForce ", "NVIDIA "})
+        if (x.nombre.rfind(q, 0) == 0) x.nombre = x.nombre.substr(std::strlen(q));
+      if (x.nombre.empty()) x.nombre = "NVIDIA " + x.ids;
+      /* lo que da de verdad: la menor de la tarjeta y de su ranura (el puerto de arriba); el ancho, el negociado */
+      const fs::path puerto = fs::canonical(d.path(), ec).parent_path();
+      int gen = genDe(leeSys(p + "/max_link_speed"));
+      const int genPuerto = genDe(leeSys(puerto.string() + "/max_link_speed"));
+      if (genPuerto > 0 && (gen == 0 || genPuerto < gen)) gen = genPuerto;
+      int ancho = std::atoi(leeSys(p + "/current_link_width").c_str());
+      const int anchoPuerto = std::atoi(leeSys(puerto.string() + "/max_link_width").c_str());
+      if (anchoPuerto > 0 && (ancho == 0 || anchoPuerto < ancho)) ancho = anchoPuerto;
+      x.gen = gen, x.ancho = ancho, x.anchoTarjeta = std::atoi(leeSys(p + "/max_link_width").c_str());
+      todas.push_back(x);
+    }
+    /* con varias, la de mas enlace (lineas por lo que da cada una: una de PCIe 4.0 da el doble que una de 3.0) */
+    std::sort(todas.begin(), todas.end(), [](const Secundaria &a, const Secundaria &b) {
+      const long ba = (long)a.ancho << std::max(0, a.gen), bb = (long)b.ancho << std::max(0, b.gen);
+      return ba != bb ? ba > bb : a.pci < b.pci;
+    });
+    if (!todas.empty()) s = todas.front(), hay = true;
+  }
+  if (hay) fuera = s;
+  return hay;
+}
+
 /* ---- poner al dia y escribir ---- */
 bool sincronizar(Estado &e, const std::vector<std::string> &appids, const std::map<std::string, std::string> &steam) {
   bool cambio = false;
@@ -956,6 +1073,7 @@ bool sincronizar(Estado &e, const std::vector<std::string> &appids, const std::m
       else j.propios[k] = v;
     }
     if (!nueva.nfExe.empty()) j.nfExe = nueva.nfExe;
+    if (nueva.ajustes.count("nf_offload") && nueva.ajustes.at("nf_offload") == "1") j.nfGpu = nueva.nfGpu;   /* (v1.18) */
     j.propia = false, j.visto = true, j.lineaSteam = cur;
   }
   return cambio;
@@ -968,7 +1086,7 @@ std::map<std::string, std::string> porEscribir(const Estado &e, const std::vecto
     if (const auto it = e.juegos.find(id); it != e.juegos.end() && it->second.propia) continue;
     const auto s = steam.find(id);
     const std::string cur = s == steam.end() ? std::string() : s->second;
-    const std::string quiero = linea(efectivo(e, id), exeDe(e, id));
+    const std::string quiero = linea(efectivo(e, id), exeDe(e, id), gpuDe(e, id));
     Leida l;
     if (!leerLinea(cur, l)) {
       /* una que no se sabe leer solo se pisa si ya se vio y se pidio llevarla (`comoTodos`, «Usar la de OdysseyVK») */
@@ -980,7 +1098,7 @@ std::map<std::string, std::string> porEscribir(const Estado &e, const std::vecto
        (aunque la de Steam este en otro orden o lleve `env` de mas) */
     Ajustes comoEsta = efectivo(e, "");
     for (const auto &[k, v] : l.ajustes) comoEsta[k] = v;
-    if (linea(comoEsta, l.nfExe) == quiero) continue;
+    if (linea(comoEsta, l.nfExe, l.nfGpu) == quiero) continue;
     sal[id] = quiero;
   }
   return sal;
@@ -1157,6 +1275,8 @@ bool instalado(const std::string &clave) {
     for (const Variable &v : kVariables) hay[v.clave] = std::find(vars.begin(), vars.end(), v.nombre) != vars.end();
     hay["vkdaedalus_run"] = hayComando("vkdaedalus-run");
     hay["gamescope"] = hay["reescalado"] = hayComando("gamescope");
+    Secundaria s;
+    hay["nf_offload"] = hay["neural_forge"] && secundariaNf(s);   /* (v1.18) la capa de Neural Forge y una segunda NVIDIA */
   }
   const auto it = hay.find(clave);
   return it == hay.end() || it->second;

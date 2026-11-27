@@ -42,9 +42,42 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     el de «el 3D no llegó a empezar»;
   - **La profundidad de DLSS**: su interruptor vale al momento y el modo Rendimiento no la usa nunca;
   - **La tarjeta de la red, sola** (`red = auto`): lo pesado, en la secundaria; medida si puede ir a más de una; y una
-    prueba de lo que corre en cada cambio de capa.
+    prueba de lo que corre en cada cambio de capa;
+  - **El offloading de Neural Forge en Integraciones**: su modelo en la segunda tarjeta, con su enlace PCIe.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## El offloading de Neural Forge en Integraciones, con el enlace PCIe de la segunda tarjeta (v1.18)
+
+- Rodolfo, tras el análisis de si OdysseyVK puede ir junto al offloading de Neural Forge: «Sí, añádelo»; antes: «remember
+  that neural needs a parameter to offload and needs the game added to their list and the parameters on the game» y
+  «remember to consider some users use x8».
+- **Lo que pide Neural Forge** (su guía, «The model on a second GPU»): `NEURAL_FORGE_OFFLOAD_GPU` con el número de la
+  tarjeta o sus números PCI en las opciones de lanzamiento, que no escribe nunca solo (ni su pestaña Setup), el juego
+  en su lista (su ejecutable en `NEURAL_FORGE_TARGET_EXE`) y una NVIDIA RTX 40 o más nueva.
+- **El interruptor** (`nf_offload`, debajo de `NEURAL_FORGE_ENABLE`, solo con Neural Forge puesto): escribe
+  `NEURAL_FORGE_OFFLOAD_GPU=10de:2c02@0000:05:00.0` (fabricante y modelo de pci.ids, y la dirección: el número cambia
+  con el orden de la lista y dos tarjetas iguales tendrían los mismos números). Ponerlo pone Neural Forge; quitar Neural
+  Forge lo quita. Un valor que ya traía la línea del juego (`=1`, `same`) se respeta (`.nf_gpu` en
+  `integraciones.conf`); el nuestro no se guarda, se vuelve a mirar. Sin `NEURAL_FORGE_ENABLE=1`, se queda con las
+  demás variables.
+- **La segunda tarjeta** (`integ::secundariaNf`): una NVIDIA que no sea la del monitor 3D. La del monitor 3D: la salida
+  `pantalla` de serve.conf (o la del hub), si no la que dice «G90XF» en su EDID, y si tampoco la que arrancó el equipo
+  (`boot_vga`). Con varias, la de más enlace. MEDIDO: en sysfs el `device` de un conector (`card2-DP-4/device`) es la
+  tarjeta de DRM, no la PCI (la primera versión tomaba la 4090 por segunda); la PCI es la de `card2/device`.
+- **El enlace** que se enseña es el de verdad: la menor generación y ancho de la tarjeta y de su ranura (el puerto de
+  arriba), no lo de ahora, que en reposo baja de velocidad. MEDIDO en el equipo de Rodolfo: la 5080 puede PCIe 5.0 x16 y
+  su ranura (`0000:04:00.0`) solo 4.0 x4, así que sale «RTX 5080 · PCIe 4.0 x4» con el aviso «cada cuadro va y vuelve
+  por ahí: puede ir más lento que en la tarjeta del juego» (con menos de x16 o menos de PCIe 4.0). La 4090, 4.0 x16.
+  Sin segunda NVIDIA, la píldora «Sin segunda tarjeta».
+- **Y el juego que no está en la lista de Neural Forge** lo dice en la fila de Neural Forge: «No está en la lista de
+  Neural Forge: añádelo en su pestaña Setup».
+- **Probado** sin tocar Steam (una casa de mentira con el Steam de verdad enlazado, solo leído): `odysseyvk
+  integraciones linea` con la línea de Raji, sin y con `NEURAL_FORGE_OFFLOAD_GPU` (el nuestro, `=1`, y sin
+  `NEURAL_FORGE_ENABLE=1`), y la tarjeta encontrada por el EDID (sin serve.conf), por `pantalla = DP-4` (la 5080) y por
+  `pantalla = DP-7   # prueba` (la 4090, con el comentario quitado); las reglas del interruptor con un programa de
+  prueba; la pestaña pintada con `ctl hud` (la fila con la tarjeta y el aviso) y `integraciones ver`: la línea de Raji
+  por escribir con el offloading, sin escribir nada.
 
 ## La tarjeta de la red, sola: lo pesado en la secundaria, medida si hay donde elegir, y una prueba en cada cambio de capa (v1.18)
 

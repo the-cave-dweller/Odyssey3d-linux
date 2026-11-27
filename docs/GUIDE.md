@@ -124,7 +124,14 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
 
 - The tab's settings apply to **every installed game**; the gear on a cover (Games tab, on hover) opens that game's
   own settings, marked with a dot, and "Reset" returns it to the all-games ones.
-- With Neural Forge on, `NEURAL_FORGE_TARGET_EXE` is taken from `neural-forge-cli games` (or kept from the game's line).
+- With Neural Forge on, `NEURAL_FORGE_TARGET_EXE` is taken from `neural-forge-cli games` (or kept from the game's line);
+  a game missing from that list says "Not in Neural Forge's list: add it in its Setup tab".
+- Since 1.18, Neural Forge's offloading (`nf_offload` in `integraciones.conf`): with Neural Forge on, a switch writes
+  `NEURAL_FORGE_OFFLOAD_GPU=vendor:device@address` of the second card (an NVIDIA that is not the 3D monitor's: the
+  `pantalla` output in `serve.conf`, else the one whose EDID says G90XF, else the boot GPU), and shows its name and
+  real PCIe link (the lower of the card and its slot: an RTX 5080 that can do 5.0 x16 in a 4.0 x4 slot shows
+  `PCIe 4.0 x4`), warning at x4 or x8. Turning it on turns Neural Forge on; turning Neural Forge off turns it off. A
+  value already in the game's line (`=1`, `same`) is kept. `odysseyvk integraciones linea TEXT` shows the card found.
 - What isn't installed shows greyed out with a "Not installed" pill and can't be turned on: a layer counts as
   installed when some Vulkan implicit-layer manifest is enabled by its variable (`enable_environment`), and
   `vkdaedalus-run` and gamescope when their command is in the `PATH`. `ENABLE_VKDAEDALUS` and `vkdaedalus-run` are

@@ -287,6 +287,29 @@ std::vector<TarjetaAmd> tarjetasAmd() {
   return v;
 }
 
+std::string nombrePciIds(const std::string &fabricante, const std::string &modelo) {
+  auto limpio = [](std::string s) {
+    s = strLower(strTrim(s));
+    return s.rfind("0x", 0) == 0 ? s.substr(2) : s;
+  };
+  const std::string fab = limpio(fabricante), mod = limpio(modelo);
+  if (fab.size() != 4 || mod.size() != 4) return {};
+  std::ifstream ids("/usr/share/hwdata/pci.ids");
+  std::string l;
+  bool enFab = false;
+  while (std::getline(ids, l)) {
+    if (!l.empty() && l[0] != '\t' && l[0] != '#') {
+      if (enFab) break;
+      enFab = strLower(l.substr(0, 4)) == fab && l.size() > 4 && l[4] == ' ';
+    } else if (enFab && l.size() > 7 && l[0] == '\t' && l[1] != '\t' && strLower(l.substr(1, 4)) == mod) {
+      const std::string nom = strTrim(l.substr(5));
+      const size_t a = nom.find('['), b = nom.rfind(']');
+      return a != std::string::npos && b != std::string::npos && b > a + 1 ? nom.substr(a + 1, b - a - 1) : nom;
+    }
+  }
+  return {};
+}
+
 namespace {
 /* segundos desde el arranque del sistema en que empezo este proceso (campo 22 de /proc/self/stat,
    en tics de reloj); -1 si no se pudo leer */

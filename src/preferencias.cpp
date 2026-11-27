@@ -1409,6 +1409,29 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
     if (!jid.empty() && puesto && std::strcmp(v.clave, "neural_forge") == 0) {
       const std::string exe = integ::exeDe(e, jid);
       if (!exe.empty()) st.items[k].nota = "NEURAL_FORGE_TARGET_EXE=" + exe;
+      /* (v1.18) sin el ejecutable, Neural Forge no sabe a que proceso del juego entrar (Rodolfo: «needs the game added to
+         their list»): eso lo hace su pestana Setup */
+      else st.items[k].nota = idioma::tr("No está en la lista de Neural Forge: añádelo en su pestaña Setup");
+    }
+    /* (v1.18) con Neural Forge puesto, su modelo en la segunda tarjeta: NEURAL_FORGE_OFFLOAD_GPU con la tarjeta y su enlace
+       (Rodolfo: «remember to consider some users use x8»; ver integ::secundariaNf) */
+    if (puesto && std::strcmp(v.clave, "neural_forge") == 0) {
+      integ::Secundaria s;
+      const bool hay = integ::secundariaNf(s);
+      const bool offload = val("nf_offload") == "1";
+      const std::string propia = jid.empty() ? std::string() : integ::gpuDe(e, jid);
+      const std::string g = !propia.empty() ? propia : (hay ? s.valor() : std::string());
+      const size_t ko = interruptor("nf_offload", std::string("NEURAL_FORGE_OFFLOAD_GPU") + (offload && !g.empty() ? "=" + g : ""),
+                                    idioma::tr("El modelo de Neural Forge en la segunda tarjeta (su offloading), no en la del juego. Cada cuadro cruza el PCIe hasta ella y vuelve: con x4 o x8 puede ir más lento que en la tarjeta del juego. Neural Forge pide una NVIDIA RTX 40 o más nueva."));
+      if (hay) {
+        std::string nota = s.nombre + " · PCIe " + std::to_string(s.gen) + ".0 x" + std::to_string(s.ancho);
+        if ((s.ancho > 0 && s.ancho < 16) || (s.gen > 0 && s.gen < 4))
+          nota += " · " + std::string(idioma::tr("cada cuadro va y vuelve por ahí: puede ir más lento que en la tarjeta del juego"));
+        st.items[ko].nota = nota;
+      } else if (integ::instalado("neural_forge")) {
+        st.items[ko].pastilla = idioma::tr("Sin segunda tarjeta");
+        st.items[ko].ayuda = idioma::tr("No hay una segunda tarjeta NVIDIA: el modelo se queda en la del juego");
+      }
     }
   }
   campo("otros", idioma::tr("Otros parámetros"), "DXVK_HUD=fps PROTON_LOG=1",
@@ -1475,7 +1498,7 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
   pon(sec, "");
   {
     Hud::ItemPanel l;
-    l.tipo = Hud::ItemPanel::Linea, l.valorTexto = integ::linea(ef, jid.empty() ? std::string() : integ::exeDe(e, jid));
+    l.tipo = Hud::ItemPanel::Linea, l.valorTexto = integ::linea(ef, jid.empty() ? std::string() : integ::exeDe(e, jid), jid.empty() ? std::string() : integ::gpuDe(e, jid));
     l.rotulo = idioma::tr("Nada: Steam arranca el juego tal cual");
     l.valor = ahoraSeg() < g_copiadoHasta;
     l.nota = idioma::tr(l.valor ? "Copiado" : "Copiar");
@@ -1534,7 +1557,7 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
     Hud::ItemPanel b;
     b.tipo = Hud::ItemPanel::Boton, b.rotulo = j.nombre;
     b.nota = it->second.propia ? std::string(idioma::tr("su línea de Steam no la sé leer: no la toco"))
-                               : integ::linea(integ::efectivo(e, j.id), integ::exeDe(e, j.id));
+                               : integ::linea(integ::efectivo(e, j.id), integ::exeDe(e, j.id), integ::gpuDe(e, j.id));
     if (b.nota.empty()) b.nota = idioma::tr("Nada: Steam arranca el juego tal cual");
     b.valorTexto = idioma::tr("Abrir"), b.valor = true;
     pon(b, "integ:juego:" + j.id);
@@ -1564,7 +1587,8 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
   if (integ::leerSteam(steam, nullptr)) integ::sincronizar(e, ids, steam);
   const integ::Ajustes ef = integ::efectivo(e, g_integJuego);
   if (que == "copiar") {
-    const std::string l = integ::linea(ef, g_integJuego.empty() ? std::string() : integ::exeDe(e, g_integJuego));
+    const std::string l = integ::linea(ef, g_integJuego.empty() ? std::string() : integ::exeDe(e, g_integJuego),
+                                     g_integJuego.empty() ? std::string() : integ::gpuDe(e, g_integJuego));
     std::string err;
     if (l.empty()) return false;
     if (copiarAlPortapapeles(l, &err)) {

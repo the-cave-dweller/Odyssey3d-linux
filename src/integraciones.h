@@ -25,6 +25,8 @@ using Ajustes = std::map<std::string, std::string>;
 
 /* las claves, en el orden de la pestana:
      odysseyvk mangohud vkdaedalus neural_forge vkbasalt   las variables (1 = puesta, 0 = no)
+     nf_offload                                           (v1.18) el modelo de Neural Forge en la segunda tarjeta:
+                                                          NEURAL_FORGE_OFFLOAD_GPU (ver secundariaNf)
      otros                                                otras variables, tal cual: «DXVK_HUD=fps PROTON_LOG=1»
      vkdaedalus_run comando                               delante del juego: vkdaedalus-run y uno a mano
      gamescope reescalado filtro render salida escala     gamescope: filtro fsr|nis (-F), render y salida «AxB»
@@ -56,6 +58,7 @@ struct Juego {
   std::string lineaSteam;   /* la ultima que se vio (o escribio) en Steam: si cambia, se cambio por fuera */
   bool propia = false;      /* su linea no se sabe leer: se deja como esta */
   std::string nfExe;        /* el NEURAL_FORGE_TARGET_EXE que traia su linea (si Neural Forge no lo da) */
+  std::string nfGpu;        /* (v1.18) el NEURAL_FORGE_OFFLOAD_GPU que traia su linea, si no es el de secundariaNf */
 };
 struct Estado {
   Ajustes todos;            /* completo: lo de fabrica con lo cambiado encima */
@@ -76,12 +79,13 @@ void comoTodos(Estado &e, const std::string &appid);
 /* ---- la linea ---- */
 /* la linea de lanzamiento de unos ajustes, con el ejecutable de Neural Forge si va puesto:
    gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- env MANGOHUD=1 ... %command% --x */
-std::string linea(const Ajustes &a, const std::string &nfExe);
+std::string linea(const Ajustes &a, const std::string &nfExe, const std::string &nfGpu = std::string());
 /* lo que dice una linea de Steam: `ajustes` solo trae las claves que la linea decide (sin gamescope no dice nada
    de su resolucion). Falso si no se sabe leer. */
 struct Leida {
   Ajustes ajustes;
   std::string nfExe;
+  std::string nfGpu;   /* (v1.18) el NEURAL_FORGE_OFFLOAD_GPU de la linea si no es el de secundariaNf (vacio: el nuestro) */
 };
 bool leerLinea(const std::string &linea, Leida &l);
 
@@ -108,6 +112,29 @@ bool escribirSteam(const std::map<std::string, std::string> &lineas, std::string
 const std::map<std::string, std::string> &exesNeuralForge();
 /* el ejecutable que lleva un juego con Neural Forge puesto: el de Neural Forge o, si no lo da, el de su linea */
 std::string exeDe(const Estado &e, const std::string &appid);
+
+/* (v1.18) La segunda tarjeta, para el offloading de Neural Forge (Rodolfo: «añade el interruptor del offloading de Neural
+   Forge en Integraciones», «remember that neural needs a parameter to offload and needs the game added to their list and
+   the parameters on the game», «remember to consider some users use x8»). Neural Forge la quiere en
+   `NEURAL_FORGE_OFFLOAD_GPU=fabricante:modelo@direccion` (o su numero, que cambia con el orden de la lista) y no la escribe
+   nunca solo: se pone a mano. La principal es la del monitor 3D (la salida `pantalla` de serve.conf, la del hub o, sin
+   ninguna, la que diga «G90XF» en su EDID; si tampoco, la que arranco el equipo, boot_vga): ahi se queda el juego y el 3D.
+   La segunda, una NVIDIA que no sea esa (Neural Forge pide una RTX 40 o mas nueva: eso lo mira el); con varias, la de mas
+   enlace. El enlace es lo que da de verdad: la menor de la tarjeta y su ranura (MEDIDO en el equipo de Rodolfo: la 5080
+   puede PCIe 5.0 x16 y su ranura, 0000:04:00.0, solo 4.0 x4), no lo de ahora, que en reposo baja de velocidad */
+struct Secundaria {
+  std::string pci;       /* «0000:05:00.0» */
+  std::string ids;       /* «10de:2c02» */
+  std::string nombre;    /* «RTX 5080» */
+  int gen = 0;           /* la generacion de PCIe que da el enlace (4 = PCIe 4.0) */
+  int ancho = 0;         /* las lineas que da el enlace (x4) */
+  int anchoTarjeta = 0;  /* las que podria la tarjeta (x16) */
+  std::string valor() const { return ids + "@" + pci; }
+};
+/* falso si no hay segunda NVIDIA; se mira una vez por proceso */
+bool secundariaNf(Secundaria &s);
+/* el NEURAL_FORGE_OFFLOAD_GPU propio de un juego (el que traia su linea), o vacio: el de secundariaNf */
+std::string gpuDe(const Estado &e, const std::string &appid);
 
 /* ---- poner al dia y escribir ---- */
 /* toma lo que se cambio en Steam por fuera desde la ultima vez (lo nuevo pasa a ser propio del juego); cierto

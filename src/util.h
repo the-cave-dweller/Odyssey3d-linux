@@ -61,6 +61,9 @@ struct TarjetaAmd {
   double tempC = -1.0;
 };
 std::vector<TarjetaAmd> tarjetasAmd();
+/* (v1.18) el nombre de una tarjeta en /usr/share/hwdata/pci.ids por su fabricante y modelo («10de», «2c02»: sin 0x): lo de
+   entre corchetes («GeForce RTX 5080») o, sin corchetes, la linea entera; vacio si no esta */
+std::string nombrePciIds(const std::string &fabricante, const std::string &modelo);
 /* (v1.16) una red de video (Video Depth Anything): lleva «video» en el nombre del archivo. Mira 32 cuadros a la vez, solo
    para videos (los juegos siguen con la de siempre), y solo en la tarjeta */
 bool esRedDeVideo(const std::string &ruta);

@@ -394,7 +394,10 @@ juego, opciones detrás, y gamescope (la resolución de renderizado y la de sali
 fit, pantalla completa, atrapar el cursor, y el reescalado FSR o NIS, que enciende gamescope). Lo que se
 pone en la pestaña vale para todos los juegos instalados; el engranaje de una carátula (pestaña Juegos) abre
 lo propio de ese juego, marcado con un punto. Con Neural Forge puesto, el `NEURAL_FORGE_TARGET_EXE` del juego
-se toma del propio Neural Forge.
+se toma del propio Neural Forge (si el juego no está en su lista, lo dice: se añade en su pestaña Setup), y un
+interruptor debajo pone el modelo de Neural Forge en la segunda tarjeta (`NEURAL_FORGE_OFFLOAD_GPU`, con los
+números PCI y la dirección de esa tarjeta), con su enlace PCIe: con x4 o x8, cada cuadro que va y vuelve puede
+hacer el juego más lento que con el modelo en la tarjeta del juego.
 
 ![Las integraciones de un juego](docs/img/es/integrations.png)
 

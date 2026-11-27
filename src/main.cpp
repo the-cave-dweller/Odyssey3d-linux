@@ -3068,7 +3068,12 @@ static int cmdIntegraciones(int argc, char **argv) {
       a[k] = v;
     }
     if (!l.nfExe.empty()) std::printf("  %-18s %s\n", "(nf_exe)", l.nfExe.c_str());
-    std::printf("OdysseyVK: %s\n", integ::linea(a, l.nfExe).c_str());
+    if (!l.nfGpu.empty()) std::printf("  %-18s %s\n", "(nf_gpu)", l.nfGpu.c_str());
+    integ::Secundaria s;
+    if (integ::secundariaNf(s))
+      std::printf("  %-18s %s · %s · PCIe %d.0 x%d (la tarjeta puede x%d)\n", "(la segunda)", s.valor().c_str(), s.nombre.c_str(),
+                  s.gen, s.ancho, s.anchoTarjeta);
+    std::printf("OdysseyVK: %s\n", integ::linea(a, l.nfExe, l.nfGpu).c_str());
     return 0;
   }
   if (que != "ver") {
@@ -3100,7 +3105,7 @@ static int cmdIntegraciones(int argc, char **argv) {
       for (const auto &[k, v] : j->second.propios) p += (p.empty() ? "" : " · ") + k + "=" + v;
       std::printf("    lo suyo:   %s\n", p.c_str());
     }
-    const std::string l = integ::linea(integ::efectivo(e, id), integ::exeDe(e, id));
+    const std::string l = integ::linea(integ::efectivo(e, id), integ::exeDe(e, id), integ::gpuDe(e, id));
     std::printf("    OdysseyVK: %s%s\n", l.empty() ? "(nada)" : l.c_str(), pend.count(id) ? "   ← por escribir" : "");
   }
   return 0;
