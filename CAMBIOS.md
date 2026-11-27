@@ -26,6 +26,9 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - Y esos dos botones, del color del modo (Rodolfo: «can the desktop buttons also have the yellow and blue colors?»
     y, con una foto de ellos, «i dont mean the whole ui, i mean this ones»): su dibujo (`paisaje`, con un `tinte`
     nuevo) va en el azul de Neural o en el ámbar del rendimiento. El de la tarjeta de la pregunta sigue morado.
+  - Y llenan su cuadro (Rodolfo: «make them fill their square and remove the white square border, make the borders
+    as the on and off button one»): el dibujo ocupa el botón entero, sin el filo blanco, con las esquinas de 4 y el
+    alto (32) del encendido. El puesto va encendido y el otro apagado, como el encendido con y sin 3D.
 - **Sus menús** (Relieve, el del rayo) vuelven a abrirse hacia abajo, pegados a su derecha, en la tarjeta de
   vkDaedalus (121117, esquinas de 8). La tarjeta de aviso vuelve a su esquina de abajo, sin nada encima. El rincón
   que trae la pastilla oculta vuelve a ser su punta derecha.

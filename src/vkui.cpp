@@ -1161,45 +1161,44 @@ void Hud::begin(int w, int h, float altoLogico) {
            ajustes del programa se quito el suavizado, lleva las dos imagenes separadas y teje el
            video con el relieve que trae. Desde v0.84 no hay tercer boton: el suavizado solo se
            quita en los ajustes (asi lo pidio Rodolfo). */
-    auto dibujaModos = [&](Rect b0, Rect b1) {
+    /* (v1.16) el dibujo llena el boton entero, sin el filo blanco, con las esquinas de 4 del encendido (Rodolfo: «make
+       them fill their square and remove the white square border, make the borders as the on and off button one»):
+       el puesto, encendido; el otro, apagado como el encendido sin 3D. `bajo` es el color de detras (la barra de la
+       pastilla o la tarjeta del menu), para redondear las esquinas */
+    auto dibujaModos = [&](Rect b0, Rect b1, const float *bajo) {
       btnNormal_ = b0;
       btnDividido_ = b1;
       const Rect bs[2] = {btnNormal_, btnDividido_};
       for (int i = 0; i < 2; i++) {
         const Rect &b = bs[i];
         const bool puesto = i == 0 ? st_.modo3d == 1 : st_.modo3d >= 2, hov = b.inside(mx_, my_);
-        const float fondo[3] = {puesto ? 0.26f : (hov ? 0.23f : 0.17f), puesto ? 0.25f : (hov ? 0.235f : 0.175f),
-                                puesto ? 0.36f : (hov ? 0.27f : 0.20f)};
-        if (puesto) solid(b.x - 1.5f, b.y - 1.5f, b.w + 3.0f, b.h + 3.0f, ink[0], ink[1], ink[2], 0.85f);
-        solid(b.x, b.y, b.w, b.h, fondo[0], fondo[1], fondo[2], 1.0f);
-        const float luz = puesto ? 1.0f : (hov ? 0.80f : 0.55f);
-        const float iw = 42.0f, ih = 22.0f, ix = b.x + (b.w - iw) * 0.5f, iy = b.y + (b.h - ih) * 0.5f;
+        const float luz = puesto ? 1.0f : (hov ? 0.62f : 0.42f);
         /* el dibujo del segundo sigue a lo que esta puesto de verdad si ya es un dividido (2 = tal
            cual, 3 = suavizado); si no, a lo que haria al picarlo */
         const bool suave = st_.modo3d == 3 || (st_.modo3d != 2 && st_.suavizado);
-        if (i == 0) {
-          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo, accent);
-        } else if (!suave) {
-          const float mitad = (iw - 3.0f) * 0.5f;
-          paisaje({ix, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo, accent);
-          paisaje({ix + mitad + 3.0f, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo, accent);
+        if (i == 0 || suave) {
+          paisaje(b, 1.0f, luz, 4.0f, bajo, accent);
+          if (i == 1)   /* la imagen entera con la raya del corte a trazos: viene partida, se ve de una pieza */
+            for (int k = 0; k < 4; k++)
+              solid(b.x + b.w * 0.5f - 1.0f, b.y + 3.0f + (float)k * (b.h - 6.0f) / 4.0f, 2.0f, (b.h - 6.0f) / 8.0f + 1.5f, luz, luz, luz, 1.0f);
         } else {
-          /* la imagen entera con la raya del corte a trazos: viene partida, se ve de una pieza */
-          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo, accent);
-          for (int k = 0; k < 4; k++)
-            solid(ix + iw * 0.5f - 1.0f, iy + 1.0f + (float)k * 5.5f, 2.0f, 3.5f, luz, luz, luz, 1.0f);
+          const float mitad = (b.w - 3.0f) * 0.5f;
+          paisaje({b.x, b.y, mitad, b.h}, 0.5f, luz, 4.0f, bajo, accent);
+          paisaje({b.x + mitad + 3.0f, b.y, mitad, b.h}, 0.5f, luz, 4.0f, bajo, accent);
         }
       }
     };
     if (modosEnPastilla) {
-      const float bw = 44.0f, bh = 28.0f, by = y0 + (ph - bh) * 0.5f;
+      const float bw = 44.0f, bh = 32.0f, by = y0 + (ph - bh) * 0.5f;   /* del alto del encendido */
       const float derM = st_.engranaje ? btnEngranaje_.x - 12.0f : x0 + pw - aire;
-      dibujaModos({derM - 2.0f * bw - 6.0f, by, bw, bh}, {derM - bw, by, bw, bh});
+      static const float barra[3] = {0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f};
+      dibujaModos({derM - 2.0f * bw - 6.0f, by, bw, bh}, {derM - bw, by, bw, bh}, barra);
     }
     if (cabeBloque && hayModo) {
       const float bw = (anchoBloque - 8.0f) * 0.5f, bh = 30.0f;
       const float by = st_.recordarVisible ? y0 + 9.0f : y0 + 18.0f;
-      dibujaModos({bloqueX, by, bw, bh}, {bloqueX + bw + 8.0f, by, bw, bh});
+      static const float barra[3] = {0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f};
+      dibujaModos({bloqueX, by, bw, bh}, {bloqueX + bw + 8.0f, by, bw, bh}, barra);
     }
 
     /* ---- el modo rendimiento: el boton del rayo (rama experimental) ----
@@ -1421,7 +1420,8 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (st_.modoVisible && !modosEnPastilla) {
         text(idioma::tr("Tipo de vídeo"), mx0 + pad, y + 13.0f, 12.0f, dim[0], dim[1], dim[2], dim[3]);
         const float bw2 = 64.0f, bh2 = 30.0f;
-        dibujaModos({mx0 + mw - pad - 2.0f * bw2 - 8.0f, y + 6.0f, bw2, bh2}, {mx0 + mw - pad - bw2, y + 6.0f, bw2, bh2});
+        static const float tarjetaM[3] = {0x12 / 255.0f, 0x11 / 255.0f, 0x17 / 255.0f};
+        dibujaModos({mx0 + mw - pad - 2.0f * bw2 - 8.0f, y + 6.0f, bw2, bh2}, {mx0 + mw - pad - bw2, y + 6.0f, bw2, bh2}, tarjetaM);
         y += 46.0f;
       }
       if (st_.recordarVisible) dibujaRecordar({mx0 + pad, y + 8.0f, 16.0f, 16.0f});
