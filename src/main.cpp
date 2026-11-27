@@ -2260,7 +2260,8 @@ static int cmdDesinstalar(int argc, char **argv) {
   std::system(("rm -f " + comilla(conf + "/systemd/user/odysseyvk-serve.service") + " " +
                comilla(datos + "/applications/odysseyvk.desktop") + " " + comilla(datos + "/applications/odysseyvk-play.desktop") +
                "; rm -f " + comilla(datos) + "/icons/hicolor/*/apps/odysseyvk.png; systemctl --user daemon-reload").c_str());
-  std::system(("rm -rf " + comilla(datos + "/odysseyvk/modelos") + " " + comilla(datos + "/odysseyvk/fuente")).c_str());
+  std::system(("rm -rf " + comilla(datos + "/odysseyvk/models") + " " + comilla(datos + "/odysseyvk/modelos") + " " +
+               comilla(datos + "/odysseyvk/fuente")).c_str());   /* (v1.16) models; modelos por si quedo */
   /* la capa de Vulkan de la profundidad de DLSS (v1.13): su manifiesto; la biblioteca va con lo de root */
   std::system(("rm -f " + comilla(datos + "/vulkan/implicit_layer.d/VkLayer_odysseyvk_capa.json")).c_str());
   const std::string raiz = "pkexec sh -c " + comilla("rm -f " + comilla(bindir + "/odysseyvk") + " " + comilla(bindir + "/odysseyvk-ajustes") +
@@ -2299,7 +2300,7 @@ static int cmdMapa(int argc, char **argv) {
   char bufTmp[128];
   if (!net.init(modelo, &err, gpu)) {
     std::fprintf(stderr, "no se pudo abrir la red: %s\n", err.c_str());
-    std::fprintf(stderr, "(las .onnx viven en ~/.local/share/odysseyvk/modelos/)\n");
+    std::fprintf(stderr, "(las .onnx viven en ~/.local/share/odysseyvk/models/)\n");
     return 1;
   }
   /* las fotos pasan a toda prisa: que el suavizado no lo note. ODYSSEYVK_PASO_FIJO (segundos) dice a
@@ -2640,7 +2641,7 @@ static void imprimirModelos() {
   std::vector<std::string> dirs;
   const char *home = std::getenv("HOME");
   const std::string h(home ? home : "/home");
-  dirs.push_back(h + "/.local/share/odysseyvk/modelos");
+  dirs.push_back(h + "/.local/share/odysseyvk/models");
   dirs.push_back("/run/media/rodolfo/067ABD417ABD2DF5/AnalisisOdyssey/modelos");
   if (const char *e = entornoOdyssey("ODYSSEYVK_MODELOS")) {
     std::string d;
@@ -4993,6 +4994,8 @@ static int cmdServe(int argc, char **argv) {
     const std::string ruta1 = disponible(rSamsung) ? rSamsung : std::string();
     const std::string ruta2 = disponible(rNuestra) ? rNuestra : std::string();
     redElegida = ruta1.empty() ? 2 : 1;
+    /* (v1.16) la que se marco en el panel (va a `modelo =`) manda, aunque este la de Samsung en la carpeta */
+    if (disponible(cfg.modelo)) redElegida = slotRed(cfg.modelo);   /* su boton: ahi quedo puesta arriba */
     redActiva = redElegida == 1 ? ruta1 : ruta2;
     redOtra = redElegida == 1 ? ruta2 : ruta1;
     std::printf("[serve] redes de profundidad: boton 1 = %s · boton 2 = %s\n",
@@ -6422,18 +6425,22 @@ int main(int argc, char **argv) {
         std::printf("se baja de %s\n", prefs::kUrlRedAbierta);
         if (!prefs::redLigeraPresente())
           std::printf("  odysseyvk ctl red descargar   deja ahi la ligera (fp16, 50 MB)\n");
+        if (!prefs::redFp32Presente())
+          std::printf("  odysseyvk ctl red descargar fp32   y la de precision completa (99 MB)\n");
         return hay ? 0 : 1;
       }
-      if (prefs::redLigeraPresente()) {
-        std::printf("ya esta: %s\n", rutaRedNuestra().c_str());
+      /* (v1.16) `ctl red descargar fp32`: la de precision completa (99 MB) */
+      const bool fp32 = argc > 4 && strLower(argv[4]) == "fp32";
+      if (fp32 ? prefs::redFp32Presente() : prefs::redLigeraPresente()) {
+        std::printf("ya esta: %s\n", (fp32 ? rutaRedVieja() : rutaRedLigera()).c_str());
         return 0;
       }
       std::string err;
-      if (!prefs::descargar(&err)) {
+      if (!prefs::descargar(fp32 ? 1 : 0, &err)) {
         std::fprintf(stderr, "%s\n", err.c_str());
         return 1;
       }
-      std::printf("descargando %s\n", prefs::kUrlRedAbierta);
+      std::printf("descargando %s\n", fp32 ? prefs::kUrlRedFp32 : prefs::kUrlRedAbierta);
       while (prefs::descargaEnMarcha()) {
         if (prefs::vigilarDescarga()) {
           std::printf("  %s\n", prefs::textoDescarga().c_str());
@@ -6441,7 +6448,7 @@ int main(int argc, char **argv) {
         }
         ::usleep(500000);
       }
-      return prefs::redLigeraPresente() ? 0 : 1;
+      return (fp32 ? prefs::redFp32Presente() : prefs::redLigeraPresente()) ? 0 : 1;
     }
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "legado") return cmdLegado(argc - 3, argv + 3);

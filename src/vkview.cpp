@@ -2101,7 +2101,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
      panel espera; si no esta, la nuestra. Lo que se elige con 1 / 2 se recuerda en el archivo pero ya
      no manda al arrancar. */
   std::string modeloActivo = opts.modelPath;
-  if (!ui.rutaRed[1].empty())
+  /* (v1.16) salvo que el servicio mande una (la marcada en el panel, o la de Samsung si no se marco ninguna) */
+  if (!opts.modelPath.empty() && fileExists(opts.modelPath))
+    modeloActivo = opts.modelPath;
+  else if (!ui.rutaRed[1].empty())
     modeloActivo = ui.rutaRed[1];
   else if (modeloActivo.empty())
     modeloActivo = ui.rutaRed[2];

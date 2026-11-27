@@ -1824,6 +1824,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   bool hfij = false, ha = false;
   const bool hi = false;
   std::string rotuloActualizar;
+  Rect anclaActualizar{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) de donde cuelga su rotulo: la flecha, o la tesela de la Version */
   const int lengua = idioma::actual();
   Rect pieCaja{px, py + ph - 44.0f, pw, 44.0f};   /* el pie: abajo del panel, o de la tarjeta */
   if (marco) {
@@ -1895,29 +1896,14 @@ void Hud::dibujaPanel(int vw, int vh) {
       if (hc) relleno(panelCerrar_, 4.0f * s, pal_.control, 1.0f);
       icono({panelCerrar_.x + 8.0f * s, panelCerrar_.y + 8.0f * s, 16.0f * s, 16.0f * s}, icoCerrar_, ink[0], ink[1], ink[2], hc ? 1.0f : 0.80f);
     }
-    if (!st_.actualizacion.empty()) {
-      /* hay version nueva: un boton con letra, como el Preview de vkDaedalus, con la flecha en ambar */
-      const std::string r = idioma::trf("Actualizar a {}", {st_.actualizacion});
-      const float w = 16.0f * s + 14.0f * s + 8.0f * s + textWidth(r, 14.0f * s) + 16.0f * s;
-      panelActualizar_ = {antesDe.x - 8.0f * s - w, panelCerrar_.y, w, 32.0f * s};
-      ha = panelActualizar_.inside(mx_, my_);
-      relleno(panelActualizar_, 4.0f * s, pal_.filo, 1.0f);
-      relleno({panelActualizar_.x + 1.0f, panelActualizar_.y + 1.0f, panelActualizar_.w - 2.0f, panelActualizar_.h - 2.0f}, 4.0f * s,
-              ha ? pal_.control : pal_.barra, 1.0f);
-      icono({panelActualizar_.x + 16.0f * s, panelActualizar_.y + 9.0f * s, 14.0f * s, 14.0f * s}, icoFlecha_, hex(0xDEAA7Cu, 0),
-            hex(0xDEAA7Cu, 1), hex(0xDEAA7Cu, 2), 1.0f);
-      text(r, panelActualizar_.x + 38.0f * s, panelActualizar_.y + 8.0f * s, 14.0f * s, ink[0], ink[1], ink[2], 1.0f);
-      rotuloActualizar = idioma::trf("Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.", {st_.actualizacion});
-    } else {
-      panelActualizar_ = {antesDe.x - 8.0f * s - 32.0f * s, panelCerrar_.y, 32.0f * s, 32.0f * s};
-      ha = panelActualizar_.inside(mx_, my_);
-      if (ha) relleno(panelActualizar_, 4.0f * s, pal_.control, 1.0f);
-      const float c[3] = {st_.alDia ? hex(0xC6E8AAu, 0) : ink[0], st_.alDia ? hex(0xC6E8AAu, 1) : ink[1], st_.alDia ? hex(0xC6E8AAu, 2) : ink[2]};
-      icono({panelActualizar_.x + 9.0f * s, panelActualizar_.y + 9.0f * s, 14.0f * s, 14.0f * s}, icoFlecha_, c[0], c[1], c[2],
-            st_.alDia ? (ha ? 1.0f : 0.85f) : (ha ? 0.8f : 0.45f));
-      rotuloActualizar = idioma::tr(st_.alDia ? "OdysseyVK está al día. Pica para volver a comprobarlo."
-                                              : "Aún no se ha buscado ninguna actualización. Pica para buscarla.");
-    }
+    /* (v1.16) sin la flecha de actualizar junto al aspa (Rodolfo: «quita el boton de update de arriba, mismo
+       comportamiento pero recuerda que ya lo movimos, ahora esta en la interfaz, pon la funcion a su boton»): lo hace
+       la tesela de la Version, con su rotulo al pasar el raton y la flecha en ambar si hay una version nueva */
+    panelActualizar_ = fuera;
+    rotuloActualizar = !st_.actualizacion.empty()
+                           ? idioma::trf("Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.", {st_.actualizacion})
+                           : std::string(idioma::tr(st_.alDia ? "OdysseyVK está al día. Pica para volver a comprobarlo."
+                                                              : "Aún no se ha buscado ninguna actualización. Pica para buscarla."));
 
     /* las teselas: en el centro las grandes, una por pestana (las que no salen, como Juegos sobre un juego, no
        ocupan sitio); a los lados las chicas, tres y tres */
@@ -1967,8 +1953,14 @@ void Hud::dibujaPanel(int vw, int vh) {
       panelTeselas_[k] = t;
       const bool hov = t.inside(mx_, my_) && !te.id.empty();
       relleno(t, 6.0f * s, hov ? pal_.control : pal_.elevado, 0.97f);
-      icono({t.x + 16.0f * s, t.y + 22.0f * s, 20.0f * s, 20.0f * s}, iconoTesela(te.icono), hex(0xC9D0D7u, 0), hex(0xC9D0D7u, 1),
-            hex(0xC9D0D7u, 2), hov ? 1.0f : 0.85f);
+      /* (v1.16) la de la Version hace lo de la flecha que habia junto al aspa: su flecha en ambar con una version nueva */
+      const bool esVersion = te.id == "buscar_actualizacion", nueva = esVersion && !st_.actualizacion.empty();
+      if (esVersion) {
+        ha = hov && !st_.menuIdioma;
+        anclaActualizar = t;
+      }
+      icono({t.x + 16.0f * s, t.y + 22.0f * s, 20.0f * s, 20.0f * s}, iconoTesela(te.icono), nueva ? hex(0xDEAA7Cu, 0) : hex(0xC9D0D7u, 0),
+            nueva ? hex(0xDEAA7Cu, 1) : hex(0xC9D0D7u, 1), nueva ? hex(0xDEAA7Cu, 2) : hex(0xC9D0D7u, 2), hov || nueva ? 1.0f : 0.85f);
       textoCabe(te.titulo, t.x + 48.0f * s, t.y + 13.0f * s, 12.0f * s, t.w - 56.0f * s, dim[0], dim[1], dim[2], 1.0f);
       textoCabe(te.valor, t.x + 48.0f * s, t.y + 31.0f * s, 15.0f * s, t.w - 56.0f * s, te.puesta ? accent[0] : ink[0],
                 te.puesta ? accent[1] : ink[1], te.puesta ? accent[2] : ink[2], 1.0f);
@@ -2140,10 +2132,10 @@ void Hud::dibujaPanel(int vw, int vh) {
       continue;
     }
     const bool hov = dentro && z.caja.inside(mx_, my_), hovFila = hov;
-    const bool picable = (it.tipo == ItemPanel::Interruptor && !(it.apagado && !it.valor)) || it.tipo == ItemPanel::Juego ||
+    const bool picable = (it.tipo == ItemPanel::Interruptor && !(it.apagado && !it.valor && !it.descargable)) || it.tipo == ItemPanel::Juego ||
                          it.tipo == ItemPanel::Atajo || (it.tipo == ItemPanel::Seccion && it.plegable);
     if (hov && it.tipo != ItemPanel::Juego && (picable || it.tipo == ItemPanel::Fila || it.tipo == ItemPanel::Opciones || it.tipo == ItemPanel::Deslizador) &&
-        !(it.tipo == ItemPanel::Interruptor && it.apagado && !it.valor))
+        !(it.tipo == ItemPanel::Interruptor && it.apagado && !it.valor && !it.descargable))
       mask9({z.caja.x, y + 2.0f, z.caja.w, h - 4.0f}, 1, 10.0f, 1.0f, 1.0f, 1.0f, picable ? 0.07f : 0.035f);
     const float yr = it.nota.empty() ? y + (h - 20.0f) * 0.5f : y + 10.0f;
     /* (v1.15) lo propio de un juego en sus integraciones: un punto del acento delante del rotulo */
@@ -2204,8 +2196,14 @@ void Hud::dibujaPanel(int vw, int vh) {
         if (!it.pastilla.empty()) {
           const float wp = textWidth(it.pastilla, 11.5f) + 20.0f;
           const Rect pa{(marco ? der : der - 46.0f - 12.0f) - wp, y + (h - 22.0f) * 0.5f, wp, 22.0f};
-          mask9(pa, 0, R(11.0f), 0.30f, 0.31f, 0.36f, 0.95f);
-          text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, ink[0], ink[1], ink[2], 0.80f, true);
+          if (it.pastillaAcento) {   /* (v1.16) en azul: la red ya bajada */
+            mask9(pa, 0, R(11.0f), accent[0], accent[1], accent[2], 0.22f);
+            text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, std::min(1.0f, accent[0] + 0.22f), std::min(1.0f, accent[1] + 0.22f),
+                 std::min(1.0f, accent[2] + 0.22f), 1.0f, true);
+          } else {
+            mask9(pa, 0, R(11.0f), 0.30f, 0.31f, 0.36f, 0.95f);
+            text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, ink[0], ink[1], ink[2], 0.80f, true);
+          }
           derTexto = pa.x - 12.0f;
         }
         textoCabe(it.rotulo, izqT, yr, 15.0f, derTexto - izqT, ink[0], ink[1], ink[2], ap);
@@ -2573,7 +2571,9 @@ void Hud::dibujaPanel(int vw, int vh) {
   /* el rotulo del boton de actualizar, al pasar por encima: por encima de todo lo demas */
   if (ha && !rotuloActualizar.empty() && !st_.menuIdioma) {
     const float w = textWidth(rotuloActualizar, 12.5f) + 24.0f;
-    const Rect r{std::max(px + 20.0f, panelCerrar_.x + panelCerrar_.w - w), panelActualizar_.y + panelActualizar_.h + 8.0f, w, 30.0f};
+    const Rect &an = anclaActualizar.w > 0.0f ? anclaActualizar : panelActualizar_;
+    const float derR = anclaActualizar.w > 0.0f ? an.x + an.w : panelCerrar_.x + panelCerrar_.w;
+    const Rect r{std::max(px + 20.0f, derR - w), an.y + an.h + 8.0f, w, 30.0f};
     mask9(r, 0, 10.0f, 0.0f, 0.0f, 0.0f, 0.90f);
     text(rotuloActualizar, r.x + 12.0f, r.y + 8.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
   }
@@ -2654,7 +2654,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     if (item) *item = (int)i;
     switch (it.tipo) {
       case ItemPanel::Interruptor:   /* en gris no se enciende (si ya estaba puesto, si se puede apagar) */
-        return it.apagado && !it.valor ? HitPanel : HitPanelItem;
+        return it.apagado && !it.valor && !it.descargable ? HitPanel : HitPanelItem;
       case ItemPanel::Seccion:
         return it.plegable ? HitPanelItem : HitPanel;
       case ItemPanel::Juego:

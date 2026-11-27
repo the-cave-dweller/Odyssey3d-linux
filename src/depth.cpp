@@ -469,7 +469,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
       *err = "no esta el modelo de profundidad en " + path +
-             "\n    bajarlo con:  mkdir -p ~/.local/share/odysseyvk/modelos && curl -fLo \"" + path +
+             "\n    bajarlo con:  mkdir -p ~/.local/share/odysseyvk/models && curl -fLo \"" + path +
              "\" https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/model.onnx";
     return false;
   }

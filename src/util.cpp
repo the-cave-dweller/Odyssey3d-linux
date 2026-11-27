@@ -87,13 +87,62 @@ static int copiarArbol(const std::filesystem::path &de, const std::filesystem::p
     if (ec) break;
     const std::filesystem::path &orig = it->path();
     if (!it->is_regular_file(ec) || ec) continue;
-    std::filesystem::path destino = a / std::filesystem::relative(orig, de, ec);
+    std::filesystem::path rel = std::filesystem::relative(orig, de, ec);
     if (ec) continue;
+    /* (v1.16) la carpeta de las redes se llama models: lo del nombre viejo va ahi, no a una modelos nueva */
+    if (!rel.empty() && *rel.begin() == "modelos") rel = std::filesystem::path("models") / std::filesystem::relative(rel, "modelos");
+    std::filesystem::path destino = a / rel;
     if (std::filesystem::exists(destino, ec)) continue;   /* lo nuevo manda: no se pisa nada */
     std::filesystem::create_directories(destino.parent_path(), ec);
     std::filesystem::copy_file(orig, destino, std::filesystem::copy_options::skip_existing, ec);
     if (!ec) n++;
   }
+  return n;
+}
+
+/* (v1.16) ~/.local/share/odysseyvk/modelos pasa a llamarse models (Rodolfo: «en esta update actualiza el nombre de
+   esa carpeta para todos los usuarios»): se mueve entera (o, si ya estaban las dos, lo que falte en la nueva), y las
+   rutas que la nombran en serve.conf, en el ajuste vivo y en los guardados por red pasan a la nueva. Cuesta una
+   mirada a una carpeta en cada arranque; mover es al momento (el mismo disco) */
+static int migrarCarpetaDeRedes(const std::string &h) {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  const fs::path base = fs::path(h) / ".local/share/odysseyvk", viejo = base / "modelos", nuevo = base / "models";
+  if (fs::is_symlink(viejo, ec) || !fs::is_directory(viejo, ec)) return 0;
+  int n = 0;
+  if (!fs::exists(nuevo, ec)) {
+    fs::rename(viejo, nuevo, ec);
+    if (ec) {
+      std::printf("[redes] no se pudo cambiar el nombre de %s a models: %s\n", viejo.c_str(), ec.message().c_str());
+      return 0;
+    }
+    n = 1;
+  } else {
+    for (const fs::directory_entry &e : fs::directory_iterator(viejo, ec)) {
+      std::error_code e2;
+      const fs::path d = nuevo / e.path().filename();
+      if (fs::exists(d, e2)) continue;   /* lo de la nueva manda */
+      fs::rename(e.path(), d, e2);
+      if (!e2) n++;
+    }
+    fs::remove(viejo, ec);   /* solo si quedo vacia */
+  }
+  int rutas = 0;
+  const std::string a = "/odysseyvk/modelos/", b = "/odysseyvk/models/";
+  for (const std::string &f : {h + "/.config/odysseyvk/serve.conf", rutaEstadoOdyssey("ajuste"), rutaEstadoOdyssey("perfiles")}) {
+    std::string t;
+    if (!readSmallFile(f, t) || t.find(a) == std::string::npos) continue;
+    for (size_t p = t.find(a); p != std::string::npos; p = t.find(a, p + b.size())) t.replace(p, a.size(), b), rutas++;
+    const std::string tmp = f + ".tmp";
+    if (FILE *o = std::fopen(tmp.c_str(), "we")) {
+      std::fputs(t.c_str(), o);
+      std::fclose(o);
+      std::error_code e3;
+      fs::rename(tmp, f, e3);
+    }
+  }
+  std::printf("[redes] la carpeta de las redes ahora es %s (%d movido%s, %d ruta%s al dia)\n", nuevo.c_str(), n, n == 1 ? "" : "s",
+              rutas, rutas == 1 ? "" : "s");
   return n;
 }
 
@@ -121,6 +170,7 @@ int migrarDatosDeViejoNombre() {
       tot += n;
     }
   }
+  migrarCarpetaDeRedes(h);   /* despues: lo copiado del nombre viejo ya va a models */
   hecho = tot;
   return hecho;
 }
@@ -158,9 +208,9 @@ std::string rutaEstadoOdyssey(const char *nombre) {
 /* la red abierta: desde la rama experimental (26-nov) la de fabrica es la fp16 (la misma red a media
    precision: el mismo mapa con un 35 % menos de tiempo y 260 MiB menos, medido en la RTX 5080). Si
    solo esta la de siempre (fp32), se usa esa hasta que se baje la ligera. */
-static std::string carpetaRedes() {
+std::string carpetaRedes() {
   const char *home = std::getenv("HOME");
-  return std::string(home ? home : "/home") + "/.local/share/odysseyvk/modelos/";
+  return std::string(home ? home : "/home") + "/.local/share/odysseyvk/models/";   /* (v1.16) antes modelos */
 }
 std::string rutaRedLigera() { return carpetaRedes() + "depth_anything_v2_small_fp16.onnx"; }
 std::string rutaRedVieja() { return carpetaRedes() + "depth_anything_v2_small.onnx"; }

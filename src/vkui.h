@@ -75,6 +75,10 @@ public:
     std::string pastilla;
     /* (v1.16) una caratula de Juegos en gris (dentro de un juego, las que no son ese): sin color y sin picarse */
     bool gris = false;
+    /* (v1.16) las redes de profundidad: `descargable` = en gris como `apagado`, pero se pica (para bajarla);
+       `pastillaAcento` = la pastilla en el azul del acento («Descargada») en vez de gris */
+    bool descargable = false;
+    bool pastillaAcento = false;
   };
 
   struct State {

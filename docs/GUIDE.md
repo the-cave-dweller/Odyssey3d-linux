@@ -51,10 +51,14 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
 
 ## 2D → 3D conversion
 
-- Network: Depth Anything V2 Small (open; since 1.12 the 50 MB fp16 file
-  `depth_anything_v2_small_fp16.onnx`, before it the 95 MB one) in `~/.local/share/odysseyvk/modelos/`. If the
-  Odyssey 3D Hub's own `mde_large.onnx` is in that folder it is used automatically (key `1`/`2`
-  switches). `modelo = /path.onnx` in `serve.conf` forces another file.
+- Network: Depth Anything V2 Small (open, from Hugging Face `onnx-community/depth-anything-v2-small`) in
+  `~/.local/share/odysseyvk/models/` (until 1.15 `modelos/`; 1.16 renames it on first start and updates the paths
+  in `serve.conf`). The panel's 3D tab lists the networks with a checkbox each: the FP16 (`model_fp16.onnx`,
+  50 MB, recommended), the FP32 (`model.onnx`, 99 MB) and any other `.onnx` placed in that folder. One not
+  downloaded yet is grey with «Download · 50 MB» and clicking it downloads it and sets it; downloaded ones show a
+  blue tag. The ticked one goes to `modelo =` in `serve.conf` and a running viewer switches to it at once. From the
+  terminal: `odysseyvk ctl red descargar` (FP16) or `odysseyvk ctl red descargar fp32`. If the Odyssey 3D Hub's own
+  `mde_large.onnx` is in that folder it is used when nothing is ticked (key `1`/`2` switches).
 - A map is computed 6 times per second on the GPU (`mapas_por_segundo`); the panel's Performance
   tab shows the time per map and the frame rate (120 or 165 fps).
 - Edges are refined per pixel against the image colour (v0.89), the subject is placed on the

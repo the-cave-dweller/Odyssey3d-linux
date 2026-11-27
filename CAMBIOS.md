@@ -3,6 +3,43 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Las redes de profundidad con su casilla (FP16 y FP32), la carpeta `models` y la Versión sin flecha arriba (v1.16)
+
+- Rodolfo: «ofrece descargar la red FP32 tambien, sugiere por defecto la fp16, activalas con un toggle, en gris la no
+  descargada y en azul la que si, informa que pueden colocar cualquier red en la carpeta de
+  /home/rodolfo/.local/share/odysseyvk/models y la herramienta la empezará a listar», «tambien en esta update
+  actualiza el nombre de esa carpeta para todos los usuarios» y «remember that the fp32 was in huggingface».
+- **La lista** (pestaña 3D, «Red de profundidad»; arriba del todo si no hay ninguna, si no después de Pantalla; ya no
+  se repite en Ajustes):
+  - una casilla por red: la FP16 «(recomendada)», la FP32 y cada `.onnx` de la carpeta (por nombre; el detector de
+    caras no sale), y la de `modelo =` si está fuera de ella;
+  - la puesta va marcada y es una sola: marcar otra la pone (`modelo =` de serve.conf, y el ajuste vivo para el
+    visor abierto); desmarcar la puesta no la quita («siempre va una puesta»);
+  - la que no está bajada, en gris con «Descargar · 50 MB» / «· 99 MB»: picarla la baja y, al acabar, queda puesta
+    (sin ninguna red antes, el visor la carga y el panel se cierra, como antes). Las bajadas, «Descargada» en azul;
+    las demás de la carpeta, «En la carpeta»;
+  - debajo, la nota: cualquier red .onnx que se ponga en esa carpeta empieza a salir en la lista.
+- **La FP32**, del mismo sitio de Hugging Face que la FP16 (`onnx-community/depth-anything-v2-small`,
+  `onnx/model.onnx`, 99 060 839 bytes, MEDIDO con una petición de cabeceras), a `depth_anything_v2_small.onnx`.
+  Una descarga a la vez. `ctl red descargar fp32` hace lo mismo desde la terminal.
+- **La que se marca manda**: el servicio arrancaba siempre con la de Samsung si estaba en la carpeta, y el visor
+  también; ahora `modelo =` gana (sin nada marcado, igual que antes).
+- **La carpeta**: `~/.local/share/odysseyvk/modelos` pasa a `models` para todos. Al arrancar cualquier pieza de
+  OdysseyVK se mueve entera (o lo que falte, si ya estaban las dos) y las rutas que la nombran en serve.conf, en el
+  ajuste vivo y en los guardados por red pasan a la nueva. Lo que se copia del nombre viejo (odyssey3d) ya va a
+  `models`. El desinstalador quita las dos.
+- **La Versión**: Rodolfo, «quita el boton de update de arriba, mismo comportamiento pero recuerda que ya lo
+  movimos, ahora esta en la interfaz, pon la funcion a su boton». La flecha junto al aspa ya no sale; la tesela de
+  la Versión ya hacía lo mismo (buscar, o instalar la nueva) y ahora lleva también su rótulo al pasar el ratón y la
+  flecha en ámbar cuando hay versión nueva.
+- **Probado**:
+  - en una casa de pruebas con `modelos/` (la FP16 enlazada, una red propia y el detector de caras): pasó a
+    `models` y las 3 rutas (serve.conf, ajuste, perfiles) quedaron al día;
+  - pintado con `ctl hud`: la lista, sin red y con ella, y el rótulo de la Versión;
+  - en un KWin aparte: sin ninguna red, un clic en la FP32 (bajada de un `file://` de prueba, ODYSSEYVK_RED_URL) la
+    dejó en `models`, puesta en serve.conf, con `cargar_red` para el visor, y el panel se cerró; con la FP16, marcar
+    la propia la puso y desmarcarla no la quitó. Sin bajar nada de Hugging Face.
+
 ## ODYSSEYVK=1 para todos desde el pie de Juegos, y el panel del escritorio del tamaño del de encima del juego (v1.16)
 
 - Rodolfo, con una foto del pie de Juegos (donde iba Copiar): «Put a reminder to enable the option either per game

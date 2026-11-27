@@ -174,7 +174,9 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
 * `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
   tecla `C` o con la tesela «Vídeo normal» de la tarjeta.
 * La red de profundidad es la abierta, *Depth Anything V2 Small* en ONNX (95 MB), en
-  `~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx`. Hace falta descargarla una vez:
+  `~/.local/share/odysseyvk/models/` (hasta la 1.15, `modelos/`: la 1.16 le cambia el nombre al arrancar). Desde la
+  1.16 la pestaña 3D lista las redes con su casilla: la FP16 (50 MB, la recomendada), la FP32 (99 MB, las dos de
+  Hugging Face) y cualquier `.onnx` que se ponga en esa carpeta. Hace falta descargar alguna una vez:
   mientras falte, el servicio abre el panel de ajustes al arrancar (y el visor también, si se le pide
   el 3D de vídeo normal), que explica que sin ella no hay datos de profundidad y trae el botón
   **Descargar (95 MB)**. Al acabar, el vídeo que esté abierto pasa a 3D solo y el panel se cierra.

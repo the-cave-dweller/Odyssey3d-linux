@@ -652,13 +652,23 @@ int cmdAjustes(int argc, char **argv) {
       if (!prefs::descargaEnMarcha()) {
         std::printf("[ajustes] red abierta: %s\n", prefs::textoDescarga().c_str());
         std::fflush(stdout);
-        if (prefs::redLigeraPresente()) {
-          /* bajada y entera: el visor que haya abierto la carga ya (orden `cargar_red`), el servicio
-             la ve en su proxima mirada, y este panel se cierra solo (v0.94) */
-          std::string e;
-          ajuste::escribir(std::map<std::string, double>(), std::string(), {{"cargar_red", "si"}}, &e);
-          st.pie = idioma::tr("red descargada: el 3D de vídeo normal ya puede calcular la profundidad");
-          cerrarEn = reloj() + 2.5;
+        const std::string bajada = prefs::recogerRedBajada();
+        if (!bajada.empty()) {
+          /* (v1.16) bajada y entera: queda puesta (se pico su casilla para eso). Sin ninguna red antes, el visor que haya
+             abierto la carga ya (orden `cargar_red`), el servicio la ve en su proxima mirada y este panel, que se abrio
+             para eso, se cierra solo (v0.94); con otra ya puesta, se cambia a esta y el panel se queda */
+          std::string e, aviso;
+          prefs::ponerRed(bajada, &aviso);
+          if (!prefs::descargaHabiaRed()) {
+            ajuste::escribir(std::map<std::string, double>(), bajada, {{"cargar_red", "si"}}, &e);
+            st.pie = idioma::tr("red descargada: el 3D de vídeo normal ya puede calcular la profundidad");
+            cerrarEn = reloj() + 2.5;
+          } else {
+            st.pie = aviso;
+          }
+          rellenar();
+        } else {
+          st.pie = prefs::textoDescarga();
         }
       }
     }

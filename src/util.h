@@ -46,6 +46,8 @@ void grabarRedPreferida(int red);
 int slotRed(const std::string &ruta);
 std::string rutaRedNuestra();
 /* las dos versiones de la abierta: la ligera (fp16, la de fabrica) y la de siempre (fp32) */
+/* (v1.16) ~/.local/share/odysseyvk/models/ (con la barra al final): las redes de profundidad; antes `modelos` */
+std::string carpetaRedes();
 std::string rutaRedLigera();
 std::string rutaRedVieja();
 /* Marcas del arranque del visor (v1.12): cada paso, en ms desde que arranco el proceso (de

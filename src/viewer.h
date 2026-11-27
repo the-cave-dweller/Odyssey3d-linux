@@ -30,7 +30,7 @@ struct ViewerOpts {
   bool noPassthrough = false;
   bool no3d = false;       /* arrancar en pase 2D */
   /* conversor de video normal (2D) a 3D: la red de profundidad dice cuanto desplazar cada ojo.
-     vacio = el modelo que esta en ~/.local/share/odysseyvk/modelos */
+     vacio = el modelo que esta en ~/.local/share/odysseyvk/models */
   bool conver = false;
   /* `--detectar` (rama experimental): el tipo de video lo decide el visor mirando los primeros segundos
      (normal, lado a lado o arriba y abajo) y luego deja de mirar */

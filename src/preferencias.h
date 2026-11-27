@@ -53,6 +53,7 @@ struct Valores {
   double mezclaVistas = 0.10;     /* `filtro`: la parte del ciclo que mezcla las dos vistas (1 / pendiente), 0,10 .. 1 */
   double relieve = 1.0;           /* fuerza del relieve del conversor: 0,5 .. 2 */
   std::string modelo;             /* `modelo =` de serve.conf, ya expandido; vacio = la red abierta de siempre */
+  std::string nuestra;            /* (v1.16) `nuestra =` (la abierta a mano), ya expandido */
   bool avisarActualizaciones = true;   /* `actualizaciones = no` apaga la tarjeta de version nueva (v0.95) */
   bool actualizarAuto = false;         /* `actualizar_auto = si`: con una version nueva se instala sola (v0.95) */
   bool enBarraTareas = true;           /* `barra_tareas = no`: el visor 3D no sale en la barra de tareas (v1.02) */
@@ -76,7 +77,7 @@ struct Valores {
 Valores leer();
 
 /* La red de profundidad abierta (Depth Anything V2 pequena, v0.92): de donde se baja, cuanto pesa y
-   si ya esta en su sitio (~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx). */
+   si ya esta en su sitio (~/.local/share/odysseyvk/models/, desde la 1.16; antes modelos). */
 extern const char *const kUrlRedAbierta;
 constexpr long kBytesRedAbierta = 49642442;   /* la fp16, la de fabrica desde la rama experimental */
 constexpr long kBytesRedVieja = 99060839;     /* la de siempre (fp32), que sigue valiendo */
@@ -85,10 +86,31 @@ bool redLigeraPresente();
 /* La descarga, con un `curl` aparte: `descargar` la arranca (una sola a la vez); `vigilarDescarga`
    se llama de vez en cuando desde el bucle del panel y devuelve true si cambio algo (avance, fin o
    fallo); `descargaEnMarcha` y `textoDescarga` son lo que ensena el panel. */
-bool descargar(std::string *err);
+bool descargar(std::string *err);   /* la fp16 */
+bool descargar(int cual, std::string *err);   /* (v1.16) 0 = la fp16, 1 = la fp32 */
 bool vigilarDescarga();
 bool descargaEnMarcha();
+int descargaCual();                 /* la que esta bajando (0 o 1), o -1 */
 std::string textoDescarga();
+bool descargaHabiaRed();            /* al empezar ya habia alguna red puesta */
+std::string recogerRedBajada();     /* la que acaba de bajar entera (una vez; luego vacio) */
+extern const char *const kUrlRedFp32;
+bool redFp32Presente();
+
+/* ---- (v1.16) las redes de ~/.local/share/odysseyvk/models y la que va puesta ----
+   Rodolfo: «ofrece descargar la red FP32 tambien, sugiere por defecto la fp16, activalas con un toggle, en gris la no
+   descargada y en azul la que si, informa que pueden colocar cualquier red en la carpeta ... y la herramienta la
+   empezara a listar». La puesta se guarda en `modelo =` de serve.conf (la que el servicio le da al visor) y se manda
+   al visor abierto por el ajuste vivo. */
+struct RedDisco {
+  std::string ruta, nombre;
+  int conocida = 0;       /* 1 = la fp16, 2 = la fp32, 0 = otra de la carpeta */
+  bool presente = false;
+  long bytes = 0;
+};
+std::vector<RedDisco> redesDelDisco(const Valores &v);   /* la fp16, la fp32 y las demas .onnx (por nombre) */
+std::string redPuesta(const Valores &v);                 /* la que arranca el visor; vacio = ninguna */
+bool ponerRed(const std::string &ruta, std::string *aviso);
 
 /* ---- la actualizacion (v0.95) ------------------------------------------------------------------
    La version nueva se mira en el VERSION de la rama main del repositorio de GitHub. La comprobacion

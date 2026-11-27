@@ -92,7 +92,7 @@ static int alDeslizador(const ajuste::Clave &c, double v) {
 /* ---------------- las redes que hay en el disco ---------------- */
 
 /* Una red y como se llama en la lista. `nativa` es la que esta instalada en la maquina
-   (~/.local/share/odysseyvk/modelos, o la carpeta `modelos` del propio programa): son las que hemos
+   (~/.local/share/odysseyvk/models, o la carpeta `modelos` del propio programa): son las que hemos
    probado aqui y las que usa el conversor por defecto. Lo demas —la memoria USB, carpetas sueltas, lo
    que diga ODYSSEYVK_MODELOS— sale bajo `Otros`, por si acaso: no sabemos si abren ni como calzan. */
 struct Red {
@@ -133,7 +133,7 @@ static QStringList carpetasNativas() {
   const char *home = std::getenv("HOME");
   const std::string h(home ? home : "/home");
   return QStringList()
-         << QString::fromStdString(h + "/.local/share/odysseyvk/modelos")
+         << QString::fromStdString(h + "/.local/share/odysseyvk/models")
          << QString::fromStdString(h + "/Documentos/LU agent/odysseyvk-linux/modelos");
 }
 
@@ -1450,7 +1450,7 @@ int main(int argc, char **argv) {
   });
   QObject::connect(buscarModelo, &QPushButton::clicked, &ventana, [&]() {
     const QString ruta = QFileDialog::getOpenFileName(&ventana, QString::fromUtf8("Red .onnx"),
-                                                      QDir::homePath() + "/.local/share/odysseyvk/modelos",
+                                                      QDir::homePath() + "/.local/share/odysseyvk/models",
                                                       "*.onnx");
     if (ruta.isEmpty()) return;
     const QString absoluta = QFileInfo(ruta).absoluteFilePath();

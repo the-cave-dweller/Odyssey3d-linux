@@ -393,6 +393,7 @@ Valores leer() {
   v.mezclaVistas = std::max(0.10, std::min(1.0, 1.0 / std::max(1.0, numero(de("filtro"), 10.0))));
   v.relieve = std::max(0.5, std::min(2.0, numero(de("relieve"), 1.0)));
   v.modelo = de("modelo");
+  v.nuestra = de("nuestra");
   v.avisarActualizaciones = si(de("actualizaciones"), true);
   v.actualizarAuto = si(de("actualizar_auto"), false);
   v.enBarraTareas = si(de("barra_tareas"), true);
@@ -421,10 +422,11 @@ Valores leer() {
   v.capaTope = std::max(0, std::min(240, std::atoi(de("capa_fps_tope").c_str())));
   v.expPrioridad = de("exp_prioridad");
   if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
-  if (!v.modelo.empty() && v.modelo[0] == '~') {
-    const char *home = std::getenv("HOME");
-    v.modelo = std::string(home ? home : "") + v.modelo.substr(1);
-  }
+  for (std::string *m : {&v.modelo, &v.nuestra})
+    if (!m->empty() && (*m)[0] == '~') {
+      const char *home = std::getenv("HOME");
+      *m = std::string(home ? home : "") + m->substr(1);
+    }
   /* las lineas `auto = app:modo, otra:modo` pueden ser varias: se lee el fichero entero */
   std::string txt;
   if (leeTexto(ajuste::rutaServeConf(), txt)) {
@@ -458,37 +460,64 @@ Valores leer() {
 }
 
 /* ---- la red abierta y su descarga (v0.92) ------------------------------------------------------ */
-/* desde la rama experimental se baja la fp16 (49,6 MB); la de siempre (fp32, 95 MB) sigue valiendo */
+/* desde la rama experimental se baja la fp16 (49,6 MB); la de siempre (fp32, 99 MB) sigue valiendo y desde la 1.16
+   tambien se ofrece (Rodolfo: «ofrece descargar la red FP32 tambien, sugiere por defecto la fp16») */
 const char *const kUrlRedAbierta = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_fp16.onnx";
+const char *const kUrlRedFp32 = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx";
 
-bool redLigeraPresente() {
+namespace {
+bool tamanoEs(const std::string &ruta, long bytes) {
   struct stat sb {};
-  return ::stat(rutaRedLigera().c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
+  return ::stat(ruta.c_str(), &sb) == 0 && sb.st_size == bytes;
 }
-bool redAbiertaPresente() {
-  struct stat sb {};
-  return redLigeraPresente() || (::stat(rutaRedVieja().c_str(), &sb) == 0 && sb.st_size == kBytesRedVieja);
-}
+}  // namespace
+
+bool redLigeraPresente() { return tamanoEs(rutaRedLigera(), kBytesRedAbierta); }
+bool redFp32Presente() { return tamanoEs(rutaRedVieja(), kBytesRedVieja); }
+bool redAbiertaPresente() { return redLigeraPresente() || redFp32Presente(); }
 
 namespace {
 struct Descarga {
   pid_t pid = 0;            /* el curl, mientras corre */
+  int cual = 0;             /* 0 = la fp16, 1 = la fp32 */
   std::string parte;        /* el archivo a medias */
   std::string texto;        /* lo que ensena el panel */
+  std::string lista;        /* (v1.16) la que acaba de bajar entera (para ponerla), hasta que se recoge */
   bool fallo = false;
+  bool habiaRed = true;     /* (v1.16) al empezar ya habia alguna red (si no, el panel se cierra al acabar) */
   long bytes = 0;
 } g_descarga;
+const char *urlDe(int cual) {
+  if (const char *u = entornoOdyssey("ODYSSEYVK_RED_URL")) return u;   /* para las pruebas: un file:// en vez de Hugging Face */
+  return cual == 1 ? kUrlRedFp32 : kUrlRedAbierta;
+}
+std::string destinoDe(int cual) { return cual == 1 ? rutaRedVieja() : rutaRedLigera(); }
+long bytesDe(int cual) { return cual == 1 ? kBytesRedVieja : kBytesRedAbierta; }
+std::string megasDe(int cual) { return cual == 1 ? "99" : "50"; }
 }  // namespace
 
 bool descargaEnMarcha() { return g_descarga.pid > 0; }
+int descargaCual() { return g_descarga.pid > 0 ? g_descarga.cual : -1; }
 std::string textoDescarga() { return g_descarga.texto; }
+bool descargaHabiaRed() { return g_descarga.habiaRed; }
+std::string recogerRedBajada() {
+  std::string r;
+  r.swap(g_descarga.lista);
+  return r;
+}
 
-bool descargar(std::string *err) {
+bool descargar(std::string *err) { return descargar(0, err); }
+
+bool descargar(int cual, std::string *err) {
   if (g_descarga.pid > 0) return true;
-  const std::string destino = rutaRedLigera();
+  cual = cual == 1 ? 1 : 0;
+  const std::string destino = destinoDe(cual);
   const std::string dir = destino.substr(0, destino.rfind('/'));
   std::error_code ec;
   std::filesystem::create_directories(dir, ec);
+  g_descarga.habiaRed = !redPuesta(leer()).empty();
+  g_descarga.cual = cual;
+  g_descarga.lista.clear();
   g_descarga.parte = destino + ".parte";
   ::unlink(g_descarga.parte.c_str());
   const pid_t pid = ::fork();
@@ -501,13 +530,13 @@ bool descargar(std::string *err) {
     const int nulo = ::open("/dev/null", O_RDWR);
     if (nulo >= 0) { ::dup2(nulo, 0); ::dup2(nulo, 1); ::dup2(nulo, 2); }
     ::execlp("curl", "curl", "-fsSL", "--max-time", "1800", "--retry", "2", "-o", g_descarga.parte.c_str(),
-             kUrlRedAbierta, (char *)nullptr);
+             urlDe(cual), (char *)nullptr);
     ::_exit(127);
   }
   g_descarga.pid = pid;
   g_descarga.fallo = false;
   g_descarga.bytes = 0;
-  g_descarga.texto = idioma::trf("descargando… {} de 50 MB", {"0"});
+  g_descarga.texto = idioma::trf("descargando… {} de {} MB", {"0", megasDe(cual)});
   return true;
 }
 
@@ -515,21 +544,22 @@ bool vigilarDescarga() {
   if (g_descarga.pid <= 0) return false;
   int estado = 0;
   const pid_t r = ::waitpid(g_descarga.pid, &estado, WNOHANG);
+  const int cual = g_descarga.cual;
   if (r == 0) {
     struct stat sb {};
     const long bytes = ::stat(g_descarga.parte.c_str(), &sb) == 0 ? (long)sb.st_size : 0;
-    if (bytes == g_descarga.bytes) return false;
+    if (bytes / 1000000 == g_descarga.bytes / 1000000 && bytes != 0) return false;
     g_descarga.bytes = bytes;
-    g_descarga.texto = idioma::trf("descargando… {} de 50 MB", {std::to_string(bytes / 1000000)});
+    g_descarga.texto = idioma::trf("descargando… {} de {} MB", {std::to_string(bytes / 1000000), megasDe(cual)});
     return true;
   }
   g_descarga.pid = 0;
   const bool bien = r > 0 && WIFEXITED(estado) && WEXITSTATUS(estado) == 0;
-  struct stat sb {};
-  const bool entera = ::stat(g_descarga.parte.c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
-  if (bien && entera && ::rename(g_descarga.parte.c_str(), rutaRedLigera().c_str()) == 0) {
-    g_descarga.texto = idioma::tr("lista: la red abierta ya está en su carpeta");
+  const bool entera = tamanoEs(g_descarga.parte, bytesDe(cual));
+  if (bien && entera && ::rename(g_descarga.parte.c_str(), destinoDe(cual).c_str()) == 0) {
+    g_descarga.texto = idioma::tr(cual == 1 ? "lista: la FP32 ya está en su carpeta" : "lista: la red abierta ya está en su carpeta");
     g_descarga.fallo = false;
+    g_descarga.lista = destinoDe(cual);
   } else {
     ::unlink(g_descarga.parte.c_str());
     g_descarga.fallo = true;
@@ -538,6 +568,67 @@ bool vigilarDescarga() {
                                     : idioma::tr("la descarga falló (¿hay conexión?): vuelve a intentarlo"))
                              : idioma::tr("el archivo bajó incompleto: vuelve a intentarlo");
   }
+  return true;
+}
+
+/* ---- (v1.16) las redes de la carpeta y la que va puesta ----------------------------------------- */
+std::string redPuesta(const Valores &v) {
+  /* lo mismo que elige el servicio (elegirRedes, src/main.cpp): `modelo =` si esta; si no, la del programa de Samsung
+     si esta en la carpeta; si no, la abierta (la fp16 antes que la fp32) */
+  if (!v.modelo.empty() && fileExists(v.modelo)) return std::filesystem::path(v.modelo).lexically_normal().string();
+  const std::string samsung = carpetaRedes() + "mde_large.onnx";
+  if (fileExists(samsung)) return samsung;
+  if (!v.nuestra.empty() && fileExists(v.nuestra)) return std::filesystem::path(v.nuestra).lexically_normal().string();
+  const std::string n = rutaRedNuestra();
+  return fileExists(n) ? n : std::string();
+}
+
+std::vector<RedDisco> redesDelDisco(const Valores &v) {
+  std::vector<RedDisco> r;
+  r.push_back({rutaRedLigera(), "Depth Anything V2 pequeña · FP16", 1, redLigeraPresente(), kBytesRedAbierta});
+  r.push_back({rutaRedVieja(), "Depth Anything V2 pequeña · FP32", 2, redFp32Presente(), kBytesRedVieja});
+  /* cualquier otra .onnx de la carpeta (Rodolfo: «pueden colocar cualquier red en la carpeta ... y la herramienta la
+     empezara a listar»), salvo el detector de caras del seguimiento de la cabeza */
+  std::vector<RedDisco> otras;
+  std::error_code ec;
+  const std::string dir = carpetaRedes();
+  for (const auto &e : std::filesystem::directory_iterator(dir, ec)) {
+    std::error_code e2;
+    const std::string nombre = e.path().filename().string();
+    if (e.path().extension() != ".onnx" || !e.is_regular_file(e2)) continue;
+    if (e.path().string() == rutaRedLigera() || e.path().string() == rutaRedVieja()) continue;
+    if (nombre.rfind("face_detection", 0) == 0) continue;
+    otras.push_back({e.path().string(), nombre.substr(0, nombre.size() - 5), 0, true, (long)e.file_size(e2)});
+  }
+  /* y la de `modelo =` si esta fuera de la carpeta */
+  if (!v.modelo.empty() && fileExists(v.modelo)) {
+    const std::string m = std::filesystem::path(v.modelo).lexically_normal().string();
+    bool ya = m == rutaRedLigera() || m == rutaRedVieja();
+    for (const RedDisco &o : otras) ya = ya || o.ruta == m;
+    if (!ya) {
+      struct stat sb {};
+      const std::string nombre = std::filesystem::path(m).filename().string();
+      otras.push_back({m, nombre.size() > 5 ? nombre.substr(0, nombre.size() - 5) : nombre, 0, true,
+                       ::stat(m.c_str(), &sb) == 0 ? (long)sb.st_size : 0});
+    }
+  }
+  std::sort(otras.begin(), otras.end(), [](const RedDisco &a, const RedDisco &b) { return a.nombre < b.nombre; });
+  r.insert(r.end(), otras.begin(), otras.end());
+  return r;
+}
+
+bool ponerRed(const std::string &ruta, std::string *aviso) {
+  std::string e;
+  if (!ajuste::fijarEnServeConf("modelo", ruta, &e)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+    return false;
+  }
+  /* el visor que este abierto la cambia ya (lee el ajuste vivo cada decima); si no hay, la toma el siguiente */
+  ajuste::escribir(std::map<std::string, double>(), ruta, &e);
+  std::string nombre = std::filesystem::path(ruta).filename().string();
+  for (const RedDisco &r : redesDelDisco(leer()))
+    if (r.ruta == ruta) nombre = r.conocida ? std::string(idioma::tr(r.conocida == 1 ? "la FP16" : "la FP32")) : r.nombre;
+  if (aviso) *aviso = idioma::trf("red puesta: {} (la cambia el visor abierto, o el siguiente vídeo)", {nombre});
   return true;
 }
 
@@ -696,38 +787,56 @@ bool lanzarActualizacion(std::string *err) { return lanzarAparte("actualizar", e
 bool lanzarDesinstalacion(std::string *err) { return lanzarAparte("desinstalar", err); }
 
 namespace {
-/* Cuando falta la red de profundidad (o se esta bajando): que hace falta, para que, de donde se
-   baja y el boton que lo hace. Con la red en su sitio no pone nada. */
+/* La red de profundidad (v1.16): la FP16 (la recomendada), la FP32 y cualquier .onnx que se ponga en la carpeta, cada
+   una con su casilla: la puesta va marcada (una sola). La que no esta bajada sale en gris con «Descargar · 50 MB», y
+   picarla la baja y la pone; las que estan, con «Descargada» (o «En la carpeta») en azul (Rodolfo: «activalas con un
+   toggle, en gris la no descargada y en azul la que si»). Sin ninguna, arriba del todo y con el aviso de para que
+   hace falta. */
 void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &ids) {
-  const bool abierta = redAbiertaPresente();
-  const bool ligera = redLigeraPresente();
-  const bool otra = !v.modelo.empty() && v.modelo != rutaRedNuestra() && fileExists(v.modelo);
-  if ((ligera || otra) && !descargaEnMarcha() && textoDescarga().empty()) return;
+  const std::vector<RedDisco> redes = redesDelDisco(v);
+  const std::string puesta = redPuesta(v);
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
   Hud::ItemPanel s;
-  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr(abierta ? "RED DE PROFUNDIDAD" : "FALTA LA RED DE PROFUNDIDAD");
+  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr(puesta.empty() ? "FALTA LA RED DE PROFUNDIDAD" : "RED DE PROFUNDIDAD");
   pon(s, "");
-  if (!abierta) {
+  if (puesta.empty()) {
     Hud::ItemPanel i;
     i.tipo = Hud::ItemPanel::Info;
     i.rotulo = idioma::tr("Sin ella no hay datos de profundidad: el vídeo normal no se puede pasar a 3D (el dividido sí).");
-    i.nota = idioma::tr("Depth Anything V2 pequeña, 50 MB, de huggingface.co/onnx-community/depth-anything-v2-small; queda en ~/.local/share/odysseyvk/modelos.");
+    i.nota = idioma::tr("Depth Anything V2 pequeña, de huggingface.co/onnx-community/depth-anything-v2-small: la FP16 es la recomendada.");
     pon(i, "");
   }
-  /* con la de siempre (fp32) ya puesta, el boton ofrece la ligera (rama experimental) */
-  const bool ofreceLigera = abierta && !ligera && !otra;
-  Hud::ItemPanel b;
-  b.tipo = Hud::ItemPanel::Boton;
-  b.rotulo = idioma::tr(ofreceLigera ? "Versión ligera de la red" : (abierta ? "Red de profundidad" : "Descargar la red para tener profundidad"));
-  b.nota = !textoDescarga().empty() || !ofreceLigera
-               ? textoDescarga()
-               : std::string(idioma::tr("La misma red a media precisión: el mismo mapa con un 35 % menos de tiempo y 260 MB menos en la tarjeta."));
-  b.valorTexto = idioma::tr(descargaEnMarcha() ? "Bajando…" : (ligera || (abierta && otra) ? "Lista" : "Descargar (50 MB)"));
-  b.valor = !descargaEnMarcha() && !ligera;
-  pon(b, "descargar_red");
+  const int bajando = descargaCual();
+  for (const RedDisco &r : redes) {
+    Hud::ItemPanel it;
+    it.tipo = Hud::ItemPanel::Interruptor;
+    it.rotulo = r.conocida == 1 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP16 (recomendada)"))
+                                : (r.conocida == 2 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP32")) : r.nombre);
+    it.nota = r.conocida == 1 ? std::string(idioma::tr("La misma red a media precisión: el mismo mapa con un 35 % menos de tiempo y 260 MB menos en la tarjeta."))
+              : r.conocida == 2 ? std::string(idioma::tr("La misma red a precisión completa: más lenta y con más memoria de la tarjeta."))
+                                : idioma::trf("{} · {} MB", {r.ruta.rfind(carpetaRedes(), 0) == 0 ? r.ruta.substr(carpetaRedes().size()) : r.ruta,
+                                                             std::to_string(std::max(1L, r.bytes / 1000000))});
+    it.valor = r.presente && r.ruta == puesta;
+    if (r.presente) {
+      it.pastilla = idioma::tr(r.conocida ? "Descargada" : "En la carpeta");
+      it.pastillaAcento = true;
+      pon(it, "red:" + r.ruta);
+    } else {
+      const int cual = r.conocida == 2 ? 1 : 0;
+      it.apagado = true;
+      it.descargable = bajando < 0;   /* una descarga a la vez: mientras baja una, la otra no se pica */
+      it.pastilla = bajando == cual ? textoDescarga() : idioma::trf("Descargar · {} MB", {cual == 1 ? "99" : "50"});
+      pon(it, "red_bajar:" + std::to_string(cual));
+    }
+  }
+  Hud::ItemPanel n;
+  n.tipo = Hud::ItemPanel::Nota;
+  n.rotulo = idioma::trf("Cualquier red de profundidad .onnx que pongas en {} empieza a salir en esta lista.",
+                         {carpetaRedes().substr(0, carpetaRedes().size() - 1)});
+  pon(n, "");
 }
 /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que dice
    nvidia-smi de las tarjetas. Desde la rama experimental va dentro de Programa (Rodolfo: «mete la info de
@@ -792,7 +901,7 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
     }
     fila(idioma::tr("Cámara"), de("facetracking") == "abierto" ? de("camara_nota") : std::string(idioma::tr("sin abrir")));
   }
-  filasDeLaRed(st, v, ids);
+  /* (v1.16) la red de profundidad ya no se repite aqui: va en la pestana 3D, con sus casillas */
   s.rotulo = idioma::tr("TARJETAS GRÁFICAS");
   pon(s, "");
   bool alguna = false;
@@ -1496,8 +1605,9 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     return;
   }
   if (st.pestana == 0) {
-    /* sin ninguna red de profundidad no hay video normal a 3D: lo primero que se ve es como bajarla */
-    filasDeLaRed(st, v, ids);
+    /* sin ninguna red de profundidad no hay video normal a 3D: lo primero que se ve es como bajarla; con alguna, */
+    const bool sinRed = redPuesta(v).empty();   /* (v1.16) va despues de Pantalla */
+    if (sinRed) filasDeLaRed(st, v, ids);
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("VÍDEO");
     pon(s, "");
@@ -1531,6 +1641,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     mz.ayuda = idioma::tr("La lente reparte los subpíxeles entre tu ojo izquierdo y el derecho. Con el 10 % (lo de Samsung) el paso de una vista a la otra es casi un escalón: si el rastreo va un poco atrasado, una franja de la pantalla salta de golpe a la imagen del otro ojo. Más mezcla hace ese paso gradual; con demasiada, algo del otro ojo se ve aun con la cabeza quieta.");
     pon(mz, "filtro");
 
+    if (!sinRed) filasDeLaRed(st, v, ids);
     /* ATAJOS DE TECLADO (v1.09): el interruptor de los globales y cada atajo, que se cambia picando
        su tecla y pulsando la combinacion nueva */
     /* las dos secciones largas se pliegan con una flechita (rama experimental); esperando un atajo,
@@ -1900,6 +2011,28 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     }
     if (aviso) *aviso = idioma::tr("desinstalando OdysseyVK…");
     if (cerrar) *cerrar = true;
+    return true;
+  }
+  /* (v1.16) la casilla de una red: picar una bajada la pone (una sola puesta; la puesta no se quita sola) */
+  if (id.rfind("red:", 0) == 0) {
+    const std::string ruta = id.substr(4);
+    if (ruta == redPuesta(v)) {
+      if (aviso) *aviso = idioma::tr("siempre va una puesta: marca otra para cambiar");
+      return true;
+    }
+    return ponerRed(ruta, aviso);
+  }
+  if (id.rfind("red_bajar:", 0) == 0) {
+    const int cual = std::atoi(id.c_str() + 10) == 1 ? 1 : 0;
+    if (descargaEnMarcha()) {
+      if (aviso) *aviso = idioma::tr("ya se está bajando una red: espera a que acabe");
+      return true;
+    }
+    if (!descargar(cual, &e)) {
+      if (aviso) *aviso = e;
+      return false;
+    }
+    if (aviso) *aviso = idioma::tr(cual == 1 ? "bajando la FP32 (99 MB): al acabar queda puesta" : "bajando la FP16 (50 MB): al acabar queda puesta");
     return true;
   }
   if (id == "descargar_red") {

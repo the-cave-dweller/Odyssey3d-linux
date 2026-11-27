@@ -101,7 +101,7 @@ class ProfundidadJuego;   /* profjuego.h: la profundidad que recibe DLSS, de la 
 class DepthNet {
 public:
   ~DepthNet();
-  /* ruta del modelo .onnx; vacio = ~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx */
+  /* ruta del modelo .onnx; vacio = ~/.local/share/odysseyvk/models/depth_anything_v2_small_fp16.onnx */
   bool init(const std::string &model, std::string *err, int gpu = 0);   /* gpu: tarjeta NVIDIA a usar */
 
   /* Cambiar de red con el visor en marcha: primero se suelta la sesion vieja (que es lo que
