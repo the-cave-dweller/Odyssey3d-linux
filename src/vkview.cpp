@@ -2419,7 +2419,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::signal(SIGINT, onTermSignal);
   rig.esperar();   /* (v1.12) la lente y el scaler, puestos en su hilo, tienen que estar antes del primer cuadro */
   marcaArranque("lente y scaler listos");
+  bool hardwareListo = true;
   while (!glfwWindowShouldClose(win) && !ui.quit) {
+    /* (v1.16, de la PR #2 de Noa3) el scaler no confirmo el 3D (al empezar o al volver a la pantalla): no se sigue
+       tramando sobre un panel en 2D; se sale por el camino de siempre, que devuelve el panel y manda apagar */
+    if (rig.fallo()) {
+      std::printf("[sesion] el scaler no confirmo el modo 3D: se sale devolviendo el panel, la lente y el scaler\n");
+      std::fflush(stdout);
+      hardwareListo = false;
+      break;
+    }
     if (gTerm && !ui.quit) {
       std::printf("[sesion] llego una senal de cierre: se sale devolviendo el panel, la lente y el scaler\n");
       std::fflush(stdout);
@@ -4738,5 +4747,5 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   borrarEntregada();   /* si nos fuimos minimizados, el aviso ya no vale para nada */
   rig.shutDown();
   glfwTerminate();
-  return 0;
+  return hardwareListo ? 0 : 1;   /* (v1.16, PR #2) 1 si el scaler no confirmo el 3D */
 }

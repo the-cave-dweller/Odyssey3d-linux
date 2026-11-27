@@ -3,6 +3,37 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La cámara por su enlace, `modo = flat`, la tarjeta CUDA por su UUID, la FP32 en la CPU y el scaler sin confirmar (v1.16)
+
+- Rodolfo, con la PR #2 de Noa3 («Fix stereo camera detection, 2D opt-in, depth selection and scaler rollback», hecha
+  sobre la 1.14). Cinco arreglos; se pasaron a mano a la 1.16, cada uno mirado contra lo de ahora:
+- **La cámara estéreo por su enlace estable** (`/dev/v4l/by-id/…`): sysfs la busca por `videoN`, así que con el enlace
+  salía como una mono de 640×480. Se resuelve el enlace antes de mirar sysfs (la captura sigue abriendo la ruta
+  puesta). Tal cual la PR.
+- **`modo = flat` se respeta**: se leía como `ask` y los vídeos a pantalla completa entraban en 3D igual. Ahora lo no
+  apuntado se queda en 2D, y el interruptor de Juegos y el lanzarlo dicen lo mismo (`juegoEn3D`: lo apuntado, el
+  último como lo lee el servicio, o si no `modo`). De fábrica sigue lo automático. Probado: con `modo = flat` y solo
+  Cyberpunk apuntado, Cyberpunk sale en 3D y los demás en 2D.
+- **La tarjeta CUDA por su UUID**: la memoria libre se miraba con el número de nvidia-smi (por bus PCI) y se usaba con
+  el de CUDA (de la más rápida a la más lenta, y solo las visibles). Ahora se casan por el UUID que da libcuda (sin
+  crear contexto) y el registro dice `CUDA N gpu-…`. MEDIDO aquí: en el equipo de Rodolfo coinciden (CUDA 0 = 4090,
+  1 = 5080), así que no le pasaba; con otras tarjetas, sí. Probado con `odysseyvk mapa`: `--red 1` cae en la 5080 y
+  `--red 0` en la 4090, cada una con su UUID.
+- **La FP32 en la CPU**: si la red acaba en el procesador y lo pedido es la FP16 de fábrica, se usa la FP32 si está
+  (Noa3 midió 298 ms por mapa contra 1447 en un Ryzen 9 7950X3D); si no está, se dice cómo bajarla. Más simple que en
+  la PR: en la 1.16 la red marcada siempre va en `modelo =`, así que el cambio se hace al abrirla y no al elegirla. La
+  red de Samsung se rechaza en la CPU también si la CPU sale porque CUDA no arrancó. Probado con `ODYSSEYVK_GPU=-1`:
+  abre la FP32. La nota de la FP32 en la lista lo dice.
+- **El scaler sin confirmar**: un error del adaptador o del conductor (no solo del monitor) cuenta como fallo; entonces
+  el visor no sigue tramando sobre un panel en 2D (se sale por el camino de siempre, sin esperar: se mira en cada
+  cuadro) y al salir se manda apagar igual, por si el monitor sí recibió la orden. El servicio, si el visor se va
+  enseguida, espera 8 s y luego 60 antes de volver a intentarlo. Los bytes que el monitor no tomó (`resid`), que la PR
+  también tomaba por fallo, de momento solo se apuntan («modo 3D activado (resid N)»): en el registro hay 110
+  activaciones buenas en 30 días y ninguna lo decía; si siempre es 0 se puede endurecer. `tools/prueba_scaler.cpp`
+  (de la PR, ajustada) lo prueba sin monitor: 6 casos, 0 fallos.
+- **Sin probar** en una sesión 3D de verdad: el fallo del scaler (no se le puede pedir al monitor que falle) y lo de la
+  cámara por su enlace.
+
 ## Los deslizadores dicen su valor mientras se arrastran, y Anticipar la cabeza vuelve a 0 con su flechita (v1.16)
 
 - Rodolfo, con la PR #1 de Noa3 («Preview head anticipation while dragging and add a reset button», hecha sobre la

@@ -186,6 +186,15 @@ void cargaCaratula(const std::string &raizSteam, Juego &j) {
 #endif
 }
 
+/* (v1.16, de la PR #2 de Noa3) si un juego entra en 3D: lo que tenga apuntado (el ultimo, como lo lee el servicio) o,
+   sin nada, lo de `modo` (con `modo = flat` se queda en 2D). El interruptor de Juegos y el lanzarlo dicen lo mismo */
+bool juegoEn3D(const Valores &v, const std::string &id) {
+  const std::string app = "steam_app_" + id;
+  for (auto it = v.recordadas.rbegin(); it != v.recordadas.rend(); ++it)
+    if (it->first == app) return it->second != "flat";
+  return v.modo != "flat";
+}
+
 bool esHerramienta(const std::string &nombre) {
   static const char *kPrefijos[] = {"Proton ", "Steam Linux Runtime", "Steamworks Common", "Steam Controller"};
   for (const char *p : kPrefijos)
@@ -401,7 +410,8 @@ Valores leer() {
     return it == c.end() ? std::string() : it->second;
   };
   const std::string modo = strLower(de("modo"));
-  v.modo = (modo == "conv" || modo == "sbs" || modo == "suave") ? (modo == "suave" ? "sbs" : modo) : "ask";
+  /* (v1.16, PR #2) `flat` se respeta: lo que no este apuntado se queda en 2D (antes se leia como `ask`) */
+  v.modo = (modo == "conv" || modo == "sbs" || modo == "flat") ? modo : (modo == "suave" ? "sbs" : "ask");
   {
     const std::string ds = strLower(de("dividido_suavizado"));
     v.suavizar = (ds == "auto" || ds == "automatico") ? 2 : (si(ds, true) ? 1 : 0);
@@ -835,7 +845,7 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
     it.rotulo = r.conocida == 1 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP16 (recomendada)"))
                                 : (r.conocida == 2 ? std::string(idioma::tr("Depth Anything V2 pequeña · FP32")) : r.nombre);
     it.nota = r.conocida == 1 ? std::string(idioma::tr("La misma red a media precisión: el mismo mapa con un 35 % menos de tiempo y 260 MB menos en la tarjeta."))
-              : r.conocida == 2 ? std::string(idioma::tr("La misma red a precisión completa: más lenta y con más memoria de la tarjeta."))
+              : r.conocida == 2 ? std::string(idioma::tr("La misma red a precisión completa: en la tarjeta va más lenta, pero si la red va por el procesador se usa esta, unas 5 veces más rápida."))
                                 : idioma::trf("{} · {} MB", {r.ruta.rfind(carpetaRedes(), 0) == 0 ? r.ruta.substr(carpetaRedes().size()) : r.ruta,
                                                              std::to_string(std::max(1L, r.bytes / 1000000))});
     it.valor = r.presente && r.ruta == puesta;
@@ -1729,9 +1739,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       fila.tipo = Hud::ItemPanel::Juego, fila.rotulo = j.nombre;
       fila.img = j.cara, fila.imgW = j.caraW, fila.imgH = j.caraH;
       /* 3D salvo que este apuntado como «sin 3D»: su ventana se llama steam_app_<id> */
-      fila.valor = true;
-      for (const auto &par : v.recordadas)
-        if (par.first == "steam_app_" + j.id && par.second == "flat") fila.valor = false;
+      fila.valor = juegoEn3D(v, j.id);
       /* (v1.15) el engranaje de la caratula (al pasar el raton) abre sus integraciones: su ayuda */
       fila.ayudas = {idioma::tr("Integraciones de este juego: sus opciones de lanzamiento de Steam")};
       pon(fila, "juego:" + j.id);
@@ -2103,9 +2111,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   if (id.rfind("juego:", 0) == 0) {
     const std::string ap = id.substr(6);
-    bool en3d = true;
-    for (const auto &par : v.recordadas)
-      if (par.first == "steam_app_" + ap && par.second == "flat") en3d = false;
+    const bool en3d = juegoEn3D(v, ap);
     if (sub == 1) {
       /* la pastillita: ese juego entra en 3D solo (conversor) o se deja en 2D sin preguntar */
       if (!ajuste::fijarAutoEnServeConf("steam_app_" + ap, en3d ? "flat" : "conv", &e)) {

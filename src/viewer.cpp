@@ -120,6 +120,12 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
 
   Rig rig;
   rig.bringUp(opts);
+  rig.esperar();
+  if (rig.fallo()) {   /* (v1.16, de la PR #2 de Noa3) el scaler no confirmo el 3D: no se sigue */
+    rig.shutDown();
+    glfwTerminate();
+    return 1;
+  }
   glfwPollEvents(); /* que GLFW vea el cambio de modo del panel */
 
   GLFWmonitor *mon = pickMonitor(opts.output.empty() ? rig.output : opts.output);

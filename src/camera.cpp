@@ -40,8 +40,18 @@ static std::string fourccName(uint32_t code) {
   return name;
 }
 
+/* Nombre del nodo sysfs (/dev/video7 -> video7). (v1.16, de la PR #2 de Noa3) sysfs usa videoN aunque la camara se
+   haya elegido por su enlace estable de /dev/v4l/by-id/: se resuelve el enlace antes. La captura sigue abriendo la ruta
+   puesta. Con el enlace, la camara estereo del monitor salia como una mono de 640x480 */
+static std::string nombreNodo(const std::string &device) {
+  char real[PATH_MAX];
+  const std::string ruta = ::realpath(device.c_str(), real) ? std::string(real) : device;
+  const size_t barra = ruta.find_last_of('/');
+  return barra == std::string::npos ? ruta : ruta.substr(barra + 1);
+}
+
 bool Camera::usbSysfs(const std::string &device, std::string *dir) {
-  const std::string nodo = device.substr(device.rfind('/') + 1);
+  const std::string nodo = nombreNodo(device);   /* (v1.16, PR #2) tambien por su enlace de /dev/v4l/by-id */
   const std::string enlace = "/sys/class/video4linux/" + nodo + "/device";
   char ruta[PATH_MAX] = {};
   if (!::realpath(enlace.c_str(), ruta)) return false;
@@ -352,11 +362,6 @@ std::vector<Camera::Mode> Camera::modes(const std::string &device) {
   return out;
 }
 
-/* Nombre del nodo sysfs (/dev/video7 -> video7). */
-static std::string nombreNodo(const std::string &device) {
-  const size_t barra = device.find_last_of('/');
-  return barra == std::string::npos ? device : device.substr(barra + 1);
-}
 
 /* El nombre que anuncia el conductor de la camara estereo del monitor. */
 static bool nombreEsDelMonitor(const std::string &nombre) {

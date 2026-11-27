@@ -45,7 +45,7 @@ std::vector<Juego> juegosSteam(bool conCaratulas = true);
 bool lanzarJuego(const std::string &id, std::string *err = nullptr);
 
 struct Valores {
-  std::string modo = "ask";       /* ask · conv · sbs */
+  std::string modo = "ask";       /* ask · conv · sbs · flat */
   int suavizar = 1;               /* los videos divididos: 0 nunca · 1 siempre · 2 solo si hace falta */
   bool rastreo = false;
   bool atajos = true;

@@ -58,6 +58,11 @@ odysseyvk ctl red descargar        # FP16
 odysseyvk ctl red descargar fp32   # FP32
 ```
 
+Cuando la red tiene que ir por el procesador (sin CUDA, o sin sitio en ninguna tarjeta), OdysseyVK usa la FP32 en vez
+de la FP16 si está bajada: en la CPU va unas 5 veces más rápida (298 contra 1447 ms por mapa, medido por
+[Noa3](https://github.com/Noa3) en un Ryzen 9 7950X3D). Con dos tarjetas, la memoria libre se casa con cada una por
+su UUID, así que `red = N` en `serve.conf` es siempre la tarjeta CUDA N.
+
 ![Primer arranque: el panel pide la red de profundidad](docs/img/es/first-run.png)
 
 ## Uso
@@ -173,7 +178,9 @@ que sigue suave y atenuado detrás; cuando la barra se esconde, el corte se va c
 ![La barra del reproductor sobre un vídeo dividido](docs/img/es/player-bar.png)
 
 **Juegos.** La pestaña Juegos lista tu biblioteca de Steam con carátulas; cada juego tiene su
-interruptor 2D | 3D. Arráncalo desde ahí y el juego entra solo en 3D al ponerse a pantalla
+interruptor 2D | 3D (con `modo = flat` en `~/.config/odysseyvk/serve.conf`, las ventanas a pantalla completa y
+los juegos sin el interruptor puesto se quedan en 2D, y los interruptores lo dicen). Arráncalo desde ahí y el juego
+entra solo en 3D al ponerse a pantalla
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
 a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
 visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego

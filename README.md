@@ -58,6 +58,11 @@ odysseyvk ctl red descargar        # FP16
 odysseyvk ctl red descargar fp32   # FP32
 ```
 
+When the network has to run on the processor (no CUDA, or no room on any GPU), OdysseyVK uses the FP32 instead of
+the FP16 if it is downloaded: on a CPU it is about 5 times faster (298 vs 1,447 ms per map, measured by
+[Noa3](https://github.com/Noa3) on a Ryzen 9 7950X3D). With two GPUs, free memory is matched to each card by its
+UUID, so `red = N` in `serve.conf` always means CUDA device N.
+
 ![First run: the panel asks for the depth network](docs/img/first-run.png)
 
 ## Use
@@ -169,7 +174,9 @@ soft and dimmed behind them; when the bar hides, the cut goes away with it.
 ![The player bar over a split video](docs/img/player-bar.png)
 
 **Games.** The Games tab lists your Steam library with covers; each game has a 2D | 3D switch.
-Launch from the tab and the game enters 3D on its own when it goes fullscreen. Games must run in
+Launch from the tab and the game enters 3D on its own when it goes fullscreen. With `modo = flat` in
+`~/.config/odysseyvk/serve.conf`, fullscreen windows and games that aren't switched on stay in 2D (the
+switches show it). Games must run in
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
 game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
 OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a

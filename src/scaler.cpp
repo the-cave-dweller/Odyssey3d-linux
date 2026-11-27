@@ -79,13 +79,18 @@ bool Scaler::set3d(bool on, int *status, int *host_status) {
   int rc = ioctl(fd_, SG_IO, &h);
   if (status) *status = h.status;
   if (host_status) *host_status = h.host_status;
+  resid_ = rc < 0 ? 0 : h.resid;
   if (rc < 0) {
     last_error_ = std::string("ioctl SG_IO: ") + std::strerror(errno);
     return false;
   }
-  if (h.status != 0) {
+  /* (v1.16, de la PR #2 de Noa3) que la llamada vuelva bien no quiere decir que el monitor tomara la orden: un error del
+     adaptador (host) o del conductor (driver) tambien es un fallo. Los bytes que no tomo (resid) solo se apuntan: en el
+     registro de Rodolfo hay 110 activaciones buenas en 30 dias y ninguna decia cuantos; se mira antes de rechazarlas */
+  if (h.status != 0 || h.host_status != 0 || h.driver_status != 0) {
     last_error_ = "el scaler respondió status=" + std::to_string(h.status) +
-                  " host=" + std::to_string(h.host_status) + " driver=" + std::to_string(h.driver_status);
+                  " host=" + std::to_string(h.host_status) + " driver=" + std::to_string(h.driver_status) +
+                  " resid=" + std::to_string(h.resid);
     return false;
   }
   return true;

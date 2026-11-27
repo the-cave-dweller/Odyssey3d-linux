@@ -185,9 +185,11 @@ void Rig::bringUp(const ViewerOpts &o) {
         std::fprintf(stderr, "[aviso] scaler: %s\n", scaler.lastError().c_str());
       } else if (scaler.set3d(true)) {
         scalerOn = true;
-        std::printf("[scaler] %s: modo 3D activado\n", dev.c_str());
+        std::printf("[scaler] %s: modo 3D activado (resid %d)\n", dev.c_str(), scaler.ultimoResid());
       } else {
-        std::fprintf(stderr, "[aviso] no se pudo activar el modo 3D: %s\n", scaler.lastError().c_str());
+        scalerIncierto_ = true;   /* (v1.16, PR #2) un fallo no garantiza que el monitor no la recibiera */
+        std::fprintf(stderr, "[error] no se pudo confirmar el modo 3D del scaler: %s; el visor no sigue y se devuelve "
+                             "el panel a 2D\n", scaler.lastError().c_str());
       }
     }
     marcaArranque("scaler");
@@ -200,10 +202,12 @@ void Rig::esperar() {
 
 void Rig::shutDown() {
   esperar();   /* (v1.12) si la lente o el scaler aun se estan poniendo, primero que acaben */
-  if (scalerOn) {
-    scaler.set3d(false);
-    std::printf("[scaler] modo 3D apagado\n");
+  if (scalerOn || scalerIncierto_) {
+    /* (v1.16, PR #2) tambien si el encendido no se confirmo: el monitor pudo recibirlo */
+    if (scaler.set3d(false)) std::printf("[scaler] modo 3D apagado (resid %d)\n", scaler.ultimoResid());
+    else std::fprintf(stderr, "[aviso] no se pudo confirmar el apagado del 3D del scaler: %s\n", scaler.lastError().c_str());
     scalerOn = false;
+    scalerIncierto_ = false;
   }
   if (lens.isOpen()) {
     lens.off();

@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <atomic>
 #include <thread>
 #include <vector>
 
@@ -37,6 +38,9 @@ struct Rig {
   void bringUp(const ViewerOpts &o);
   void esperar();
   void shutDown();
+  /* (v1.16, de la PR #2 de Noa3) se mando encender el 3D del scaler y no se confirmo: el visor no sigue (tramaria sobre
+     un panel en 2D) y al salir se manda apagar igual, por si el monitor si la recibio. Se mira sin esperar */
+  bool fallo() const { return scalerIncierto_.load(); }
   Rig() = default;
   Rig(const Rig &) = delete;
   Rig &operator=(const Rig &) = delete;
@@ -44,6 +48,7 @@ struct Rig {
 
 private:
   std::thread hilo_;
+  std::atomic<bool> scalerIncierto_{false};
 };
 
 /* Elige la salida del panel por nombre (DP-4) o buscando el modo 4K. */
