@@ -92,6 +92,9 @@ public:
 
   /* Vuelca la tarjeta a un archivo PNG (para comprobar el dibujo sin el compositor). */
   bool dumpPng(const std::string &ruta, std::string *err = nullptr);
+  /* (v1.16) para el guion del panel: un clic del boton izquierdo en (x, y) del lienzo virtual, por el mismo camino que
+     uno del raton de verdad (el que decide que golpes llegan al bucle del panel) */
+  void clicPrueba(float x, float y);
 
   /* Preferencia de pantalla para la tarjeta (nombre o modelo, sin distinguir
      mayúsculas; por ejemplo "DP-4"). Sin esto se elige solo, y por defecto se buscan

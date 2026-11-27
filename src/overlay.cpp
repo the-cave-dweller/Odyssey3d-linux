@@ -1209,7 +1209,8 @@ struct Overlay::Impl {
        idiomas abierta, que la cierra */
     if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem || h == Hud::HitPanelIdioma ||
         h == Hud::HitPanelIdiomaOpcion || h == Hud::HitPanelActualizar || h == Hud::HitPanelFijar ||
-        h == Hud::HitPanelModoRed ||
+        h == Hud::HitPanelModoRed || h == Hud::HitPanelTesela ||   /* (v1.16) las teselas chicas del panel nuevo */
+        h == Hud::HitPanelCopiar ||   /* (v1.16) el Copiar del pie de Juegos: desde la 1.14 no llegaba */
         (hud.state().menuIdioma && (h == Hud::HitPanel || h == Hud::HitPanelTitulo)))
       golpes.push_back({(int)h, item, sub, fr, true});
   }
@@ -1689,6 +1690,14 @@ void Overlay::showPanel(bool grande, bool velo) {
   s.pintar();
 }
 
+
+void Overlay::clicPrueba(float x, float y) {
+  if (!d || !d->hud.state().panel) return;
+  d->ratonX = x * d->hud.scale();
+  d->ratonY = y * d->hud.scale();
+  d->panelBoton(true);
+  d->panelBoton(false);
+}
 
 void Overlay::tomarTeclado(bool si) { modoTeclado(si ? 1 : 0); }
 

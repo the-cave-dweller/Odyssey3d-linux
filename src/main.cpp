@@ -3314,6 +3314,9 @@ static int cmdAjustes(int argc, char **argv) {
         Overlay::Golpe gg;
         gg.tipo = (int)Hud::HitPanelPestana, gg.sub = std::atoi(p.arg.c_str());
         golpesGuion.push_back(gg);
+      } else if (p.accion == "clic") {   /* (v1.16) un clic en x y del lienzo, como el del raton (pasa por la capa) */
+        float cx = 0.0f, cy = 0.0f;
+        if (std::sscanf(p.arg.c_str(), "%f %f", &cx, &cy) == 2) ov.clicPrueba(cx, cy);
       } else if (p.accion == "tesela") {   /* (v1.16) una tesela chica: su numero (0..5) */
         Overlay::Golpe gg;
         gg.tipo = (int)Hud::HitPanelTesela, gg.sub = std::atoi(p.arg.c_str());
@@ -3454,6 +3457,8 @@ static int cmdAjustes(int argc, char **argv) {
         } else {
           st.pie = idioma::trf("no se pudo copiar ({}): escríbelo a mano", {e});
         }
+        std::printf("[ajustes] copiar el parametro de Steam: %s\n", e.empty() ? "copiado" : e.c_str());   /* (v1.16) */
+        std::fflush(stdout);
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelActualizar) {
         /* el boton junto al aspa (v0.95): con una version nueva, se instala; si no, se vuelve a mirar */

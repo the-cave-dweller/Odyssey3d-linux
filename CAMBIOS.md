@@ -3,6 +3,21 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Las teselas no hacían nada al picarlas, ni el Copiar de Juegos (v1.16)
+
+- Rodolfo: «dar click en los ajustes que tienen boton no hace nada»; «los de fps hud dlss y cabeza».
+- La capa (`overlay.cpp`, `panelBoton`) solo deja pasar al bucle del panel una lista de golpes, y el de las teselas
+  (`HitPanelTesela`) no estaba. El Idioma sí funcionaba, porque su tesela toma el camino del botón del idioma de
+  antes. En las pruebas no salió porque el guion metía el golpe directo en el bucle, sin pasar por la capa.
+- Con el mismo fallo, desde la 1.14: el botón **Copiar** del pie de Juegos (el parámetro de Steam). Tampoco
+  llegaba nunca.
+- **Arreglo**: los dos entran en la lista. Copiar apunta en el registro si copió o por qué no.
+- **Para que no vuelva a pasar**: el guion del panel tiene `clic X Y`, un clic en el lienzo por el mismo camino que
+  el ratón de verdad (`Overlay::clicPrueba`).
+- **Probado** en el KWin aparte con `clic`: las cuatro teselas cambian `profundidad_dlss`, `hud_plano`, `rastreo`
+  y `fps_juego` (en un HOME aparte); y Copiar llega al bucle con el arreglo y no llega sin él (comprobado quitándolo
+  un momento). En el KWin aparte no hay portapapeles al que copiar.
+
 ## Dentro de un juego: Integraciones en gris y en Juegos solo el suyo; sin opciones repetidas (v1.16)
 
 - Rodolfo, corrigiendo lo de la entrada de abajo: «si muestra el boton de juegos e integraciones, pero integraciones
