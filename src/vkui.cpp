@@ -1763,10 +1763,22 @@ void Hud::dibujaPanel(int vw, int vh) {
   if (marco) {
     const Rect fuera{-10.0f, -10.0f, 0.0f, 0.0f};
     panelFijar_ = panelLogo_ = panelIdioma_ = panelModo_ = panelEsquina_ = fuera;
-    const float s = std::max(0.5f, std::min(1.0f, std::min((float)vw / 1280.0f, (float)vh / 720.0f)));
+    /* el marco: la pantalla entera, o en el escritorio una ventana de 1012 (el contenido de 980 y sus margenes) con la
+       barra, las teselas y la tarjeta dentro, mas juntas (sin la fila de avisos de vkDaedalus) */
+    const bool ventana = st_.marcoVentana;
+    const float s = ventana ? 1.0f : std::max(0.5f, std::min(1.0f, std::min((float)vw / 1280.0f, (float)vh / 720.0f)));
     const float a = std::max(0.0f, std::min(1.0f, st_.aparicion));
-    /* el velo: no se mueve, solo se oscurece al abrirse (el de vkDaedalus es 5,7,10) */
-    solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
+    Rect F{0.0f, 0.0f, (float)vw, (float)vh};
+    float arribaT = 88.0f, arribaC = 304.0f;
+    if (ventana) {
+      const float fw = std::min(1012.0f, (float)vw - 24.0f), fh = std::min(880.0f, (float)vh - 48.0f);
+      F = {std::floor(((float)vw - fw) * 0.5f), std::floor(((float)vh - fh) * 0.5f), fw, fh};
+      arribaT = 72.0f, arribaC = 288.0f;
+      px = F.x, py = F.y, pw = F.w, ph = F.h;
+      panelCaja_ = F;
+    }
+    /* el velo: no se mueve, solo se oscurece al abrirse (el de vkDaedalus es 5,7,10); en la ventana, su fondo y su filo */
+    if (!ventana) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
     /* lo demas sube desde la pastilla, que esta abajo en el centro (Rodolfo: «la herramienta desplace el resto de
        la interfaz hacia la pantalla»), y se hace opaco */
     alfaGlobal_ = a;
@@ -1776,16 +1788,23 @@ void Hud::dibujaPanel(int vw, int vh) {
       else mask9(r, 1, radio, hex(c, 0), hex(c, 1), hex(c, 2), al);
     };
     /* la barra de arriba: el logo y el nombre; a la derecha, la actualizacion y el aspa */
-    relleno({0.0f, 0.0f, (float)vw, 56.0f * s}, 0.0f, 0x0B0A0Eu, 0.97f);
+    if (ventana) {
+      relleno(F, 8.0f, 0x343C46u, 1.0f);
+      relleno({F.x + 1.0f, F.y + 1.0f, F.w - 2.0f, F.h - 2.0f}, 7.0f, 0x0E0D12u, 0.98f);
+      relleno({F.x + 1.0f, F.y + 1.0f, F.w - 2.0f, 56.0f}, 7.0f, 0x0B0A0Eu, 1.0f);   /* la barra, con las esquinas de arriba */
+      relleno({F.x + 1.0f, F.y + 28.0f, F.w - 2.0f, 29.0f}, 0.0f, 0x0B0A0Eu, 1.0f);
+    } else {
+      relleno({0.0f, 0.0f, (float)vw, 56.0f * s}, 0.0f, 0x0B0A0Eu, 0.97f);
+    }
     {
-      const Rect baldosa{16.0f * s, 17.0f * s, 22.0f * s, 22.0f * s};
+      const Rect baldosa{F.x + 16.0f * s, F.y + 17.0f * s, 22.0f * s, 22.0f * s};
       mask9(baldosa, 1, 5.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
       icono({baldosa.x + s, baldosa.y + s, 20.0f * s, 20.0f * s}, icoLogo_, 14.0f / 255.0f, 68.0f / 255.0f, 158.0f / 255.0f, 1.0f);
       fuente_ = hayBarlow_ ? 2 : 0;
-      text("OdysseyVK", baldosa.x + baldosa.w + 12.0f * s, (56.0f - 21.0f) * 0.5f * s, 21.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
+      text("OdysseyVK", baldosa.x + baldosa.w + 12.0f * s, F.y + (56.0f - 21.0f) * 0.5f * s, 21.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
       fuente_ = hayBarlow_ ? 1 : 0;
     }
-    panelCerrar_ = {(float)vw - 16.0f * s - 32.0f * s, 12.0f * s, 32.0f * s, 32.0f * s};
+    panelCerrar_ = {F.x + F.w - 16.0f * s - 32.0f * s, F.y + 12.0f * s, 32.0f * s, 32.0f * s};
     {
       const bool hc = panelCerrar_.inside(mx_, my_);
       if (hc) relleno(panelCerrar_, 4.0f * s, 0x201D29u, 1.0f);
@@ -1795,7 +1814,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       /* hay version nueva: un boton con letra, como el Preview de vkDaedalus, con la flecha en ambar */
       const std::string r = idioma::trf("Actualizar a {}", {st_.actualizacion});
       const float w = 16.0f * s + 14.0f * s + 8.0f * s + textWidth(r, 14.0f * s) + 16.0f * s;
-      panelActualizar_ = {panelCerrar_.x - 8.0f * s - w, 12.0f * s, w, 32.0f * s};
+      panelActualizar_ = {panelCerrar_.x - 8.0f * s - w, panelCerrar_.y, w, 32.0f * s};
       ha = panelActualizar_.inside(mx_, my_);
       relleno(panelActualizar_, 4.0f * s, 0x343C46u, 1.0f);
       relleno({panelActualizar_.x + 1.0f, panelActualizar_.y + 1.0f, panelActualizar_.w - 2.0f, panelActualizar_.h - 2.0f}, 4.0f * s,
@@ -1805,7 +1824,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       text(r, panelActualizar_.x + 38.0f * s, panelActualizar_.y + 8.0f * s, 14.0f * s, ink[0], ink[1], ink[2], 1.0f);
       rotuloActualizar = idioma::trf("Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.", {st_.actualizacion});
     } else {
-      panelActualizar_ = {panelCerrar_.x - 8.0f * s - 32.0f * s, 12.0f * s, 32.0f * s, 32.0f * s};
+      panelActualizar_ = {panelCerrar_.x - 8.0f * s - 32.0f * s, panelCerrar_.y, 32.0f * s, 32.0f * s};
       ha = panelActualizar_.inside(mx_, my_);
       if (ha) relleno(panelActualizar_, 4.0f * s, 0x201D29u, 1.0f);
       const float c[3] = {st_.alDia ? hex(0xC6E8AAu, 0) : ink[0], st_.alDia ? hex(0xC6E8AAu, 1) : ink[1], st_.alDia ? hex(0xC6E8AAu, 2) : ink[2]};
@@ -1817,7 +1836,7 @@ void Hud::dibujaPanel(int vw, int vh) {
 
     /* las teselas: en el centro las grandes, una por pestana (las que no salen, como Juegos sobre un juego, no
        ocupan sitio); a los lados las chicas, tres y tres */
-    const float izqC = std::floor(((float)vw - 980.0f * s) * 0.5f), arriba = 88.0f * s;
+    const float izqC = F.x + std::floor((F.w - 980.0f * s) * 0.5f), arriba = F.y + arribaT * s;
     std::vector<int> vistas;
     for (size_t i = 0; i < st_.pestanas.size(); i++)
       if (i == 0 || !st_.pestanas[i].empty()) vistas.push_back((int)i);
@@ -1825,7 +1844,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     const float sitioC = 980.0f - 2.0f * 200.0f - 2.0f * 16.0f;
     const float anchoT = std::min(176.0f, (sitioC - 2.0f * (float)(nT - 1)) / (float)nT);
     const float centroW = (float)nT * anchoT + 2.0f * (float)(nT - 1);
-    const float centroX = std::floor(((float)vw - centroW * s) * 0.5f);
+    const float centroX = F.x + std::floor((F.w - centroW * s) * 0.5f);
     panelPestanas_.assign(st_.pestanas.size(), fuera);
     const Rect *iconoPest[4] = {&icoCubo_, &icoMando_, &icoEnchufe_, &icoDeslizadores_};
     auto nombrePest = [&](int i) { return i == 0 ? std::string(idioma::tr("3D")) : st_.pestanas[(size_t)i]; };
@@ -1867,7 +1886,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     }
 
     /* la tarjeta de la pestana puesta: su nombre arriba, las filas y el pie */
-    const Rect tarjeta{izqC, 304.0f * s, 980.0f * s, std::max(160.0f, std::min(600.0f * s, (float)vh - 304.0f * s - 16.0f * s))};
+    const Rect tarjeta{izqC, F.y + arribaC * s, 980.0f * s, std::max(160.0f, std::min(600.0f * s, F.h - arribaC * s - 16.0f * s))};
     relleno(tarjeta, 8.0f * s, 0x121117u, 0.97f);
     fuente_ = hayBarlow_ ? 2 : 0;
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -2508,6 +2527,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
         return HitPanelTesela;
       }
   if (!st_.marco && my < panelCaja_.y + 106.0f) return HitPanelTitulo;
+  if (st_.marco && st_.marcoVentana && my < panelCaja_.y + 56.0f) return HitPanelTitulo;   /* (v1.16) la ventana, por su barra */
   if (!panelCuerpo_.inside(mx, my)) return HitPanel;
   for (size_t i = 0; i < zonas_.size() && i < st_.items.size(); i++) {
     const ZonaItem &z = zonas_[i];

@@ -3160,8 +3160,10 @@ static int cmdAjustes(int argc, char **argv) {
     prefs::llenar(st, prefs::leer(), juegos, ids);
     if (haySesion && st.pestanas.size() > 1) st.pestanas[1].clear();
     if (sinIntegraciones) {
-      if (st.pestanas.size() > 2) st.pestanas[2].clear();
-      if (st.pestana == 2) st.pestana = 0;
+      /* (v1.16) y Juegos tampoco dentro de un juego (Rodolfo: «no games once inside a game, same for integrations»):
+         antes solo se quitaba con una sesion 3D */
+      if (st.pestanas.size() > 2) st.pestanas[1].clear(), st.pestanas[2].clear();
+      if (st.pestana == 1 || st.pestana == 2) st.pestana = 0;
       for (Hud::ItemPanel &it : st.items)
         if (it.tipo == Hud::ItemPanel::Juego) it.ayudas.clear();
     }
@@ -3194,6 +3196,9 @@ static int cmdAjustes(int argc, char **argv) {
   }
   /* el pin (rama experimental): fijado encima, sin velo y con el teclado a pedido */
   st.fijado = st.marco ? false : panelFijado();   /* (v1.16) a pantalla completa no hay pin */
+  /* (v1.16) en el escritorio (sin juego delante ni sesion 3D), una ventana que se mueve; sobre un juego, la pantalla
+     entera como el menu de vkDaedalus. ODYSSEYVK_PANEL_COMPLETO=1 la pone entera tambien en el escritorio */
+  st.marcoVentana = st.marco && !haySesion && juegoUuid.empty() && !entornoOdyssey("ODYSSEYVK_PANEL_COMPLETO");
   /* y el acento del panel, el color de resaltado de KDE */
   colorResaltadoKde(st.acentoPanel);
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
@@ -3688,6 +3693,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
      1 = Juegos), con lo que hay de verdad en serve.conf y en la biblioteca de Steam */
   hud.state().engranaje = true;
   hud.state().marco = !(std::getenv("ODYSSEYVK_PANEL_VIEJO") && std::getenv("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
+  /* (v1.16) como en el escritorio, en ventana, salvo con ODYSSEYVK_HUD_SESION (sobre el 3D) u ODYSSEYVK_PANEL_COMPLETO */
+  hud.state().marcoVentana = hud.state().marco && !std::getenv("ODYSSEYVK_HUD_SESION") && !std::getenv("ODYSSEYVK_PANEL_COMPLETO");
   /* ODYSSEYVK_HUD_APARICION=0..1: el panel a media aparicion (cuanto ha subido) */
   if (const char *ap = std::getenv("ODYSSEYVK_HUD_APARICION")) hud.state().aparicion = (float)std::atof(ap);
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {

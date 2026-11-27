@@ -121,6 +121,9 @@ public:
        vale y si esta puesto; al picarla se aplica su `id` como una fila. `aparicion` va de 0 a 1 al abrirse: la
        interfaz sube desde la pastilla y se hace opaca */
     bool marco = true;
+    /* (v1.16) en el escritorio el marco va en una ventana que se mueve por su barra (Rodolfo: «en la vista de escritorio
+       hazlo movible, y con boton de cierre»); sobre un juego o el 3D, a pantalla completa */
+    bool marcoVentana = false;
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;

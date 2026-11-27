@@ -3,6 +3,27 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El ratón desfasado en el escritorio, el panel en ventana y sin Juegos dentro de un juego (v1.16)
+
+- Rodolfo: «mouse desfasado en el escritorio, en la vista de escritorio hazlo movible, y con boton de cierre»; y
+  «also remember, no games once inside a game, same for integrations».
+- **El ratón desfasado era la escala**. Error de antes de esta versión, en `overlay.cpp`: el compositor manda la
+  escala fraccionaria (`wp_fractional_scale_v1`) en 120 avos y se dividía entre 100. En el monitor de Rodolfo
+  (DP-4, 4K al 150 %) llegaba 180 y el panel se ponía a 1,80, sobre una pantalla de 1,5. Lo dicen sus registros:
+  «escala del monitor 1.50» y luego «1.80». El dibujo y el ratón iban a 1,8 sobre 1,5: el ratón caía corrido un
+  20 %, más cuanto más abajo a la derecha. A pantalla completa se notaba en todas partes; el panel flotante, más
+  chico y en el centro, lo disimulaba. Ahora se divide entre 120. No se pudo reproducir en el KWin aparte, que no
+  manda esa escala.
+- **En el escritorio, una ventana que se mueve**: el mismo marco al estilo de vkDaedalus (la barra, las teselas,
+  la tarjeta), en una ventana de 1012 de ancho (el contenido de 980 y sus márgenes), sin velo. Se arrastra por su
+  barra, como el panel de antes, y la barra lleva el aspa y la actualización. Sobre un juego o con la sesión 3D
+  sigue a pantalla completa. `ODYSSEYVK_PANEL_COMPLETO=1` la pone entera también en el escritorio.
+- **Ni Juegos ni Integraciones dentro de un juego**: con un juego como ventana activa al abrir el panel tampoco
+  sale la pestaña Juegos. Antes solo se quitaba con una sesión 3D. Las dos siguen la misma regla.
+- Probado: pintado con `ctl hud` (la ventana en 2560 × 1440 y la pantalla completa con la sesión 3D, con solo 3D y
+  Ajustes); en el KWin aparte a 150 %, la ventana de verdad (1020 × 888 con su borde). Sin probar: arrastrarla y el
+  ratón con la escala arreglada en el escritorio de Rodolfo.
+
 ## El panel, al estilo de vkDaedalus (v1.16)
 
 - Rodolfo: «quiero que la interfaz del resto siga un estilo como el de vkdaedalus cuando se esté en un juego, misma

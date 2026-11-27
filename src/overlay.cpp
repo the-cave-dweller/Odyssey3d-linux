@@ -1075,7 +1075,9 @@ struct Overlay::Impl {
 #ifdef HAVE_FRACTIONAL_SCALE
   static void escalaSuperficie(void *data, wp_fractional_scale_v1 *, uint32_t nueva) {
     Impl *s = static_cast<Impl *>(data);
-    s->escala = (double)nueva / 100.0;
+    /* el protocolo la manda en 120 avos (150 % = 180), no en centesimos: con /100 salia 1,80 en un monitor al 150 % y el
+       raton del panel caia desfasado, mas cuanto mas abajo a la derecha (Rodolfo: «mouse desfasado en el escritorio») */
+    s->escala = (double)nueva / 120.0;
   }
   static const struct wp_fractional_scale_v1_listener escalaListener;
 #endif
