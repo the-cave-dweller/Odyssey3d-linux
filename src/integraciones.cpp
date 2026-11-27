@@ -1,5 +1,6 @@
 /* integraciones.cpp — ver integraciones.h */
 #include "integraciones.h"
+#include "mako.h"   /* (v1.18) MAKO_FG_HOST, el generador de MAKO que instala OdysseyVK */
 
 #include <algorithm>
 #include <cctype>
@@ -478,6 +479,10 @@ std::string linea(const Ajustes &a, const std::string &nfExe, const std::string 
     vars.push_back(std::string(v.nombre) + "=1");
     if (std::strcmp(v.clave, "neural_forge") == 0 && !strTrim(nfExe).empty())
       vars.push_back("NEURAL_FORGE_TARGET_EXE=" + citar(strTrim(nfExe)));
+    /* (v1.18) el generador de MAKO que instalo OdysseyVK (MAKO solo busca el suyo junto a su biblioteca: ver mako.h), salvo
+       que el juego ya traiga uno suyo en las demas variables: ese manda */
+    if (std::strcmp(v.clave, "mako") == 0 && val("otros").find("MAKO_FG_HOST=") == std::string::npos)
+      if (const std::string h = mako::hostParaJuegos(); !h.empty()) vars.push_back("MAKO_FG_HOST=" + citar(h));
     /* (v1.18) el modelo de Neural Forge en la segunda tarjeta: la que trajo su linea o la de secundariaNf */
     if (std::strcmp(v.clave, "neural_forge") == 0 && si("nf_offload")) {
       Secundaria s;
@@ -602,7 +607,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
     if (r < c && !t[r].texto.empty() && t[r].texto[0] == '-') return false;   /* env -u ...: no se modela */
   }
   std::vector<std::string> otrosVars;
-  std::string exe, gpu;
+  std::string exe, gpu, host;
   for (; r < c && esAsignacion(t[r].texto); r++) {
     const std::string &x = t[r].texto;
     const size_t ig = x.find('=');
@@ -620,6 +625,10 @@ bool leerLinea(const std::string &lin, Leida &l) {
     }
     if (!nuestra && nombre == "NEURAL_FORGE_OFFLOAD_GPU" && gpu.empty() && !valor.empty()) {   /* (v1.18) */
       gpu = valor;
+      nuestra = true;
+    }
+    if (!nuestra && nombre == "MAKO_FG_HOST" && host.empty() && !valor.empty()) {   /* (v1.18) */
+      host = valor;
       nuestra = true;
     }
     /* (v1.18) la tarjeta del juego: solo si nombra una de las nuestras (y la misma en las tres) */
@@ -644,6 +653,10 @@ bool leerLinea(const std::string &lin, Leida &l) {
     Secundaria s;
     if (!(secundariaNf(s, a["juego_tarjeta"]) && strLower(gpu) == strLower(s.valor()))) l.nfGpu = gpu;
   }
+  /* (v1.18) MAKO_FG_HOST es nuestro solo si lleva a nuestro generador y va con ENABLE_MAKO=1 (sale de ahi: linea() lo pone
+     mientras este instalado). Otro que se puso a mano se queda con las demas y no se pisa */
+  if (!host.empty() && (a["mako"] != "1" || host != mako::carpetaGenerador() + "/mako-fg-host"))
+    otrosVars.push_back("MAKO_FG_HOST=" + citar(host));
   a["otros"] = unir(otrosVars);
   if (r < c && nombreBase(t[r].texto) == "vkdaedalus-run") {
     a["vkdaedalus_run"] = "1";

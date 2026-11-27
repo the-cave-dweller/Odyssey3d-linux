@@ -116,7 +116,7 @@ struct Lento {
   pid_t pid = -1;
   double cuando = -1e9;
   bool mango = false, vkd = false, hudVkd = false, fpsVkd = false, mako = false;
-  std::string exe;
+  std::string exe, fgHost;
   std::string posMango = "top-left";
 };
 
@@ -157,6 +157,7 @@ void mirarJuego(pid_t pid, Lento &l) {
     const size_t ig = kv.find('=');
     if (ig != std::string::npos) vars[kv.substr(0, ig)] = kv.substr(ig + 1);
   }
+  if (vars.count("MAKO_FG_HOST")) l.fgHost = vars["MAKO_FG_HOST"];   /* (v1.18) */
   if (l.mango) {
     std::map<std::string, std::string> op;
     if (vars.count("MANGOHUD_CONFIG")) op = opcionesMango(vars["MANGOHUD_CONFIG"]);
@@ -201,7 +202,7 @@ Estado mirar(pid_t pid) {
   e.mangohud = l.mango;
   e.hudVkd = l.hudVkd;
   e.fpsVkd = l.fpsVkd;
-  e.mako = l.mako, e.exe = l.exe;
+  e.mako = l.mako, e.exe = l.exe, e.fgHost = l.fgHost;
   if (e.menuVkd) {
     e.planas.push_back({0.0f, 0.0f, 1.0f, 1.0f});
     return e;

@@ -195,6 +195,7 @@ add_executable(odysseyvk
   src/preferencias.cpp
   src/monitor.cpp
   src/mako.cpp
+  src/mako_instalar.cpp
   src/integraciones.cpp
   src/capasajenas.cpp
   src/panel_ajustes.cpp
@@ -335,7 +336,7 @@ install(TARGETS odysseyvk RUNTIME DESTINATION bin)
 # panel lo usa si esta junto a `odysseyvk`; si no, `odysseyvk ajustes`.
 if(WAYLAND_CLIENT_FOUND)
   add_executable(odysseyvk-panel src/panel_main.cpp src/panel_ajustes.cpp src/overlay.cpp src/vkui.cpp src/preferencias.cpp src/monitor.cpp
-                 src/integraciones.cpp src/wm.cpp src/ajuste.cpp src/idioma.cpp src/util.cpp src/atajos.cpp src/pngsave.cpp
+                 src/integraciones.cpp src/mako.cpp src/wm.cpp src/ajuste.cpp src/idioma.cpp src/util.cpp src/atajos.cpp src/pngsave.cpp
                  ${PROTO_GEN})
   add_dependencies(odysseyvk-panel fuentes)
   target_compile_definitions(odysseyvk-panel PRIVATE ODYSSEYVK_VERSION="${ODYSSEYVK_VERSION_STRING}" HAVE_WAYLAND_WM=1)

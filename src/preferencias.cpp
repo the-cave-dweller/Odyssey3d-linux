@@ -32,6 +32,7 @@ extern char **environ;
 #include "ajuste.h"
 #include "atajos.h"
 #include "integraciones.h"
+#include "mako.h"   /* (v1.18) MAKO FG: su boton de instalar, junto a ENABLE_MAKO */
 #include "util.h"
 
 #if defined(HAVE_JPEG)
@@ -1437,6 +1438,31 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
         st.items[ko].ayuda = idioma::tr("No hay una segunda tarjeta NVIDIA: el modelo se queda en la del juego");
       }
     }
+    /* (v1.18) MAKO FG, el generador propio de MAKO, debajo de ENABLE_MAKO (Rodolfo: «offer an install button»): sin el, su
+       boton (lo baja e instala sin root, ver mako.h); bajando, lo que lleva; puesto, de donde sale. Solo en los de todos */
+    if (std::strcmp(v.clave, "mako") == 0 && jid.empty() && integ::instalado("mako")) {
+      const mako::Instalacion in = mako::leerInstalacion();
+      const std::string sis = mako::hostSistema(), propio = mako::hostPropio();
+      const long megas = (mako::bytesGenerador() + 999999) / 1000000;
+      Hud::ItemPanel b;
+      if (in.enMarcha) {
+        b.tipo = Hud::ItemPanel::Nota;
+        b.rotulo = idioma::trf("Bajando MAKO FG… {} de {} MB", {std::to_string(in.hecho / 1000000), std::to_string(megas)});
+        pon(b, "");
+      } else if (!sis.empty() || !propio.empty()) {
+        b.tipo = Hud::ItemPanel::Nota;
+        b.rotulo = !sis.empty() ? std::string(idioma::tr("MAKO FG: el de MAKO, junto a su biblioteca"))
+                                : idioma::trf("MAKO FG {} instalado: los juegos con MAKO lo reciben con MAKO_FG_HOST (uso no comercial, CC BY-NC 4.0)",
+                                              {mako::kVersionGenerador});
+        pon(b, "");
+      } else {
+        b.tipo = Hud::ItemPanel::Boton, b.rotulo = "MAKO FG";
+        b.nota = !in.error.empty() ? idioma::trf("No se pudo instalar MAKO FG: {}", {in.error})
+                                   : idioma::trf("El modelo propio de MAKO ({} MB, no pide root; uso no comercial, CC BY-NC 4.0)", {std::to_string(megas)});
+        b.valorTexto = idioma::tr(in.error.empty() ? "Instalar" : "Reintentar"), b.valor = true;
+        pon(b, "integ:mako_fg");
+      }
+    }
   }
   /* (v1.18) la tarjeta del juego, con el monitor 3D en otra (Rodolfo: «haz una opcion de offload con el monitor conectado a
      otra tarjeta tambien»; ver integ::tarjetasParaJuego): con dos o mas dedicadas */
@@ -1615,6 +1641,13 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
     g_pestanaPedida = 2;
     return true;
   }
+  /* (v1.18) instalar MAKO FG: `odysseyvk mako instalar`, aparte (la pestana ensena lo que lleva cada dos segundos) */
+  if (que == "mako_fg") {
+    std::string err;
+    const bool bien = mako::lanzarInstalacion(&err);
+    if (aviso) *aviso = bien ? idioma::tr("instalando MAKO FG…") : idioma::trf("No se pudo instalar MAKO FG: {}", {err});
+    return true;
+  }
   integ::Estado e = integ::cargar();
   std::map<std::string, std::string> steam;
   if (integ::leerSteam(steam, nullptr)) integ::sincronizar(e, ids, steam);
@@ -1775,7 +1808,13 @@ int tomarPestana() {
 
 void integracionesDe(const std::string &appid) { g_integJuego = appid; }
 
-std::string firmaIntegraciones() { return integ::firma() + (ahoraSeg() < g_copiadoHasta ? "|copiado" : ""); }
+std::string firmaIntegraciones() {
+  /* (v1.18) y la instalacion de MAKO FG: lo que lleva (su fichero cambia mientras baja) y si ya esta */
+  std::string mfg;
+  struct stat sb {};
+  if (::stat(rutaEstadoOdyssey("mako-fg").c_str(), &sb) == 0) mfg = std::to_string((long long)sb.st_mtim.tv_sec) + "." + std::to_string(sb.st_mtim.tv_nsec);
+  return integ::firma() + (ahoraSeg() < g_copiadoHasta ? "|copiado" : "") + "|" + mfg + (mako::hostPropio().empty() ? "" : "|fg");
+}
 
 void probarEdicion(const std::string &clave, const std::string &texto) {
   g_edit = Edicion{};

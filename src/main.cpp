@@ -14,6 +14,7 @@
 #include "barra.h"
 #include "preferencias.h"
 #include "integraciones.h"
+#include "mako.h"   /* (v1.18) `odysseyvk mako`: MAKO FG */
 #include "bandeja.h"
 #include "idioma.h"
 #include "wm.h"
@@ -81,6 +82,9 @@ static const char *kUsage =
     "  odysseyvk ajustes [--juegos]  el panel flotante de ajustes y juegos (otra vez lo cierra)\n"
     "  odysseyvk integraciones [ver|escribir]  las opciones de lanzamiento de Steam de cada juego (pestana\n"
     "                                Integraciones): ver lo que hay y lo que falta; escribir, con Steam cerrado\n"
+    "  odysseyvk mako [estado|instalar|quitar]  MAKO FG, el generador de cuadros propio de MAKO: instalar lo baja\n"
+    "                                (19 MB, V1.24 de Hugging Face, SHA-256 comprobado) a ~/.local/share/odysseyvk/mako-fg\n"
+    "                                sin root, y los juegos con MAKO lo reciben con MAKO_FG_HOST (CC BY-NC 4.0)\n"
     "  odysseyvk ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odysseyvk ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
@@ -3018,6 +3022,56 @@ static const std::vector<std::string> &idsJuegosSteam() {
 /* (v1.15) las integraciones desde la terminal: `ver` (de fabrica) lista cada juego con su linea de Steam, lo que
    OdysseyVK le pondria y si falta escribirla, sin tocar nada; `escribir` hace lo del panel: con Steam cerrado
    escribe lo que falta (con copia del fichero), con Steam abierto lo deja para el servicio */
+/* ---- (v1.18) `odysseyvk mako`: MAKO FG, el generador de cuadros de MAKO (ver mako.h) ----
+   La hacen los botones del menu de los FPS y de Integraciones (mako::lanzarInstalacion), y se puede a mano */
+static int cmdMako(int argc, char **argv) {
+  const std::string que = argc > 0 ? argv[0] : "estado";
+  if (que == "instalar") {
+    std::printf("MAKO FG %s: %ld bytes de %s\n  a %s\n", mako::kVersionGenerador, mako::bytesGenerador(),
+                mako::origenGenerador().c_str(), mako::carpetaGenerador().c_str());
+    std::fflush(stdout);
+    int dicho = -1;
+    std::string err;
+    const bool bien = mako::instalarGenerador(&err, [&](long h, long t) {
+      const int pc = t > 0 ? (int)(100 * h / t) : 0;
+      if (pc / 10 != dicho / 10) {
+        dicho = pc;
+        std::printf("  %d %%\n", pc);
+        std::fflush(stdout);
+      }
+    });
+    if (!bien) {
+      std::fprintf(stderr, "no se pudo instalar MAKO FG: %s\n", err.c_str());
+      return 1;
+    }
+    std::printf("listo: %s\n", mako::hostPropio().c_str());
+    return 0;
+  }
+  if (que == "quitar") {
+    std::string err;
+    if (!mako::quitarGenerador(&err)) {
+      std::fprintf(stderr, "no se pudo quitar: %s\n", err.c_str());
+      return 1;
+    }
+    std::printf("quitado: %s\n", mako::carpetaGenerador().c_str());
+    return 0;
+  }
+  if (que != "estado") {
+    std::fprintf(stderr, "uso: odysseyvk mako [estado|instalar|quitar]\n");
+    return 2;
+  }
+  const std::string sis = mako::hostSistema(), propio = mako::hostPropio(), juegos = mako::hostParaJuegos();
+  std::printf("la capa de MAKO: %s\n", mako::instalado() ? "instalada" : "no esta");
+  std::printf("su generador (junto a su biblioteca): %s\n", sis.empty() ? "no esta" : sis.c_str());
+  std::printf("el de OdysseyVK (%s): %s\n", mako::carpetaGenerador().c_str(), propio.empty() ? "no esta" : propio.c_str());
+  std::printf("a los juegos con MAKO: %s\n",
+              !juegos.empty() ? ("MAKO_FG_HOST=" + juegos).c_str() : (sis.empty() ? "nada (no hay generador)" : "nada (MAKO tiene el suyo)"));
+  const mako::Instalacion in = mako::leerInstalacion();
+  if (in.enMarcha) std::printf("instalando: %ld de %ld bytes\n", in.hecho, in.total);
+  else if (!in.error.empty()) std::printf("la ultima instalacion fallo: %s\n", in.error.c_str());
+  return 0;
+}
+
 static int cmdIntegraciones(int argc, char **argv) {
   const std::string que = argc > 0 ? argv[0] : "ver";
   std::vector<std::string> ids;
@@ -3174,15 +3228,18 @@ static int cmdHudSelfTest(int argc, char **argv) {
                            {"CPU", {{"40", "%"}, {"79", "°C"}}},
                            {"RAM", {{"38,9", "GB"}}},
                            {idioma::tr("Cuadro"), {{"8,5", "ms"}}}};
-  /* (v1.18) ODYSSEYVK_HUD_MENU_FG=1|2|3: el menu de la generacion de cuadros abierto (1 = MAKO en el juego, x3 encendida y
-     su perfil en la 5080; 2 = MAKO sin cargar en el juego; 3 = sin MAKO) */
+  /* (v1.18) ODYSSEYVK_HUD_MENU_FG=1..7: el menu de la generacion de cuadros abierto (1 = MAKO en el juego, x3 encendida con
+     MAKO FG; 2 = MAKO sin cargar en el juego; 3 = sin MAKO; 4 = sin MAKO FG instalado, con LSFG, como en el equipo de Rodolfo,
+     con su boton de instalar; 5 = instalandolo, al 40 %; 6 = instalado, pero el juego se abrio sin el; 7 = sin MAKO FG ni
+     LSFG y sin juego debajo) */
   if (const char *mf = std::getenv("ODYSSEYVK_HUD_MENU_FG")) {
     Hud::State::Fg &g = hud.state().fg;
     const int caso = std::atoi(mf);
     hud.state().menuFg = true;
-    g.mako = caso != 3, g.enJuego = caso == 1, g.exe = "Raji-Win64-Shipping.exe";
-    g.puesta = caso == 1, g.multiplicador = 3, g.flujo = 85, g.rendimiento = true, g.tarjeta = caso == 1 ? 2 : 0;
-    g.tarjetas = {"RTX 4090", "RTX 5080"};
+    g.mako = caso != 3, g.generador = caso != 4 && caso != 5 && caso != 7, g.lsfg = caso != 7;
+    g.enJuego = caso == 1 || caso == 4 || caso == 5 || caso == 6, g.exe = caso == 7 ? "" : "Raji-Win64-Shipping.exe";
+    g.puesta = caso == 1, g.multiplicador = 3, g.flujo = 85, g.rendimiento = true, g.modelo = caso == 4 || caso == 5 ? 0 : 1;
+    g.generadorJuego = caso != 6, g.instalando = caso == 5, g.avance = 0.4f;
     g.enPantalla = 180.0f;
   }
   hud.state().controlOjo = true;
@@ -6688,6 +6745,7 @@ int main(int argc, char **argv) {
     return cmdAjustes(argc - 2, argv + 2);
   if (cmd == "integraciones")
     return cmdIntegraciones(argc - 2, argv + 2);
+  if (cmd == "mako") return cmdMako(argc - 2, argv + 2);
   if (cmd == "planos")
     return cmdPlanos(argc - 2, argv + 2);
   if (cmd == "mapa")

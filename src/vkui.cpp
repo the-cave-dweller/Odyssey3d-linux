@@ -1036,24 +1036,38 @@ void Hud::dibujaMenuFg(const float accent[3], const float ink[4], const float di
   int flujo = 0;
   for (int k = 1; k < 4; k++)
     if (std::abs(g.flujo - kFlujo[k]) < std::abs(g.flujo - kFlujo[flujo])) flujo = k;
-  std::vector<std::string> tarjetas = {idioma::tr("La del juego")};
-  tarjetas.insert(tarjetas.end(), g.tarjetas.begin(), g.tarjetas.end());
+  /* (v1.18) sin fila de tarjeta: MAKO no genera en otra que la del juego («Cross-GPU Frame Generation is unsupported», sus
+     documentos). La del modelo: LSFG (el de Lossless Scaling) o MAKO FG (el suyo), cada uno solo si esta */
   const std::vector<Fila> filas = {
       {idioma::tr("Generación"), {idioma::tr("Apagada"), idioma::tr("Encendida")}, g.puesta ? 1 : 0},
+      {idioma::tr("Modelo"), {"LSFG", "MAKO FG"}, g.modelo},
       {idioma::tr("Multiplicador"), {"x2", "x3", "x4"}, g.multiplicador - 2},
       {idioma::tr("Flujo"), {"50 %", "75 %", "85 %", "100 %"}, flujo},
-      {idioma::tr("Modo rendimiento"), {idioma::tr("No"), idioma::tr("Sí")}, g.rendimiento ? 1 : 0},
-      {idioma::tr("Tarjeta"), tarjetas, g.tarjeta}};
+      {idioma::tr("Modo rendimiento"), {idioma::tr("No"), idioma::tr("Sí")}, g.rendimiento ? 1 : 0}};
+  auto disponible = [&](size_t f, size_t k) { return f != 1 || (k == 0 ? g.lsfg : g.generador); };
   const float mw = 440.0f, pad = 16.0f, filaAlto = 38.0f, rotW = 150.0f, tam = 12.0f;
+  /* (v1.18) sin MAKO FG, su boton debajo de las opciones (Rodolfo: «offer an install button»): lo baja y lo instala sin root
+     (ver mako.h); mientras baja, el mismo boton es la barra de lo que lleva */
+  const bool botonInstalar = g.mako && (!g.generador || g.instalando);
+  const size_t nFilas = filas.size() + (botonInstalar ? 1 : 0);
   std::string pie = g.aviso;
   if (pie.empty()) {
     if (!g.mako) pie = idioma::tr("MAKO no está instalado: la generación de cuadros es su capa de Vulkan (mako-render).");
+    else if (g.instalando)
+      pie = idioma::tr("Bajando MAKO FG V1.24 de Hugging Face: cada archivo se comprueba (SHA-256) antes de ponerlo. No pide root.");
     else if (g.exe.empty()) pie = idioma::tr("Sin un juego debajo: la generación de cuadros va en el juego, no en el vídeo.");
+    else if (!g.generador && !g.lsfg) pie = idioma::tr("MAKO no tiene con qué generar: instala MAKO FG con el botón (no pide root) o pon Lossless Scaling en Steam.");
+    else if (g.modelo == 1 && !g.generador) pie = idioma::tr("MAKO FG no está instalado: instálalo con el botón (no pide root); mientras, LSFG ya genera.");
+    else if (g.modelo == 0 && !g.lsfg) pie = idioma::tr("Lossless Scaling no está en Steam: elige MAKO FG.");
     else if (!g.enJuego) pie = idioma::tr("MAKO no está cargado en este juego: pon ENABLE_MAKO=1 en Integraciones. Lo que elijas se guarda para cuando lo esté.");
-    else pie = idioma::tr("Se guarda en el perfil de MAKO de este juego y se aplica al momento.");
+    else if (g.modelo == 1 && !g.generadorJuego)
+      pie = idioma::tr("MAKO FG está instalado, pero este juego se abrió sin él: vale al volver a abrirlo (Integraciones se lo da con Steam cerrado).");
+    else pie = idioma::tr("Se guarda en el perfil de MAKO de este juego y vale en marcha; cambiar de modelo, al volver a abrir el juego.");
+    if (botonInstalar && !g.instalando)
+      pie += std::string(" ") + idioma::tr("MAKO FG V1.24 es de uso no comercial (licencia CC BY-NC 4.0).");
   }
   const std::vector<std::string> lineasPie = renglones(pie, 11.5f, mw - 2.0f * pad);
-  const float alto = 40.0f + filaAlto * (float)filas.size() + 6.0f + 16.0f * (float)lineasPie.size() + 12.0f;
+  const float alto = 40.0f + filaAlto * (float)nFilas + 6.0f + 16.0f * (float)lineasPie.size() + 12.0f;
   /* con el cuadrito pegado a la orilla (la pastilla oculta), el menu se queda a 8 de ella: se ven sus esquinas */
   const float der = std::min(cuadroFps_.x + cuadroFps_.w, (float)W_ / sc_ - 8.0f);
   const float mx0 = std::max(8.0f, der - mw), my0 = cuadroFps_.y + cuadroFps_.h + 6.0f;
@@ -1072,16 +1086,35 @@ void Hud::dibujaMenuFg(const float accent[3], const float ink[4], const float di
     const float x0b = mx0 + pad + rotW, wTot = mw - pad - (x0b - mx0), bw = (wTot - 6.0f * (float)(n - 1)) / (float)n;
     for (size_t k = 0; k < n; k++) {
       Rect r{x0b + (float)k * (bw + 6.0f), y + 2.0f, bw, 28.0f};
-      fgOpc_[f][k] = vale ? r : Rect{-10.0f, -10.0f, 0.0f, 0.0f};
-      const bool elegida = (int)k == filas[f].elegida, hov = vale && r.inside(mx_, my_);
-      if (elegida && vale) mask9(r, 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
-      else mask9(r, 0, 4.0f, 1.0f, 1.0f, 1.0f, !vale ? 0.04f : (hov ? 0.16f : 0.07f));
-      const float a = !vale ? 0.40f : (elegida || hov ? 1.0f : 0.85f);
-      textoCabe(filas[f].opc[k], r.x + bw * 0.5f, r.y + 7.0f, 12.0f, bw - 10.0f, elegida && vale ? 0.06f : ink[0],
-                elegida && vale ? 0.10f : ink[1], elegida && vale ? 0.16f : ink[2], a, true);
+      const bool puede = vale && disponible(f, k);
+      fgOpc_[f][k] = puede ? r : Rect{-10.0f, -10.0f, 0.0f, 0.0f};
+      const bool elegida = (int)k == filas[f].elegida, hov = puede && r.inside(mx_, my_);
+      if (elegida && puede) mask9(r, 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+      else mask9(r, 0, 4.0f, 1.0f, 1.0f, 1.0f, !puede ? 0.04f : (hov ? 0.16f : 0.07f));
+      const float a = !puede ? 0.40f : (elegida || hov ? 1.0f : 0.85f);
+      textoCabe(filas[f].opc[k], r.x + bw * 0.5f, r.y + 7.0f, 12.0f, bw - 10.0f, elegida && puede ? 0.06f : ink[0],
+                elegida && puede ? 0.10f : ink[1], elegida && puede ? 0.16f : ink[2], a, true);
     }
   }
-  float yp = my0 + 38.0f + filaAlto * (float)filas.size() + 6.0f;
+  if (botonInstalar) {
+    const float y = my0 + 38.0f + filaAlto * (float)filas.size();
+    const Rect r{mx0 + pad, y + 2.0f, mw - 2.0f * pad, 28.0f};
+    std::string rotulo;
+    if (g.instalando) {
+      const float a = std::max(0.0f, std::min(1.0f, g.avance));
+      mask9(r, 0, 4.0f, 1.0f, 1.0f, 1.0f, 0.07f);
+      if (a > 0.0f) mask9({r.x, r.y, std::max(8.0f, r.w * a), r.h}, 0, 4.0f, accent[0], accent[1], accent[2], 0.55f);
+      rotulo = idioma::trf("Bajando MAKO FG… {} de {} MB", {std::to_string((long)std::lround(a * (float)g.megas)), std::to_string(g.megas)});
+      textoCabe(rotulo, r.x + r.w * 0.5f, r.y + 7.0f, 12.0f, r.w - 10.0f, ink[0], ink[1], ink[2], 1.0f, true);
+    } else {
+      fgOpc_[5][0] = r;
+      const bool hov = r.inside(mx_, my_);
+      mask9(r, 0, 4.0f, accent[0], accent[1], accent[2], hov ? 1.0f : 0.85f);
+      rotulo = idioma::trf("Instalar MAKO FG · {} MB", {std::to_string(g.megas)});
+      textoCabe(rotulo, r.x + r.w * 0.5f, r.y + 7.0f, 12.0f, r.w - 10.0f, 0.06f, 0.10f, 0.16f, 1.0f, true);
+    }
+  }
+  float yp = my0 + 38.0f + filaAlto * (float)nFilas + 6.0f;
   for (const std::string &l : lineasPie) {
     text(l, mx0 + pad, yp, 11.5f, dim[0], dim[1], dim[2], dim[3]);
     yp += 16.0f;

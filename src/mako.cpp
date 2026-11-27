@@ -1,13 +1,18 @@
 /* (v1.18) la generacion de cuadros de MAKO: su conf.toml (ver mako.h) */
 #include "mako.h"
 
+#include "idioma.h"
 #include "util.h"
 
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -166,6 +171,235 @@ bool instalado() {
   return hay;
 }
 
+/* ---- MAKO FG (ver mako.h) ---- */
+const char *const kVersionGenerador = "1.24";
+
+namespace {
+/* la revision de Hugging Face que se midio el 27-nov (la de su etiqueta V1.24). Los SHA-256 son los de su MANIFEST.json
+   (y los de MANIFEST.json y version.json, que no se nombran a si mismos, medidos al bajarlos ese dia) */
+const char *const kOrigen = "https://huggingface.co/eugeniosegala/MAKO-FG/resolve/18d7d690515a658c993f84029b245cb710cb83f2";
+
+bool programa(const std::string &ruta) {
+  std::error_code ec;
+  return !ruta.empty() && std::filesystem::is_regular_file(ruta, ec) && ::access(ruta.c_str(), X_OK) == 0;
+}
+
+/* la biblioteca de la capa de MAKO, por la `library_path` de su manifiesto: absoluta, junto al manifiesto o, con el nombre
+   solo, donde la buscaria el cargador */
+std::string bibliotecaMako() {
+  std::vector<std::string> dirs = {"/usr/share/vulkan/implicit_layer.d", "/usr/local/share/vulkan/implicit_layer.d",
+                                   "/etc/vulkan/implicit_layer.d"};
+  if (const char *h = std::getenv("HOME")) dirs.push_back(std::string(h) + "/.local/share/vulkan/implicit_layer.d");
+  for (const std::string &d : dirs) {
+    std::string txt;
+    if (!readSmallFile(d + "/VkLayer_MAKO_render.json", txt)) continue;
+    const size_t k = txt.find("\"library_path\"");
+    const size_t a = k == std::string::npos ? k : txt.find('"', txt.find(':', k) + 1);
+    const size_t b = a == std::string::npos ? a : txt.find('"', a + 1);
+    if (b == std::string::npos) continue;
+    const std::string lib = txt.substr(a + 1, b - a - 1);
+    std::vector<std::string> donde;
+    if (!lib.empty() && lib[0] == '/') donde.push_back(lib);
+    else if (lib.find('/') != std::string::npos) donde.push_back(d + "/" + lib);
+    else
+      for (const char *l : {"/usr/lib/", "/usr/lib64/", "/lib/", "/lib64/", "/usr/local/lib/"}) donde.push_back(l + lib);
+    for (const std::string &r : donde)
+      if (fileExists(r)) return r;
+  }
+  return "";
+}
+}  // namespace
+
+const std::vector<ArchivoGenerador> &archivosGenerador() {
+  static const std::vector<ArchivoGenerador> v = {
+      {"runtime/x64/bin/mako-fg-host", "mako-fg-host", "ceba4c468280bdc458c33432dd7c420a85edc7f895ba3a3a8549a25aea173b4a",
+       19102344, true},
+      {"model/weights.bin", "model/weights.bin", "08ed3acfefa71a6d29a208e9a64c73d6593bfc2e83eb0230fe4f8d62ff7ea781", 914, false},
+      {"model/ops.spv", "model/ops.spv", "431ec6d0224111435a62e9e1235d844cc9180083e9e5c79461b47d46a2b950ea", 53432, false},
+      {"model/transport.spv", "model/transport.spv", "d2285a08b046fcb40ef63254589df3e1defa43e11e8f1026dd9a10c922db992d", 24412,
+       false},
+      {"model/mixture.spv", "model/mixture.spv", "f5395a370e03783273c68295c1b11215e8c0c7c978e07299b68d7e843d6c0e8e", 22392, false},
+      {"LICENSE", "LICENSE", "e990112837dcd5af880065d292f22f394f87c69912f957eabc54dc0285c6a7fc", 2071, false},
+      {"MODEL_CARD.md", "MODEL_CARD.md", "e35681cd07e8a18f204f5be744a81b1870309bf77e017d0f182bd6327da7de36", 24315, false},
+      {"runtime/THIRD_PARTY_NOTICES", "THIRD_PARTY_NOTICES", "8595328bc0da204886179891b277fcf305b7cb7194f7e7672c929a1e2cd2ce10",
+       61528, false},
+      {"runtime/RUNTIME.json", "RUNTIME.json", "0f4e53d4f24efab90496461e078ded7cf853ddbf3d236035c5825abb147961c2", 1348, false},
+      {"MANIFEST.json", "MANIFEST.json", "88cc7852d832d26c9e5fda1367fab2a3137e3d40805dd62080e607c1e02aaef3", 3841, false},
+      {"version.json", "version.json", "a381de9c62e37a2e3b75c9c6afd0917e632ea901dd6b2d2d7f3115b75d4d08de", 679, false}};
+  return v;
+}
+
+long bytesGenerador() {
+  long t = 0;
+  for (const ArchivoGenerador &a : archivosGenerador()) t += a.bytes;
+  return t;
+}
+
+std::string origenGenerador() {
+  if (const char *o = entornoOdyssey("ODYSSEYVK_MAKO_FG_ORIGEN"); o && *o) return o;   /* las pruebas: un file:// */
+  return kOrigen;
+}
+
+std::string carpetaGenerador() {
+  /* como las redes (carpetaRedes): bajo HOME, no XDG_DATA_HOME (las pruebas lo apuntan al de verdad para las capas) */
+  const char *home = std::getenv("HOME");
+  return std::string(home ? home : "/home") + "/.local/share/odysseyvk/mako-fg";
+}
+
+std::string hostSistema() {
+  /* lo mismo que hostProgram() de MAKO, sin su $MAKO_FG_HOST: la carpeta D de su biblioteca y D/../lib/mako-fg,
+     D/../../lib64/mako-fg y D/mako-fg */
+  const std::string lib = bibliotecaMako();
+  if (lib.empty()) return "";
+  std::error_code ec;
+  const std::filesystem::path d = std::filesystem::canonical(lib, ec).parent_path();
+  if (ec) return "";
+  for (const std::filesystem::path &c : {d.parent_path() / "lib/mako-fg/mako-fg-host",
+                                         d.parent_path().parent_path() / "lib64/mako-fg/mako-fg-host", d / "mako-fg/mako-fg-host"})
+    if (programa(c.string())) return c.string();
+  return "";
+}
+
+std::string hostPropio() {
+  /* entero: el programa con su tamano y la marca de la version que puso la instalacion al acabar (lo ultimo que escribe) */
+  const std::string d = carpetaGenerador();
+  const std::string h = d + "/mako-fg-host";
+  struct stat sb {};
+  if (!programa(h) || ::stat(h.c_str(), &sb) != 0 || (long)sb.st_size != archivosGenerador()[0].bytes) return "";
+  std::string marca;
+  if (!readSmallFile(d + "/instalado", marca) || marca.find(std::string("version = ") + kVersionGenerador) == std::string::npos)
+    return "";
+  return h;
+}
+
+std::string hostParaJuegos() {
+  /* lo piden las lineas de Integraciones, una por juego: se vuelve a mirar como mucho cada 2 s */
+  static std::string ultimo;
+  static std::chrono::steady_clock::time_point cuando{};
+  static bool mirado = false;
+  const auto t = std::chrono::steady_clock::now();
+  if (!mirado || t - cuando > std::chrono::seconds(2)) {
+    ultimo = hostSistema().empty() ? hostPropio() : std::string();
+    cuando = t, mirado = true;
+  }
+  return ultimo;
+}
+
+bool generadorInstalado() {
+  if (const char *h = std::getenv("MAKO_FG_HOST"); h && *h && programa(h)) return true;
+  return !hostSistema().empty() || !hostPropio().empty();
+}
+
+bool generadorEnJuego(const std::string &hostDelJuego) {
+  /* MAKO toma $MAKO_FG_HOST tal cual, sin mirar si esta: con uno que no lleva a nada, no genera */
+  if (!hostDelJuego.empty()) return programa(hostDelJuego);
+  return !hostSistema().empty();
+}
+
+Instalacion leerInstalacion() {
+  Instalacion r;
+  std::string txt;
+  if (!readSmallFile(rutaEstadoOdyssey("mako-fg"), txt)) return r;
+  std::map<std::string, std::string> v;
+  std::istringstream in(txt);
+  std::string l, c, x;
+  while (std::getline(in, l))
+    if (parClave(l, c, x)) v[c] = x;
+  const long pid = std::atol(v["pid"].c_str());
+  r.pid = pid;
+  r.hecho = std::atol(v["hecho"].c_str());
+  r.total = std::atol(v["total"].c_str());
+  r.hora = std::atol(v["hora"].c_str());
+  if (v["estado"] == "bajando") {
+    /* la que dice que baja tiene que seguir viva: si no, se corto (se mato, se apago el equipo) */
+    std::string cmd;
+    r.enMarcha = pid > 0 && ::kill((pid_t)pid, 0) == 0 && readSmallFile("/proc/" + std::to_string(pid) + "/cmdline", cmd) &&
+                 cmd.find("mako") != std::string::npos;
+    if (!r.enMarcha) r.error = idioma::tr("se cortó a medias: vuelve a intentarlo");
+  } else if (v["estado"] == "lista") {
+    r.lista = true;
+  } else if (v["estado"] == "fallo") {
+    /* el motivo ya viene en el idioma de la interfaz; el archivo y el detalle (un codigo, una ruta), tal cual */
+    r.error = (v["archivo"].empty() ? std::string() : v["archivo"] + ": ") +
+              (v["error"].empty() ? std::string(idioma::tr("la descarga falló")) : v["error"]) +
+              (v["detalle"].empty() ? std::string() : " (" + v["detalle"] + ")");
+  }
+  return r;
+}
+
+bool lanzarInstalacion(std::string *err) {
+  if (leerInstalacion().enMarcha) return true;
+  /* `odysseyvk mako instalar`, aparte y suelto (doble fork, su propia sesion): el que la lanza (el visor, el panel) no la
+     espera ni la mata al cerrarse. El programa: este mismo si es `odysseyvk`; si no (el panel), el de su carpeta o el del PATH */
+  std::string bin;
+  {
+    std::error_code ec;
+    const std::filesystem::path yo = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec && yo.filename() == "odysseyvk") bin = yo.string();
+    else if (!ec && fileExists((yo.parent_path() / "odysseyvk").string())) bin = (yo.parent_path() / "odysseyvk").string();
+    else bin = "odysseyvk";
+  }
+  const std::string registro = rutaEstadoOdyssey("mako-fg.log");
+  const pid_t p = ::fork();
+  if (p < 0) {
+    if (err) *err = std::string("no se pudo arrancar: ") + std::strerror(errno);
+    return false;
+  }
+  if (p == 0) {
+    ::setsid();
+    if (::fork() != 0) ::_exit(0);
+    const int nulo = ::open("/dev/null", O_RDONLY);
+    /* anadiendo: un segundo clic seguido arranca otra que se para en el cerrojo, y no tiene que borrar lo de la primera */
+    const int log = ::open(registro.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (nulo >= 0) ::dup2(nulo, 0);
+    if (log >= 0) ::dup2(log, 1), ::dup2(log, 2);
+    for (int fd = 3; fd < 1024; fd++) ::close(fd);
+    ::execlp(bin.c_str(), bin.c_str(), "mako", "instalar", (char *)nullptr);
+    ::_exit(127);
+  }
+  int st = 0;
+  while (::waitpid(p, &st, 0) < 0 && errno == EINTR) {
+  }
+  return true;
+}
+
+std::string dllLossless() {
+  /* la que diga [global] dll */
+  std::vector<std::string> lineas;
+  if (leerLineas(lineas)) {
+    bool enGlobal = false;
+    for (const std::string &l : lineas) {
+      const std::string s = sinComentario(l);
+      if (!s.empty() && s[0] == '[') enGlobal = s == "[global]";
+      std::string k, v;
+      if (enGlobal && parClave(l, k, v) && k == "dll") {
+        const std::string r = sinComillas(v);
+        if (!r.empty() && fileExists(r)) return r;
+      }
+    }
+  }
+  /* la carpeta de Lossless Scaling de cada biblioteca de Steam */
+  const char *h = std::getenv("HOME");
+  const std::string home = h ? h : "";
+  std::vector<std::string> bibliotecas;
+  for (const char *raiz : {"/.local/share/Steam", "/.steam/steam", "/.steam/debian-installation",
+                           "/.var/app/com.valvesoftware.Steam/.local/share/Steam"}) {
+    const std::string r = home + raiz;
+    bibliotecas.push_back(r);
+    std::string vdf;
+    if (!readSmallFile(r + "/steamapps/libraryfolders.vdf", vdf)) continue;
+    for (size_t p = vdf.find("\"path\""); p != std::string::npos; p = vdf.find("\"path\"", p + 6)) {
+      const size_t a = vdf.find('"', p + 6), b = a == std::string::npos ? a : vdf.find('"', a + 1);
+      if (a != std::string::npos && b != std::string::npos) bibliotecas.push_back(vdf.substr(a + 1, b - a - 1));
+    }
+  }
+  for (const std::string &b : bibliotecas) {
+    const std::string r = b + "/steamapps/common/Lossless Scaling/Lossless.dll";
+    if (fileExists(r)) return r;
+  }
+  return {};
+}
+
 std::string rutaConf() {
   if (const char *c = std::getenv("MAKO_CONFIG"); c && *c) return c;
   const char *xc = std::getenv("XDG_CONFIG_HOME");
@@ -189,9 +423,11 @@ Perfil leer(const std::string &exe) {
       else if (k == "flow_scale") p.flujo = std::atof(v.c_str());
       else if (k == "performance_mode") p.rendimiento = v == "true";
       else if (k == "gpu") p.tarjeta = sinComillas(v);
+      else if (k == "frame_generation_model") p.modelo = sinComillas(v);
     }
     break;
   }
+  if (p.modelo.empty()) p.modelo = "mako-fg";   /* lo de fabrica de MAKO */
   return p;
 }
 
@@ -277,27 +513,6 @@ bool fijar(const std::string &exe, const std::map<std::string, std::string> &cla
     return false;
   }
   return true;
-}
-
-std::vector<std::string> tarjetas() {
-  namespace fs = std::filesystem;
-  std::vector<std::pair<std::string, std::string>> v;   /* direccion PCI, nombre */
-  std::error_code ec;
-  for (const fs::directory_entry &d : fs::directory_iterator("/sys/bus/pci/devices", ec)) {
-    std::string fab, clase, modelo;
-    if (!readSmallFile(d.path().string() + "/vendor", fab) || strLower(strTrim(fab)) != "0x10de") continue;
-    if (!readSmallFile(d.path().string() + "/class", clase) || strTrim(clase).rfind("0x03", 0) != 0) continue;
-    readSmallFile(d.path().string() + "/device", modelo);
-    modelo = strLower(strTrim(modelo));
-    if (modelo.rfind("0x", 0) == 0) modelo = modelo.substr(2);
-    std::string n = nombrePciIds("10de", modelo);   /* «GeForce RTX 5080» */
-    if (n.empty() || n.find('/') != std::string::npos) continue;   /* sin un nombre de una sola tarjeta, no */
-    v.push_back({d.path().filename().string(), "NVIDIA " + n});
-  }
-  std::sort(v.begin(), v.end());
-  std::vector<std::string> r;
-  for (const auto &x : v) r.push_back(x.second);
-  return r;
 }
 
 }  // namespace mako

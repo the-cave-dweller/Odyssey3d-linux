@@ -992,49 +992,68 @@ static void cambio3D(VkUi &ui, bool puesto, const char *fuente) {
 
 /* (v1.18) lo que dice el perfil de MAKO del juego, en el estado del menu (ver mako.h) */
 static void leerFg(Hud::State::Fg &g) {
-  const std::vector<std::string> todas = mako::tarjetas();
-  g.tarjetas.clear();
-  for (const std::string &n : todas) g.tarjetas.push_back(n.rfind("NVIDIA GeForce ", 0) == 0 ? n.substr(15) : n);
   if (!g.mako || g.exe.empty()) return;
   const mako::Perfil p = mako::leer(g.exe);
   g.puesta = p.existe && p.puesta;
   g.multiplicador = std::max(2, std::min(4, p.multiplicador));
   g.flujo = (int)std::lround(p.flujo * 100.0);
   g.rendimiento = p.rendimiento;
-  g.tarjeta = 0;
-  for (size_t k = 0; k < todas.size(); k++)
-    if (!p.tarjeta.empty() && todas[k] == p.tarjeta) g.tarjeta = (int)k + 1;
+  /* sin perfil, el modelo que hay: el suyo si esta, si no el de Lossless Scaling */
+  g.modelo = p.existe ? (p.modelo == "lossless-scaling" ? 0 : 1) : (g.generador || !g.lsfg ? 1 : 0);
 }
+
+/* (v1.18) cuando se pidio instalar MAKO FG desde el menu (segundos desde 1970), hasta que la instalacion dice como acabo */
+static long g_fgInstalarPedido = 0;
 
 /* (v1.18) una opcion del menu de la generacion de cuadros: al perfil de MAKO del juego, como hace vkDaedalus */
 static void aplicarFg(VkUi &ui, int fila, int k) {
   Hud::State::Fg &g = ui.hud.state().fg;
+  /* la fila 5: el boton de instalar MAKO FG (no hace falta un juego). `odysseyvk mako instalar`, aparte: el visor no espera */
+  if (fila == 5) {
+    if (!g.mako || g.generador || g.instalando) return;
+    std::string err;
+    if (mako::lanzarInstalacion(&err)) {
+      g_fgInstalarPedido = (long)std::time(nullptr);
+      g.instalando = true, g.avance = 0.0f, g.aviso.clear();
+      std::printf("[fg] instalando MAKO FG %s (odysseyvk mako instalar, %ld bytes a %s)\n", mako::kVersionGenerador,
+                  mako::bytesGenerador(), mako::carpetaGenerador().c_str());
+    } else {
+      g.aviso = idioma::trf("No se pudo instalar MAKO FG: {}", {err});
+      std::printf("[fg] no se pudo arrancar la instalacion de MAKO FG: %s\n", err.c_str());
+    }
+    std::fflush(stdout);
+    ui.inputChanged = true;
+    return;
+  }
   if (!g.mako || g.exe.empty()) return;
   static const int kFlujo[4] = {50, 75, 85, 100};
   std::map<std::string, std::string> c;
   std::string que, dicho;   /* lo de registro (en español) y lo del pie del menu (en el idioma de la interfaz) */
+  /* cambiar de modelo vale al volver a abrir el juego (los documentos de MAKO lo marcan «restart»); lo demas, en marcha.
+     MEDIDO el 27-nov con vkcube y LSFG: x2 → x3 paso de 120 a 180 cuadros por segundo sin reiniciar, y encenderla con el
+     juego en marcha, de 240 reales sin generar a 60 + 60 generados (con frame_generation_provisioned, que va en el perfil) */
+  const bool alReabrir = fila == 1;
   if (fila == 0) {
     c["frame_generation_enabled"] = k == 1 ? "true" : "false";
     que = k == 1 ? "encendida" : "apagada";
     dicho = idioma::tr(k == 1 ? "Generación encendida" : "Generación apagada");
-  } else if (fila == 1 && k <= 2) {
+  } else if (fila == 1 && k <= 1) {
+    if (k == 0 ? !g.lsfg : !g.generador) return;
+    c["frame_generation_model"] = k == 0 ? "'lossless-scaling'" : "'mako-fg'";
+    que = dicho = k == 0 ? "LSFG" : "MAKO FG";
+  } else if (fila == 2 && k <= 2) {
     c["multiplier"] = std::to_string(k + 2);
     que = dicho = "x" + std::to_string(k + 2);
-  } else if (fila == 2 && k <= 3) {
+  } else if (fila == 3 && k <= 3) {
     char b[16];
     std::snprintf(b, sizeof b, "%.2f", kFlujo[k] / 100.0);
     c["flow_scale"] = b;
     que = "flujo " + std::to_string(kFlujo[k]) + " %";
     dicho = idioma::trf("Flujo {} %", {std::to_string(kFlujo[k])});
-  } else if (fila == 3 && k <= 1) {
+  } else if (fila == 4 && k <= 1) {
     c["performance_mode"] = k == 1 ? "true" : "false";
     que = k == 1 ? "modo rendimiento" : "sin modo rendimiento";
     dicho = idioma::tr(k == 1 ? "Modo rendimiento" : "Sin modo rendimiento");
-  } else if (fila == 4) {
-    const std::vector<std::string> todas = mako::tarjetas();
-    if (k == 0) c["gpu"] = "", que = "la tarjeta del juego", dicho = idioma::tr("La del juego");
-    else if ((size_t)k <= todas.size()) c["gpu"] = "'" + todas[(size_t)k - 1] + "'", que = dicho = todas[(size_t)k - 1];
-    else return;
   } else {
     return;
   }
@@ -1046,11 +1065,13 @@ static void aplicarFg(VkUi &ui, int fila, int k) {
     c.emplace("multiplier", std::to_string(g.multiplicador));
     c.emplace("flow_scale", b);
     c.emplace("performance_mode", g.rendimiento ? "true" : "false");
+    c.emplace("frame_generation_model", g.modelo == 0 ? "'lossless-scaling'" : "'mako-fg'");
   }
   std::string err;
   if (mako::fijar(g.exe, c, &err)) {
-    g.aviso = g.enJuego ? idioma::trf("{}: guardado en el perfil de MAKO de {}", {dicho, g.exe})
-                        : idioma::trf("{}: guardado; se aplicará cuando MAKO esté en el juego", {dicho});
+    g.aviso = !g.enJuego ? idioma::trf("{}: guardado; se aplicará cuando MAKO esté en el juego", {dicho})
+              : alReabrir ? idioma::trf("{}: guardado; vale al volver a abrir el juego", {dicho})
+                          : idioma::trf("{}: guardado en el perfil de MAKO de {}", {dicho, g.exe});
     std::printf("[fg] %s · %s · %s\n", g.exe.c_str(), que.c_str(), mako::rutaConf().c_str());
   } else {
     g.aviso = idioma::trf("MAKO no lo aceptó: {}", {err});
@@ -4920,6 +4941,38 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           static double tPerfil = -10.0;
           const bool otro = fg.exe != e.exe || fg.enJuego != e.mako;
           fg.mako = mako::instalado();
+          static const bool lsfg = !mako::dllLossless().empty();
+          fg.lsfg = lsfg;
+          /* (v1.18) MAKO FG ya no es fijo en una sesion: se instala desde el menu. Si esta (cada 2 s), si el juego lo recibio
+             (su MAKO_FG_HOST) y como va su instalacion: la de este boton o una de otro sitio (Integraciones, `odysseyvk mako`) */
+          static double tGenerador = -10.0;
+          static std::string hostVisto = "-";
+          const mako::Instalacion in = mako::leerInstalacion();
+          bool acabo = false;
+          if (in.enMarcha) {
+            fg.instalando = true;
+            fg.avance = in.total > 0 ? (float)((double)in.hecho / (double)in.total) : 0.0f;
+          } else if (g_fgInstalarPedido > 0 && in.hora >= g_fgInstalarPedido && (in.lista || !in.error.empty())) {
+            acabo = true;
+            fg.instalando = false, g_fgInstalarPedido = 0;
+            fg.aviso = in.lista ? idioma::tr("MAKO FG instalado: los juegos con MAKO lo reciben al volver a abrirlos (Integraciones lo escribe en Steam con Steam cerrado).")
+                                : idioma::trf("No se pudo instalar MAKO FG: {}", {in.error});
+            std::printf("[fg] la instalacion de MAKO FG acabo: %s\n", in.lista ? "instalado" : in.error.c_str());
+            std::fflush(stdout);
+          } else if (g_fgInstalarPedido > 0 && (long)std::time(nullptr) - g_fgInstalarPedido > 15) {
+            /* pedida y en 15 s sin una linea suya: no arranco */
+            fg.instalando = false, g_fgInstalarPedido = 0;
+            fg.aviso = idioma::trf("No se pudo instalar MAKO FG: {}", {rutaEstadoOdyssey("mako-fg.log")});
+          } else if (g_fgInstalarPedido == 0 && fg.instalando) {
+            acabo = true, fg.instalando = false;   /* la de otro sitio acabo */
+          }
+          if (acabo || hostVisto != e.fgHost || ahoraA - tGenerador >= 2.0) {
+            tGenerador = ahoraA, hostVisto = e.fgHost;
+            fg.generador = mako::generadorInstalado();
+            fg.generadorJuego = !e.mako || mako::generadorEnJuego(e.fgHost);
+            fg.megas = (mako::bytesGenerador() + 999999) / 1000000;
+          }
+          if (fg.instalando && hsA.menuFg) ui.inputChanged = true;   /* la barra del boton */
           fg.exe = e.exe;
           fg.enJuego = e.mako;
           if (otro || ahoraA - tPerfil >= 2.0) tPerfil = ahoraA, leerFg(fg);

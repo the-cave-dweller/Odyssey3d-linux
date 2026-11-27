@@ -45,9 +45,43 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     prueba de lo que corre en cada cambio de capa;
   - **El offloading de Neural Forge en Integraciones**: su modelo en la segunda tarjeta, con su enlace PCIe;
   - **El monitor 3D en otra tarjeta**: el 3D en la del monitor y la tarjeta del juego en Integraciones;
-  - **La generación de cuadros de MAKO** con el clic derecho en el cuadrito de los FPS.
+  - **La generación de cuadros de MAKO** con el clic derecho en el cuadrito de los FPS, y un botón que instala MAKO FG
+    (su generador propio) sin root.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## MAKO FG, el generador propio de MAKO, con un botón que lo instala sin root (v1.18)
+
+- Rodolfo: «look it, i help to install», «quiero que tu controles a mako, no quiero tener que ver con su ui» y «offer an
+  install button».
+- **Lo que faltaba, MEDIDO**: el paquete `mako-render 5.0.0` de Rodolfo (compilado de las fuentes) no trae
+  `mako-fg-host`, el programa aparte con el que MAKO genera con su propio modelo; sin él, MAKO dice «MAKO FG is not
+  installed: mako-fg-host is missing» y presenta el juego tal cual. Dónde lo busca, de su código
+  (`engine/mako-backend/src/mako_fg.cpp`) y de una sonda en las llamadas de vkcube con MAKO: `$MAKO_FG_HOST` y, si no,
+  solo junto a su biblioteca (`/usr/lib/mako-fg/mako-fg-host` y `/lib64/mako-fg/mako-fg-host`). El modelo va dentro
+  del programa («source=release»; `MAKO_FG_PACKAGE` solo lo cambia por otro). Lo arranca sin argumentos, con el entorno
+  del juego, y le habla por un socket.
+- **El botón**: en el menú de los FPS, «Instalar MAKO FG · 19 MB» debajo de las opciones cuando no está (mientras baja,
+  el mismo botón es la barra: «Bajando MAKO FG… 8 de 19 MB»); y en Integraciones, debajo de `ENABLE_MAKO`, con lo que
+  pasó si falló («Reintentar»). Los dos arrancan `odysseyvk mako instalar` aparte, que también se puede a mano
+  (`odysseyvk mako estado|instalar|quitar`).
+- **Lo que baja** (`src/mako_instalar.cpp`): MAKO FG V1.24 de Hugging Face (`eugeniosegala/MAKO-FG`, la que salió con
+  MAKO 5.0.0 el 12-nov), fijada a su revisión; el programa, el modelo, su licencia y sus avisos (19,3 MB de los 72 de la
+  revisión: las bibliotecas para compilar no). Cada archivo con un `curl` aparte (solo https, también en las
+  redirecciones), a una carpeta aparte; se comprueba su tamaño y su SHA-256 contra los de su `MANIFEST.json`, medidos el
+  27-nov; y solo con todo bien se cambia por la de antes, de una vez. Lo último que se escribe es la marca `instalado`:
+  a medias no queda nada que parezca puesto. Una a la vez (un cerrojo). Sin root: a `~/.local/share/odysseyvk/mako-fg/`.
+  Su licencia es CC BY-NC 4.0 (uso no comercial), y el menú lo dice junto al botón.
+- **A los juegos**: Integraciones pone `MAKO_FG_HOST=` (ese programa) junto a `ENABLE_MAKO=1` en la línea de Steam de
+  los juegos con MAKO, y la escribe con Steam cerrado, como lo demás; si MAKO ya tiene el suyo junto a su biblioteca, no
+  lo pone, y si el juego trae uno puesto a mano, ese manda. El visor lee el `MAKO_FG_HOST` del juego que corre: si se
+  abrió sin él, el pie lo dice («vale al volver a abrirlo»).
+- **Probado**, en una carpeta personal de prueba y con un origen `file://` falso (`ODYSSEYVK_MAKO_FG_ORIGEN`): con el
+  SHA-256 que no cuadra, con un archivo que no está y con otra instalación en marcha, no queda nada puesto y el estado
+  dice el archivo y el motivo (traducido); el camino del botón (aparte, leyendo cómo va cada 0,25 s); la línea de Steam
+  con el generador puesto (y sin duplicarlo al leerla de vuelta, y respetando uno puesto a mano); una marca de otra
+  versión o un tamaño distinto no cuentan; y el menú pintado en sus cuatro casos nuevos. Falta bajarlo de verdad y
+  medir MAKO FG generando: eso baja 19 MB y acepta su licencia, y lo decide Rodolfo.
 
 ## La generación de cuadros de MAKO con el clic derecho en el cuadrito de los FPS (v1.18)
 
@@ -61,9 +95,11 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   se queda como está; antes de la primera escritura, una copia en `~/.local/state/odysseyvk/mako/` (y la primera de
   todas, `conf-antes-de-odysseyvk.toml`); y lo nuevo se comprueba con `mako-cli validate` antes de cambiar el fichero.
 - **El menú**: clic derecho en el cuadrito de los FPS (también con la pastilla oculta, en la esquina): Generación
-  (apagada o encendida), Multiplicador (x2, x3, x4), Flujo (50, 75, 85 o 100 %), Modo rendimiento y Tarjeta (la del juego
-  o una NVIDIA por su nombre de Vulkan, la clave `gpu` de MAKO). El pie dice qué pasó, o por qué no se puede: sin MAKO, sin
-  un juego debajo, o MAKO sin cargar en el juego («pon ENABLE_MAKO=1 en Integraciones»; lo elegido se guarda igual). El
+  (apagada o encendida), Modelo (LSFG, el de Lossless Scaling, o MAKO FG, el suyo; cada uno solo si está), Multiplicador
+  (x2, x3, x4), Flujo (50, 75, 85 o 100 %) y Modo rendimiento. Sin fila de tarjeta: MAKO no genera en otra que la del
+  juego (sus documentos: «Cross-GPU Frame Generation is unsupported»). El pie dice qué pasó, o por qué no se puede: sin
+  MAKO, sin un juego debajo, o MAKO sin cargar en el juego («pon ENABLE_MAKO=1 en Integraciones»; lo elegido se guarda
+  igual); y que lo elegido vale en marcha, salvo cambiar de modelo, que vale al volver a abrir el juego. El
   ejecutable del juego sale de su línea de órdenes (en Wine, la ruta de Windows) y si MAKO está cargado, de sus
   bibliotecas (`capasajenas`). El cuadrito y el menú entran en la región de entrada del visor, para que el clic llegue.
 - **Dónde genera MAKO, MEDIDO con el cargador de Vulkan** (`VK_LOADER_DEBUG=layer`): la cadena del dispositivo es juego
@@ -76,7 +112,12 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Probado**: el módulo con una copia del `conf.toml` de Rodolfo (`MAKO_CONFIG`): lee los dos perfiles (el de vkcube con
   `active_in` en varias líneas y el de Genshin), cambia el multiplicador del de vkcube tocando solo esa línea, crea el
   de Raji al final, un x9 lo rechaza `mako-cli validate` y el fichero no cambia, y la copia de antes es el original; el
-  menú pintado con `ctl hud` (`ODYSSEYVK_HUD_MENU_FG=1|2|3`: MAKO en el juego, sin cargar y sin MAKO).
+  menú pintado con `ctl hud` (`ODYSSEYVK_HUD_MENU_FG=1..7`).
+- **Probado en marcha, MEDIDO con vkcube** en un compositor aparte, la capa de OdysseyVK en modo de prueba y un visor
+  leyéndola, con el modelo LSFG (con MAKO FG no hay nada que medir: en el equipo de Rodolfo faltaba su generador, ver
+  abajo): x2 con 60 de base dio 120 en pantalla y la capa siguió viendo 60; pasar de x2 a x3 con el juego en marcha dio
+  180 sin reiniciarlo; encenderla en marcha pasó de 240 reales sin generar a 60 + 60 generados; y MAKO cargado en el
+  propio visor no añadió nada (60). Genera en el juego, por debajo de la capa; en el visor no sirve.
 
 ## El monitor 3D en otra tarjeta: el 3D en la suya y la tarjeta del juego en Integraciones (v1.18)
 

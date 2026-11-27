@@ -162,6 +162,18 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   `vkdaedalus-run`. The OdysseyVK layer sits above MAKO, so it sees the game's real frames. **Don't use
   `mako-launch`**: it sets `VK_IMPLICIT_LAYER_PATH` to MAKO's own folder, which leaves out the OdysseyVK layer (and
   Neural Forge).
+- Since 1.18, a right-click on the FPS box opens MAKO's frame generation for the game underneath: on/off, model (LSFG,
+  Lossless Scaling's, or MAKO FG, MAKO's own), x2 to x4, flow and performance mode, written into the game's
+  `[[profile]]` in MAKO's `conf.toml` (backed up, checked with `mako-cli validate`). Changes apply on the fly; a model
+  switch applies when the game is reopened. MAKO generates below the OdysseyVK layer, in the game: the layer still
+  sees only real frames. There is no card choice: MAKO doesn't generate on another card than the game's.
+- MAKO FG needs `mako-fg-host`, which MAKO only looks for in `$MAKO_FG_HOST` or next to its own library
+  (`/usr/lib/mako-fg/`); a MAKO built from source lacks it. *Install MAKO FG* (in that menu, and under `ENABLE_MAKO`
+  in Integrations) or `odysseyvk mako instalar` downloads MAKO FG V1.24 from Hugging Face (19 MB, pinned revision,
+  every file SHA-256 checked, nothing replaced until all of it checks out) into `~/.local/share/odysseyvk/mako-fg`
+  without root, and Integrations adds `MAKO_FG_HOST=` to the Steam line of games with `ENABLE_MAKO=1` (written once
+  Steam is closed; not added if MAKO has its own or the game sets one by hand). `odysseyvk mako estado` shows what is
+  found; `odysseyvk mako quitar` removes it. MAKO FG is licensed CC BY-NC 4.0 (non-commercial).
 - Only one overlay in front at a time:
   - while the vkDaedalus menu is open (End), the OdysseyVK pill steps aside and the 3D goes flat, so the menu
     reads right. Its state is read from the file vkDaedalus's input hook keeps in `$XDG_RUNTIME_DIR`, so it needs

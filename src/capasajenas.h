@@ -38,11 +38,12 @@ struct Estado {
   bool mangohud = false;   /* MangoHud a la vista (lleva los FPS) */
   bool mako = false;       /* (v1.18) la capa de MAKO (la generacion de cuadros) cargada en el juego */
   std::string exe;         /* (v1.18) el ejecutable del juego («Raji-Win64-Shipping.exe»), para su perfil de MAKO */
+  std::string fgHost;      /* (v1.18) su MAKO_FG_HOST (el generador de MAKO que le dieron), o vacio */
   std::vector<Zona> planas;   /* lo que va al plano de la pantalla: todo con el menu; la esquina de cada HUD */
   bool hayFpsAjeno() const { return mangohud || fpsVkd; }
   bool operator==(const Estado &o) const {
     return menuVkd == o.menuVkd && hudVkd == o.hudVkd && fpsVkd == o.fpsVkd && mangohud == o.mangohud && mako == o.mako &&
-           exe == o.exe;
+           exe == o.exe && fgHost == o.fgHost;
   }
 };
 

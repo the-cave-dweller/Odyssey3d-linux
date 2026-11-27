@@ -253,14 +253,20 @@ public:
     bool menuFg = false;
     struct Fg {
       bool mako = false;          /* MAKO esta en el equipo */
+      bool generador = false;     /* su modelo propio, MAKO FG (mako-fg-host): el de MAKO o el que instalo OdysseyVK */
+      bool generadorJuego = true; /* y el juego que corre lo recibio (su MAKO_FG_HOST, o MAKO tiene el suyo) */
+      /* (v1.18) su instalacion desde el menu (Rodolfo: «offer an install button»): el boton sale sin MAKO FG */
+      bool instalando = false;
+      float avance = 0.0f;        /* 0 a 1 */
+      long megas = 19;            /* lo que baja, para el boton */
+      bool lsfg = false;          /* y el de Lossless Scaling (su Lossless.dll en Steam) */
+      int modelo = 0;             /* el del perfil: 0 = LSFG (lossless-scaling), 1 = MAKO FG (mako-fg) */
       bool enJuego = false;       /* y su capa, cargada en el juego */
       std::string exe;            /* el ejecutable del juego; vacio = el 3D no esta sobre un juego */
       bool puesta = false;
       int multiplicador = 2;
       int flujo = 85;             /* % */
       bool rendimiento = false;
-      int tarjeta = 0;            /* 0 = la del juego; k = tarjetas[k - 1] */
-      std::vector<std::string> tarjetas;   /* nombres cortos («RTX 5080») */
       std::string aviso;          /* el pie: lo que paso al tocar, o por que no se puede */
       float enPantalla = 0.0f;    /* los cuadros que llegan al visor por segundo, generados incluidos */
     } fg;
@@ -325,7 +331,7 @@ public:
     HitPanelTesela,    /* (v1.16) una tesela chica de los lados: `sub` = cual (State::teselas) */
     HitPanelVolver,    /* (v1.16) la flecha de volver a la pastilla, junto al aspa */
     /* (v1.18) la generacion de cuadros: el cuadrito (su clic derecho abre el menu), el menu, y sus opciones: fila * 8 +
-       la opcion, desde HitFgOpcion0 */
+       la opcion, desde HitFgOpcion0. La fila 5 es el boton de instalar MAKO FG */
     HitFgCuadro,
     HitFgFondo,
     HitFgOpcion0,
