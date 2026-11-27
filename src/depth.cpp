@@ -706,27 +706,32 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
        mayusculas. El arenal de la tarjeta no se apaga: con kSameAsRequested crece lo que se le pide y no al doble.
        MEDIDO con la FP16 en la 5080 (CUDA 1): el proceso baja de 666 a 636 MiB en la tarjeta (el arenal reserva 191
        MiB en vez de 255) y la red tarda lo mismo (4,35 ms de mediana). La estructura vieja queda de reserva por si
-       la V2 no fuera */
+       la V2 no fuera.
+       (v1.16) La de video (Video Depth Anything, con su ventana de 32 cuadros) pide ~2,3 GB: con el techo de 550 MB no
+       arranca (MEDIDO el 27-nov: «Available memory of 40894464 is smaller than requested bytes of 399237888»). Para
+       ella el techo es de 3,5 GB, por las dos vias */
+    const bool redVideo = esRedDeVideo(path);
+    const unsigned long long techo = redVideo ? 3500ull << 20 : 550000000ull;
     try {
       Ort::CUDAProviderOptions co;
       co.Update({{"device_id", std::to_string(gpu_)},
-                 {"gpu_mem_limit", "550000000"},
+                 {"gpu_mem_limit", std::to_string(techo)},
                  {"arena_extend_strategy", "kSameAsRequested"},
                  {"cudnn_conv_algo_search", "HEURISTIC"}});
       im->so.AppendExecutionProvider_CUDA_V2(*co);
       dev_ = "NVIDIA";
-      std::printf("[conversor] CUDA con sus opciones por la via V2 (techo de 550 MB, arenal kSameAsRequested, "
-                  "busqueda heuristica)\n");
+      std::printf("[conversor] CUDA con sus opciones por la via V2 (techo de %llu MB, arenal kSameAsRequested, "
+                  "busqueda heuristica)\n", techo / 1000000ull);
     } catch (const std::exception &e) {
       try {
         OrtCUDAProviderOptions o{};
         o.device_id = gpu_;
-        o.gpu_mem_limit = esRedDeVideo(path) ? 3500ull << 20 : 550ull << 20;   /* (v1.16) la de video pide ~2,3 GB */
+        o.gpu_mem_limit = redVideo ? 3500ull << 20 : 550ull << 20;
         o.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
         im->so.AppendExecutionProvider_CUDA(o);
         dev_ = "NVIDIA";
-        std::printf("[conversor] la via V2 de CUDA no fue (%s): opciones por la estructura vieja (techo de 550 MiB, "
-                    "busqueda heuristica, arenal de fabrica)\n", resumenOrt(e.what()).c_str());
+        std::printf("[conversor] la via V2 de CUDA no fue (%s): opciones por la estructura vieja (techo de %d MiB, "
+                    "busqueda heuristica, arenal de fabrica)\n", resumenOrt(e.what()).c_str(), redVideo ? 3500 : 550);
       } catch (const std::exception &e2) {
         std::printf("[conversor] la tarjeta no se pudo usar (%s): se hara con la CPU, mas despacio\n", e2.what());
         dev_ = "CPU";

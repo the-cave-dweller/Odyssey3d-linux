@@ -3,6 +3,64 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La pestaña 3D: las redes en dos mitades, desplegables y la vista de depuración en vivo (v1.16)
+
+- Rodolfo: «I want a dropdown button for Depth network once the user exceeds 2 models, Add to the right side, like
+  half and half one for video only models … also add a debug view on and off button for live testing in the middle
+  top between both sides», y luego «make the main hub a bit bigger if needed» y «if there is a way to see the model
+  performance measure it on the left panel mentioned beside the debug toggle».
+- **Dos mitades**: las redes de siempre a la izquierda y las de solo vídeos a la derecha (`ItemPanel::lado`; las
+  seguidas se ponen lado a lado, cada mitad con su altura). Un lado con **más de dos** redes pasa a ser un
+  **desplegable** (`ItemPanel::Desplegable`): la puesta en la caja con su etiqueta, y al picarla la lista con la
+  etiqueta de cada una (azul si está; gris con «Descargar · N MB» si no, y al elegirla se baja y queda puesta). El de
+  vídeo empieza por «Ninguna: los vídeos con la de siempre». Cualquier clic fuera o Esc lo cierran; elegir la que ya
+  está no hace nada. El id del desplegable lleva detrás de su cabeza la orden de cada opción (la de su casilla).
+- **Vista de depuración**: una casilla en medio, encima de las dos mitades. Manda `ver_profundidad = 1|0` al visor
+  (lo de Ctrl+Mayús+9; el visor no hace caso a la que encuentre en su primer vistazo, de una sesión vieja) y el
+  panel se queda en una columna a la izquierda, sin velo, sin barra, sin teselas y con el teclado a pedido: las
+  redes de siempre en la mitad de arriba y las de vídeo en la de abajo, para cambiarlas con la profundidad a la
+  vista. La región de entrada y el desenfoque de KWin siguen a la columna (`panelCaja_`): fuera de ella el ratón va
+  al vídeo. Al quitarla vuelve todo. Refleja al visor: abierto con su vista ya puesta, el panel sale así. En gris sin
+  un vídeo o un juego en 3D abierto; en el panel flotante de antes no sale (y allí las listas van a lo ancho).
+- **Lo que rinde la red**, junto a la casilla y cada segundo: en su pastilla los ms por mapa de la red sola, debajo
+  la red y la tarjeta, y tres filas: tiempo por mapa (la red sola y en total), mapas por segundo y cuadros por
+  segundo. El visor apunta en su `estado` `red_ms`, `mapas_s` (los mapas hechos entre una escritura y otra, contados
+  en no menos de 0,45 s) y `ver_profundidad`.
+- **El panel, más grande**: lo de en medio pasa de 980 a 1160 de ancho (en el lienzo mínimo de 1280 quedan 60 de
+  margen a cada lado; las teselas grandes, hasta 200) y la tarjeta, de 600 a 700 de alto como mucho. Las notas de las
+  redes, más cortas, para que quepan en media fila.
+- **Probado**: `ctl hud` (con `ODYSSEYVK_HUD_DEPURACION=1` y `ODYSSEYVK_HUD_DESPLEGADO=lista:red`, nuevos) en
+  español e inglés, con 2+1 redes (casillas), 4+3 (desplegables), sin sesión (la casilla en gris) y con el panel
+  viejo; y el panel en un KWin aparte con un `HOME` y un estado aparte, por guion (golpes y clics en su sitio):
+  abrir y cerrar cada desplegable (con un clic al lado y con Esc), elegir la FP32 (`modelo =` en serve.conf y en el
+  ajuste), «Ninguna» (`modelo_video = no`), poner y quitar la vista (`ver_profundidad = 1` y `0`, y la región de
+  entrada cambia). Las traducciones: 0 sin traducir.
+
+## Una red de profundidad solo para vídeos: Video Depth Anything pequeña (v1.16, experimental)
+
+- Rodolfo: «can we try this for videos only?» (github.com/DepthAnything). Video Depth Anything mira una ventana de
+  los últimos 32 cuadros y da el mapa de todos; se queda el del cuadro de ahora. No hay ONNX oficial: es la
+  exportación de la comunidad (`looplj/video-depth-anything-small-onnx` en Hugging Face, Apache-2.0, 117 MB), fijada
+  a su revisión y comprobada por su tamaño. Se baja desde la pestaña 3D o con `odysseyvk ctl net download video` y
+  queda en `models/video_depth_anything_small_fp32.onnx`; cualquier `.onnx` con «video» en el nombre cuenta igual.
+- **Medido en la RTX 5080** (la FP32, `banco` aparte): 518×518, 269 ms por mapa y 5,9 GB; 392×392, 137 ms y 2,8 GB;
+  **504×280, 122 ms y 2,8 GB** (la que se usa: la forma del vídeo, múltiplos de 14); 280×280, 50 ms y 1,8 GB. La de
+  siempre (DA2 FP16) tarda 4,3 ms. Por el camino entero (`odysseyvk mapa`) salen unos 140-150 ms por mapa, dentro de
+  los 6 mapas por segundo del visor.
+- **Lo que gana**, medido con dos vídeos por el camino entero (cuántos pares de puntos cambian de orden de cerca a
+  lejos de un mapa al siguiente): una persona hablando, del 4,80 % al 4,23 % (los saltos de más del 10 %, de 4 a 2);
+  un paisaje, del 0,42 % al 0,21 % (el peor, de 9,0 a 3,9).
+- **Cómo va**: `modelo_video =` en serve.conf; el servicio se la pasa al visor (`--modelo-video`) solo con las
+  ventanas que no son juegos, y el visor la usa si no está sobre un juego. La ventana empieza de nuevo en los cortes
+  de escena y al olvidar. El panel la pone o la quita en vivo (orden `modelo_video = RUTA|no`, que el visor no
+  atiende en su primer vistazo ni sobre un juego; con ella cargada, una orden `modelo =` no la cambia). No va por
+  la CPU (sería segundos por mapa): ahí se queda la de siempre. En CUDA el techo de memoria sube a 3,5 GB para ella,
+  por la vía V2 y por la vieja: con el de 550 MB no arrancaba («Available memory of 40894464 is smaller than
+  requested bytes of 399237888»).
+- **Probado** con el visor en un gamescope aparte: con un vídeo usa la de vídeo y con un juego la de siempre; el
+  cambio en vivo va y la orden vieja no se atiende; 60 cuadros por segundo con el bucle por debajo de 3 ms, y se
+  cierra limpio.
+
 ## La red por CUDA, con sus opciones de verdad: la vía V2 de ONNX Runtime 1.29 (v1.16)
 
 - Salió midiendo otra red (27-nov): `DepthNet::init` pedía CUDA por nombre (`AppendExecutionProvider("CUDA", …)`) y
