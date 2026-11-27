@@ -5198,7 +5198,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       static long vueltaVista = -1;
       static std::string elegidoVisto;
       Hud::State &hs = ui.hud.state();
-      const bool vigilar = g_fpsCuadro && !g_monitor.empty();
+      /* (v1.18) solo sobre un juego (Rodolfo: «no quiero contador de fps en videos tampoco, que se vaya ahi»): sobre un video
+         el cuadrito ya no tenia FPS y salia solo con lo vigilado */
+      const bool vigilar = g_fpsCuadro && !g_monitor.empty() && sobreJuego(ui);
       muestreo.pedir(vigilar);
       const std::string elegido = monitor::aTexto(g_monitor);
       if (!vigilar) {

@@ -50,6 +50,12 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Sin cuadrito de FPS sobre los vídeos (v1.18)
+
+- Rodolfo: «no quiero contador de fps en videos tampoco, que se vaya ahí». Sobre un vídeo el cuadrito ya no llevaba FPS
+  (esos son solo de los juegos), pero salía igual con lo vigilado (tarjetas, CPU, RAM: el título «Monitor»). Ahora lo
+  vigilado también es solo sobre un juego, y sobre un vídeo no sale nada.
+
 ## La generación de cuadros en los vídeos: MAKO FG dentro del visor (v1.18)
 
 - Rodolfo: «y no puedes poner una capa de vulkan entre los videos (no juegos) y el 3d donde se puedan generar?», «todo
