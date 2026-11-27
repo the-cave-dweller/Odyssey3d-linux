@@ -6,7 +6,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 ## Versión 1.14: la profundidad de DLSS, el HUD del juego plano y el cuadrito de FPS (v1.14)
 
 - Rodolfo: «Sí, prepárala». El actualizador solo compara el número de `VERSION`, y desde la 1.13 publicada
-  (`4c17842`) hay 25 cambios más con el mismo número: con 1.14 se ofrecen.
+  (`4c17842`) hay más de 25 cambios con el mismo número: con 1.14 se ofrecen.
 - **Lo que trae** (cada cosa en su entrada, abajo):
   - **La profundidad de DLSS sin Neural Forge**: la capa de Vulkan de OdysseyVK, con `ODYSSEYVK=1` en las
     opciones de lanzamiento del juego, copia la profundidad que el juego le da a DLSS y el visor la usa en vez de
