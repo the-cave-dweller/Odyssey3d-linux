@@ -3283,6 +3283,13 @@ static int cmdHudSelfTest(int argc, char **argv) {
                                   idioma::tr("Para dejarlo en 2D, cambia su interruptor en la pestaña Juegos.")};
     /* ODYSSEYVK_HUD_AVISO=tapa (v1.12): el de «el juego tapa el 3D», con su cuenta atras en 4 (o en
        ODYSSEYVK_HUD_AVISO_CUENTA) */
+    /* (v1.18) ODYSSEYVK_HUD_AVISO=steam: el de las opciones de lanzamiento escritas en Steam */
+    if (!std::strcmp(std::getenv("ODYSSEYVK_HUD_AVISO"), "steam")) {
+      hud.state().askAviso = idioma::tr("Opciones de lanzamiento escritas en Steam");
+      hud.state().askAvisoLineas = {idioma::trf("{} juegos de Steam llevan ya lo de Integraciones.", {"3"}),
+                                    idioma::tr("Se escribieron al cerrarse Steam; queda una copia de lo de antes.")};
+      hud.state().askAvisoCuenta = 8;
+    }
     if (!std::strcmp(std::getenv("ODYSSEYVK_HUD_AVISO"), "tapa")) {
       hud.state().askAviso = idioma::tr("El juego tapa el 3D");
       hud.state().askAvisoLineas = {idioma::tr("A pantalla completa exclusiva el escritorio pone al juego sobre el visor."),
@@ -6011,9 +6018,24 @@ static int cmdServe(int argc, char **argv) {
           } else if (r.escritos > 0) {
             std::printf("[serve] integraciones: Steam se cerro y se escribieron las opciones de lanzamiento de %d juegos "
                         "(copia de antes: %s)\n", r.escritos, r.respaldo.c_str());
-            avisoEscritorio(idioma::tr("OdysseyVK: opciones de lanzamiento escritas"),
-                            r.escritos == 1 ? std::string(idioma::tr("Un juego de Steam lleva ya lo de Integraciones."))
-                                            : idioma::trf("{} juegos de Steam llevan ya lo de Integraciones.", {std::to_string(r.escritos)}));
+            /* (v1.18) con la tarjeta propia, no con la notificacion del escritorio (Rodolfo: «que la notificacion ... tambien
+               tenga el estilo propio», «la de los parametros de steam»); se cierra sola a los 8 s. Si ya hay otra tarjeta a
+               la vista (o no hay capa), la del escritorio como antes, para no perderla */
+            const int n = r.escritos;
+            auto texto = [n](std::string &t, std::vector<std::string> &l) {
+              t = idioma::tr("Opciones de lanzamiento escritas en Steam");
+              l = {n == 1 ? std::string(idioma::tr("Un juego de Steam lleva ya lo de Integraciones."))
+                          : idioma::trf("{} juegos de Steam llevan ya lo de Integraciones.", {std::to_string(n)}),
+                   idioma::tr("Se escribieron al cerrarse Steam; queda una copia de lo de antes.")};
+            };
+            if (hayTarjeta && ov && !ov->askVisible()) {
+              mostrarAviso(texto, now, 8.0);
+            } else {
+              std::string t;
+              std::vector<std::string> l;
+              texto(t, l);
+              avisoEscritorio(t, l[0]);
+            }
           }
           std::fflush(stdout);
         }

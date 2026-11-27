@@ -37,9 +37,20 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     rehace ni el navegador pausa el vídeo; si el vídeo se activa, el servicio le devuelve el foco al visor;
   - **La tarjeta de «el juego se cerró»**, solo en los primeros 20 s;
   - **`install.sh`** en silencio (el detalle en `build/compilacion.log`) y 0 avisos del compilador;
-  - **El panel**: sin la flecha de volver a la pastilla; la nota de la carpeta de las redes al pie de cada lista.
+  - **El panel**: sin la flecha de volver a la pastilla; la nota de la carpeta de las redes al pie de cada lista;
+  - **El aviso de las opciones de lanzamiento escritas en Steam**, con la tarjeta propia.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## El aviso de las opciones de lanzamiento escritas en Steam, con la tarjeta propia (v1.18)
+
+- Rodolfo: «que la notificación de la app ... también tenga el estilo propio», «la de los parámetros de Steam». Al
+  cerrarse Steam y escribir el servicio lo de Integraciones salía una notificación del escritorio (la de KDE). Ahora
+  es la tarjeta de OdysseyVK, la de los avisos: «Opciones de lanzamiento escritas en Steam», cuántos juegos y que hay
+  una copia de lo de antes; se cierra sola a los 8 s (la cuenta en el botón). Si ya hay otra tarjeta a la vista o no
+  hay capa, la del escritorio como antes, para no perderla. `ctl hud`: `ODYSSEYVK_HUD_AVISO=steam`.
+- Siguen con la del escritorio los del actualizador y el desinstalador (corren aparte y el servicio se reinicia o se
+  va) y el de «el 3D no llegó a empezar».
 
 ## El visor ya no se minimiza al abrir o cerrar el panel (lo que «recargaba la imagen» y pausaba el vídeo), y «DLSS» solo con su profundidad (v1.18)
 

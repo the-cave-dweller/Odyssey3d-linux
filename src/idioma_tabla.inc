@@ -439,3 +439,5 @@
 {"el cuadrito vigila {} cosas", {"the FPS box monitors {} items", "le cadre des FPS surveille {} éléments", "das FPS-Kästchen überwacht {} Werte", "FPS 小框监视 {} 项", "FPS ボックスは {} 項目を表示", "окошко FPS отслеживает {} показателей"}},
 {"{} · {} más", {"{} · {} more", "{} · {} de plus", "{} · {} mehr", "{} · 另 {} 项", "{} · 他 {} 件", "{} · ещё {}"}},
 {"Monitor", {"Monitor", "Moniteur", "Monitor", "监视", "モニター", "Монитор"}},
+{"Opciones de lanzamiento escritas en Steam", {"Launch options written to Steam", "Options de lancement écrites dans Steam", "Startoptionen in Steam geschrieben", "启动选项已写入 Steam", "Steam に起動オプションを書き込みました", "Параметры запуска записаны в Steam"}},
+{"Se escribieron al cerrarse Steam; queda una copia de lo de antes.", {"Written when Steam closed; a copy of the previous ones is kept.", "Écrites à la fermeture de Steam ; une copie des précédentes est conservée.", "Beim Schließen von Steam geschrieben; eine Kopie der vorherigen bleibt erhalten.", "在 Steam 关闭时写入；之前的内容留有备份。", "Steam の終了時に書き込みました。以前の内容のコピーを残しています。", "Записаны при закрытии Steam; копия прежних сохранена."}},
