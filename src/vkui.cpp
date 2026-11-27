@@ -2059,20 +2059,19 @@ void Hud::dibujaPanel(int vw, int vh) {
       relleno({col.x + 1.0f, col.y + 1.0f, col.w - 2.0f, col.h - 2.0f}, 7.0f * s, pal_.tarjeta, 0.95f);
       panelCuerpo_ = {col.x + 6.0f * s, col.y + 8.0f * s, col.w - 12.0f * s, col.h - 8.0f * s - 44.0f};
       pieCaja = {col.x, col.y + col.h - 44.0f, col.w, 44.0f};
-      /* (v1.18) la vista previa de los efectos: el visor pinta el juego en toda la pantalla, con la raya en medio de lo que
-         se ve a la derecha de la columna; abajo de cada lado, lo que es (arriba estan la pastilla y el cuadrito de FPS) */
+      /* (v1.18) la vista previa de los efectos: el visor pinta el juego en toda la pantalla con sus efectos, entero (Rodolfo:
+         «on the preview tab dont split it in half, just show it full now»: sin raya, corte 0). Con el interruptor general
+         apagado sale sin ellos, y abajo, en medio de lo que se ve, lo dice (arriba estan la pastilla y el cuadrito de FPS) */
       if (st_.vistaEfectos && st_.vistaEnVivo) {
-        const float libre = col.x + col.w, corte = std::floor((libre + (float)vw) * 0.5f);
         vistaRect_ = {0.0f, 0.0f, (float)vw, (float)vh};
-        corteVista_ = corte;
-        auto rotulo = [&](const std::string &t, float cx) {
-          const float tam = 14.0f * s, tw = textWidth(t, tam) + 28.0f * s;
+        corteVista_ = 0.0f;
+        if (!st_.efectosPuestos) {
+          const std::string t = idioma::tr("Efectos apagados");
+          const float cx = (col.x + col.w + (float)vw) * 0.5f, tam = 14.0f * s, tw = textWidth(t, tam) + 28.0f * s;
           const Rect r{std::floor(cx - tw * 0.5f), (float)vh - m - 30.0f * s, tw, 30.0f * s};
           relleno(r, 15.0f * s, pal_.tarjeta, 0.88f);
           text(t, cx, r.y + (r.h - tam) * 0.5f, tam, ink[0], ink[1], ink[2], 1.0f, true);
-        };
-        rotulo(idioma::tr("Sin efectos"), (libre + corte) * 0.5f);
-        rotulo(idioma::tr("Con efectos"), (corte + (float)vw) * 0.5f);
+        }
       }
     } else {
     /* la barra de arriba: el logo y el nombre; a la derecha, la actualizacion y el aspa */
@@ -2377,6 +2376,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     const float der = it.tipo == ItemPanel::Juego ? der0 : sitio[i].x + sitio[i].w - 12.0f;
     ZonaItem &z = zonas_[i];
     z.caja = {sitio[i].x, y, sitio[i].w, h};
+    z.yCentro = y + h * 0.5f;
     if (y + h < panelCuerpo_.y || y > panelCuerpo_.y + panelCuerpo_.h) {   /* fuera de la vista */
       z.caja = {-10.0f, -10.0f, 0.0f, 0.0f};
       continue;
@@ -2443,12 +2443,30 @@ void Hud::dibujaPanel(int vw, int vh) {
         const bool casilla = marco && !it.pildora;   /* (v1.18) con `pildora`, el interruptor de pastilla tambien en el marco */
         /* (v1.16) al estilo de vkDaedalus, una casilla a la izquierda del rotulo en vez del interruptor */
         /* (v1.16) `centrado`: la casilla y su rotulo, juntos en medio de la fila */
-        const float izqI = it.centrado ? std::floor(sitio[i].x + (sitio[i].w - 30.0f - textWidth(it.rotulo, 15.0f)) * 0.5f) : izq;
+        float izqI = it.centrado ? std::floor(sitio[i].x + (sitio[i].w - 30.0f - textWidth(it.rotulo, 15.0f)) * 0.5f) : izq;
+        /* (v1.18) un efecto de la lista: el agarre de seis puntos antes de la flechita (se arrastra) y el aspita a la derecha
+           del interruptor (lo quita) */
+        if (it.arrastrable) {
+          z.agarre = {izqI - 6.0f, y, 22.0f, h};
+          const bool ha = (dentro && z.agarre.inside(mx_, my_)) || st_.moviendoFila == (int)i;
+          for (int fy = 0; fy < 3; fy++)
+            for (int fx = 0; fx < 2; fx++)
+              mask9({izqI + 1.0f + (float)fx * 6.0f, yr + 3.0f + (float)fy * 6.0f, 3.5f, 3.5f}, 0, 1.75f, ink[0], ink[1], ink[2], ha ? 0.95f : 0.45f);
+          izqI += 20.0f;
+        }
+        const float derSw = it.borrable || it.sitioAspa ? der - 30.0f : der;
+        if (it.borrable) {
+          z.aspa = {der - 24.0f, y + (h - 24.0f) * 0.5f, 24.0f, 24.0f};
+          const bool hx = dentro && z.aspa.inside(mx_, my_);
+          if (hx) mask9(z.aspa, 0, R(12.0f), 0.86f, 0.33f, 0.33f, 0.22f);
+          icono({z.aspa.x + 6.0f, z.aspa.y + 6.0f, 12.0f, 12.0f}, icoCerrar_, hx ? 1.0f : ink[0], hx ? 0.55f : ink[1], hx ? 0.55f : ink[2],
+                hx ? 1.0f : 0.55f);
+        }
         const float izqT = casilla ? izqI + 30.0f : (it.plegable ? izqI + 24.0f : izqI);
-        float derTexto = casilla ? der : der - 46.0f - 16.0f;
+        float derTexto = casilla ? derSw : derSw - 46.0f - 16.0f;
         if (!it.pastilla.empty()) {
           const float wp = textWidth(it.pastilla, 11.5f) + 20.0f;
-          const Rect pa{(casilla ? der : der - 46.0f - 12.0f) - wp, y + (h - 22.0f) * 0.5f, wp, 22.0f};
+          const Rect pa{(casilla ? derSw : derSw - 46.0f - 12.0f) - wp, y + (h - 22.0f) * 0.5f, wp, 22.0f};
           if (it.pastillaAcento) {   /* (v1.16) en azul: la red ya bajada */
             mask9(pa, 0, R(11.0f), accent[0], accent[1], accent[2], 0.22f);
             text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, std::min(1.0f, accent[0] + 0.22f), std::min(1.0f, accent[1] + 0.22f),
@@ -2480,7 +2498,7 @@ void Hud::dibujaPanel(int vw, int vh) {
           }
           break;
         }
-        const Rect sw{der - 46.0f, y + (h - 26.0f) * 0.5f, 46.0f, 26.0f};
+        const Rect sw{derSw - 46.0f, y + (h - 26.0f) * 0.5f, 46.0f, 26.0f};
         if (it.valor) mask9(sw, 0, R(13.0f), accent[0], accent[1], accent[2], 0.98f * ap);
         else mask9(sw, 0, R(13.0f), 0.28f, 0.29f, 0.33f, it.apagado ? 0.55f : 0.98f);
         mask9({it.valor ? sw.x + sw.w - 23.0f : sw.x + 3.0f, sw.y + 3.0f, 20.0f, 20.0f}, 0, R(10.0f), 0.97f, 0.97f, 0.99f, it.apagado ? 0.40f : 1.0f);
@@ -2736,6 +2754,35 @@ void Hud::dibujaPanel(int vw, int vh) {
         }
         break;
       }
+    }
+  }
+  /* (v1.18) arrastrando un efecto por su agarre: su bloque (la cabecera y sus ajustes) en el acento y una raya donde caeria */
+  if (st_.moviendoFila >= 0 && (size_t)st_.moviendoFila < st_.items.size()) {
+    const int bl = st_.items[(size_t)st_.moviendoFila].bloque;
+    std::vector<size_t> cabezas;
+    for (size_t i = 0; i < st_.items.size() && i < zonas_.size(); i++) {
+      if (st_.items[i].bloque == bl && zonas_[i].caja.w > 0.0f) {
+        const Rect &c = zonas_[i].caja;
+        mask9({c.x, c.y + 1.0f, c.w, c.h - 2.0f}, 1, 6.0f, accent[0], accent[1], accent[2], 0.14f);
+      }
+      if (st_.items[i].arrastrable && (int)i != st_.moviendoFila) cabezas.push_back(i);
+    }
+    const int k = destinoFila();
+    if (k >= 0 && !cabezas.empty()) {
+      /* encima de la cabecera k (de las que quedan), o debajo de la ultima fila del ultimo bloque */
+      float yRaya = 0.0f, xRaya = 0.0f, wRaya = 0.0f;
+      if ((size_t)k < cabezas.size()) {
+        const Rect &c = zonas_[cabezas[(size_t)k]].caja;
+        yRaya = c.y, xRaya = c.x, wRaya = c.w;
+      } else {
+        const int ultimo = st_.items[cabezas.back()].bloque;
+        for (size_t i = 0; i < st_.items.size() && i < zonas_.size(); i++)
+          if (st_.items[i].bloque == ultimo && zonas_[i].caja.w > 0.0f) {
+            const Rect &c = zonas_[i].caja;
+            yRaya = std::max(yRaya, c.y + c.h), xRaya = c.x, wRaya = c.w;
+          }
+      }
+      if (wRaya > 0.0f) mask9({xRaya + 4.0f, yRaya - 1.5f, wRaya - 8.0f, 3.0f}, 0, 1.5f, accent[0], accent[1], accent[2], 1.0f);
     }
   }
   hayRecorte_ = false;
@@ -3161,6 +3208,15 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     if (item) *item = (int)i;
     switch (it.tipo) {
       case ItemPanel::Interruptor:   /* en gris no se enciende (si ya estaba puesto, si se puede apagar) */
+        /* (v1.18) el agarre de un efecto (se arrastra) y su aspita (lo quita), aunque este en gris */
+        if (it.arrastrable && z.agarre.inside(mx, my)) {
+          if (sub) *sub = 2;
+          return HitPanelItem;
+        }
+        if (it.borrable && z.aspa.inside(mx, my)) {
+          if (sub) *sub = 3;
+          return HitPanelItem;
+        }
         /* (v1.18) la flechita y el rotulo de uno plegable: pliegan, aunque este en gris */
         if (it.plegable && !z.subs.empty() && z.subs[0].inside(mx, my)) {
           if (sub) *sub = 1;
@@ -3232,6 +3288,17 @@ float Hud::fracDeslizador(int item, float mxa) const {
   if ((size_t)item >= zonas_.size() || zonas_[(size_t)item].pista.w <= 0.0f) return st_.items[(size_t)item].frac;
   const Rect &p = zonas_[(size_t)item].pista;
   return std::max(0.0f, std::min(1.0f, (mxa / sc_ - p.x) / std::max(1.0f, p.w)));
+}
+
+int Hud::destinoFila() const {
+  if (st_.moviendoFila < 0) return -1;
+  /* las cabeceras de los demas efectos que quedan por encima del raton: ese es el puesto */
+  int k = 0;
+  for (size_t i = 0; i < st_.items.size() && i < zonas_.size(); i++) {
+    if (!st_.items[i].arrastrable || (int)i == st_.moviendoFila) continue;
+    if (zonas_[i].yCentro < my_) k++;
+  }
+  return k;
 }
 
 bool Hud::vistaPantalla(float *x, float *y, float *w, float *h, float *corte) const {

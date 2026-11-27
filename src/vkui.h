@@ -106,6 +106,15 @@ public:
        quepan y con sus botones de correr, que corren solos con el raton encima */
     std::vector<std::string> grupos;
     std::vector<int> grupoOpc;
+    /* (v1.18) los efectos de la lista (Rodolfo: «ponme forma de organizarlos, pon un icono antes de cada scrolldown que
+       deje arrastrarlos de la lista, y junto al boton de encendido, a la derecha un tachesito para borrar»): `arrastrable`,
+       un agarre de seis puntos antes de la flechita (el sub 2: se arrastra a otro puesto, State::moviendoFila); `borrable`,
+       una aspita a la derecha del interruptor (el sub 3). `bloque`: el efecto al que pertenece la fila (su cabecera y sus
+       ajustes llevan el mismo), para pintar donde caeria */
+    bool arrastrable = false;
+    bool borrable = false;
+    bool sitioAspa = false;   /* sin aspita pero con su hueco: el interruptor general, alineado con los de los efectos */
+    int bloque = -1;
   };
 
   struct State {
@@ -172,6 +181,10 @@ public:
        con `vistaEnVivo` (el panel sobre el 3D de un juego); sin palomearla no corre nada de mas */
     bool vistaEfectos = false;
     bool vistaEnVivo = false;
+    /* (v1.18) el interruptor general de los efectos que se ven: apagado, la vista previa lo dice */
+    bool efectosPuestos = true;
+    /* (v1.18) el efecto que se esta arrastrando por su agarre (su fila, -1 = ninguno): donde caeria lo dice destinoFila() */
+    int moviendoFila = -1;
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;
@@ -443,6 +456,9 @@ public:
   /* (v1.18) la vista previa de los efectos del ultimo dibujo, en fracciones del lienzo: donde pinta el visor el juego y
      la x de la raya (a la izquierda sin efectos, a la derecha con ellos); falso si no hay */
   bool vistaPantalla(float *x, float *y, float *w, float *h, float *corte) const;
+  /* (v1.18) arrastrando un efecto (State::moviendoFila): el puesto en que caeria con el raton donde esta, contando solo las
+     filas `arrastrable` (0 = el primero); -1 si no se arrastra nada */
+  int destinoFila() const;
   /* (v1.18) con el raton encima de un boton de correr de un desplegable por grupos: lo corre `dt` segundos (empieza
      despacio y acelera un poco: de ~140 a ~320 puntos por segundo en 1,5 s). Verdadero si se movio: hay que repintar */
   bool autodesplazar(float dt);
@@ -610,6 +626,8 @@ private:
     Rect caja;
     std::vector<Rect> subs;   /* las opciones de un segmentado, o el aspa de una fila */
     Rect pista;               /* la pista de un deslizador */
+    Rect agarre, aspa;        /* (v1.18) el agarre para arrastrar y el aspita de borrar de un efecto */
+    float yCentro = 0.0f;     /* (v1.18) la mitad de su alto en la pantalla, aunque este fuera de la vista */
   };
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
   Rect panelCopiar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.14) el boton Copiar del pie (pestana Juegos) */

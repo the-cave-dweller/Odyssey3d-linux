@@ -632,7 +632,7 @@ int cmdAjustes(int argc, char **argv) {
           st.corrida = 0.0f;
           if (st.vistaEfectos) ov.quitarVelo();
           else if (quiereVelo && !st.fijado) ov.showPanel(grande, true);
-          st.pie = idioma::tr(st.vistaEfectos ? "vista previa: a la izquierda de la raya sin efectos, a la derecha con ellos" : "vista previa quitada");
+          st.pie = idioma::tr(st.vistaEfectos ? "vista previa: el juego con sus efectos, a pantalla completa" : "vista previa quitada");
           std::printf("[ajustes] vista previa de los efectos %s\n", st.vistaEfectos ? "puesta" : "quitada");
           std::fflush(stdout);
           rellenar();

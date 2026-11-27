@@ -111,10 +111,11 @@ std::string rutaTextura(const std::string &nombre);
 /* ---- (v1.18) la vista previa de los efectos: con su casilla palomeada en la pestana Efectos, el panel (en una columna a
    la izquierda, sin velo) lo apunta en $XDG_RUNTIME_DIR/odysseyvk-efectos-vista-pide: donde va el juego (x, y, ancho y
    alto) y la x de la raya, en fracciones de la pantalla; cada segundo y al cambiar. El visor, debajo, pinta ahi el juego,
-   a la izquierda de la raya sin efectos y a la derecha con ellos (VkWeave::ponerVista). Sin el archivo no corre nada ---- */
+   a la izquierda de la raya sin efectos y a la derecha con ellos (VkWeave::ponerVista); con la raya en 0, como la pide el
+   panel, el juego entero con sus efectos (si el interruptor general esta puesto). Sin el archivo no se pinta nada ---- */
 void pedirVista(float x, float y, float w, float h, float corte);
 void soltarVista();   /* al quitar la casilla, salir de la pestana o cerrar el panel */
-/* lo pedido hace menos de 2,5 s (sin raya en el archivo: en medio); falso si no hay */
+/* lo pedido hace menos de 2,5 s (sin el quinto numero en el archivo: la raya en medio; 0 = sin raya); falso si no hay */
 bool vistaPedida(float *x, float *y, float *w, float *h, float *corte);
 
 /* ---- (v1.18) fuentes publicas de efectos: los repositorios de ReShade mas conocidos, con su boton de bajar ----

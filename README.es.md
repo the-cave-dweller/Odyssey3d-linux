@@ -59,15 +59,16 @@ Lo que tienes:
   efecto con su pastilla y sus deslizadores; todos los juegos comparten unos y cualquiera puede tener los suyos
   (`~/.config/odysseyvk/effects/`). La pestaña va en dos mitades (tus efectos a la izquierda; añadir uno y las
   fuentes públicas a la derecha) con la casilla *Vista previa* arriba: palomeada sobre un juego en 3D, el panel queda en
-  una columna a la izquierda, como la vista de depuración, y el visor enseña el juego en el resto de la pantalla, sin
-  efectos a la izquierda de una raya y con ellos a la derecha, pintado en la tarjeta gráfica a cada cuadro. Sin
-  palomearla no corre nada de más. *Añadir un efecto* abre un selector a lo ancho de la pantalla con los que usan
+  una columna a la izquierda, como la vista de depuración, y el visor enseña el juego a pantalla completa con sus
+  efectos (sin ellos si el interruptor general está apagado), pintado en la tarjeta gráfica a cada cuadro. Sin
+  palomearla no corre nada de más. Cada efecto se arrastra por su agarre de puntos para cambiarlo de puesto, y su
+  aspita lo quita. *Añadir un efecto* abre un selector a lo ancho de la pantalla con los que usan
   la profundidad y los que no, que corre solo con el ratón sobre sus botones. Las *fuentes públicas* (ReShade, SweetFX,
   qUINT, prod80, AstrayFX...) bajan solo los archivos que no tienes, comparados por contenido con GitHub: lo que ya tienes con ese nombre
   se queda y nunca se reemplaza, y lo bajado que quede duplicado se borra; la que no tiene nada nuevo sale en gris. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
 - **Teclas de juego.** Solo sobre un juego: `Insert` oculta o muestra la pastilla, `Supr` cambia la profundidad entre
   DLSS y el modelo elegido, `Fin` enciende o apaga la generación de cuadros de MAKO, `RePág` / `AvPág` dan x2 → x3 → x4 y
-  al revés (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda
+  al revés, `Inicio` enciende o apaga los efectos del juego (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda
   mientras el visor está sobre un juego.
 - **La generación de cuadros de cada juego en sus Integraciones** (su perfil de MAKO, por su ejecutable), y con el tiempo
   por cuadro marcado el cuadrito dice «Reales», «Generados» y «En pantalla» también sin DLSS. El cuadrito sale ahora
@@ -220,6 +221,7 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 | `Supr` (sobre un juego) | profundidad: DLSS o el modelo elegido |
 | `Fin` (sobre un juego) | generación de cuadros de MAKO sí / no |
 | `RePág` / `AvPág` (sobre un juego) | más / menos cuadros generados (de x2 a x4) |
+| `Inicio` (sobre un juego) | efectos de ReShade sí / no |
 | `Ctrl+Shift+9` | vista de depuración de la profundidad (plana, sin 3D): la profundidad en gris (blanco = cerca), en naranja donde pesa la saliencia (la que elige el plano de la pantalla en Auto) y en cian lo que cae en el plano de la pantalla; otra vez para volver |
 | `Esc` (en el visor) | salir del 3D |
 

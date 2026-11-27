@@ -1018,7 +1018,7 @@ void VkWeave::pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo
   if (ih > rh) ih = rh, iw = (int)std::lround(rh * prop);
   iw &= ~1;
   const int ix = rx + (rw - iw) / 2, iy = ry + (rh - ih) / 2;
-  /* la raya: a su izquierda la fuente, a su derecha la salida de los efectos, cada una en su sitio del juego */
+  /* la raya (si la hay, `corte` > 0): a su izquierda la fuente, a su derecha la salida de los efectos, cada una en su sitio */
   const int md = std::max(ix + 2, std::min(ix + iw - 2, (int)std::lround(vista_[4] * W)));
   const int mf = std::max(1, std::min(fuente.w - 1, (int)std::lround((double)(md - ix) * fuente.w / std::max(1, iw))));
   barrier(cb, destino, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1031,9 +1031,14 @@ void VkWeave::pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo
     vkCmdBlitImage(cb, desde, VK_IMAGE_LAYOUT_GENERAL, destino, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl, filtro);
   };
   if (iw != rw || ih != rh) copia(black_.img, 0, 0, 1, 1, rx, ry, rx + rw, ry + rh, VK_FILTER_NEAREST);
-  copia(fuente.img, 0, 0, mf, fuente.h, ix, iy, md, iy + ih, VK_FILTER_LINEAR);
-  copia(conEfectos ? conEfectos : fuente.img, mf, 0, fuente.w, fuente.h, md, iy, ix + iw, iy + ih, VK_FILTER_LINEAR);
-  if (blanco_.valid()) copia(blanco_.img, 0, 0, 1, 1, md - 1, iy, md + 1, iy + ih, VK_FILTER_NEAREST);
+  if (vista_[4] <= 0.0f) {
+    /* sin raya (la del panel desde que la vista es a pantalla completa): el juego entero, con sus efectos si los hay */
+    copia(conEfectos ? conEfectos : fuente.img, 0, 0, fuente.w, fuente.h, ix, iy, ix + iw, iy + ih, VK_FILTER_LINEAR);
+  } else {
+    copia(fuente.img, 0, 0, mf, fuente.h, ix, iy, md, iy + ih, VK_FILTER_LINEAR);
+    copia(conEfectos ? conEfectos : fuente.img, mf, 0, fuente.w, fuente.h, md, iy, ix + iw, iy + ih, VK_FILTER_LINEAR);
+    if (blanco_.valid()) copia(blanco_.img, 0, 0, 1, 1, md - 1, iy, md + 1, iy + ih, VK_FILTER_NEAREST);
+  }
   barrier(cb, destino, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
           VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 }

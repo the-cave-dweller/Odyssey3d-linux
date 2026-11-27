@@ -1364,6 +1364,27 @@ static void atajoHub(VkUi &ui, const std::string &accion, const char *origen) {
     ui.extraHasta = glfwGetTime() + 3.0;
     tag = "generacion";
   }
+  /* (v1.18) Inicio: el interruptor general de los efectos que valen para el juego (los suyos, o los de todos), como el de
+     su pestana; el visor lo nota en medio segundo y la pastilla lo dice */
+  else if (accion == "efectos") {
+    static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");   /* las pruebas, como en el bucle */
+    if (!forzado && ui.esJuego != 1) {
+      std::printf("[efectos] atajo: sin juego debajo (%s)\n", origen);
+      std::fflush(stdout);
+      return;
+    }
+    const std::string app = forzado ? (std::string(forzado) == "todos" ? std::string() : std::string(forzado)) : ui.appJuego;
+    efectos::Ajustes a = efectos::cargar(app);
+    a.puestos = !a.puestos;
+    std::string err;
+    const bool ok = efectos::guardar(a.propio ? app : std::string(), a, &err);
+    ui.extraInfo = ok ? std::string(idioma::tr(a.puestos ? "Efectos encendidos" : "Efectos apagados")) : idioma::trf("no se pudo guardar: {}", {err});
+    ui.extraHasta = glfwGetTime() + 3.0;
+    std::printf("[efectos] %s con el atajo (%s, %s)%s\n", a.puestos ? "puestos" : "apagados", origen, a.propio ? "los del juego" : "los de todos",
+                ok ? "" : (" · no se pudo guardar: " + err).c_str());
+    std::fflush(stdout);
+    return;
+  }
   else if (accion == "verprof") {   /* el bucle se lo pasa a la trama y avisa bajo la pastilla */
     ui.verProfundidad = !ui.verProfundidad;
     std::printf("[depuracion] vista de profundidad %s (%s)\n", ui.verProfundidad ? "puesta" : "quitada", origen);
@@ -3285,27 +3306,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       static long long firmaEf = -1;
       static int juegoEf = -2;
       static std::string appEf;
-      static bool vistaEf = false;
       const double tAhora = glfwGetTime();
       if (tAhora - tEf >= 0.5) {
         tEf = tAhora;
         if (ui.esJuego < 0) sobreJuego(ui);
-        /* (v1.18) la vista previa de los efectos palomeada en el panel (a un lado de la raya sin, al otro con) */
-        float vx = 0, vy = 0, vw = 0, vh = 0, vc = 0;
-        const bool vista = efectos::vistaPedida(&vx, &vy, &vw, &vh, &vc);
         /* ODYSSEYVK_EFECTOS_JUEGO=APPID (o «todos»): para las pruebas, como si la fuente fuera ese juego */
         static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
         const bool esJuego = forzado || ui.esJuego == 1;
         const std::string app = forzado ? (std::string(forzado) == "todos" ? std::string() : std::string(forzado)) : ui.appJuego;
         const long long f = esJuego ? efectos::firma(app) : 0;
-        if ((esJuego ? 1 : ui.esJuego) != juegoEf || f != firmaEf || app != appEf || vista != vistaEf) {
-          juegoEf = esJuego ? 1 : ui.esJuego, firmaEf = f, appEf = app, vistaEf = vista;
+        if ((esJuego ? 1 : ui.esJuego) != juegoEf || f != firmaEf || app != appEf) {
+          juegoEf = esJuego ? 1 : ui.esJuego, firmaEf = f, appEf = app;
           const efectos::Ajustes aj = esJuego ? efectos::cargar(app) : efectos::Ajustes{};
-          /* con la vista pedida, la cadena corre aunque esten apagados, pero solo para la vista */
-          efectos::Ajustes paraCadena = aj;
-          if (vista && esJuego) paraCadena.puestos = true;
+          /* (v1.18) la vista previa ya no los enciende: con el interruptor general apagado, a los dos lados de la raya sale
+             el juego sin efectos (Rodolfo: «el boton de encendido general no hace nada»: con la vista puesta la cadena
+             corria igual y el lado de «con efectos» no cambiaba) */
           wv.efectosEnPantalla(aj.puestos);
-          wv.efectos().ajustar(paraCadena);
+          wv.efectos().ajustar(aj);
           if (esJuego) {
             std::string lista;
             for (const efectos::Efecto &e : aj.lista)

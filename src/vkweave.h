@@ -53,7 +53,8 @@ public:
      half of the screen shown», «can you find a way to make the preview fast?, maybe not cpu based», y luego «distribuyelo
      como en la vista de depuracion»): con su casilla palomeada el panel queda en una columna a la izquierda y el visor
      pinta en cada cuadro el juego en (x, y, ancho, alto), a la izquierda de la raya `corte` sin efectos y a la derecha con
-     ellos: copias en la tarjeta, sin pasar por la CPU. Todo en fracciones de la pantalla; ancho 0 = ninguna. Si tapa la
+     ellos (con `corte` 0, sin raya: el juego entero con sus efectos, como lo pide el panel desde «just show it full now»):
+     copias en la tarjeta, sin pasar por la CPU. Todo en fracciones de la pantalla; ancho 0 = ninguna. Si tapa la
      pantalla entera, la trama de ese cuadro no se pinta */
   void ponerVista(float x, float y, float w, float h, float corte) {
     vista_[0] = x, vista_[1] = y, vista_[2] = w, vista_[3] = h, vista_[4] = corte;

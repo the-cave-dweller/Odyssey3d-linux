@@ -2180,14 +2180,15 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     d.valor = previa;
     d.centrado = !previa;
     d.apagado = !st.vistaEnVivo && !previa;
-    if (previa) d.nota = idioma::tr("A la izquierda de la raya sin efectos, a la derecha con ellos");
-    d.ayuda = idioma::tr(st.vistaEnVivo ? "El juego a la vista con los efectos a un lado: a la izquierda de la raya sin ellos y a la derecha con ellos."
-                                        : "Hace falta un juego en 3D abierto: enseña el juego sin efectos y con ellos.");
+    if (previa) d.nota = idioma::tr("El juego con sus efectos, a pantalla completa");
+    d.ayuda = idioma::tr(st.vistaEnVivo ? "El juego a pantalla completa con sus efectos, y la lista a un lado para ajustarlos."
+                                        : "Hace falta un juego en 3D abierto: enseña el juego con sus efectos.");
     pon(d, "vista_efectos");
   }
   const std::string app = g_efectosDe == "*" ? std::string() : g_efectosDe;   /* vacio: los de todos */
   const std::string nombre = app.empty() ? std::string() : nombreDeJuego(juegos, app);
   const efectos::Ajustes a = efectos::cargar(app);
+  st.efectosPuestos = a.puestos;   /* (v1.18) la vista previa dice si estan apagados */
   const auto disp = efectos::disponibles();
   const std::string carpeta = efectos::carpeta();
   Hud::ItemPanel s;
@@ -2234,6 +2235,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   m.ayuda = carpeta;
   m.propio = !app.empty() && a.propio;
   m.pildora = true;
+  m.sitioAspa = true;   /* (v1.18) alineado con los de los efectos, que llevan su aspita */
   pon(m, "efx:puestos");
   const std::set<std::string> &abiertas = seccionesAbiertas();
   for (size_t i = 0; i < a.lista.size(); i++) {
@@ -2246,6 +2248,8 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     Hud::ItemPanel p;
     p.tipo = Hud::ItemPanel::Interruptor, p.rotulo = e.nombre, p.valor = e.activo, p.pildora = true;
     p.plegable = true, p.desplegada = abierta;
+    /* (v1.18) el agarre para cambiarlo de puesto y el aspita para quitarlo (en vez de «Subir» y «Quitar» al desplegarlo) */
+    p.arrastrable = true, p.borrable = true, p.bloque = (int)i;
     if (it == disp.end()) {
       p.apagado = true, p.pastilla = idioma::tr("No está"), p.nota = idioma::tr("No está en la carpeta de ReShade");
     } else if (!d.ok) {
@@ -2267,6 +2271,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
         const std::string id = "efx:v:" + e.nombre + ":" + clave;
         Hud::ItemPanel f;
         f.ayuda = c.ayuda;
+        f.bloque = (int)i;
         if (c.tipo == efectos::Control::Bool) {
           f.tipo = Hud::ItemPanel::Interruptor, f.rotulo = rot, f.valor = val > 0.5f;
           pon(f, id);
@@ -2294,17 +2299,9 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     if (d.controles.empty()) {
       Hud::ItemPanel n;
       n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No tiene ajustes");
+      n.bloque = (int)i;
       pon(n, "");
     }
-    if (i > 0) {
-      Hud::ItemPanel u;
-      u.tipo = Hud::ItemPanel::Boton, u.rotulo = idioma::tr("Orden"), u.nota = idioma::trf("Antes de {}", {a.lista[i - 1].nombre});
-      u.valorTexto = idioma::tr("Subir");
-      pon(u, "efx:subir:" + e.nombre);
-    }
-    Hud::ItemPanel q;
-    q.tipo = Hud::ItemPanel::Boton, q.rotulo = idioma::tr("Quitar de la lista"), q.valorTexto = idioma::tr("Quitar"), q.peligro = true;
-    pon(q, "efx:quitar:" + e.nombre);
   }
   /* añadir uno de la carpeta */
   lado = 2;
@@ -2464,6 +2461,25 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
       std::fclose(f);
     }
     return true;
+  } else if (que.rfind("on:", 0) == 0 && sub >= 200) {
+    /* (v1.18) soltado por su agarre: a ese puesto de la lista (contado sin el, como lo pinta el panel) */
+    const std::string n = que.substr(3);
+    const auto it = std::find_if(a.lista.begin(), a.lista.end(), [&](const efectos::Efecto &e) { return e.nombre == n; });
+    if (it == a.lista.end()) return false;
+    const size_t desde = (size_t)(it - a.lista.begin());
+    const size_t hasta = std::min((size_t)(sub - 200), a.lista.size() - 1);
+    if (desde == hasta) return false;
+    efectos::Efecto e = std::move(*it);
+    a.lista.erase(it);
+    a.lista.insert(a.lista.begin() + (ptrdiff_t)hasta, std::move(e));
+    dicho = idioma::trf("{} pasa al puesto {}", {n, std::to_string(hasta + 1)});
+  } else if (que.rfind("on:", 0) == 0 && sub == 3) {
+    /* (v1.18) su aspita: fuera de la lista */
+    if (!a.buscar(que.substr(3))) return false;
+    quitar(que.substr(3));
+    dicho = idioma::trf("{} quitado de la lista", {que.substr(3)});
+  } else if (que.rfind("on:", 0) == 0 && sub == 2) {
+    return false;   /* el agarre sin arrastrar: nada */
   } else if (que.rfind("on:", 0) == 0) {
     efectos::Efecto *e = a.buscar(que.substr(3));
     if (!e) return false;

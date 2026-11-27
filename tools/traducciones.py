@@ -650,14 +650,16 @@ T = {
 "Oilify, ReVeil, Halftone...": ("Oilify, ReVeil, Halftone...", "Oilify, ReVeil, Halftone...", "Oilify, ReVeil, Halftone...", "Oilify、ReVeil、Halftone…", "Oilify、ReVeil、Halftone…"),
 "RTGI, UBR, color...": ("RTGI, UBR, color...", "RTGI, UBR, couleur...", "RTGI, UBR, Farbe...", "RTGI、UBR、色彩…", "RTGI、UBR、色…"),
 # (v1.18) la vista de los efectos en su pestana
-"Sin efectos": ("Without effects", "Sans effets", "Ohne Effekte", "无效果", "エフェクトなし"),
-"Con efectos": ("With effects", "Avec effets", "Mit Effekten", "有效果", "エフェクトあり"),
+"Efectos apagados": ("Effects off", "Effets désactivés", "Effekte aus", "效果已关闭", "エフェクト オフ"),
+"Efectos encendidos": ("Effects on", "Effets activés", "Effekte an", "效果已开启", "エフェクト オン"),
 "Vista previa": ("Preview", "Aperçu", "Vorschau", "预览", "プレビュー"),
-"A la izquierda de la raya sin efectos, a la derecha con ellos": ("Left of the line without effects, right of it with them", "À gauche de la ligne sans effets, à droite avec", "Links der Linie ohne Effekte, rechts davon mit", "分隔线左侧无效果，右侧有效果", "線の左はエフェクトなし、右はあり"),
-"El juego a la vista con los efectos a un lado: a la izquierda de la raya sin ellos y a la derecha con ellos.": ("The game in view with the effects to one side: left of the line without them, right of it with them.", "Le jeu à l'écran avec les effets sur le côté : à gauche de la ligne sans eux, à droite avec.", "Das Spiel im Blick, die Effekte an der Seite: links der Linie ohne, rechts davon mit.", "游戏显示在屏幕上，效果列表在一侧：分隔线左侧无效果，右侧有效果。", "ゲームを表示し、エフェクトは横に：線の左はなし、右はあり。"),
-"Hace falta un juego en 3D abierto: enseña el juego sin efectos y con ellos.": ("Needs a game open in 3D: it shows the game without effects and with them.", "Il faut un jeu ouvert en 3D : il montre le jeu sans effets et avec.", "Braucht ein in 3D geöffnetes Spiel: zeigt das Spiel ohne und mit Effekten.", "需要以 3D 打开一个游戏：显示游戏无效果和有效果的样子。", "3D で開いたゲームが必要です：エフェクトなしとありのゲームを表示します。"),
-"vista previa: a la izquierda de la raya sin efectos, a la derecha con ellos": ("preview: left of the line without effects, right of it with them", "aperçu : à gauche de la ligne sans effets, à droite avec", "Vorschau: links der Linie ohne Effekte, rechts davon mit", "预览：分隔线左侧无效果，右侧有效果", "プレビュー：線の左はエフェクトなし、右はあり"),
+"El juego con sus efectos, a pantalla completa": ("The game with its effects, full screen", "Le jeu avec ses effets, en plein écran", "Das Spiel mit seinen Effekten, im Vollbild", "游戏及其效果，全屏显示", "ゲームとエフェクト、全画面"),
+"El juego a pantalla completa con sus efectos, y la lista a un lado para ajustarlos.": ("The game full screen with its effects, and the list to one side to adjust them.", "Le jeu en plein écran avec ses effets, et la liste sur le côté pour les régler.", "Das Spiel im Vollbild mit seinen Effekten, die Liste an der Seite zum Einstellen.", "游戏全屏显示其效果，列表在一侧以便调整。", "ゲームをエフェクト付きで全画面表示し、横のリストで調整します。"),
+"Hace falta un juego en 3D abierto: enseña el juego con sus efectos.": ("Needs a game open in 3D: it shows the game with its effects.", "Il faut un jeu ouvert en 3D : il montre le jeu avec ses effets.", "Braucht ein in 3D geöffnetes Spiel: zeigt das Spiel mit seinen Effekten.", "需要以 3D 打开一个游戏：显示游戏及其效果。", "3D で開いたゲームが必要です：ゲームをエフェクト付きで表示します。"),
+"vista previa: el juego con sus efectos, a pantalla completa": ("preview: the game with its effects, full screen", "aperçu : le jeu avec ses effets, en plein écran", "Vorschau: das Spiel mit seinen Effekten, im Vollbild", "预览：游戏及其效果，全屏", "プレビュー：ゲームとエフェクト、全画面"),
 "vista previa quitada": ("preview off", "aperçu retiré", "Vorschau aus", "预览已关闭", "プレビューをオフにしました"),
+"{} pasa al puesto {}": ("{} moves to position {}", "{} passe en position {}", "{} rückt auf Platz {}", "{} 移到第 {} 位", "{} を {} 番目に移動"),
+"Efectos encendidos o apagados (en un juego)": ("Effects on or off (in a game)", "Effets activés ou désactivés (dans un jeu)", "Effekte an oder aus (im Spiel)", "效果开启或关闭（游戏中）", "エフェクトのオン／オフ（ゲーム内）"),
 }
 
 from traducciones_ru import RU

@@ -52,8 +52,8 @@ What you get:
   while the OdysseyVK layer counts them above it, so the box shows *Real* and *Generated* fps
   (`ODYSSEYVK_CONTAR_MAKO=1`, added by Integrations next to `ODYSSEYVK=1` and `ENABLE_MAKO=1`).
 - **Game keys.** Over a game only: `Insert` hides or shows the pill, `Delete` switches the depth between DLSS and the
-  chosen model, `End` turns MAKO's frame generation on or off, `Page Up` / `Page Down` give x2 → x3 → x4 and back
-  (all changeable in Keyboard shortcuts). `End` is also vkDaedalus's menu key: KDE takes it while the viewer is over a game.
+  chosen model, `End` turns MAKO's frame generation on or off, `Page Up` / `Page Down` give x2 → x3 → x4 and back,
+  `Home` turns the game's effects on or off (all changeable in Keyboard shortcuts). `End` is also vkDaedalus's menu key: KDE takes it while the viewer is over a game.
 - **Each game's frame generation in its Integrations** (its MAKO profile, by its executable), and with the frame time
   ticked the FPS box shows *Real*, *Generated* and *On screen* without DLSS too. The box now shows only when the pill is
   hidden.
@@ -65,8 +65,9 @@ What you get:
   as ReShade's depth buffer (so depth effects work in any game). Each effect has its toggle pill and its sliders; all
   games share one set and any game can have its own (`~/.config/odysseyvk/effects/`). The tab is split in two halves (your effects on the left; adding one and
   the public sources on the right) with a *Preview* checkbox on top: ticked over a game in 3D, the panel becomes a column
-  on the left, like the debug view, and the viewer shows the game on the rest of the screen, without effects left of a
-  line and with them right of it, drawn on the GPU every frame. Unticked, nothing extra runs. *Add an
+  on the left, like the debug view, and the viewer shows the game full screen with its effects (none if the main switch
+  is off), drawn on the GPU every frame. Unticked, nothing extra runs. Drag an effect by its dotted handle to reorder
+  the list; its small × removes it. *Add an
   effect* opens a full-width picker split into effects that use depth and those that don't, with hover-to-scroll
   buttons. *Public sources* (ReShade, SweetFX, qUINT, prod80, AstrayFX...) download only the files you don't have,
   compared by content against GitHub: files you already have by name are kept and never replaced, and downloaded files that
@@ -214,6 +215,7 @@ Keys (they also work while the video or game has the keyboard):
 | `Delete` (over a game) | depth: DLSS or the chosen model |
 | `End` (over a game) | MAKO frame generation on / off |
 | `Page Up` / `Page Down` (over a game) | more / fewer generated frames (x2 to x4) |
+| `Home` (over a game) | ReShade effects on / off |
 | `Ctrl+Shift+9` | depth debug view (flat, no 3D): the depth in gray (white = near), where saliency weighs in orange (it picks the screen plane in Auto) and what sits on the screen plane in cyan; again to go back |
 | `Esc` (in the viewer) | leave 3D |
 

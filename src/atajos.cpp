@@ -54,6 +54,8 @@ const Accion kAcciones[] = {
     {"fg", "Generación de cuadros encendida o apagada (en un juego)", true},
     {"fg+", "Más cuadros generados (en un juego)", true},
     {"fg-", "Menos cuadros generados (en un juego)", true},
+    /* (v1.18) Rodolfo: «pon en los atajos los efectos y asignalo a tecla»: Inicio, la que quedaba libre junto a las otras */
+    {"efectos", "Efectos encendidos o apagados (en un juego)", true},
 };
 
 /* las que se pueden cambiar en el panel (v1.09). `capa2` (Ctrl+Shift+2) no: es la vieja de ocultar
@@ -76,6 +78,7 @@ const std::vector<atajos::Def> kDefs = {
     {"fg", "generacion", "Generación de cuadros (en un juego)", "End"},
     {"fg+", "generacion_mas", "Más cuadros generados (en un juego)", "PgUp"},
     {"fg-", "generacion_menos", "Menos cuadros generados (en un juego)", "PgDown"},
+    {"efectos", "efectos", "Efectos encendidos o apagados (en un juego)", "Home"},
 };
 const char *kCapa2 = "Ctrl+Shift+2";
 

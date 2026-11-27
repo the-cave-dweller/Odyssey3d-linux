@@ -3836,6 +3836,29 @@ static int cmdHudSelfTest(int argc, char **argv) {
     std::printf("  autocorrer: %d de %d cuadros movieron · grupos corridos %.0f y %.0f puntos · corriendo %s\n", movidos, cuadros,
                 hud.state().despCorrida[0], hud.state().despCorrida[1], hud.autodesplazando() ? "si" : "no");
   }
+  /* (v1.18) ODYSSEYVK_HUD_MOVIENDO=fila: arrastrando ese efecto por su agarre, con el raton en ODYSSEYVK_HUD_RATON; dice
+     en que puesto caeria (y la imagen lleva la raya) */
+  if (const char *mv = std::getenv("ODYSSEYVK_HUD_MOVIENDO")) {
+    hud.state().moviendoFila = std::atoi(mv);
+    hud.begin(W, H);
+    hud.begin(W, H);
+    std::printf("  moviendo la fila %d: caeria en el puesto %d\n", hud.state().moviendoFila, hud.destinoFila());
+  }
+  /* (v1.18) ODYSSEYVK_HUD_CLIC=x,y;x,y...: que le tocaria a un clic en cada punto (el tipo, la fila con su rotulo y el sub),
+     sin hacerlo: para ver donde cae cada control */
+  if (const char *cl = std::getenv("ODYSSEYVK_HUD_CLIC")) {
+    std::string todo = cl, uno;
+    std::stringstream ss(todo);
+    while (std::getline(ss, uno, ';')) {
+      float cx = -1.0f, cy = -1.0f;
+      if (std::sscanf(uno.c_str(), "%f,%f", &cx, &cy) != 2) continue;
+      int item = -1, sub = 0;
+      float frac = 0.0f;
+      const int h = (int)hud.hitDetalle(cx, cy, &item, &sub, &frac);
+      const std::string rot = item >= 0 && (size_t)item < hud.state().items.size() ? hud.state().items[(size_t)item].rotulo : std::string("-");
+      std::printf("  clic %.0f,%.0f: golpe %d · fila %d (%s) · sub %d\n", cx, cy, h, item, rot.c_str(), sub);
+    }
+  }
   std::printf("[interfaz] ventana %dx%d · atlas %dx%d · texto %s · %d vertices\n", W, H, hud.atlasW(), hud.atlasH(),
               hud.hasText() ? "si" : "no", hud.vertexCount());
   /* ODYSSEYVK_HUD_PNG=ruta deja la interfaz pintada en un archivo (fondo transparente), con el mismo

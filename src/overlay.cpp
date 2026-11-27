@@ -1130,7 +1130,7 @@ struct Overlay::Impl {
     s->ratonDentro = false;
     s->ratonX = s->ratonY = -1.0;
     s->hud.setMouse(-1.0f, -1.0f);
-    if (s->tarjetaPuesta && s->hud.state().panel && s->hud.state().arrastrando < 0) {
+    if (s->tarjetaPuesta && s->hud.state().panel && s->hud.state().arrastrando < 0 && s->hud.state().moviendoFila < 0) {
       s->firmaVista = -1;
       s->pintar();   /* se apaga el realce de lo que habia bajo el raton */
       return;
@@ -1180,6 +1180,11 @@ struct Overlay::Impl {
       wl_surface_commit(surf);
       return;
     }
+    /* (v1.18) arrastrando un efecto por su agarre: solo se repinta (la raya de donde caeria sigue al raton) */
+    if (hud.state().moviendoFila >= 0) {
+      sucio = true;
+      return;
+    }
     const int arrastrando = hud.state().arrastrando;
     if (arrastrando >= 0) {
       const float f = hud.fracDeslizador(arrastrando, (float)ratonX);
@@ -1202,6 +1207,13 @@ struct Overlay::Impl {
     if (!apretado) {
       if (moviendo || redimensionando) guardaVentana();
       moviendo = redimensionando = false;
+      /* (v1.18) se suelta un efecto que se arrastraba: su fila y el puesto donde cae (el sub 200 + el puesto) */
+      if (int &mf = hud.state().moviendoFila; mf >= 0) {
+        const int k = hud.destinoFila();
+        if (k >= 0 && (size_t)mf < hud.state().items.size()) golpes.push_back({(int)Hud::HitPanelItem, mf, 200 + k, 0.0f, true});
+        mf = -1;
+        sucio = true;
+      }
       if (arrastrando >= 0 && (size_t)arrastrando < hud.state().items.size()) {
         /* (v1.16, PR #1) se guarda donde se ve la bola (la lista pudo rehacerse mientras tanto) */
         golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.state().items[(size_t)arrastrando].frac, true});
@@ -1218,6 +1230,13 @@ struct Overlay::Impl {
       arrastrando = item;
       hud.state().items[(size_t)item].frac = fr;
       golpes.push_back({(int)h, item, 0, fr, false});
+      sucio = true;
+      return;
+    }
+    /* (v1.18) el agarre de un efecto: empieza a arrastrarse (se suelta arriba) */
+    if (h == Hud::HitPanelItem && sub == 2 && item >= 0 && (size_t)item < hud.state().items.size() &&
+        hud.state().items[(size_t)item].arrastrable) {
+      hud.state().moviendoFila = item;
       sucio = true;
       return;
     }

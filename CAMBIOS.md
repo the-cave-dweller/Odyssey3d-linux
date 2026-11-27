@@ -122,6 +122,33 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     mueven los deslizadores.
   - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
+## Efectos: el interruptor general en la vista previa, la tecla Inicio, arrastrarlos y su aspita; la vista entera (v1.18)
+
+- Rodolfo, con una foto del interruptor «Efectos»: «el boton de encendido general no hace nada, arreglalo, pon en los atajos
+  los efectos y asignalo a tecla», «tambien ponme forma de organizarlos, pon un icono antes de cada scrolldown que deje
+  arrastrarlos de la lista, y junto al boton de encendido, a la derecha un tachesito para borrar» y «on the preview tab dont
+  split it in half, just show it full now».
+- **El interruptor general**: MEDIDO en el registro de las 14:27: los clics llegaban (`efx:puestos · efectos apagados /
+  encendidos`) y el visor los leia (`[efectos] apagados (los de todos)`), pero con la vista previa puesta la cadena se
+  encendia igual para la vista, así que el lado «con efectos» no cambiaba. Ahora la vista no los enciende: con el
+  interruptor apagado sale el juego sin efectos y, abajo, «Efectos apagados».
+- **La vista previa, entera**: sin raya ni mitades; el visor pinta el juego a pantalla completa con sus efectos (el quinto
+  número de `odysseyvk-efectos-vista-pide` en 0 = sin raya).
+- **La tecla**: una acción nueva de juego, «Efectos encendidos o apagados (en un juego)», de fábrica `Inicio` (la que
+  quedaba libre junto a Insert, Supr, Fin, RePág y AvPág); se cambia en Atajos de teclado como las demás. Cambia el
+  interruptor general de los que valen para ese juego (los suyos o los de todos) y la pastilla lo dice.
+- **Ordenarlos y quitarlos**: cada efecto lleva un agarre de seis puntos antes de su flechita (se aprieta y se arrastra:
+  su bloque se tiñe del acento y una raya dice dónde cae) y un aspita a la derecha de su interruptor que lo quita. Fuera
+  las filas «Orden · Subir» y «Quitar de la lista» de dentro de cada efecto. El interruptor general deja el mismo hueco,
+  para que los interruptores queden en columna.
+- **Probado**: el panel, pintado en la CPU, con clics simulados (`ODYSSEYVK_HUD_CLIC`, nuevo): el agarre da el sub 2, la
+  flechita el 1, el interruptor el 0, el aspita el 3 y el general el 0; arrastrando CRT (`ODYSSEYVK_HUD_MOVIENDO`, nuevo)
+  con el ratón bajo los ajustes de FakeHDR cae en el puesto 2, con su raya encima de LUT-RA. En una copia de los ajustes,
+  CRT al puesto 3 (`DPX:FakeHDR:CRT:LUT-RA:RGBSharpening`), DPX quitado y el general encendido. El visor, en un gamescope
+  sin salida con la vista pedida: con el general apagado, la salida igual a la fuente (diferencia 0,0, sin cadena); con
+  él puesto, los efectos en toda la imagen (14/255 a los dos lados, sin raya). `Inicio` (`ODYSSEY_GOLPE=tecla:home`):
+  «[efectos] puestos con el atajo» y el archivo pasa a `puestos = si`. Sin probar con un juego delante.
+
 ## La vista previa de los efectos, con su casilla y como la vista de depuración (v1.18)
 
 - Rodolfo, con una foto de la vista de depuración y otra de la pestaña Efectos: «cambialo, distribuyelo como en la vista de
