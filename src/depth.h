@@ -174,6 +174,8 @@ public:
      reloj; las herramientas que pasan fotos a toda prisa (`odysseyvk mapa`) lo fijan en kPasoRef para
      que una rafaga de cuadros se suavice como en un video y no como si durara milisegundos. */
   static constexpr double kPasoRef = 1.0 / 6.0;
+  /* (v1.16) el cambio de plano por la imagen: diferencia media de la miniatura (0..1) desde la que hay corte */
+  static constexpr float kCorteImagen = 0.14f;
   void setPasoFijo(double s) { pasoFijo_ = s; }
   /* Olvida lo que arrastra de un cuadro al siguiente (mapa anterior, escala, plano de apoyo, laminas):
      el cuadro que venga se trata como el primero. Para medir fotos sueltas con `mapa --sueltas`: sin
@@ -187,6 +189,8 @@ public:
     focoListo_ = false;
     cuadrosDesdeCorte_ = 1000;
     pFondo_ = pFrente_ = -1.0f;
+    miniAnt_.clear();
+    cuadrosDesdeCorteImg_ = 1000;
   }
   bool lastCut() const { return corte_; }    /* hubo cambio de plano en la ultima estimacion */
   /* (v1.16) la red de video (Video Depth Anything): cuantos cuadros mira a la vez (0 = una red de un cuadro) */
@@ -290,9 +294,14 @@ private:
   float pivote_ = 0.0f;                 /* cuanto se retrasa el plano de la pantalla respecto al sujeto (0..0,9) */
   double tUltima_ = -1.0;               /* reloj de la estimacion anterior, en segundos (< 0 = no hubo) */
   double pasoFijo_ = 0.0;               /* ver setPasoFijo */
-  bool corte_ = false;
+  bool corte_ = false;                  /* cambio de plano en la ultima estimacion */
+  /* (v1.16) el cambio de plano por la imagen: la miniatura de 32 x 32 del cuadro anterior, lo que cambio y el
+     descanso (en estimaciones) desde el ultimo */
+  std::vector<float> miniAnt_;
+  float difImagen_ = 0.0f;
+  int cuadrosDesdeCorteImg_ = 1000;
   /* (v1.16) la red de video: los cuadros que mira a la vez (0 = de un cuadro) y cuantos lleva ya su ventana */
-  int ventana_ = 0, ventanaN_ = 0;                  /* cambio de plano en la ultima estimacion */
+  int ventana_ = 0, ventanaN_ = 0;
   long cortes_ = 0;
   int cuadrosDesdeCorte_ = 1000;        /* descanso entre reinicios (15 cuadros en el programa de Samsung) */
   std::vector<float> guia_;             /* luminancia de la foto: la que guia la limpieza del mapa */

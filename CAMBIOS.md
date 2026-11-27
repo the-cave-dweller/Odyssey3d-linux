@@ -34,6 +34,32 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Ctrl+C o por una señal, se mata todo lo marcado que siga vivo: SIGTERM y, a los 3 s, SIGKILL (probado con un
   proceso que no hace caso a SIGTERM: muerto a los ~5 s).
 
+## La red de vídeo ve los cambios de plano en la imagen, antes de pasar (v1.16)
+
+- Rodolfo: «se pueden usar las separaciones de plano en depth anything video para mejorar o reemplazar las nuestras?».
+  Video Depth Anything no tiene ninguna: ni su modo por ventanas ni el de flujo miran cortes ni vacían su memoria
+  (leído en su código y su README). Las suyas dependen de las nuestras: el visor le vacía la ventana en cada cambio
+  de plano.
+- **MEDIDO** (27-nov, `odysseyvk mapa` en la 5080 sin sesión 3D, clips de 40 + 40 cuadros con un corte duro en los dos
+  sentidos, comparados con el plano nuevo pasado solo). El corte de siempre mira el MAPA (diferencia media de 0,12 y
+  15 mapas de descanso, las cifras de Samsung):
+  - con la red de siempre va perfecto: lo ve en el mismo mapa (0,25-0,29) y lo de después es idéntico a empezar de
+    cero; el único de más, en el cuadro 24 de la persona hablando, es un corte de verdad del vídeo;
+  - con la de vídeo, no: en la persona hablando sus mapas cambian solos (mediana 0,105; 12 de 38 por encima del
+    umbral, hasta 0,23, y un corte de verdad dio 0,19), así que salta en falso en cuanto acaba el descanso (cuadros
+    4, 57, 73) y cada salto le tira su ventana de 32 cuadros; y el primer mapa del plano nuevo sale con 31 cuadros del
+    viejo: 13-15 niveles de 255 de diferencia con el plano solo, hasta 53 después, y en un sentido no se igualaba en
+    40 mapas.
+- **Ahora**, con la red de vídeo el corte se mira en la IMAGEN, antes de pasar la red: una miniatura de 32 × 32 de la
+  luminancia contra la del cuadro anterior, la diferencia media sin las celdas negras en los dos (las bandas de una
+  película no la diluyen), corte por encima de 0,14 y 3 estimaciones de descanso. Si hay corte, la ventana empieza con
+  ese cuadro antes de pasarla. Las redes de un cuadro siguen con el corte por el mapa.
+- **Medido otra vez**: cortes de verdad 0,169-0,199, movimiento rápido dentro de un plano hasta 0,107, un paisaje
+  hasta 0,03. La red de vídeo corta solo en los cortes de verdad (24 y 41; 41 y 64) y desde el primer mapa del plano
+  nuevo sale idéntica al plano pasado solo (0 niveles de diferencia en los 40); la de siempre da los mismos números
+  que antes. Son tres cortes de verdad: el 0,14 queda en medio, pero no está calibrado con muchos (un corte entre dos
+  tomas muy parecidas podría quedar por debajo).
+
 ## La pestaña 3D: las redes en dos mitades, desplegables y la vista de depuración en vivo (v1.16)
 
 - Rodolfo: «I want a dropdown button for Depth network once the user exceeds 2 models, Add to the right side, like

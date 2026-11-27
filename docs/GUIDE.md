@@ -61,7 +61,8 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   `mde_large.onnx` is in that folder it is used when nothing is ticked (key `1`/`2` switches).
 - Videos only (since 1.16, experimental): Video Depth Anything Small (`video_depth_anything_small_fp32.onnx`, a
   community ONNX export of the Apache-2.0 model; any `.onnx` with «video» in its name counts too) looks at a window of
-  the last 32 frames at 504×280 and keeps the newest map; the window restarts at scene cuts. It goes to
+  the last 32 frames at 504×280 and keeps the newest map; the window restarts at scene cuts, which for this network
+  are found on the image before it runs (a 32×32 luminance thumbnail against the previous one; cut above 0.14). It goes to
   `modelo_video =` in `serve.conf`; the service passes it to the viewer only for non-game windows, and a running video
   session switches when it's ticked or unticked (a game ignores it). Needs ~2.3 GB on the GPU (the CUDA cap rises to
   3.5 GB for it) and refuses the CPU, falling back to the usual network. In the panel the two lists sit side by side

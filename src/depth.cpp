@@ -1184,6 +1184,44 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     }
   }
   detectarBandas();
+  /* (v1.16) El cambio de plano mirado en la IMAGEN y no en el mapa: una miniatura de 32 x 32 de la luminancia contra
+     la del cuadro anterior, la diferencia media sin las celdas negras en los dos (las bandas de una pelicula no la
+     diluyen). MEDIDO el 27-nov con dos clips y un corte duro: con la red de video el corte por el mapa (abajo) salta
+     en falso dentro de un plano con movimiento (12 de 39 mapas por encima de su 0,12 en una persona hablando: el
+     ruido de la propia red llega a 0,23 y un corte de verdad dio 0,19), y cada salto en falso le tira su ventana de
+     32 cuadros; y lo ve tarde: el primer mapa del plano nuevo sale con 31 cuadros del viejo. La imagen no depende de
+     la red y se mira ANTES de pasarla, asi que la ventana se vacia a tiempo. Con la red de video manda esta; las de
+     un cuadro siguen con la del mapa, que con ellas va bien (lo ve en el mismo mapa y no salta en falso) */
+  bool corteImagen = false;
+  {
+    constexpr int kCeldas = 32;
+    const int n = sz_;
+    std::vector<float> mini((size_t)kCeldas * kCeldas);
+    for (int cy = 0; cy < kCeldas; cy++)
+      for (int cx = 0; cx < kCeldas; cx++) {
+        const int ya = n * cy / kCeldas, yb = n * (cy + 1) / kCeldas, xa = n * cx / kCeldas, xb = n * (cx + 1) / kCeldas;
+        double s = 0.0;
+        for (int y = ya; y < yb; y++)
+          for (int x = xa; x < xb; x++) s += guia_[(size_t)y * (size_t)n + (size_t)x];
+        mini[(size_t)cy * kCeldas + (size_t)cx] = (float)(s / std::max(1, (yb - ya) * (xb - xa)));
+      }
+    difImagen_ = 0.0f;
+    const bool hay = miniAnt_.size() == mini.size();
+    if (hay) {
+      double s = 0.0;
+      int cuenta = 0;
+      for (size_t k = 0; k < mini.size(); k++) {
+        if (mini[k] < 0.03f && miniAnt_[k] < 0.03f) continue;   /* negra en los dos: una banda, o un fundido */
+        s += std::fabs(mini[k] - miniAnt_[k]);
+        cuenta++;
+      }
+      if (cuenta > 0) difImagen_ = (float)(s / cuenta);
+    }
+    miniAnt_ = std::move(mini);
+    corteImagen = hay && difImagen_ > kCorteImagen && cuadrosDesdeCorteImg_ >= 3;
+    cuadrosDesdeCorteImg_ = corteImagen ? 0 : cuadrosDesdeCorteImg_ + 1;
+    if (corteImagen && im->ventana) ventanaN_ = 0;   /* la ventana empieza con este cuadro, como recien abierta */
+  }
   std::vector<Ort::Value> outs;
   std::vector<float> dRe, dSinRed, dJuego;
   const float *d = nullptr;
@@ -1351,19 +1389,13 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     }
     if (tomadas) dif /= (float)tomadas * 255.0f;
   }
-  corte_ = tomadas > 0 && dif > 0.12f && cuadrosDesdeCorte_ >= 15;
+  /* (v1.16) con la red de video manda el cambio de plano por la imagen (arriba, antes de pasar la red) */
+  corte_ = im->ventana ? corteImagen : (tomadas > 0 && dif > 0.12f && cuadrosDesdeCorte_ >= 15);
   if (corte_) {
     cuadrosDesdeCorte_ = 0;
     cortes_++;
     haveScale_ = false;
-    /* (v1.16) la red de video: lo de antes del cambio de plano ya no le sirve; la ventana se queda con el cuadro de
-       ahora en todos sus sitios */
-    if (im->ventana) {
-      const size_t fr = im->in.size();
-      const float *ult = im->hist.data() + (size_t)(im->ventana - 1) * fr;
-      for (int k = 0; k < im->ventana - 1; k++) std::copy(ult, ult + fr, im->hist.begin() + (long)k * (long)fr);
-      ventanaN_ = 1;
-    }
+    /* (v1.16) la red de video ya empezo su ventana con este cuadro, antes de pasarla (el corte por la imagen) */
   } else {
     cuadrosDesdeCorte_++;
   }
