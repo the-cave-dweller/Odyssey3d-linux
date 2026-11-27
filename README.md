@@ -55,6 +55,12 @@ When the download finishes the panel closes and the network loads. From a termin
 odysseyvk ctl red descargar
 ```
 
+For **Neural on the CPU**, you can also download the full-precision model:
+`odysseyvk ctl red descargar fp32` (99 MB). When both variants are installed,
+automatic model selection uses FP16 on CUDA and FP32 on the CPU, including
+when the requested GPU has too little free memory. An explicit `--modelo` or
+configured model path still takes precedence. Performance mode uses neither model.
+
 ![First run: the panel asks for the depth network](docs/img/first-run.png)
 
 ## Use

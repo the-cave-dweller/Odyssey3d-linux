@@ -4289,11 +4289,14 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     args.push_back(std::to_string(cada));
     args.push_back("--red");
     args.push_back(std::to_string(red));
-    if (!modelo.empty()) {
+    /* La red nativa sin ruta explicita la elige el visor: FP16 en CUDA, FP32 en CPU si esta. */
+    const bool nativaAuto = pila && pila->nuestra.empty() && (pila->modelo.empty() || slotRed(pila->modelo) == 1);
+    const std::string automatica = nativaAuto ? rutaRedNuestra() : std::string();
+    if (!modelo.empty() && modelo != automatica) {
       args.push_back("--modelo");
       args.push_back(modelo);
     }
-    if (!alterno.empty()) {   /* la otra red, para el boton 1 / 2 del visor */
+    if (!alterno.empty() && alterno != automatica) {   /* la otra red, para el boton 1 / 2 del visor */
       args.push_back("--alterno");
       args.push_back(alterno);
     }
@@ -6607,18 +6610,26 @@ int main(int argc, char **argv) {
         std::printf("se baja de %s\n", prefs::kUrlRedAbierta);
         if (!prefs::redLigeraPresente())
           std::printf("  odysseyvk ctl red descargar   deja ahi la ligera (fp16, 50 MB)\n");
+        if (!redFp32Presente()) std::printf("  odysseyvk ctl red descargar fp32   variante opcional para CPU (99 MB)\n");
         return hay ? 0 : 1;
       }
-      if (prefs::redLigeraPresente()) {
-        std::printf("ya esta: %s\n", rutaRedNuestra().c_str());
+      const std::string precision = argc > 4 ? strLower(argv[4]) : "fp16";
+      if (argc > 5 || (precision != "fp16" && precision != "fp32")) {
+        std::fprintf(stderr, "uso: odysseyvk ctl red descargar [fp16|fp32]\n");
+        return 2;
+      }
+      const bool fp32 = precision == "fp32";
+      auto presente = [fp32] { return fp32 ? redFp32Presente() : prefs::redLigeraPresente(); };
+      if (presente()) {
+        std::printf("ya esta: %s\n", (fp32 ? rutaRedVieja() : rutaRedLigera()).c_str());
         return 0;
       }
       std::string err;
-      if (!prefs::descargar(&err)) {
+      if (!prefs::descargar(&err, fp32)) {
         std::fprintf(stderr, "%s\n", err.c_str());
         return 1;
       }
-      std::printf("descargando %s\n", prefs::kUrlRedAbierta);
+      std::printf("descargando %s\n", fp32 ? prefs::kUrlRedFp32 : prefs::kUrlRedAbierta);
       while (prefs::descargaEnMarcha()) {
         if (prefs::vigilarDescarga()) {
           std::printf("  %s\n", prefs::textoDescarga().c_str());
@@ -6626,7 +6637,7 @@ int main(int argc, char **argv) {
         }
         ::usleep(500000);
       }
-      return prefs::redLigeraPresente() ? 0 : 1;
+      return presente() ? 0 : 1;
     }
     if (sub == "3d") return cmd3D(argc - 3, argv + 3);
     if (sub == "legado") return cmdLegado(argc - 3, argv + 3);

@@ -48,6 +48,8 @@ std::string rutaRedNuestra();
 /* las dos versiones de la abierta: la ligera (fp16, la de fabrica) y la de siempre (fp32) */
 std::string rutaRedLigera();
 std::string rutaRedVieja();
+constexpr long kBytesRedFp32 = 99060839;
+bool redFp32Presente();
 /* Marcas del arranque del visor (v1.12): cada paso, en ms desde que arranco el proceso (de
    /proc/self/stat, no del reloj del registro, que agrupa las lineas por tandas). `resumenArranque`
    da la linea con lo que tardo cada paso. */

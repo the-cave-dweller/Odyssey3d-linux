@@ -55,6 +55,12 @@ Al acabar la descarga el panel se cierra y la red se carga. Desde la terminal es
 odysseyvk ctl red descargar
 ```
 
+Para usar la red **en la CPU** se puede descargar también la variante de precisión
+completa: `odysseyvk ctl red descargar fp32` (99 MB). Con las dos instaladas,
+la selección automática usa FP16 en CUDA y FP32 en la CPU, también cuando no
+cabe en la tarjeta. Se respeta una ruta de modelo explícita. El modo Rendimiento
+no necesita ninguna de las dos.
+
 ![Primer arranque: el panel pide la red de profundidad](docs/img/es/first-run.png)
 
 ## Uso

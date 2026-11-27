@@ -3,6 +3,7 @@
    init() avisa y el conversor simplemente no esta disponible. */
 #include "depth.h"
 #include "profjuego.h"
+#include "util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -23,7 +24,6 @@
 #include <unistd.h>
 
 #ifdef HAVE_ORT
-#include "util.h"
 #include <onnxruntime_cxx_api.h>
 #endif
 
@@ -369,24 +369,57 @@ static std::string resumenOrt(const std::string &m) {
   return salida;
 }
 
-/* Cuanta memoria libre queda en cada tarjeta. nvidia-smi responde "0, 246" por linea; si no esta
-   (AMD, o sin el utilitario) devuelve vacio y no se mira nada. Sirve para no abrir la red donde no
-   cabe: con la tarjeta reventada la creacion de la sesion revienta y el conversor no arranca. */
-static std::vector<long> vramLibreMiB() {
-  std::vector<long> libres;
-  FILE *p = popen("nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null", "r");
-  if (!p) return libres;
-  char linea[128];
-  while (std::fgets(linea, sizeof linea, p)) {
-    long idx = -1, ml = -1;
-    if (std::sscanf(linea, "%ld, %ld", &idx, &ml) == 2 && idx >= 0 && idx < 16) {
-      if ((int)libres.size() <= idx) libres.resize((size_t)idx + 1, -1);
-      libres[(size_t)idx] = ml;
+#ifdef HAVE_ORT
+/* ONNX usa los ordinales del proceso CUDA; nvidia-smi enumera todas las tarjetas en otro orden.
+   Preguntar por el UUID no crea un contexto ni requiere el SDK de CUDA para compilar. */
+struct TarjetaCuda {
+  std::string uuid;
+  long libreMiB = -1;
+};
+static std::vector<TarjetaCuda> tarjetasCuda() {
+  std::vector<TarjetaCuda> tarjetas;
+  void *lib = dlopen("libcuda.so.1", RTLD_NOW | RTLD_LOCAL);
+  if (!lib) return tarjetas;
+  struct Uuid { unsigned char bytes[16]; };
+  auto init = (int (*)(unsigned))dlsym(lib, "cuInit");
+  auto count = (int (*)(int *))dlsym(lib, "cuDeviceGetCount");
+  auto device = (int (*)(int *, int))dlsym(lib, "cuDeviceGet");
+  auto uuid = (int (*)(Uuid *, int))dlsym(lib, "cuDeviceGetUuid_v2");
+  if (!uuid) uuid = (int (*)(Uuid *, int))dlsym(lib, "cuDeviceGetUuid");
+  int n = 0;
+  if (init && count && device && uuid && init(0) == 0 && count(&n) == 0 && n > 0) {
+    tarjetas.resize((size_t)n);
+    for (int i = 0; i < n; ++i) {
+      int d = 0;
+      Uuid u{};
+      if (device(&d, i) != 0 || uuid(&u, d) != 0) continue;
+      std::string id = "gpu-";
+      static constexpr char hex[] = "0123456789abcdef";
+      for (int j = 0; j < 16; ++j) {
+        if (j == 4 || j == 6 || j == 8 || j == 10) id += '-';
+        id += hex[u.bytes[j] >> 4];
+        id += hex[u.bytes[j] & 15];
+      }
+      tarjetas[(size_t)i].uuid = id;
     }
   }
+  dlclose(lib);
+  if (tarjetas.empty()) return tarjetas;
+  FILE *p = popen("nvidia-smi --query-gpu=uuid,memory.free --format=csv,noheader,nounits 2>/dev/null", "r");
+  if (!p) return tarjetas;
+  char linea[128];
+  while (std::fgets(linea, sizeof linea, p)) {
+    char id[64];
+    long ml = -1;
+    if (std::sscanf(linea, " %63[^,], %ld", id, &ml) != 2 || ml < 0) continue;
+    const std::string clave = strLower(strTrim(id));
+    for (auto &t : tarjetas)
+      if (t.uuid == clave) t.libreMiB = ml;
+  }
   pclose(p);
-  return libres;
+  return tarjetas;
 }
+#endif
 
 /* Cuanta memoria de sistema queda disponible (MemAvailable de /proc/meminfo). Con la CPU por
    delante la red se queda con unos cientos de megabytes; si la maestra esta casi llena la
@@ -412,7 +445,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
              "(abortaria por dentro y el visor se iria arriba)";
     return false;
   }
-  const std::string path = model.empty() ? defaultModelPath() : model;
+  std::string path = model.empty() ? defaultModelPath() : model;
   gpu_ = gpu < 0 ? 0 : gpu;
   if (const char *lim = entornoOdyssey("ODYSSEYVK_LIMPIEZA"))   /* 0 deja el mapa en crudo: para comparar */
     limpieza_ = lim[0] != '0';
@@ -469,8 +502,7 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   if (stat(path.c_str(), &stt) != 0) {
     if (err)
       *err = "no esta el modelo de profundidad en " + path +
-             "\n    bajarlo con:  mkdir -p ~/.local/share/odysseyvk/modelos && curl -fLo \"" + path +
-             "\" https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/model.onnx";
+             "\n    la red abierta se descarga con: odysseyvk ctl red descargar [fp16|fp32]";
     return false;
   }
 #ifdef HAVE_ORT
@@ -491,42 +523,29 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     gpu_ = std::atoi(g);
   if (gpu_ < 0)
     sinGpu = true;
-  {
-    const std::vector<long> libres = vramLibreMiB();
-    if (!sinGpu && !libres.empty()) {
-      long mia = gpu_ < (int)libres.size() ? libres[(size_t)gpu_] : -1;
-      int mejor = gpu_;
-      long mejorMiB = mia;
-      for (size_t i = 0; i < libres.size(); i++)
-        if (libres[i] > mejorMiB) { mejorMiB = libres[i]; mejor = (int)i; }
-      const long falta = requisitoMiB(path);
-      if (mia >= 0 && mia < falta) {
-        if (mejor != gpu_ && mejorMiB >= falta) {
-          std::printf("[conversor] la grafica %d tiene solo %ld MB libres: la red se va a la grafica %d "
-                      "(%ld MB libres)\n", gpu_, mia, mejor, mejorMiB);
-          std::fflush(stdout);
-          gpu_ = mejor;
-        } else {
-          std::printf("[conversor] no hay %ld MB libres en ninguna grafica (esta red, con el colchon, "
-                      "pide %ld): la red se hara con la CPU, mas despacio\n", mejorMiB, falta);
-          std::fflush(stdout);
-          sinGpu = true;
-        }
-      }
+  const auto tarjetas = sinGpu ? std::vector<TarjetaCuda>{} : tarjetasCuda();
+  if (!tarjetas.empty()) {
+    if ((size_t)gpu_ >= tarjetas.size()) {
+      std::printf("[conversor] CUDA %d no es visible: se prueba la tarjeta visible 0\n", gpu_);
+      gpu_ = 0;
     }
-  }
-  /* La red de Samsung no va por CPU ni por asomo: se cuelga creando la sesion (medido el 24-nov con
-     mde_large.onnx: mas de 4 minutos quemando CPU sin acabarla) y acaba en abort, y el visor se iba
-     arriba dejando el panel en modo 3D sin video. No se intenta: se dice lo que hace falta. */
-  if (sinGpu && esRedDeSamsung(path)) {
-    if (err)
-      *err = std::string("la red de Samsung no puede abrirse por CPU: se cuelga creando la sesion ") +
-             "(medido: mas de 4 minutos sin acabarla) y acaba abortando, asi que no se intenta. "
-             "Hacen falta " +
-             std::to_string(requisitoMiB(path)) +
-             " MB libres en una grafica; suéltalos cerrando lo que ocupe la grafica, o usa la red "
-             "nativa con el boton 2 (esa si va por CPU, a unos 190 ms por mapa).";
-    return false;
+    const long mia = tarjetas[(size_t)gpu_].libreMiB;
+    int mejor = gpu_;
+    for (size_t i = 0; i < tarjetas.size(); i++)
+      if (tarjetas[i].libreMiB > tarjetas[(size_t)mejor].libreMiB) mejor = (int)i;
+    const long mejorMiB = tarjetas[(size_t)mejor].libreMiB, falta = requisitoMiB(path);
+    if (mia >= 0 && mia < falta) {
+      if (mejorMiB >= falta) {
+        std::printf("[conversor] la grafica %d tiene solo %ld MB libres: la red se va a la grafica %d "
+                    "(%ld MB libres)\n", gpu_, mia, mejor, mejorMiB);
+        gpu_ = mejor;
+      } else {
+        std::printf("[conversor] como mucho %ld MB libres en las tarjetas visibles, hacen falta %ld: "
+                    "la red se hara con la CPU, mas despacio\n", mejorMiB, falta);
+        sinGpu = true;
+      }
+      std::fflush(stdout);
+    }
   }
   OrtImpl *im = new OrtImpl();
   im->so.SetIntraOpNumThreads(4);
@@ -563,6 +582,17 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
     }
   }
   if (dev_ == "CPU") {
+    /* Tambien si falto el proveedor CUDA: mde_large no se debe abrir en la CPU. */
+    if (esRedDeSamsung(path)) {
+      if (err) *err = "la red de Samsung no puede abrirse por CPU. Usa la red nativa con el boton 2, "
+                      "o una grafica CUDA con " + std::to_string(requisitoMiB(path)) + " MB libres.";
+      delete im;
+      return false;
+    }
+    if (model.empty() && path == rutaRedLigera()) {
+      if (redFp32Presente()) path = rutaRedVieja();
+      else std::printf("[conversor] FP32 puede ser mas rapida por CPU: odysseyvk ctl red descargar fp32\n");
+    }
     const long mib = ramDisponibleMiB();
     if (mib >= 0 && mib < 1500) {
       std::printf("[conversor] la memoria de sistema esta justa (%ld MB disponibles): el conversor se "
@@ -622,7 +652,8 @@ bool DepthNet::init(const std::string &model, std::string *err, int gpu) {
   ruta_ = path;
   std::printf("[conversor] modelo %s (entrada %d x %d · mapa %d x %d%s) con %s%s\n", path.c_str(), inW_, inH_, sz_, sz_,
               topeArrastre_ ? " · tope de arrastre" : "", dev_.c_str(),
-              dev_ == "NVIDIA" ? (" (tarjeta " + std::to_string(gpu_) + ")").c_str() : "");
+              dev_ == "NVIDIA" ? (" (CUDA " + std::to_string(gpu_) +
+                  (tarjetas.empty() ? "" : " " + tarjetas[(size_t)gpu_].uuid) + ")").c_str() : "");
   return true;
 #else
   (void)path;
@@ -653,16 +684,16 @@ bool DepthNet::cambiar(const std::string &model, std::string *err, bool forzar) 
   /* Aviso aparte para la red de Samsung: si ahora mismo no cabe en ninguna grafica, soltar la sesion
      en curso no siempre le deja sitio (el contexto de CUDA no se devuelve del todo), y el intento por
      CPU es lo que hunde el visor. Se intenta igual, porque a lo mejor si cabe, pero se avisa. */
+#ifdef HAVE_ORT
   if (esRedDeSamsung(nueva)) {
-    const std::vector<long> libres = vramLibreMiB();
     long mejor = -1;
-    for (long m : libres)
-      if (m > mejor) mejor = m;
+    for (const auto &t : tarjetasCuda()) mejor = std::max(mejor, t.libreMiB);
     const long falta = requisitoMiB(nueva);
     if (mejor >= 0 && mejor < falta)
       std::printf("[conversor] la grafica esta justa (%ld MB libres en la mejor, esta red pide %ld): si "
-                  "no cabe, la red de Samsung NO se abrira por CPU\n", mejor, falta);
+                   "no cabe, la red de Samsung NO se abrira por CPU\n", mejor, falta);
   }
+#endif
   /* Se suelta la sesion vieja ANTES de abrir la nueva: es lo que devuelve la memoria de la
      grafica, y sin eso la segunda red no cabe y se va a la CPU. */
   cierra();
@@ -671,7 +702,7 @@ bool DepthNet::cambiar(const std::string &model, std::string *err, bool forzar) 
   focoListo_ = false;              /* y el plano de apoyo de la otra red tampoco vale */
   cuadrosDesdeCorte_ = 0;          /* la otra red no comparte el suavizado anterior */
   std::string e;
-  if (init(nueva, &e, gpu)) {
+  if (init(model, &e, gpu)) {
     smooth_ = sm;
     limpieza_ = lim;
     return true;

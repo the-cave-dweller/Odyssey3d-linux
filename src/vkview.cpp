@@ -163,6 +163,7 @@ struct VkUi {
      modelo encargado, que se atiende con la red parada, igual que las teclas 1 y 2, y se queda
      encargado hasta que el conversor este encendido. */
   std::string redRutaPedida;
+  bool redRutaAutomatica = false;   /* el cambio tras descargar la ligera no fija una ruta manual */
   bool avisoRedLejos = false;   /* dar cuenta una sola vez de "el conversor esta apagado" */
 };
 
@@ -2047,6 +2048,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   };
   anotarRed(opts.modelPath);
   anotarRed(opts.altModel);
+  bool nativaAuto = ui.rutaRed[2].empty();
+  auto rutaInferencia = [&](const std::string &ruta) {
+    /* Vacia pide la variante del proveedor; --modelo/--alterno explicitos siempre se respetan. */
+    return nativaAuto && (ruta == rutaRedLigera() || ruta == rutaRedVieja()) ? std::string() : ruta;
+  };
   if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra()))
     ui.rutaRed[2] = rutaRedNuestra();
   /* "opts" es de solo lectura, asi que la red con la que arrancamos vive aqui. Al arrancar se usa
@@ -2058,16 +2064,23 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     modeloActivo = ui.rutaRed[1];
   else if (modeloActivo.empty())
     modeloActivo = ui.rutaRed[2];
+  auto aceptarRuta = [&](const std::string &ruta) {
+    modeloActivo = ruta;
+    if (!ui.redRutaAutomatica) {
+      anotarRed(ruta);
+      if (slotRed(ruta) == 2) nativaAuto = false;  /* recordar tambien la eleccion hecha en marcha */
+    }
+  };
   ui.hud.state().red = modeloActivo.empty() ? 2 : slotRed(modeloActivo);
   ui.hud.state().redViva = false;
   int convGpu = opts.convGpu;   /* se sube solo a la 1 si la 0 esta llena (strata, juegos, ...) */
   auto arrancarRed = [&](int &gpu, std::string *e) {
-    if (red.init(modeloActivo, e, gpu)) return true;
+    if (red.init(rutaInferencia(modeloActivo), e, gpu)) return true;
     if (gpu == 0) {   /* la GPU de la pantalla suele estar ocupada: probar la siguiente tarjeta */
       std::fprintf(stderr, "[conversor] %s\n[conversor] se prueba en la grafica 1 (se fuerza con --red N)\n",
                    e->c_str());
       std::fflush(stderr);
-      if (red.init(modeloActivo, e, 1)) {
+      if (red.init(rutaInferencia(modeloActivo), e, 1)) {
         gpu = 1;
         return true;
       }
@@ -2079,7 +2092,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       std::fprintf(stderr, "[conversor] %s\n[conversor] se prueba con la nuestra (%s)\n", e->c_str(),
                    ui.rutaRed[2].c_str());
       std::fflush(stderr);
-      if (red.init(ui.rutaRed[2], e, gpu)) {
+      if (red.init(rutaInferencia(ui.rutaRed[2]), e, gpu)) {
         modeloActivo = ui.rutaRed[2];
         ui.hud.state().red = 2;
         return true;
@@ -2607,14 +2620,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             }
             std::fflush(stdout);
           }
+#ifdef HAVE_ORT
           const auto ordenRed = palabras.find("cargar_red");
           if (ordenRed != palabras.end()) {
             if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra())) ui.rutaRed[2] = rutaRedNuestra();
             /* bajo la ligera (fp16) con la de siempre puesta: se cambia a ella en marcha (rama experimental) */
-            if (ui.rutaRed[2] == rutaRedVieja() && rutaRedNuestra() == rutaRedLigera()) {
+            if (nativaAuto && ui.rutaRed[2] == rutaRedVieja() && rutaRedNuestra() == rutaRedLigera()) {
               ui.rutaRed[2] = rutaRedLigera();
-              if (modeloActivo == rutaRedVieja() && convActivo) ui.redRutaPedida = rutaRedLigera();
-              else if (modeloActivo == rutaRedVieja()) modeloActivo = rutaRedLigera();
+              if (modeloActivo == rutaRedVieja() && convActivo && red.device() != "CPU") {
+                ui.redRutaPedida = rutaRedLigera();
+                ui.redRutaAutomatica = true;
+              } else if (modeloActivo == rutaRedVieja()) modeloActivo = rutaRedLigera();
             }
             if (modeloActivo.empty() || !fileExists(modeloActivo)) modeloActivo = ui.rutaRed[2];
             if (!convActivo && !modeloActivo.empty() && fileExists(modeloActivo)) {
@@ -2623,6 +2639,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               ui.convWant = true;
             }
           }
+#endif
           /* `dividido_suavizado = si|no`: lo mandan los ajustes del programa. Cambia lo que hace el
              boton de video dividido y, si ahora mismo se esta viendo un dividido, lo cambia al momento. */
           const auto ordenSuave = palabras.find("dividido_suavizado");
@@ -2652,6 +2669,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           }
           if (!modeloPedido.empty()) {
             ui.redRutaPedida = modeloPedido;   /* se atiende mas abajo, con la red parada */
+            ui.redRutaAutomatica = false;
             ui.avisoRedLejos = false;
           }
           foto = ajusteActual(ui, wv);         /* lo de fuera ya quedo contado al aplicarlo */
@@ -2767,7 +2785,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (!aSinRed && (ruta.empty() || !fileExists(ruta))) ruta = ui.rutaRed[2];
         std::string cerr1;
         const auto t0 = std::chrono::steady_clock::now();
-        if (red.cambiar(ruta, &cerr1, true)) {
+        if (red.cambiar(rutaInferencia(ruta), &cerr1, true)) {
           if (wv.converterSize() != red.size() && !wv.prepareConverter(red.size(), &cerr1))
             std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());
           ajuste::fijarEnServeConf("exp_sin_red", aSinRed ? "si" : "no", &e2);
@@ -2813,7 +2831,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         ui.redPedida = 0;
         hiloRed.esperar();
         std::string cerr1;
-        if (red.cambiar(ui.rutaRed[quiero], &cerr1)) {
+        if (red.cambiar(rutaInferencia(ui.rutaRed[quiero]), &cerr1)) {
           if (wv.converterSize() != red.size() && !wv.prepareConverter(red.size(), &cerr1))
             std::fprintf(stderr, "[conversor] %s\n", cerr1.c_str());
           ui.hud.state().red = quiero;
@@ -2860,6 +2878,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       } else if (hiloRed.ocupado) {
         /* espera unos milisegundos a que termine el mapa que esta en el aire */
       } else if (ui.redRutaPedida == red.modelPath()) {
+        aceptarRuta(ui.redRutaPedida);
         ui.redRutaPedida.clear();                 /* ya estaba puesta: nada que hacer */
       } else {
         const std::string pedida = ui.redRutaPedida;
@@ -2873,7 +2892,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         } else {
           hiloRed.esperar();
           std::string cerr2;
-          if (red.cambiar(pedida, &cerr2)) {
+          if (red.cambiar(ui.redRutaAutomatica ? std::string() : pedida, &cerr2)) {
+            aceptarRuta(red.modelPath());
             if (wv.converterSize() != red.size() && !wv.prepareConverter(red.size(), &cerr2))
               std::fprintf(stderr, "[conversor] %s\n", cerr2.c_str());
             ui.hud.state().red = slotRed(pedida);

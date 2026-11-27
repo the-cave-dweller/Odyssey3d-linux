@@ -164,6 +164,10 @@ static std::string carpetaRedes() {
 }
 std::string rutaRedLigera() { return carpetaRedes() + "depth_anything_v2_small_fp16.onnx"; }
 std::string rutaRedVieja() { return carpetaRedes() + "depth_anything_v2_small.onnx"; }
+bool redFp32Presente() {
+  std::error_code ec;
+  return std::filesystem::file_size(rutaRedVieja(), ec) == kBytesRedFp32 && !ec;
+}
 
 namespace {
 /* segundos desde el arranque del sistema en que empezo este proceso (campo 22 de /proc/self/stat,

@@ -365,32 +365,40 @@ Valores leer() {
 /* ---- la red abierta y su descarga (v0.92) ------------------------------------------------------ */
 /* desde la rama experimental se baja la fp16 (49,6 MB); la de siempre (fp32, 95 MB) sigue valiendo */
 const char *const kUrlRedAbierta = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_fp16.onnx";
+const char *const kUrlRedFp32 = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/4472b7362082ad9968fee890ca0f1e5aca36b93d/onnx/model.onnx";
 
 bool redLigeraPresente() {
   struct stat sb {};
   return ::stat(rutaRedLigera().c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
 }
 bool redAbiertaPresente() {
-  struct stat sb {};
-  return redLigeraPresente() || (::stat(rutaRedVieja().c_str(), &sb) == 0 && sb.st_size == kBytesRedVieja);
+  return redLigeraPresente() || redFp32Presente();
 }
 
 namespace {
 struct Descarga {
   pid_t pid = 0;            /* el curl, mientras corre */
   std::string parte;        /* el archivo a medias */
+  std::string destino;
+  long esperado = 0;
   std::string texto;        /* lo que ensena el panel */
   bool fallo = false;
   long bytes = 0;
 } g_descarga;
+std::string progresoDescarga() {
+  return std::string(idioma::tr("Bajando…")) + " " + std::to_string(g_descarga.bytes / 1000000) + " / " +
+         std::to_string((g_descarga.esperado + 500000) / 1000000) + " MB";
+}
 }  // namespace
 
 bool descargaEnMarcha() { return g_descarga.pid > 0; }
 std::string textoDescarga() { return g_descarga.texto; }
 
-bool descargar(std::string *err) {
+bool descargar(std::string *err, bool fp32) {
   if (g_descarga.pid > 0) return true;
-  const std::string destino = rutaRedLigera();
+  const std::string destino = fp32 ? rutaRedVieja() : rutaRedLigera();
+  g_descarga.destino = destino;
+  g_descarga.esperado = fp32 ? kBytesRedFp32 : kBytesRedAbierta;
   const std::string dir = destino.substr(0, destino.rfind('/'));
   std::error_code ec;
   std::filesystem::create_directories(dir, ec);
@@ -406,13 +414,13 @@ bool descargar(std::string *err) {
     const int nulo = ::open("/dev/null", O_RDWR);
     if (nulo >= 0) { ::dup2(nulo, 0); ::dup2(nulo, 1); ::dup2(nulo, 2); }
     ::execlp("curl", "curl", "-fsSL", "--max-time", "1800", "--retry", "2", "-o", g_descarga.parte.c_str(),
-             kUrlRedAbierta, (char *)nullptr);
+             fp32 ? kUrlRedFp32 : kUrlRedAbierta, (char *)nullptr);
     ::_exit(127);
   }
   g_descarga.pid = pid;
   g_descarga.fallo = false;
   g_descarga.bytes = 0;
-  g_descarga.texto = idioma::trf("descargando… {} de 50 MB", {"0"});
+  g_descarga.texto = progresoDescarga();
   return true;
 }
 
@@ -425,14 +433,14 @@ bool vigilarDescarga() {
     const long bytes = ::stat(g_descarga.parte.c_str(), &sb) == 0 ? (long)sb.st_size : 0;
     if (bytes == g_descarga.bytes) return false;
     g_descarga.bytes = bytes;
-    g_descarga.texto = idioma::trf("descargando… {} de 50 MB", {std::to_string(bytes / 1000000)});
+    g_descarga.texto = progresoDescarga();
     return true;
   }
   g_descarga.pid = 0;
   const bool bien = r > 0 && WIFEXITED(estado) && WEXITSTATUS(estado) == 0;
   struct stat sb {};
-  const bool entera = ::stat(g_descarga.parte.c_str(), &sb) == 0 && sb.st_size == kBytesRedAbierta;
-  if (bien && entera && ::rename(g_descarga.parte.c_str(), rutaRedLigera().c_str()) == 0) {
+  const bool entera = ::stat(g_descarga.parte.c_str(), &sb) == 0 && sb.st_size == g_descarga.esperado;
+  if (bien && entera && ::rename(g_descarga.parte.c_str(), g_descarga.destino.c_str()) == 0) {
     g_descarga.texto = idioma::tr("lista: la red abierta ya está en su carpeta");
     g_descarga.fallo = false;
   } else {

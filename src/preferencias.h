@@ -44,7 +44,7 @@ std::vector<Juego> juegosSteam();
 bool lanzarJuego(const std::string &id, std::string *err = nullptr);
 
 struct Valores {
-  std::string modo = "ask";       /* ask · conv · sbs */
+  std::string modo = "ask";       /* ask · conv · sbs · flat */
   int suavizar = 1;               /* los videos divididos: 0 nunca · 1 siempre · 2 solo si hace falta */
   bool rastreo = false;
   bool atajos = true;
@@ -76,14 +76,14 @@ Valores leer();
 /* La red de profundidad abierta (Depth Anything V2 pequena, v0.92): de donde se baja, cuanto pesa y
    si ya esta en su sitio (~/.local/share/odysseyvk/modelos/depth_anything_v2_small.onnx). */
 extern const char *const kUrlRedAbierta;
+extern const char *const kUrlRedFp32;
 constexpr long kBytesRedAbierta = 49642442;   /* la fp16, la de fabrica desde la rama experimental */
-constexpr long kBytesRedVieja = 99060839;     /* la de siempre (fp32), que sigue valiendo */
 bool redAbiertaPresente();   /* la una o la otra */
 bool redLigeraPresente();
 /* La descarga, con un `curl` aparte: `descargar` la arranca (una sola a la vez); `vigilarDescarga`
    se llama de vez en cuando desde el bucle del panel y devuelve true si cambio algo (avance, fin o
    fallo); `descargaEnMarcha` y `textoDescarga` son lo que ensena el panel. */
-bool descargar(std::string *err);
+bool descargar(std::string *err, bool fp32 = false);
 bool vigilarDescarga();
 bool descargaEnMarcha();
 std::string textoDescarga();
