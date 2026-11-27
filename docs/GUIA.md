@@ -170,7 +170,19 @@ aparece una fracción de segundo después que el vídeo.
 ```sh
 odysseyvk capture3d --uuid '<id>' --conver            # video normal, con la red en la GPU 0
 odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si la 0 esta llena)
+odysseyvk capture3d --uuid '<id>' --conver --red auto # (desde la 1.18) lo pesado, la red, en la tarjeta secundaria
 ```
+
+* `red = auto` (desde la 1.18, lo de fábrica en `serve.conf`): la red va a una tarjeta secundaria, nunca a la que
+  dibuja el 3D y el juego salvo que no haya otra. Por orden: una dedicada que no sea la del visor (con una, ahí sin
+  medir nada); si no, la del visor y las integradas, que se miden entre sí; si tampoco, la CPU. Si la red puede ir a
+  más de una, el visor las mide con la red que corre (A B A, 3 s cada vez) y se queda la que menos le quita al juego;
+  lo guarda en `~/.local/state/odysseyvk/tarjeta_red` (borrar una línea la vuelve a medir). `red = 0` o `red = 1` la
+  fija a mano, como antes.
+* Una prueba en cada cambio de capa (desde la 1.18): cuando cambia lo que da la profundidad (otra red, la de vídeo, la
+  de DLSS que llega o se va, u otro preset de DLSS en el juego) y aguanta 1,5 s, el visor mide 3 s lo que corre y lo
+  apunta en el registro (`[prueba]`) y en su `estado` (`prueba =`): los FPS del juego, las copias de la capa, los
+  mapas por segundo y lo que tarda cada uno, los refrescos perdidos y lo ocupada que va cada tarjeta.
 
 * `--conver` (o `--convert`) arranca ya con el conversor puesto; sin esa opción se enciende con la
   tecla `C` o con la tesela «Vídeo normal» de la tarjeta.

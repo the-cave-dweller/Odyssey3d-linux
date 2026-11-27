@@ -418,16 +418,30 @@ static std::vector<TarjetaGpu> tarjetasCuda() {
   }
   dlclose(lib);
   if (tarjetas.empty()) return tarjetas;
-  FILE *p = popen("nvidia-smi --query-gpu=uuid,memory.free --format=csv,noheader,nounits 2>/dev/null", "r");
+  /* (v1.18) con su memoria total y su nombre, para la tarjeta medida de la red (DepthNet::candidatas) */
+  FILE *p = popen("nvidia-smi --query-gpu=uuid,memory.free,memory.total,name --format=csv,noheader,nounits 2>/dev/null", "r");
   if (!p) return tarjetas;
-  char linea[160];
+  char linea[256];
   while (std::fgets(linea, sizeof linea, p)) {
-    char id[96];
-    long ml = -1;
-    if (std::sscanf(linea, " %95[^,], %ld", id, &ml) != 2 || ml < 0) continue;
+    char id[96], nombre[128] = {0};
+    long ml = -1, mt = -1;
+    const int campos = std::sscanf(linea, " %95[^,], %ld, %ld, %127[^\n]", id, &ml, &mt, nombre);
+    if (campos < 2 || ml < 0) continue;
     const std::string clave = strLower(strTrim(id));
     for (TarjetaGpu &t : tarjetas)
-      if (t.id == clave) t.libreMiB = ml;
+      if (t.id == clave) {
+        t.libreMiB = ml;
+        if (campos >= 3) t.totalMiB = mt;
+        if (campos >= 4) {
+          std::string n = strTrim(nombre);
+          for (const char *q : {"NVIDIA GeForce ", "NVIDIA "})
+            if (n.rfind(q, 0) == 0) {
+              n = n.substr(std::strlen(q));
+              break;
+            }
+          t.nombre = n;
+        }
+      }
   }
   pclose(p);
   return tarjetas;
@@ -878,6 +892,70 @@ void DepthNet::cierra() {
 DepthNet::~DepthNet() {
   cierra();
   delete juego_;
+}
+
+/* (v1.18) ver depth.h */
+std::vector<DepthNet::Candidata> DepthNet::candidatas(const std::string &modelo, int actual) {
+  std::vector<Candidata> todas;
+#ifdef HAVE_ORT
+  const char *f = entornoOdyssey("ODYSSEYVK_PROVEEDOR");
+  const std::string forzado = f ? strLower(f) : std::string();
+  if (forzado == "cpu") return todas;
+  const std::vector<std::string> provs = Ort::GetAvailableProviders();
+  auto hay = [&](const char *n) { return std::find(provs.begin(), provs.end(), n) != provs.end(); };
+  bool amd = false;
+  if (forzado == "cuda" || (forzado.empty() && hay("CUDAExecutionProvider"))) amd = false;
+  else if (forzado == "migraphx" || forzado == "rocm" ||
+           (forzado.empty() && (hay("MIGraphXExecutionProvider") || hay("ROCMExecutionProvider"))))
+    amd = true;
+  else
+    return todas;
+  const std::vector<TarjetaGpu> ts = amd ? tarjetasHip() : tarjetasCuda();
+  long grande = 0;
+  for (const TarjetaGpu &t : ts) grande = std::max(grande, t.totalMiB);
+  const long falta = requisitoMiB(modelo.empty() ? defaultModelPath() : modelo);
+  for (size_t i = 0; i < ts.size(); i++) {
+    const TarjetaGpu &t = ts[i];
+    Candidata c;
+    c.gpu = (int)i, c.id = t.id, c.libreMiB = t.libreMiB;
+    c.nombre = !t.nombre.empty() ? t.nombre : std::string(amd ? "HIP " : "CUDA ") + std::to_string(i);
+    /* NVIDIA: todas dedicadas (en un PC no hay integradas de NVIDIA). AMD: la del procesador trae poca memoria propia
+       (0,5 a 2 GB de un Ryzen 7000 o 9000), o mucho menos que la grande: la misma regla que init */
+    c.dedicada = !amd || !(t.totalMiB >= 0 && (t.totalMiB < 4096 || (grande > 0 && t.totalMiB * 4 < grande)));
+    c.cabe = (int)i == actual || t.libreMiB < 0 || t.libreMiB >= falta;
+    if (!t.id.empty()) todas.push_back(c);
+  }
+#else
+  (void)modelo, (void)actual;
+#endif
+  return todas;
+}
+
+bool DepthNet::moverA(int gpu, std::string *err) {
+  if (ruta_.empty() || gpu < 0) return false;
+  if (gpu == gpu_ && enTarjeta()) return true;
+  const std::string ruta = ruta_;
+  const int antes = gpu_;
+  const float sm = smooth_;
+  const bool lim = limpieza_;
+  /* como en cambiar: la sesion vieja se suelta antes (es lo que devuelve la memoria) y lo que se arrastraba de la otra
+     tarjeta no vale (la escala, el plano de apoyo) */
+  cierra();
+  prev_.clear();
+  haveScale_ = false;
+  focoListo_ = false;
+  cuadrosDesdeCorte_ = 0;
+  std::string e;
+  if (init(ruta, &e, gpu) && gpu_ == gpu && enTarjeta()) {
+    smooth_ = sm, limpieza_ = lim;
+    return true;
+  }
+  if (err) *err = e.empty() ? std::string("no se quedo en esa tarjeta (sin sitio)") : e;
+  cierra();
+  std::string e2;
+  init(ruta, &e2, antes);
+  smooth_ = sm, limpieza_ = lim;
+  return false;
 }
 
 bool DepthNet::cambiar(const std::string &model, std::string *err, bool forzar) {

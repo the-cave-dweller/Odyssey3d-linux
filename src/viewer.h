@@ -42,6 +42,7 @@ struct ViewerOpts {
   std::string modeloVideo;
   int convEach = 3;          /* cada cuantos cuadros se vuelve a calcular la profundidad */
   int convGpu = 0;           /* 0 = primera tarjeta NVIDIA, 1 = la otra (la primera puede estar llena) */
+  bool redAuto = false;      /* (v1.18) `--red auto`: la tarjeta de la red se mide (ver EvalTarjeta en vkview.cpp) */
   /* mapa de profundidad fijo para medir en el taller (--mapa-fijo F.pgm): el relieve se prueba con un
      mapa que ya conocemos, sin red y sin sentarse delante del panel. vacio = lo de siempre. */
   std::string mapaFijo;

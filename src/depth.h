@@ -111,6 +111,29 @@ public:
      (`ODYSSEYVK_SIN_RED` se lee en init) */
   bool cambiar(const std::string &model, std::string *err, bool forzar = false);
 
+  /* (v1.18) La tarjeta de la red, elegida sola (`red = auto`) en vez de fijada a mano (Rodolfo: «replicar el offloading
+     de gpu: ellos hacen evaluaciones al inicio de la partida y ajustan y se quedan con la gpu y capa que mejor rinda»,
+     «que se haga con la capa que corre, que solo se repita al cambiar de capa», «prioritize dedicated cards», «recuerda
+     que la tarjeta secundaria debe procesar lo pesado del modelo, no la principal»). Que tarjeta es la principal (la que
+     dibuja el 3D y el juego) lo sabe el visor, y alli va la regla y la medida (ver paraLaRed y EvalTarjeta en
+     vkview.cpp); aqui, las tarjetas que ve el motor de la red y pasarla de una a otra en marcha. */
+  struct Candidata {
+    int gpu = 0;              /* el numero de su motor (CUDA o HIP): el de init */
+    std::string id, nombre;   /* su UUID (NVIDIA, «gpu-…») o su direccion PCI (AMD), y su nombre corto («RTX 5080») */
+    bool dedicada = true;     /* la integrada del procesador, no */
+    bool cabe = true;         /* hay sitio para esta red (con su colchon, requisitoMiB) */
+    long libreMiB = -1;       /* -1 = no se sabe */
+  };
+  /* Todas las tarjetas que ve el motor de la red (CUDA o ROCm), en su orden, y si `modelo` cabe en cada una. `actual` (el
+     numero de la tarjeta donde ya corre, o -1) cabe siempre: su memoria libre ya no cuenta la de la red. Vacio sin CUDA
+     ni ROCm (o con ODYSSEYVK_PROVEEDOR=cpu) */
+  static std::vector<Candidata> candidatas(const std::string &modelo, int actual = -1);
+  /* La misma red en la tarjeta `gpu`, con el visor en marcha (como cambiar). Si no abre alli, o init la manda a otra
+     por falta de memoria, vuelve a la de antes y devuelve falso */
+  bool moverA(int gpu, std::string *err);
+  int tarjeta() const { return gpu_; }                                  /* el numero de su motor */
+  bool enTarjeta() const { return dev_ == "NVIDIA" || dev_ == "AMD"; }  /* y no en la CPU */
+
   /* Cierta si ONNX Runtime ya revinto una sesion dentro de este proceso (un .onnx que no abrio con
      CUDA). Despues de eso no se puede volver a abrir ninguna red sin arriesgarse a un abort: hay que
      cerrar el visor y abrirlo otra vez. */

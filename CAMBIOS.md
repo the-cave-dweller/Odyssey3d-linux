@@ -40,9 +40,58 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **El panel**: sin la flecha de volver a la pastilla; la nota de la carpeta de las redes al pie de cada lista;
   - **Los avisos con la tarjeta propia**: el de las opciones de lanzamiento escritas en Steam, los del actualizador y
     el de «el 3D no llegó a empezar»;
-  - **La profundidad de DLSS**: su interruptor vale al momento y el modo Rendimiento no la usa nunca.
+  - **La profundidad de DLSS**: su interruptor vale al momento y el modo Rendimiento no la usa nunca;
+  - **La tarjeta de la red, sola** (`red = auto`): lo pesado, en la secundaria; medida si puede ir a más de una; y una
+    prueba de lo que corre en cada cambio de capa.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## La tarjeta de la red, sola: lo pesado en la secundaria, medida si hay donde elegir, y una prueba en cada cambio de capa (v1.18)
+
+- Rodolfo: «revises el codigo de neural forge y me ayudes a replicar el offloading de gpu, ellos hacen evaluaciones al
+  inicio de la partida y ajustan y se quedan con la gpu y capa que mejor rinda», y después: «que se haga con la capa
+  que corre, que solo se repita al cambiar de capa», «prioritize dedicated cards», «recuerda que la tarjeta secundaria
+  debe procesar lo pesado del modelo, no la principal», «que cada cambio de modelo de dlss ejecute una prueba» («yes,
+  the preset»).
+- **Lo que hace Neural Forge, leído en su código** (AGPL-3.0, github.com/labj1987/neural-forge; OdysseyVK es MIT, así
+  que se toma la idea y no el código): la red en otra tarjeta y en la del juego solo la captura y la composición. La
+  otra la elige el usuario (`NEURAL_FORGE_OFFLOAD_GPU`), no se mide al arrancar; si no da abasto (30 de 120 cuadros
+  tarde, 5 seguidos sin respuesta o un cuadro de más de 1 s) vuelve a la del juego para el resto de la sesión, y los
+  10 primeros cuadros tras arrancar o cambiar de medida no cuentan. Su Placement Auto elige la etapa (antes o después
+  de DLSS) por lo que ofrece el juego, no por tiempos.
+- **Aquí, `red = auto`** (lo de fábrica cuando `serve.conf` no dice `red`; `red = 0` o `red = 1` la siguen fijando a
+  mano, como la `red = 1` de Rodolfo): la principal es la tarjeta del visor (la que dibuja el 3D y el juego), y en ella
+  se quedan la captura, la copia chica y la trama. Lo pesado, la red, va por este orden: una dedicada que no sea la
+  del visor (con una, ahí sin medir); si no, la del visor y las integradas, que se miden; si tampoco, la CPU. La del
+  visor se reconoce por su UUID: MEDIDO, NVIDIA le da a Vulkan el mismo que a CUDA (4973ad92… la 4090, ca3a3844… la
+  5080). En el equipo de Rodolfo sale la 5080 sin medir nada, lo mismo que su `red = 1`.
+- **La medida, con la capa que corre**: si la red puede ir a más de una tarjeta y esa capa no se midió, se prueba en
+  cada una en el orden A B A (la de ahora, las demás, la de ahora otra vez: lo que cambie la escena se reparte), con 8
+  mapas de calentamiento (de Neural Forge: los primeros no cuentan) y 3 s de medida. Gana la que menos le quita al
+  juego: los cuadros nuevos del juego o del vídeo por segundo (5 % de margen), los refrescos que pierde el visor, lo
+  ocupada que queda la tarjeta del visor (8 puntos) y lo que tarda la red (10 %); en un empate, la secundaria. Se
+  guarda en `~/.local/state/odysseyvk/tarjeta_red` por capa (la red y las tarjetas del equipo): otra red u otra
+  tarjeta se miden otra vez. `DepthNet::candidatas` (las tarjetas del motor, su nombre y si cabe la red) y
+  `DepthNet::moverA` (la misma red en otra tarjeta, en marcha; si no abre allí, vuelve a la de antes).
+- **Una prueba en cada cambio de capa**: la capa es lo que da la profundidad (una red, la de DLSS con su medida, que
+  cambia con el preset de DLSS del juego, o el modo rendimiento). Cuando cambia y aguanta 1,5 s (3 s la primera), se
+  mide 3 s lo que corre y va al registro como `[prueba]` y al `estado` como `prueba =`: los FPS del juego (con DLSS,
+  los de la capa), las copias de la capa, los mapas por segundo y lo que tarda cada uno, los refrescos perdidos y lo
+  ocupada que va cada tarjeta. Si cambia a media prueba, se deja y se prueba la nueva.
+- **El mapa de DLSS en la 5080, medido antes de hacerlo, y no compensa** (Rodolfo eligió probarlo: «check if it
+  performs better if not the first option works»). Con la partida de Raji abierta el visor hacía 5,8 mapas por segundo
+  de 11,9 ms (`mapas_por_segundo` de fábrica, 6). Medido aparte, con 4 hilos en el CCD que no usaba el juego:
+
+  | DLSS | reducirla (copiar, comprobar, por áreas, escala) | el mapa entero |
+  |---|---|---|
+  | 2228x1256 (Equilibrado) | 5,8 ms | 11,9 ms |
+  | 2564x1444 (Calidad) | 8,0 ms | 13,4 ms |
+
+  A 6 mapas por segundo son unos 80 ms de CPU por segundo, menos del 1 % del procesador, y no tocan ninguna tarjeta
+  (la copia dentro del juego es la misma). En la 5080 se ahorrarían como mucho los 8 ms de reducirla en cada mapa y no
+  subiría ningún FPS (Raji iba limitado por la 4090, no por la CPU), así que va la primera opción: la prueba de lo que
+  corre. Si algún día el mapa de DLSS se hace en cada cuadro del juego (a 60 por segundo serían ~80 % de un núcleo),
+  eso cambia.
 
 ## La profundidad de DLSS: el interruptor vale al momento, y el modo Rendimiento sin ella (v1.18)
 

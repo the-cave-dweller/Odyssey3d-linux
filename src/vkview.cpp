@@ -50,7 +50,10 @@ struct wl_region;
 #include <csignal>
 #include <cstdio>
 #include <ctime>
+#include <algorithm>
 #include <map>
+#include <set>
+#include <sstream>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -312,6 +315,143 @@ static const bool g_topeCapaPuesto = [] {
   return true;
 }();
 static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
+
+/* ---------- (v1.18) la tarjeta de la red, sola (`red = auto`) ----------
+   Rodolfo: «replicar el offloading de gpu: ellos hacen evaluaciones al inicio de la partida y ajustan y se quedan con la
+   gpu y capa que mejor rinda», «que se haga con la capa que corre, que solo se repita al cambiar de capa», «prioritize
+   dedicated cards», «recuerda que la tarjeta secundaria debe procesar lo pesado del modelo, no la principal».
+   Lo que hace Neural Forge (su codigo, AGPL; aqui solo la idea): la red en otra tarjeta y en la del juego solo la captura
+   y la composicion; la otra la elige el usuario (NEURAL_FORGE_OFFLOAD_GPU) y si no da abasto vuelve a la del juego
+   (LateRule); los primeros cuadros tras arrancar no cuentan. Aqui: la principal es la del visor (la que dibuja el 3D y
+   el juego) y en ella se quedan la captura, la copia chica y la trama; lo pesado, la red, va a una secundaria
+   (paraLaRed). Si hay mas de una donde puede ir, se miden con la capa que corre (EvalTarjeta) y se guarda la que gana
+   para esa capa: no se vuelve a medir hasta que cambie la capa (otra red) o las tarjetas del equipo. */
+static std::string g_tarjetaNombre;   /* la de la red ahora, corta («RTX 5080»); vacio = no se sabe */
+static std::string g_tarjetaPor;      /* por que esta ahi: «secundaria», «medida», «a mano»... */
+static std::string g_prueba;          /* lo que dijo la ultima prueba de lo que corre («[prueba]» en el registro) */
+
+/* El UUID de la tarjeta del visor escrito como lo escribe CUDA («gpu-xxxxxxxx-xxxx-…»): NVIDIA da el mismo a Vulkan y a
+   CUDA (es como se casan en su interoperabilidad), asi se sabe cual de las de la red es la principal. Y su direccion
+   PCI (VK_EXT_pci_bus_info), que es como se nombran las AMD de la red */
+static void idsDeVulkan(VkPhysicalDevice p, std::string &uuid, std::string &pci) {
+  uuid.clear(), pci.clear();
+  if (p == VK_NULL_HANDLE) return;
+  uint32_t n = 0;
+  vkEnumerateDeviceExtensionProperties(p, nullptr, &n, nullptr);
+  std::vector<VkExtensionProperties> ext(n);
+  if (n) vkEnumerateDeviceExtensionProperties(p, nullptr, &n, ext.data());
+  bool hayPci = false;
+  for (const VkExtensionProperties &e : ext)
+    if (std::strcmp(e.extensionName, VK_EXT_PCI_BUS_INFO_EXTENSION_NAME) == 0) hayPci = true;
+  VkPhysicalDevicePCIBusInfoPropertiesEXT bus{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT};
+  VkPhysicalDeviceIDProperties id{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
+  id.pNext = hayPci ? &bus : nullptr;
+  VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  p2.pNext = &id;
+  vkGetPhysicalDeviceProperties2(p, &p2);
+  static constexpr char hex[] = "0123456789abcdef";
+  uuid = "gpu-";
+  for (int k = 0; k < 16; ++k) {
+    if (k == 4 || k == 6 || k == 8 || k == 10) uuid += '-';
+    uuid += hex[id.deviceUUID[k] >> 4];
+    uuid += hex[id.deviceUUID[k] & 15];
+  }
+  if (hayPci) {
+    char b[32];
+    std::snprintf(b, sizeof b, "%04x:%02x:%02x.%x", bus.pciDomain, bus.pciBus, bus.pciDevice, bus.pciFunction);
+    pci = b;
+  }
+}
+
+static bool mismaDireccionPci(const std::string &a, const std::string &b) {
+  unsigned d1 = 0, b1 = 0, s1 = 0, f1 = 0, d2 = 0, b2 = 0, s2 = 0, f2 = 0;
+  return !a.empty() && !b.empty() && std::sscanf(a.c_str(), "%x:%x:%x.%x", &d1, &b1, &s1, &f1) == 4 &&
+         std::sscanf(b.c_str(), "%x:%x:%x.%x", &d2, &b2, &s2, &f2) == 4 && d1 == d2 && b1 == b2 && s1 == s2 && f1 == f2;
+}
+
+/* la tarjeta del visor: la principal */
+struct TarjetaVisor {
+  std::string uuid, pci;
+  bool es(const DepthNet::Candidata &c) const {
+    return (!uuid.empty() && strLower(c.id) == uuid) || mismaDireccionPci(c.id, pci);
+  }
+  /* por la clave del modulo de vigilancia («gpu:GPU-…» de NVML, «gpu:amd:0000:03:00.0»): para leer lo ocupada que va */
+  bool esMonitor(const std::string &clave) const {
+    if (clave.rfind("gpu:amd:", 0) == 0) return mismaDireccionPci(clave.substr(8), pci);
+    return clave.rfind("gpu:", 0) == 0 && !uuid.empty() && strLower(clave.substr(4)) == uuid;
+  }
+};
+
+/* Donde puede ir lo pesado de la red, de las tarjetas con sitio:
+   1. las dedicadas que no son la del visor (la secundaria: Rodolfo, «debe procesar lo pesado del modelo, no la
+      principal»); con una, va ahi sin medir nada;
+   2. si no hay ninguna, la del visor y las integradas, que se miden (una integrada puede no dar abasto, y la principal
+      dibuja tambien el juego: gana la que menos le quite);
+   3. si tampoco, ninguna: la red decide sola (la CPU), como siempre.
+   ODYSSEYVK_TARJETA_MEDIR=todas mide todas las que tienen sitio, la del visor incluida (para probar la medida en un equipo
+   con una sola secundaria, como el de Rodolfo) */
+static std::vector<DepthNet::Candidata> paraLaRed(const std::vector<DepthNet::Candidata> &ts, const TarjetaVisor &visor) {
+  const char *m = entornoOdyssey("ODYSSEYVK_TARJETA_MEDIR");
+  const bool todas = m && strLower(m) == "todas";
+  std::vector<DepthNet::Candidata> secundarias, resto;
+  for (const DepthNet::Candidata &c : ts) {
+    if (!c.cabe) continue;
+    if (todas) resto.push_back(c);
+    else if (!visor.es(c) && c.dedicada) secundarias.push_back(c);
+    else resto.push_back(c);
+  }
+  return !secundarias.empty() ? secundarias : resto;
+}
+
+/* la capa que se mide: la red (su archivo) y las tarjetas que hay (todas, quepa o no la red). Otra red, u otra tarjeta
+   en el equipo, es otra capa: se mide otra vez */
+static std::string claveCapa(const std::string &modelo, const std::vector<DepthNet::Candidata> &ts) {
+  std::vector<std::string> ids;
+  for (const DepthNet::Candidata &c : ts) ids.push_back(strLower(c.id));
+  std::sort(ids.begin(), ids.end());
+  std::string base = modelo;
+  if (const size_t b = base.find_last_of('/'); b != std::string::npos) base = base.substr(b + 1);
+  std::string k = base + "|";
+  for (size_t i = 0; i < ids.size(); i++) k += (i ? "," : "") + ids[i];
+  return k;
+}
+
+/* lo medido, en ~/.local/state/odysseyvk/tarjeta_red: «clave = id · nombre · cuando · lo medido» */
+static std::string rutaTarjetaRed() { return rutaEstadoOdyssey("tarjeta_red"); }
+static std::map<std::string, std::string> leerTarjetasRed() {
+  std::map<std::string, std::string> m;
+  std::string t;
+  if (!readSmallFile(rutaTarjetaRed(), t)) return m;
+  std::istringstream in(t);
+  std::string l;
+  while (std::getline(in, l)) {
+    if (l.empty() || l[0] == '#') continue;
+    const size_t e = l.find(" = ");
+    if (e == std::string::npos) continue;
+    std::string v = l.substr(e + 3);
+    const size_t f = v.find(" · ");
+    m[l.substr(0, e)] = strTrim(f == std::string::npos ? v : v.substr(0, f));
+  }
+  return m;
+}
+static void guardarTarjetaRed(const std::string &clave, const std::string &valor) {
+  std::string t, fuera = "# La tarjeta de la red de profundidad para cada capa (la red y las tarjetas del equipo), medida por\n"
+                         "# el visor con `red = auto`. Borrar una linea la vuelve a medir.\n";
+  if (readSmallFile(rutaTarjetaRed(), t)) {
+    std::istringstream in(t);
+    std::string l;
+    while (std::getline(in, l))
+      if (!l.empty() && l[0] != '#' && l.rfind(clave + " = ", 0) != 0) fuera += l + "\n";
+  }
+  fuera += clave + " = " + valor + "\n";
+  const std::string ruta = rutaTarjetaRed(), tmp = ruta + ".nuevo";
+  {
+    std::ofstream o(tmp, std::ios::trunc);
+    if (!o) return;
+    o << fuera;
+  }
+  std::rename(tmp.c_str(), ruta.c_str());
+}
 /* La casilla de Previsualizacion de la ventana de ajustes (`vista = 1`): mientras esta pedida, la copia
    del cuadro que guardamos en `camara.jpg` sale ocho veces por segundo en vez de una cada dos segundos.
    El rastreo ya esta leyendo la camara a su tasa, asi que esto no abre nada ni le arranca nada a la
@@ -498,6 +638,10 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
   s += std::string("modelo = ") + (g_modeloEnUso.empty() ? "(ninguno)" : g_modeloEnUso) + "\n";
   s += std::string("red = ") + std::to_string(ui.hud.state().red) + "\n";
   s += std::string("tarjeta = ") + (g_tarjetaEnUso.empty() ? "-" : g_tarjetaEnUso) + "\n";
+  /* (v1.18) por que la red esta en esa tarjeta: secundaria, medida, la del visor (no habia otra) o a mano */
+  s += std::string("tarjeta_por = ") + (g_tarjetaPor.empty() ? "-" : g_tarjetaPor) + "\n";
+  /* (v1.18) la ultima prueba de lo que corre, tras un cambio de capa */
+  s += std::string("prueba = ") + (g_prueba.empty() ? "-" : g_prueba) + "\n";
   /* (v1.13) la profundidad de DLSS: lo que se lee, los FPS del juego y de la capa, y el HUD del juego */
   s += std::string("prof_juego = ") + (g_profJuego.empty() ? "-" : g_profJuego) + "\n";
   {
@@ -2192,7 +2336,107 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.hud.state().red = modeloActivo.empty() ? 2 : slotRed(modeloActivo);
   ui.hud.state().redViva = false;
   int convGpu = opts.convGpu;   /* se sube solo a la 1 si la 0 esta llena (strata, juegos, ...) */
+  /* (v1.18) `red = auto`: la tarjeta en que arranca la red, la que gano al medir esta capa o, sin medir, la de la regla
+     de paraLaRed (la secundaria). ODYSSEYVK_GPU (la de las pruebas) manda sobre todo */
+  TarjetaVisor visor;
+  idsDeVulkan(dev.phys(), visor.uuid, visor.pci);
+  const bool redAuto = opts.redAuto && !entornoOdyssey("ODYSSEYVK_GPU");
+  std::vector<DepthNet::Candidata> tarjetasVistas;   /* las del motor de la red, la ultima vez que se miraron */
+  /* (v1.18) La medida, con la capa que corre: cuando lo pesado de la red puede ir a mas de una tarjeta (paraLaRed) y esta
+     capa no se midio todavia, se prueba en cada una en el orden A B A (la de ahora, las demas, la de ahora otra vez: lo
+     que cambie la escena entretanto se reparte), cada vez con 8 mapas de calentamiento (la red se construye en la
+     tarjeta nueva: Neural Forge tampoco cuenta sus primeros cuadros) y 3 s de medida, y se queda la que mejor rinde.
+     Manda, en este orden: los cuadros nuevos del juego o del video por segundo (lo que la red le quita al juego, con un 5
+     % de margen), los refrescos que pierde el visor (1 por segundo), lo ocupada que queda la tarjeta del visor (8
+     puntos: lo que le quedaria a un juego) y lo que tarda la red (10 %); en un empate, la secundaria, despues la
+     dedicada y despues la de ahora. Lo medido se guarda para esa capa (leerTarjetasRed). Se deja a medias si deja de
+     valer (DLSS, el modo rendimiento, otra red, el conversor apagado) y se empieza otra vez cuando vuelva; a la tercera,
+     esa capa se deja hasta la proxima sesion. Cada paso de tarjeta para la imagen lo que tarda en abrirse la red alli,
+     como el boton 1 / 2 o Neural | Rendimiento (MEDIDO: 0,4 a 1,7 s) */
+  struct EvalTarjeta {
+    enum Fase { Nada, Calentando, Midiendo, Hecha } fase = Nada;
+    bool pendiente = false;         /* la regla pide medir esta capa */
+    std::string modeloVisto;        /* la red con que se miro la regla: otra red es otra capa */
+    std::string clave;
+    std::vector<DepthNet::Candidata> cand;
+    std::vector<size_t> orden;      /* indices de cand: A B A */
+    size_t paso = 0;
+    double desde = 0.0, ultimaMuestra = 0.0;
+    long long mapas0 = 0;
+    long fuente = 0, cuadros = 0, lentos = 0;
+    std::vector<float> redMs;
+    double ocupSum = 0.0;
+    int ocupN = 0, tiradas = 0;
+    struct Medida {
+      bool valida = true;
+      int ventanas = 0, ocupVentanas = 0;
+      double fuenteS = 0, lentosS = 0, mapasS = 0, ocupada = 0;
+      std::vector<float> redMs;
+    };
+    std::vector<Medida> med;
+    std::map<std::string, int> abandonos;
+    /* (v1.18) la prueba de cada cambio de capa: que capa, desde cuando, y lo medido de lo que corre */
+    std::string capaVista, capaCandidata, capaDeLaPrueba;
+    double capaDesde = 0.0;
+    bool primera = true, soloMedir = true;
+    std::vector<float> mapaMs;
+    struct Uso {
+      std::string nombre;
+      double suma = 0.0;
+      int n = 0;
+    };
+    std::map<std::string, Uso> usos;   /* cada tarjeta, por su clave del modulo de vigilancia */
+  } ev;
+  auto nombreDeTarjeta = [&](int gpu) {
+    for (const DepthNet::Candidata &c : tarjetasVistas)
+      if (c.gpu == gpu) return c.nombre + (visor.es(c) ? std::string(" (la del visor)") : std::string());
+    return std::string();
+  };
+  /* lo que dice el estado (y el panel, junto a la red): el motor y el nombre de la tarjeta, sin palabras que traducir */
+  auto descTarjeta = [&]() {
+    std::string s = red.device();
+    if (red.enTarjeta())
+      for (const DepthNet::Candidata &c : tarjetasVistas)
+        if (c.gpu == red.tarjeta()) s += " · " + c.nombre;
+    return s;
+  };
+  auto tarjetaDeSalida = [&](const std::string &modelo, int porDefecto) {
+    ev.modeloVisto = modelo, ev.pendiente = false, ev.cand.clear();
+    tarjetasVistas = DepthNet::candidatas(modelo, red.ready() && red.enTarjeta() ? red.tarjeta() : -1);
+    if (tarjetasVistas.empty()) return porDefecto;
+    ev.clave = claveCapa(modelo, tarjetasVistas);
+    std::string base = modelo;
+    if (const size_t b = base.find_last_of('/'); b != std::string::npos) base = base.substr(b + 1);
+    const std::map<std::string, std::string> medidas = leerTarjetasRed();
+    if (const auto it = medidas.find(ev.clave); it != medidas.end())
+      for (const DepthNet::Candidata &c : tarjetasVistas)
+        if (strLower(c.id) == it->second && c.cabe) {
+          std::printf("[tarjeta] la red (%s) en la %s: la que gano al medir esta capa\n", base.c_str(), c.nombre.c_str());
+          std::fflush(stdout);
+          g_tarjetaPor = "medida";
+          return c.gpu;
+        }
+    const std::vector<DepthNet::Candidata> cand = paraLaRed(tarjetasVistas, visor);
+    if (cand.empty()) return porDefecto;
+    if (cand.size() > 1 && ev.abandonos[ev.clave] < 3) ev.cand = cand, ev.pendiente = true;
+    const DepthNet::Candidata &c = cand[0];
+    std::string principal;
+    for (const DepthNet::Candidata &t : tarjetasVistas)
+      if (visor.es(t)) principal = t.nombre;
+    if (visor.es(c))
+      std::printf("[tarjeta] lo pesado de la red (%s), en la %s: es la del visor, pero no hay otra con sitio%s\n", base.c_str(),
+                  c.nombre.c_str(), cand.size() > 1 ? " (se medira contra las demas)" : "");
+    else
+      std::printf("[tarjeta] lo pesado de la red (%s), en la %s, la secundaria%s%s%s\n", base.c_str(), c.nombre.c_str(),
+                  principal.empty() ? "" : "; la ", principal.c_str(),
+                  principal.empty() ? "" : (cand.size() > 1 ? " dibuja el 3D (se mediran las secundarias)" : " dibuja el 3D"));
+    std::fflush(stdout);
+    g_tarjetaPor = visor.es(c) ? "la del visor" : "secundaria";
+    return c.gpu;
+  };
   auto arrancarRed = [&](int &gpu, std::string *e) {
+    if (redAuto) gpu = tarjetaDeSalida(modeloActivo, gpu);
+    else if (tarjetasVistas.empty()) tarjetasVistas = DepthNet::candidatas(modeloActivo), g_tarjetaPor = "a mano";
     if (red.init(modeloActivo, e, gpu)) return true;
     if (gpu == 0) {   /* la GPU de la pantalla suele estar ocupada: probar la siguiente tarjeta */
       std::fprintf(stderr, "[conversor] %s\n[conversor] se prueba en la grafica 1 (se fuerza con --red N)\n",
@@ -2218,6 +2462,129 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     }
     return false;
   };
+  /* (v1.18) los pasos de la medida de la tarjeta de la red (ver EvalTarjeta) */
+  auto decidirTarjeta = [&]() {
+    struct R {
+      size_t i;
+      double fuente, lentos, ocup, red, mapas;
+    };
+    std::vector<R> rs;
+    for (size_t i = 0; i < ev.cand.size(); i++) {
+      EvalTarjeta::Medida &m = ev.med[i];
+      if (!m.valida || m.ventanas == 0) continue;
+      R x{i, m.fuenteS / m.ventanas, m.lentosS / m.ventanas, m.ocupVentanas ? m.ocupada / m.ocupVentanas : -1.0, 0.0,
+          m.mapasS / m.ventanas};
+      if (!m.redMs.empty()) {
+        std::vector<float> v = m.redMs;
+        std::nth_element(v.begin(), v.begin() + (long)(v.size() / 2), v.end());
+        x.red = v[v.size() / 2];
+      }
+      rs.push_back(x);
+    }
+    ev.fase = EvalTarjeta::Hecha;
+    if (rs.empty()) {
+      std::printf("[tarjeta] ninguna tarjeta se pudo medir: la red se queda donde esta\n");
+      std::fflush(stdout);
+      return;
+    }
+    /* 1 = a mejor, -1 = b mejor, 0 = empate; `por`: lo que decidio */
+    auto compara = [](const R &a, const R &b, const char **por) {
+      *por = "los cuadros del juego o del video por segundo";
+      if (a.fuente > b.fuente * 1.05) return 1;
+      if (b.fuente > a.fuente * 1.05) return -1;
+      *por = "los refrescos que pierde el visor";
+      if (a.lentos + 1.0 < b.lentos) return 1;
+      if (b.lentos + 1.0 < a.lentos) return -1;
+      *por = "lo ocupada que queda la tarjeta del visor";
+      if (a.ocup >= 0.0 && b.ocup >= 0.0) {
+        if (a.ocup + 8.0 < b.ocup) return 1;
+        if (b.ocup + 8.0 < a.ocup) return -1;
+      }
+      *por = "lo que tarda la red";
+      if (a.red > 0.0 && b.red > 0.0) {
+        if (a.red < b.red * 0.9) return 1;
+        if (b.red < a.red * 0.9) return -1;
+      }
+      *por = "empate";
+      return 0;
+    };
+    const size_t actual = ev.orden.empty() ? 0 : ev.orden.front();
+    auto preferida = [&](const R &a, const R &b) {   /* en un empate: la secundaria, la dedicada, la de ahora */
+      const DepthNet::Candidata &ca = ev.cand[a.i], &cb = ev.cand[b.i];
+      if (visor.es(ca) != visor.es(cb)) return !visor.es(ca);
+      if (ca.dedicada != cb.dedicada) return ca.dedicada;
+      return a.i == actual && b.i != actual;
+    };
+    size_t mejor = 0;
+    for (size_t k = 1; k < rs.size(); k++) {
+      const char *por = "";
+      const int c = compara(rs[k], rs[mejor], &por);
+      if (c > 0 || (c == 0 && preferida(rs[k], rs[mejor]))) mejor = k;
+    }
+    /* por que gano: lo que la separa de la segunda (con dos tarjetas, de la otra) */
+    const char *porMejor = "la unica que se pudo medir";
+    for (size_t k = 0; k < rs.size(); k++) {
+      if (k == mejor) continue;
+      const char *por = "";
+      const int c = compara(rs[mejor], rs[k], &por);
+      porMejor = c == 0 ? "empate: la secundaria, la dedicada o la de ahora" : por;
+      break;
+    }
+    std::string resumen;
+    for (const R &x : rs) {
+      char b[200];
+      std::snprintf(b, sizeof b, "%s%s %.1f cuadros/s, %.1f refrescos perdidos/s, visor al %s, red %.1f ms, %.1f mapas/s",
+                    resumen.empty() ? "" : " | ", ev.cand[x.i].nombre.c_str(), x.fuente, x.lentos,
+                    x.ocup >= 0.0 ? (std::to_string((int)(x.ocup + 0.5)) + " %").c_str() : "?", x.red, x.mapas);
+      resumen += b;
+    }
+    const DepthNet::Candidata &g = ev.cand[rs[mejor].i];
+    std::string base = ev.modeloVisto;
+    if (const size_t s = base.find_last_of('/'); s != std::string::npos) base = base.substr(s + 1);
+    std::printf("[tarjeta] medida con la capa que corre (%s): %s · gana la %s (%s). Guardado: no se vuelve a medir hasta que "
+                "cambie la capa\n", base.c_str(), resumen.c_str(), g.nombre.c_str(), porMejor);
+    std::fflush(stdout);
+    char fecha[32];
+    const std::time_t ya = std::time(nullptr);
+    std::strftime(fecha, sizeof fecha, "%Y-%m-%d %H:%M", std::localtime(&ya));
+    guardarTarjetaRed(ev.clave, strLower(g.id) + " · " + g.nombre + " · " + fecha + " · " + resumen);
+    if (g.gpu != red.tarjeta()) {
+      hiloRed.esperar();
+      std::string e;
+      if (!red.moverA(g.gpu, &e)) std::fprintf(stderr, "[tarjeta] no se pudo dejar la red en la %s: %s\n", g.nombre.c_str(), e.c_str());
+    }
+    g_tarjetaPor = "medida";
+  };
+  auto empezarPaso = [&]() {
+    while (ev.paso < ev.orden.size()) {
+      EvalTarjeta::Medida &m = ev.med[ev.orden[ev.paso]];
+      const DepthNet::Candidata &c = ev.cand[ev.orden[ev.paso]];
+      if (!m.valida) {
+        ev.paso++;
+        continue;
+      }
+      if (c.gpu != red.tarjeta()) {
+        hiloRed.esperar();
+        const double t0 = glfwGetTime();
+        std::string e;
+        if (!red.moverA(c.gpu, &e)) {
+          m.valida = false;
+          std::printf("[tarjeta] la %s no abrio la red (%s): fuera de la medida\n", c.nombre.c_str(), e.c_str());
+          std::fflush(stdout);
+          ev.paso++;
+          continue;
+        }
+        std::printf("[tarjeta] probando la %s (%.0f ms en pasar la red)\n", c.nombre.c_str(), (glfwGetTime() - t0) * 1000.0);
+        std::fflush(stdout);
+      }
+      ev.fase = EvalTarjeta::Calentando;
+      ev.desde = glfwGetTime();
+      ev.mapas0 = g_mapasHechos;
+      return;
+    }
+    decidirTarjeta();
+  };
+
   if (convActivo && (modeloActivo.empty() || !fileExists(modeloActivo)) &&
       (ui.rutaRed[2].empty() || !fileExists(ui.rutaRed[2]))) {
     /* se pidio el conversor y no hay ninguna red que cargar: el video se vera plano, y el panel de
@@ -2620,7 +2987,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       if (momento - ultimoVistazo >= 0.1) {
         ultimoVistazo = momento;
 #ifdef HAVE_ORT
-        if (red.ready()) { g_modeloEnUso = red.modelPath(); g_tarjetaEnUso = red.device(); }
+        if (red.ready()) { g_modeloEnUso = red.modelPath(); g_tarjetaEnUso = descTarjeta(); }
 #endif
         const std::map<std::string, double> actual = ajusteActual(ui, wv);
         if (fotoPuesta)
@@ -3000,6 +3367,169 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
       }
     }
+    /* (v1.18) La prueba de cada cambio de capa (Rodolfo: «que cada cambio de modelo de dlss ejecute una prueba», «yes, the
+       preset», «check if it performs better if not the first option works»). La capa es lo que da la profundidad: una red
+       (su archivo), la de DLSS con su medida (el preset de DLSS del juego: Calidad, Equilibrado...) o el modo rendimiento.
+       Cuando cambia y aguanta 1,5 s (3 s la primera de la sesion), se mide 3 s lo que corre y se apunta en el registro
+       («[prueba]») y en el estado. Con `red = auto` y la red con mas de una tarjeta donde ir, la prueba es la de
+       EvalTarjeta (A B A) y se queda la que gane.
+       Lo de pasar el mapa de DLSS a la 5080 se midio antes de hacerlo y no compensa: a 6 mapas por segundo cuesta 80 ms de
+       CPU por segundo (13,4 ms cada uno a 2564x1444 y 11,9 a 2228x1256, con 4 hilos), sin tocar ninguna tarjeta; en la 5080
+       se ahorrarian como mucho los 8 ms de reducirla en cada mapa y no subiria ningun FPS (Raji iba limitado por la 4090).
+       Si algun dia el mapa de DLSS se hace en cada cuadro del juego, eso cambia */
+    {
+      const double ahoraE = glfwGetTime();
+      std::string capa;
+      if (convActivo && red.ready() && wv.converterOn() && ui.hud.state().weaveOn) {
+        if (red.usandoJuego()) {
+          const std::string d = red.descJuego();
+          capa = "DLSS " + d.substr(0, d.find(','));
+        } else if (red.sinRed()) {
+          capa = "rendimiento";
+        } else {
+          capa = "red " + red.modelPath();
+        }
+      }
+      if (capa != ev.capaCandidata) ev.capaCandidata = capa, ev.capaDesde = ahoraE;
+      bool midiendo = ev.fase == EvalTarjeta::Calentando || ev.fase == EvalTarjeta::Midiendo;
+      if (midiendo && capa != ev.capaDeLaPrueba) {
+        std::printf("[prueba] dejada a medias: la capa cambio (%s -> %s)\n", ev.capaDeLaPrueba.c_str(),
+                    capa.empty() ? "sin 3D" : capa.c_str());
+        std::fflush(stdout);
+        if (!ev.soloMedir) ev.pendiente = ++ev.abandonos[ev.clave] < 3;
+        ev.fase = EvalTarjeta::Nada, midiendo = false;
+        ev.capaVista.clear();   /* la siguiente capa que aguante se prueba */
+      }
+      const bool estable = !capa.empty() && ahoraE - ev.capaDesde >= (ev.primera ? 3.0 : 1.5);
+      if (!midiendo && estable && capa != ev.capaVista && ahoraE - tirFuenteUlt < 0.5 && !hiloRed.ocupado) {
+        ev.capaVista = ev.capaDeLaPrueba = capa, ev.primera = false;
+        bool aba = false;
+        if (capa.rfind("red ", 0) == 0 && red.enTarjeta() && redAuto) {
+          /* otra red: la regla otra vez (paraLaRed), y a su tarjeta si es otra */
+          if (red.modelPath() != ev.modeloVisto) {
+            const int gpu = tarjetaDeSalida(red.modelPath(), red.tarjeta());
+            if (gpu != red.tarjeta()) {
+              hiloRed.esperar();
+              std::string e;
+              if (!red.moverA(gpu, &e))
+                std::fprintf(stderr, "[tarjeta] la red no paso a la %s: %s\n", nombreDeTarjeta(gpu).c_str(), e.c_str());
+            }
+          }
+          aba = ev.pendiente && ev.cand.size() > 1;
+        }
+        ev.soloMedir = !aba;
+        ev.tiradas = 0;
+        ev.usos.clear();
+        if (aba) {
+          size_t a = 0;
+          for (size_t i = 0; i < ev.cand.size(); i++)
+            if (ev.cand[i].gpu == red.tarjeta()) a = i;
+          ev.orden.assign(1, a);
+          for (size_t i = 0; i < ev.cand.size(); i++)
+            if (i != a) ev.orden.push_back(i);
+          ev.orden.push_back(a);
+          ev.med.assign(ev.cand.size(), EvalTarjeta::Medida{});
+          ev.paso = 0, ev.pendiente = false;
+          std::string lista;
+          for (const DepthNet::Candidata &c : ev.cand) lista += (lista.empty() ? "" : ", ") + c.nombre;
+          std::printf("[tarjeta] se mide donde va lo pesado de la red, con la capa que corre: %s (A B A, 3 s cada vez)\n",
+                      lista.c_str());
+          std::fflush(stdout);
+          empezarPaso();
+        } else {
+          ev.fase = EvalTarjeta::Calentando;
+          ev.desde = ahoraE, ev.mapas0 = g_mapasHechos;
+        }
+      } else if (ev.fase == EvalTarjeta::Calentando) {
+        if (g_mapasHechos - ev.mapas0 >= (ev.soloMedir ? 3 : 8) && ahoraE - ev.desde >= 1.0) {
+          ev.fase = EvalTarjeta::Midiendo;
+          ev.desde = ahoraE, ev.mapas0 = g_mapasHechos, ev.ultimaMuestra = 0.0;
+          ev.fuente = ev.cuadros = ev.lentos = 0, ev.redMs.clear(), ev.mapaMs.clear(), ev.ocupSum = 0.0, ev.ocupN = 0;
+          ev.usos.clear();
+        } else if (ahoraE - ev.desde > 15.0) {
+          if (ev.soloMedir) {
+            ev.fase = EvalTarjeta::Hecha;
+            std::printf("[prueba] %s: sin mapas en 15 s, no se mide\n", ev.capaDeLaPrueba.c_str());
+          } else {
+            ev.med[ev.orden[ev.paso]].valida = false;
+            std::printf("[tarjeta] la %s no saco mapas en 15 s: fuera de la medida\n", ev.cand[ev.orden[ev.paso]].nombre.c_str());
+            ev.paso++;
+            empezarPaso();
+          }
+          std::fflush(stdout);
+        }
+      } else if (ev.fase == EvalTarjeta::Midiendo) {
+        if (ahoraE - ev.ultimaMuestra >= 0.25) {   /* lo ocupada que va cada tarjeta, cuatro veces por segundo */
+          ev.ultimaMuestra = ahoraE;
+          for (const monitor::Tarjeta &t : monitor::leer().tarjetas) {
+            if (t.uso < 0) continue;
+            if (visor.esMonitor(t.clave)) ev.ocupSum += t.uso, ev.ocupN++;
+            EvalTarjeta::Uso &u = ev.usos[t.clave];
+            u.nombre = t.nombre + (visor.esMonitor(t.clave) ? " (la del visor)" : "");
+            u.suma += t.uso, u.n++;
+          }
+        }
+        if (ahoraE - ev.desde >= 3.0) {
+          const double dur = ahoraE - ev.desde;
+          if (ev.fuente == 0) {   /* nada nuevo del juego o del video (en pausa, una pantalla de carga): otra vez */
+            if (++ev.tiradas > 6) {
+              ev.fase = EvalTarjeta::Hecha;
+              std::printf("[prueba] %s: sin cuadros nuevos del juego o del video, se deja\n", ev.capaDeLaPrueba.c_str());
+              std::fflush(stdout);
+            } else {
+              ev.desde = ahoraE, ev.mapas0 = g_mapasHechos;
+              ev.fuente = ev.cuadros = ev.lentos = 0, ev.redMs.clear(), ev.mapaMs.clear(), ev.ocupSum = 0.0, ev.ocupN = 0;
+              ev.usos.clear();
+            }
+          } else if (ev.soloMedir) {
+            /* la prueba de lo que corre: al registro y al estado */
+            auto mediana = [](std::vector<float> v) {
+              if (v.empty()) return 0.0f;
+              std::nth_element(v.begin(), v.begin() + (long)(v.size() / 2), v.end());
+              return v[v.size() / 2];
+            };
+            const bool dlss = ev.capaDeLaPrueba.rfind("DLSS ", 0) == 0;
+            std::string capaTxt = ev.capaDeLaPrueba;
+            if (capaTxt.rfind("red ", 0) == 0) {
+              std::string base = capaTxt.substr(4);
+              if (const size_t s = base.find_last_of('/'); s != std::string::npos) base = base.substr(s + 1);
+              capaTxt = "red " + base + (red.enTarjeta() ? " en la " + nombreDeTarjeta(red.tarjeta()) : std::string(" en la CPU"));
+            }
+            char b[512];
+            std::snprintf(b, sizeof b, "%s: juego %.0f fps%s · %.1f mapas/s de %.1f ms%s · %.1f refrescos perdidos/s",
+                          capaTxt.c_str(), dlss ? (double)red.fpsJuego() : ev.fuente / dur,
+                          dlss ? (" · capa " + std::to_string((int)std::lround(red.fpsCapa())) + " copias/s").c_str() : "",
+                          (double)(g_mapasHechos - ev.mapas0) / dur, mediana(ev.mapaMs),
+                          dlss ? " (en la CPU)" : (" (red " + std::to_string((int)std::lround(mediana(ev.redMs))) + " ms)").c_str(),
+                          ev.lentos / dur);
+            std::string linea = b;
+            for (const auto &kv : ev.usos)
+              if (kv.second.n) linea += " · " + kv.second.nombre + " al " + std::to_string((int)std::lround(kv.second.suma / kv.second.n)) + " %";
+            std::printf("[prueba] %s\n", linea.c_str());
+            std::fflush(stdout);
+            g_prueba = linea;
+            ev.fase = EvalTarjeta::Hecha;
+          } else {
+            const size_t i = ev.orden[ev.paso];
+            EvalTarjeta::Medida &m = ev.med[i];
+            m.ventanas++;
+            m.fuenteS += ev.fuente / dur, m.lentosS += ev.lentos / dur, m.mapasS += (double)(g_mapasHechos - ev.mapas0) / dur;
+            if (ev.ocupN) m.ocupada += ev.ocupSum / ev.ocupN, m.ocupVentanas++;
+            m.redMs.insert(m.redMs.end(), ev.redMs.begin(), ev.redMs.end());
+            float redMedia = 0.0f;
+            for (float x : ev.redMs) redMedia += x;
+            if (!ev.redMs.empty()) redMedia /= (float)ev.redMs.size();
+            std::printf("[tarjeta] %s: %.1f cuadros nuevos/s · %.1f refrescos perdidos/s · la del visor al %s · red %.1f ms · %.1f "
+                        "mapas/s\n", ev.cand[i].nombre.c_str(), ev.fuente / dur, ev.lentos / dur,
+                        ev.ocupN ? (std::to_string((int)(ev.ocupSum / ev.ocupN + 0.5)) + " %").c_str() : "?", redMedia,
+                        (double)(g_mapasHechos - ev.mapas0) / dur);
+            std::fflush(stdout);
+            ev.paso++;
+            empezarPaso();
+          }
+        }
+      }
+    }
     if (ui.redPedida) {
       const int quiero = ui.redPedida;
       const int ahora = slotRed(red.modelPath());
@@ -3091,7 +3621,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             ui.hud.state().red = slotRed(pedida);
             grabarRedPreferida(slotRed(pedida));
             g_modeloEnUso = red.modelPath();
-            g_tarjetaEnUso = red.device();
+            g_tarjetaEnUso = descTarjeta();
             ajuste::registrar("modelo", nombreCorto(anterior), nombreCorto(pedida), nombreCorto(pedida),
                               "la ventana de ajustes");
             std::printf("[conversor] red cambiada a %s en %s · mapa %d x %d\n", pedida.c_str(),
@@ -3478,6 +4008,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       tirFuenteUlt = tirTrabajo0;
       tirFuenteN++;
       cuentaFuente++;
+      if (ev.fase == EvalTarjeta::Midiendo) ev.fuente++;   /* (v1.18) la medida de la tarjeta de la red */
     }
 
     /* la interfaz se rehace en CPU cada cuadro (son pocos triángulos) y se sube su geometría */
@@ -3867,6 +4398,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         g_mapaMs = msHecho;
         g_mapasHechos++;                 /* (v1.16) para los mapas por segundo de la vista de depuracion */
         g_redMs = red.lastMsRed();
+        if (ev.fase == EvalTarjeta::Midiendo) ev.redMs.push_back((float)g_redMs), ev.mapaMs.push_back(msHecho);
         const double tSube0 = glfwGetTime();
         const bool subido = mapaRG.size() == mapa.size() * 4
                                 ? wv.setDepthMapGuia(mapaRG.data(), red.size(), red.size(), &cerr)
@@ -4839,7 +5371,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     {
       /* cuadros que tardan mas de un refresco y medio: cada uno es un refresco perdido */
       const double ahoraM = glfwGetTime();
-      if (medUltimo > 0.0 && ahoraM - medUltimo > 1.5 / (hz > 0 ? (double)hz : 120.0)) medLentos++;
+      const bool lento = medUltimo > 0.0 && ahoraM - medUltimo > 1.5 / (hz > 0 ? (double)hz : 120.0);
+      if (lento) medLentos++;
+      if (ev.fase == EvalTarjeta::Midiendo) ev.cuadros++, ev.lentos += lento ? 1 : 0;
       medUltimo = ahoraM;
     }
     if (now - clock > 5.0) {

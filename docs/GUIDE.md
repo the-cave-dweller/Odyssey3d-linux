@@ -79,6 +79,20 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   biggest one (an integrated Radeon, typically), the biggest is used, and `HIP_VISIBLE_DEVICES` pins one. MIGraphX
   prepares the network for the card at the start of each session, which can take a while. The AMD path is not yet
   tested on AMD hardware.
+- Which card runs the network (since 1.18, `red = auto` in `serve.conf`, the default): the heavy part, the network,
+  goes to a secondary card, never the one that draws the 3D and the game unless there is no other. In order: a
+  dedicated card other than the viewer's (with one, straight there, nothing measured); else the viewer's card and the
+  integrated ones, timed against each other; else the CPU. When the network could go to more than one card, the viewer
+  times each with the network that is running (A B A: the current one, the others, the current one again; 8 maps to
+  warm up and 3 s each), keeps the one that costs the game least (new frames per second, then lost refreshes, then how
+  busy the viewer's card stays, then the network's time) and saves it in `~/.local/state/odysseyvk/tarjeta_red`
+  (delete a line to time it again). `red = 0` or `red = 1` pins a card by hand, as before.
+  `ODYSSEYVK_TARJETA_MEDIR=todas` times every card with room, the viewer's included (for testing on a machine with a
+  single secondary card).
+- A test on every layer change (since 1.18): when what gives the depth changes (another network, the video network,
+  DLSS depth coming or going, or another DLSS preset in the game) and holds for 1.5 s, the viewer measures what runs
+  for 3 s and writes a `[prueba]` line to the log (and `prueba =` to its `estado`): the game's FPS, the layer's copies,
+  maps per second and their time, lost refreshes and how busy each card is.
 - A map is computed 6 times per second on the GPU (`mapas_por_segundo`); the panel's Performance
   tab shows the time per map and the frame rate (120 or 165 fps).
 - Edges are refined per pixel against the image colour (v0.89), the subject is placed on the

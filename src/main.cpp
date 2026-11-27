@@ -1760,7 +1760,9 @@ static bool parseViewerFlags(int argc, char **argv, ViewerOpts &o) {
     }
     else if (a == "--red" || a == "--red-gpu") {
       if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a.c_str()); return 2; }
-      o.convGpu = std::max(0, std::atoi(argv[++i]));
+      const std::string v = strLower(argv[++i]);
+      o.redAuto = v == "auto";   /* (v1.18) la tarjeta de la red, medida */
+      o.convGpu = o.redAuto ? 0 : std::max(0, std::atoi(v.c_str()));
     } else if (a == "--cada") {
       if (i + 1 >= argc) { std::fprintf(stderr, "%s necesita un numero\n", a.c_str()); return 2; }
       o.convEach = std::max(1, std::atoi(argv[++i]));
@@ -3584,7 +3586,8 @@ struct ServeCfg {
   std::string nuestra;            /* la otra red (.onnx), la nativa, la del boton 2 del visor */
   std::string modeloVideo;        /* (v1.16) `modelo_video =`: la red solo para videos (vacio = la de siempre tambien) */
   std::string modo = "ask";   /* ask = preguntar; sbs/tb/flat/conv = arrancar sin preguntar */
-  int red = 0;                /* GPU donde vive la red que convierte video normal a 3D */
+  int red = -1;               /* GPU donde vive la red que convierte video normal a 3D; -1 = `red = auto` (v1.18): la
+                                 secundaria, o la que gane al medir (ver EvalTarjeta en vkview.cpp). Lo de fabrica */
   int cada = 3;               /* cada cuantos cuadros se calcula la profundidad */
   bool rastreo = false;       /* pasar --track al visor: la camara IR del monitor sigue los ojos */
   float suavizado = 0.0f;     /* 0 = el valor de fabrica del visor (0,35); menor = responde antes */
@@ -3735,7 +3738,7 @@ static void loadServeCfg(ServeCfg &cfg) {
       }
     if (k == "ignore") splitList(v, cfg.ignore);
     else if (k == "espera") cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
-    else if (k == "red") cfg.red = std::max(0, std::atoi(v.c_str()));
+    else if (k == "red") cfg.red = strLower(v) == "auto" ? -1 : std::max(0, std::atoi(v.c_str()));
     else if (k == "cada") cfg.cada = std::max(1, std::atoi(v.c_str()));
     else if (k == "modo") cfg.modo = strLower(v);
     else if (k == "pantalla") cfg.pantalla = v;
@@ -4128,7 +4131,7 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
     args.push_back("--cada");
     args.push_back(std::to_string(cada));
     args.push_back("--red");
-    args.push_back(std::to_string(red));
+    args.push_back(red < 0 ? std::string("auto") : std::to_string(red));
     if (!modelo.empty()) {
       args.push_back("--modelo");
       args.push_back(modelo);
@@ -4753,7 +4756,7 @@ static int cmdServe(int argc, char **argv) {
   bool dry = hasFlag(argc, argv, "--dry");
   bool unaVez = hasFlag(argc, argv, "--once");
   if (std::string v = flag(argc, argv, "--espera"); !v.empty()) cfg.esperaSeg = std::max(5, std::atoi(v.c_str()));
-  if (std::string v = flag(argc, argv, "--red"); !v.empty()) cfg.red = std::max(0, std::atoi(v.c_str()));
+  if (std::string v = flag(argc, argv, "--red"); !v.empty()) cfg.red = strLower(v) == "auto" ? -1 : std::max(0, std::atoi(v.c_str()));
   if (std::string v = flag(argc, argv, "--cada"); !v.empty()) cfg.cada = std::max(1, std::atoi(v.c_str()));
   if (std::string v = flag(argc, argv, "--modo"); !v.empty()) cfg.modo = strLower(v);
   if (std::string v = flag(argc, argv, "--pantalla"); !v.empty()) cfg.pantalla = v;
@@ -6144,7 +6147,10 @@ static int cmdServe(int argc, char **argv) {
           cfg.atajosGlobales = nuevo.atajosGlobales;
           /* la tarjeta de la red (`red = 1`): vale desde el siguiente visor, sin reiniciar el servicio */
           if (nuevo.red != cfg.red) {
-            std::printf("[serve] la red de profundidad pasa a la tarjeta %d desde el siguiente video\n", nuevo.red);
+            if (nuevo.red < 0)
+              std::printf("[serve] la tarjeta de la red de profundidad, sola (red = auto) desde el siguiente video\n");
+            else
+              std::printf("[serve] la red de profundidad pasa a la tarjeta %d desde el siguiente video\n", nuevo.red);
             cfg.red = nuevo.red;
           }
           cfg.expRed = nuevo.expRed, cfg.expMapa = nuevo.expMapa, cfg.expTope = nuevo.expTope;

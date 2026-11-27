@@ -32,6 +32,13 @@ What you get:
 - **The DLSS depth switch works straight away.** Turning off *Use DLSS depth* goes back to the depth network on the
   next map (it used to wait for the next video) and the game stops copying its depth; turning it on brings the game's
   depth back just as fast. *Performance* mode never uses it: no network and no DLSS.
+- **The heavy part goes to the second card.** With two cards, the depth network now runs on the one that is not
+  drawing the 3D and the game, on its own (`red = auto`, the default; a number still pins one). If it could go to
+  more than one, the viewer times each with the network that is running and keeps the one that costs the game least,
+  until you switch networks.
+- **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
+  gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the
+  log.
 
 | | Before | 1.18 |
 |---|---|---|

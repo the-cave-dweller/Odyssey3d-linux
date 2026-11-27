@@ -33,6 +33,12 @@ Lo que tienes:
 - **El interruptor de la profundidad de DLSS vale al momento.** Apagar *Usar la profundidad de DLSS* vuelve a la red
   de profundidad en el mapa siguiente (antes esperaba al siguiente vídeo) y el juego deja de copiar su profundidad;
   encenderlo trae la del juego igual de rápido. El modo *Rendimiento* no la usa nunca: ni red ni DLSS.
+- **Lo pesado va a la segunda tarjeta.** Con dos tarjetas, la red de profundidad corre sola en la que no dibuja el 3D
+  ni el juego (`red = auto`, lo de fábrica; un número la sigue fijando a mano). Si puede ir a más de una, el visor
+  las mide con la red que corre y se queda la que menos le quita al juego, hasta que cambies de red.
+- **Una prueba en cada cambio de capa**: otra red, la profundidad de DLSS que llega o se va, u otro preset de DLSS en
+  el juego, y el registro apunta 3 segundos de lo que corre (FPS del juego, mapas por segundo, refrescos perdidos y lo
+  ocupada que va cada tarjeta).
 
 | | Antes | 1.18 |
 |---|---|---|
