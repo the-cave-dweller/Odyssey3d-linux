@@ -15,6 +15,10 @@
 /* (v1.14, protocolo v6) el tope de FPS de la capa que pide el visor (Ajustes → Fluidez, `capa_fps_tope`): se le
    escribe a la capa con el latido. 0 = sin tope. Desde cualquier hilo */
 void ponerTopeCapa(unsigned fps);
+/* (v1.18) «El HUD al plano de la pantalla» (`hud_plano`), al momento: de entrada ODYSSEYVK_HUD_PLANO=0 lo apaga, y la
+   orden `hud_plano` de la ventana de ajustes lo cambia en marcha. Apagado, la capa ni copia la mascara del HUD */
+void ponerHudPlano(bool si);
+bool hudPlano();
 
 class ProfundidadJuego {
 public:

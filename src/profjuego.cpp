@@ -47,6 +47,16 @@ namespace {
 std::atomic<unsigned> g_topeCapa{0};
 }  // namespace
 void ponerTopeCapa(unsigned fps) { g_topeCapa.store(fps > 500 ? 500 : fps); }
+std::atomic<int> g_hudPlano{-1};   /* -1 = lo que diga el entorno */
+void ponerHudPlano(bool si) { g_hudPlano.store(si ? 1 : 0); }
+bool hudPlano() {
+  static const bool kEntorno = [] {
+    const char *e = std::getenv("ODYSSEYVK_HUD_PLANO");
+    return !(e && e[0] == '0');
+  }();
+  const int v = g_hudPlano.load();
+  return v < 0 ? kEntorno : v != 0;
+}
 
 ProfundidadJuego::~ProfundidadJuego() { cerrar(); }
 
@@ -106,11 +116,7 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
   c->lectorLatido = monotonoNs();   /* «leo»: la capa copia mientras esto tenga menos de 2 s */
   /* (protocolo v5) y si quiero la mascara del HUD: `hud_plano = no` en los ajustes (ODYSSEYVK_HUD_PLANO=0) la
      apaga tambien en el juego (la capa ni toca su imagen del HUD) */
-  static const bool kQuiereHud = [] {
-    const char *e = std::getenv("ODYSSEYVK_HUD_PLANO");
-    return !(e && e[0] == '0');
-  }();
-  c->lectorQuiereHud = kQuiereHud ? 1u : 0u;
+  c->lectorQuiereHud = hudPlano() ? 1u : 0u;
   c->lectorTopeFps = g_topeCapa.load();   /* (protocolo v6) */
   const uint32_t w = c->ancho, h = c->alto, bpp = c->bytesPunto, huecos = c->huecos;
   const uint64_t tamHueco = c->tamHueco;

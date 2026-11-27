@@ -1794,7 +1794,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       Hud::ItemPanel pd;
       pd.tipo = Hud::ItemPanel::Interruptor, pd.rotulo = idioma::tr("Usar la profundidad de DLSS");
       pd.valor = v.profDlss;
-      pd.ayuda = idioma::tr("Con ODYSSEYVK=1 en las opciones de lanzamiento del juego, el 3D toma la profundidad exacta que el juego le da a DLSS en vez de la red.");
+      pd.ayuda = idioma::tr("Con ODYSSEYVK=1 en las opciones de lanzamiento del juego, el 3D toma la profundidad exacta que el juego le da a DLSS en vez de la red. Se aplica al momento; el modo Rendimiento no la usa nunca.");
       pon(pd, "profundidad_dlss");
       Hud::ItemPanel hp;
       hp.tipo = Hud::ItemPanel::Interruptor, hp.rotulo = idioma::tr("HUD del juego en el plano de la pantalla");
@@ -2255,7 +2255,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   if (id == "profundidad_dlss" || id == "hud_plano") {
     const bool ahora = id == "profundidad_dlss" ? v.profDlss : v.hudPlano;
     if (!fija(id, ahora ? "no" : "si")) return false;
-    if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    avisarVisor({}, {{id, ahora ? "no" : "si"}});   /* (v1.18) al momento: el visor vuelve a la red o toma la de DLSS */
     return true;
   }
   if (id == "capa_fps_tope") {

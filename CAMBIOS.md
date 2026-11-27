@@ -39,9 +39,38 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **`install.sh`** en silencio (el detalle en `build/compilacion.log`) y 0 avisos del compilador;
   - **El panel**: sin la flecha de volver a la pastilla; la nota de la carpeta de las redes al pie de cada lista;
   - **Los avisos con la tarjeta propia**: el de las opciones de lanzamiento escritas en Steam, los del actualizador y
-    el de «el 3D no llegó a empezar».
+    el de «el 3D no llegó a empezar»;
+  - **La profundidad de DLSS**: su interruptor vale al momento y el modo Rendimiento no la usa nunca.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## La profundidad de DLSS: el interruptor vale al momento, y el modo Rendimiento sin ella (v1.18)
+
+- Rodolfo, jugando a Raji: «porque dlss me esta yendo tan mal en raji», «en la ui apagar profundidad de DLSS no manda
+  a los modelos locales» y «rendimiento se deberia desconectar de cualquier modelo incluido dlss».
+- **Lo de Raji, MEDIDO** (solo leyendo, con la partida en marcha): el juego se llevaba él solo la 4090 (77-99 % por
+  `nvidia-smi pmon`; el visor un 11 %, KWin otro 11 %) a 25-28 FPS con DLSS Equilibrado (2228x1256). A las 06:34:25
+  pasó a 60-76 FPS con la misma resolución de DLSS, justo cuando Neural Forge quedó apagado (su ventana, abierta poco
+  antes, escribió `set_enabled=0` a las 06:34:34): el coste era la red de Neural Forge dentro del juego, no DLSS. DLSS corre una sola vez por cuadro: 19,6 lanzamientos de núcleos por cada copia de
+  la capa, igual en toda la partida, así que nadie lanza un segundo DLSS. El DLSS de Raji es el suyo, el 2.3.1.
+- **El interruptor «Usar la profundidad de DLSS»** (Ajustes, Juegos con DLSS) solo se guardaba en serve.conf («se
+  aplica desde el siguiente vídeo»): el visor lo leía del entorno al arrancar. Ahora el panel le manda la orden
+  `profundidad_dlss` y el visor cambia en el mapa siguiente (`DepthNet::setUsarJuego`). Apagado no se lee la memoria
+  compartida, así que el visor deja de latir y a los 2 s la capa deja de copiar dentro del juego. Lo mismo con «El HUD
+  al plano de la pantalla» (`hud_plano`, `ponerHudPlano`): el visor y lo que le pide a la capa.
+- **El modo Rendimiento no usa la profundidad de DLSS**: antes la del juego mandaba sobre todo (el modo rendimiento
+  solo valía sin ella). Ahora va solo con la imagen, sin red ni DLSS, y tampoco lee la memoria compartida.
+- **Cambiar de fuente es un cambio de plano**: al pasar de la red a la del juego (o al revés) se reinician la escala y
+  el plano de apoyo, y la red de vídeo empieza su ventana. MEDIDO al probar: sin esto, al volver a la de DLSS el mapa
+  tardaba 14 mapas en ser el del juego; con esto, el primero ya es idéntico.
+- **La capa apuntaba cada cuadro**: Raji turna dos profundidades, una por cuadro, y cada cambio iba al registro (16 000
+  líneas, 3 MB en 8 minutos). Ahora cada imagen se apunta una vez.
+- **Probado** sin ventana ni tarjeta, con la partida de Raji abierta: la red en la CPU (`ODYSSEYVK_GPU=-1`) y
+  `tools/simula-capa.py` con su propia memoria compartida. Apagar: la red en el mapa siguiente (84,9 niveles de
+  diferencia), sin máscara del HUD, y simula-capa ve «el visor dejó de leer» a los ~1,9 s; encender: el mapa del juego
+  en el primer mapa (diferencia 0,00); Rendimiento con la capa escribiendo: ni la usa ni late. La orden pasa por el
+  filtro de órdenes del visor (`ajuste::leer`) con `si` y `no`. Las traducciones del texto de ayuda, en los siete
+  idiomas.
 
 ## El aviso de las opciones de lanzamiento escritas en Steam, con la tarjeta propia (v1.18)
 

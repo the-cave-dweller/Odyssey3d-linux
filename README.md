@@ -29,6 +29,9 @@ What you get:
 - **The «game closed» card** only shows if the game closes within 20 seconds of entering 3D (a crash), not when you
   quit it.
 - **A quiet install**: `install.sh` shows a few lines; the details go to `build/compilacion.log`.
+- **The DLSS depth switch works straight away.** Turning off *Use DLSS depth* goes back to the depth network on the
+  next map (it used to wait for the next video) and the game stops copying its depth; turning it on brings the game's
+  depth back just as fast. *Performance* mode never uses it: no network and no DLSS.
 
 | | Before | 1.18 |
 |---|---|---|

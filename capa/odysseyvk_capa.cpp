@@ -226,6 +226,9 @@ struct Dispositivo {
   std::unordered_map<VkImage, long> usoComoProfundidad;
   VkImage profElegida = VK_NULL_HANDLE;
   bool profAvisada = false;
+  /* (v1.18) las ya anunciadas en el registro. MEDIDO en Raji, 27-nov: el juego turna dos profundidades, una por cuadro,
+     y cada cambio se apuntaba: 16 000 lineas (3 MB) en 8 minutos, una escritura por cuadro en el hilo del juego */
+  std::unordered_set<VkImage> profAnunciadas;
   /* fase 3 (sonda): las imagenes de color a las que DLSS pidio numero, con los tipos de descriptor (bit 1 =
      para leer con muestreador, bit 3 = de almacenamiento, la que escribe) */
   std::unordered_map<VkImage, uint32_t> colorDlss;
@@ -989,6 +992,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAl
     d->profundidadesDlss.erase(img);
     d->usoComoProfundidad.erase(img);
     if (d->profElegida == img) d->profElegida = VK_NULL_HANDLE;
+    d->profAnunciadas.erase(img);
     /* (v1.13) la leimos hace nada: se aparta (ver kAplazar) */
     auto l = d->leidaEn.find(img);
     const bool aplazar = aplazarTodo() || (l != d->leidaEn.end() && d->presentes - l->second < kAplazar);
@@ -1185,9 +1189,10 @@ VkImage elegirProfundidad(Dispositivo *d, Imagen *im) {
   }
   auto it = mejor != VK_NULL_HANDLE ? d->imagenes.find(mejor) : d->imagenes.end();
   const bool vale = it != d->imagenes.end() && uso >= d->presentes - 3;
-  if (vale && mejor != d->profElegida)
+  if (vale && mejor != d->profElegida && d->profAnunciadas.insert(mejor).second)
     anota("[compartir] la profundidad de DLSS: %p %ux%u %s, banderas 0x%x (el juego la usa como profundidad en este "
-          "cuadro)", (void *)mejor, it->second.w, it->second.h, formato(it->second.formato).c_str(), (unsigned)it->second.flags);
+          "cuadro%s)", (void *)mejor, it->second.w, it->second.h, formato(it->second.formato).c_str(),
+          (unsigned)it->second.flags, d->profAnunciadas.size() > 1 ? "; las ya vistas no se vuelven a apuntar" : "");
   else if (!vale && (d->profElegida != VK_NULL_HANDLE || !d->profAvisada))
     anota("[compartir] ninguna profundidad de DLSS en uso en este cuadro (%zu pedidas): no se copia hasta que vuelva una",
           d->profundidadesDlss.size());

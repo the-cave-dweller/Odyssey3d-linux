@@ -30,6 +30,9 @@ Lo que tienes:
 - **La tarjeta de «el juego se cerró»** solo sale si el juego se cierra en los 20 segundos de entrar en 3D (una
   caída), no al salir tú.
 - **Una instalación en silencio**: `install.sh` enseña unas pocas líneas; el detalle va a `build/compilacion.log`.
+- **El interruptor de la profundidad de DLSS vale al momento.** Apagar *Usar la profundidad de DLSS* vuelve a la red
+  de profundidad en el mapa siguiente (antes esperaba al siguiente vídeo) y el juego deja de copiar su profundidad;
+  encenderlo trae la del juego igual de rápido. El modo *Rendimiento* no la usa nunca: ni red ni DLSS.
 
 | | Antes | 1.18 |
 |---|---|---|

@@ -2044,11 +2044,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          /* (v1.13, fase 3c) el HUD del juego, con su mascara exacta (la capa lee la imagen donde el juego lo dibuja):
             al plano de la pantalla, como un rotulo. Sin ella (otro juego, ODYSSEYVK_HUD=0) no cambia nada */
          /* `hud_plano = no` en serve.conf (ODYSSEYVK_HUD_PLANO=0): el HUD se queda con el relieve de lo que tiene detras */
-         static const bool kHudPlano = [] {
-           const char *e = std::getenv("ODYSSEYVK_HUD_PLANO");
-           return !(e && e[0] == '0');
-         }();
-         if (ok && t.juego && kHudPlano && m.size() == (size_t)t.red->size() * t.red->size()) {
+         if (ok && t.juego && hudPlano() && m.size() == (size_t)t.red->size() * t.red->size()) {
            std::vector<uint8_t> hud;
            int hw = 0, hh = 0, fw = 0, fh = 0;
            const bool hay = t.red->mascaraHud(hud, hw, hh, &fw, &fh);
@@ -2733,6 +2729,18 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             std::printf("[capa] tope de FPS de la capa: %s\n", n > 0 ? (std::to_string(n) + " por segundo").c_str() : "sin tope");
             std::fflush(stdout);
           }
+          /* (v1.18) `profundidad_dlss = si|no` y `hud_plano = si|no`: los interruptores de «Juegos con DLSS» de la ventana
+             de ajustes, al momento (antes solo valian desde el siguiente video). Apagada la profundidad, vuelve la red
+             (o, en el modo rendimiento, la profundidad sin red) en el cuadro siguiente */
+          for (const char *clave : {"profundidad_dlss", "hud_plano"})
+            if (const auto od = palabras.find(clave); od != palabras.end()) {
+              const std::string v = strLower(od->second);
+              const bool si = !(v == "no" || v == "0" || v == "apagar");
+              if (std::strcmp(clave, "hud_plano") == 0) ponerHudPlano(si);
+              else red.setUsarJuego(si);
+              std::printf("[ajustes] %s: %s\n", clave, si ? "si" : "no");
+              std::fflush(stdout);
+            }
           /* `fps_juego = si|no` (v1.13): el interruptor de la ventana de ajustes, el cuadrito de FPS de la pastilla */
           if (const auto of = palabras.find("fps_juego"); of != palabras.end()) {
             const std::string v = strLower(of->second);

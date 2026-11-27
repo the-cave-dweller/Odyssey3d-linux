@@ -226,8 +226,13 @@ public:
   /* (v1.13, fase 2) La profundidad del juego, la que recibe DLSS, en lugar de la red: la escribe la
      capa de OdysseyVK dentro del juego (`ODYSSEYVK=1`, capa/) en una memoria compartida. El visor la
      permite cuando la ventana del 3D es un juego; si no llega fresca, se usa la red como siempre.
-     ODYSSEYVK_PROFUNDIDAD_JUEGO=0 la apaga. */
+     ODYSSEYVK_PROFUNDIDAD_JUEGO=0 la apaga al arrancar.
+     (v1.18) «Usar la profundidad de DLSS» de la ventana de ajustes vale al momento (la orden `profundidad_dlss`,
+     Rodolfo: «apagar profundidad de DLSS no manda a los modelos locales»): apagada, vuelve la red en el cuadro
+     siguiente y la capa deja de copiar (sin latido, a los 2 s). Y el modo rendimiento no la usa nunca (Rodolfo:
+     «rendimiento se deberia desconectar de cualquier modelo incluido dlss»): sin red ni DLSS, solo la imagen. */
   void setPermitirJuego(bool p) { permitirJuego_.store(p); }
+  void setUsarJuego(bool u) { usarJuego_.store(u ? 1 : 0); }
   bool usandoJuego() const { return usandoJuego_.load(); }
   /* (v1.13, fase 3c) la mascara del HUD del juego, de la capa (ver ProfundidadJuego::leerHud); en el hilo del
      mapa, despues de estimate. `fuenteW/H`: el tamano de la imagen del HUD del juego, para el registro */
@@ -269,6 +274,8 @@ private:
   bool enBanda(int x, int y) const { return y < bArr_ || y >= sz_ - bAb_ || x < bIz_ || x >= sz_ - bDe_; }
   ProfundidadJuego *juego_ = nullptr;   /* se crea al primer uso y se borra en ~DepthNet (depth.cpp) */
   std::atomic<bool> permitirJuego_{false}, usandoJuego_{false};
+  std::atomic<int> usarJuego_{-1};   /* -1 = lo que diga el entorno al arrancar; 0/1, la orden `profundidad_dlss` */
+  bool quiereJuego() const;          /* el interruptor, y que no sea el modo rendimiento */
   std::atomic<float> fpsJuego_{0.0f}, fpsCapa_{0.0f}, hudFrac_{-1.0f};
   mutable std::mutex infoMx_;
   std::string descJuego_;

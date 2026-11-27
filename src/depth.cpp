@@ -1227,12 +1227,8 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
   auto tRed1 = tRed0;
   /* (v1.13, fase 2) la profundidad del juego, la que recibe DLSS, si el visor esta sobre un juego y la
      capa la esta escribiendo (ver profjuego.h): exacta, sin parpadeo y sin gastar la red */
-  static const bool kJuego = [] {
-    const char *e = entornoOdyssey("ODYSSEYVK_PROFUNDIDAD_JUEGO");
-    return !(e && e[0] == '0');
-  }();
   bool delJuego = false;
-  if (kJuego && permitirJuego_.load()) {
+  if (quiereJuego() && permitirJuego_.load()) {
     if (!juego_) juego_ = new ProfundidadJuego;
     delJuego = juego_->leer(dJuego, sz_);
   }
@@ -1244,7 +1240,12 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     std::lock_guard<std::mutex> g(infoMx_);
     descJuego_ = delJuego ? juego_->descripcion() : std::string();
   }
-  if (delJuego != usandoJuego_.load()) {
+  /* (v1.18) pasar de la red a la del juego, o al reves, es un cambio de plano: la escala y el plano de apoyo de la
+     otra fuente no valen. MEDIDO con el interruptor al momento: sin esto, al volver a la de DLSS el mapa tardaba 14
+     mapas en ser el del juego (la escala de la red entrando poco a poco, hasta que salto el corte por diferencia) */
+  const bool cambioFuente = delJuego != usandoJuego_.load();
+  if (cambioFuente && im->ventana) ventanaN_ = 0;   /* la red de video empieza su ventana otra vez */
+  if (cambioFuente) {
     usandoJuego_.store(delJuego);
     if (delJuego)
       std::printf("[red] la profundidad del juego (la de DLSS, %s) en lugar de la red\n", juego_->descripcion().c_str());
@@ -1387,7 +1388,7 @@ bool DepthNet::estimate(const uint8_t *rgba, int w, int h, std::vector<uint8_t> 
     if (tomadas) dif /= (float)tomadas * 255.0f;
   }
   /* (v1.16) con la red de video manda el cambio de plano por la imagen (arriba, antes de pasar la red) */
-  corte_ = im->ventana ? corteImagen : (tomadas > 0 && dif > 0.12f && cuadrosDesdeCorte_ >= 15);
+  corte_ = cambioFuente || (im->ventana ? corteImagen : (tomadas > 0 && dif > 0.12f && cuadrosDesdeCorte_ >= 15));
   if (corte_) {
     cuadrosDesdeCorte_ = 0;
     cortes_++;
@@ -2349,9 +2350,20 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
   return tocadas / (float)((size_t)cw * ch);
 }
 
+/* (v1.18) si se toma la profundidad del juego: el interruptor de la ventana de ajustes (o, sin orden, el entorno al
+   arrancar) y nunca en el modo rendimiento, que va sin red y sin DLSS (ver depth.h) */
+bool DepthNet::quiereJuego() const {
+  static const bool kEntorno = [] {
+    const char *e = entornoOdyssey("ODYSSEYVK_PROFUNDIDAD_JUEGO");
+    return !(e && e[0] == '0');
+  }();
+  const int u = usarJuego_.load();
+  return (u < 0 ? kEntorno : u != 0) && sinRed_ == 0;
+}
+
 /* ---------- (v1.13, fase 3c) el HUD del juego ---------- */
 bool DepthNet::mascaraHud(std::vector<uint8_t> &alfa, int &w, int &h, int *fuenteW, int *fuenteH) {
-  if (!juego_ || !permitirJuego_.load()) return false;
+  if (!juego_ || !permitirJuego_.load() || !quiereJuego()) return false;
   if (!juego_->leerHud(alfa, w, h)) return false;
   if (fuenteW && fuenteH) juego_->fuenteHud(*fuenteW, *fuenteH);
   return true;
