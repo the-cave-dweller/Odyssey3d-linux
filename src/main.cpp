@@ -4458,6 +4458,15 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
     if (ig.empty()) continue;
     if (app == ig || app.find(ig) != std::string::npos) return true;
   }
+  /* (v1.16) las de capturar o grabar la pantalla nunca entran al 3D (Rodolfo: «excluye las aplicaciones de captura de
+     pantalla del 3d»): Spectacle, por ejemplo, tapa la pantalla entera mientras se elige la zona. Van fijas, aparte
+     de `ignore` en serve.conf. OBS va por su nombre entero («obs» a secas tambien pillaria Obsidian) */
+  if (app == "obs" || app == "com.obsproject.studio") return true;
+  static const char *kCaptura[] = {"spectacle", "flameshot", "ksnip", "obsproject", "org.gnome.screenshot", "gnome-screenshot",
+                                   "kooha", "gpu-screen-recorder", "gpu_screen_recorder", "simplescreenrecorder", "peek",
+                                   "vokoscreen", "kazam", "shutter", "satty", "swappy", "xdg-desktop-portal"};
+  for (const char *c : kCaptura)
+    if (app.find(c) != std::string::npos) return true;
   return false;
 }
 

@@ -3,6 +3,19 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Las aplicaciones de captura de pantalla no entran al 3D (v1.16)
+
+- Rodolfo: «excluye las aplicaciones de captura de pantalla del 3d». Spectacle, por ejemplo, tapa la pantalla
+  entera mientras se elige la zona, y el servicio la tomaba por una ventana a pantalla completa.
+- `ignoredApp` (la que decide si una ventana a pantalla completa entra al 3D) lleva ahora una lista fija, aparte
+  del `ignore` de serve.conf, que no se puede quitar. Se compara con el appId:
+  - spectacle, flameshot, ksnip, obsproject, org.gnome.screenshot y gnome-screenshot;
+  - kooha, gpu-screen-recorder, simplescreenrecorder, peek, vokoscreen, kazam y shutter;
+  - satty, swappy y xdg-desktop-portal (su selector de qué compartir).
+  OBS va por su nombre entero (`obs`, `com.obsproject.studio`): «obs» a secas también pillaría Obsidian.
+- Probado aparte con appIds de prueba: Spectacle (`org.kde.spectacle`, el de Rodolfo), Flameshot, OBS, Kooha y
+  ksnip quedan fuera; Obsidian, un juego de Steam, mpv y Firefox siguen entrando.
+
 ## ODYSSEYVK=1 en todos los juegos, solo y sin poder quitarse; fuera el Copiar (v1.16)
 
 - Rodolfo: «no need for copy button anymore, just make sure the game automatically toggles the ODYSSEYVK
