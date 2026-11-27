@@ -934,7 +934,10 @@ void Hud::begin(int w, int h, float altoLogico) {
      es el gris casi negro de la tarjeta: las dos piezas se ven de la misma familia. */
   /* rama experimental: la pastilla va en azul claro (el del chip «AI») y en ambar la de rendimiento (el
      color del rayo). La tarjeta de la orilla sigue en morado: se vuelve a poner antes de pintarla. */
-  float accent[3] = {st_.rendimiento ? 0.93f : 0.40f, st_.rendimiento ? 0.62f : 0.72f, st_.rendimiento ? 0.12f : 1.0f};
+  /* (v1.16) la pastilla con la paleta soft de vkDaedalus, como el resto (Rodolfo: «adapta el estilo cuadrado al del
+     resto de la aplicacion»): su morado con la red y su ambar en el modo rendimiento */
+  float accent[3] = {st_.rendimiento ? 0xDE / 255.0f : 0xA8 / 255.0f, st_.rendimiento ? 0xAA / 255.0f : 0x8F / 255.0f,
+                     st_.rendimiento ? 0x7C / 255.0f : 0xD0 / 255.0f};
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -954,6 +957,7 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   if (st_.overlayOn) {
     const bool leg = st_.legado;
+    fuente_ = hayBarlow_ ? 1 : 0;   /* (v1.16) la letra del resto de la aplicacion */
     const float aire = 16.0f, anchoDes = 140.0f;
     const char *rotRec = idioma::tr("No volver a preguntar");
     const float anchoRec = 18.0f + 8.0f + textWidth(rotRec, 12.5f);
@@ -1011,15 +1015,20 @@ void Hud::begin(int w, int h, float altoLogico) {
       pw = std::max(pw, 2.0f * aire + textWidth(teclas, 9.5f) + (st_.engranaje ? 44.0f : 0.0f));
 
     pw = std::min(pw, (float)vw - 48.0f);
-    const float ph = 76.0f;
+    /* (v1.16) del alto de la barra del panel (56), salvo el modo de legado, que lleva deslizadores (Rodolfo:
+       «integralo a la barra de titulo en cuanto a tamaño, el ancho dejalo asi»); el renglon de las teclas pasa a la
+       ayuda que sale al pasar el raton */
+    const bool compacta = !leg;
+    const float ph = compacta ? 56.0f : 76.0f;
+    const float dy = compacta ? -5.0f : 0.0f;   /* lo de dentro, centrado en el alto nuevo */
     panelW_ = pw;
     panelH_ = ph;
-    /* (v1.16) abajo en el centro (Rodolfo: «que el pill sea igual de practico, pero que vaya al centro inferior y la
-       herramienta desplace el resto de la interfaz hacia la pantalla ya con el estilo de daedalus»): sus menus se
-       abren hacia arriba, centrados encima de ella */
-    const float x0 = std::floor(((float)vw - pw) * 0.5f), y0 = (float)vh - 24.0f - ph;
+    /* (v1.16) otra vez arriba a la derecha (Rodolfo: «devuelve el pill a la orilla superior derecha»), pegada a las
+       dos orillas como un trozo de barra de titulo: del color de la barra del panel, con la esquina de abajo a la
+       izquierda redonda. Sus menus se abren hacia abajo */
+    const float x0 = (float)vw - pw, y0 = 0.0f;
     pillPanel_ = {x0, y0, pw, ph};
-    solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov) */
+    mask9({x0, y0 - 8.0f, pw + 8.0f, ph + 8.0f}, 1, 8.0f, 0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f, 0.94f);
 
     /* (v1.13) el cuadrito de DLSS a la izquierda de la pastilla (Rodolfo: «junto al HUB quiero que en un cuadro
        pequeño indiques los FPS del layer y los del juego»): los cuadros que presenta el juego y las profundidades
@@ -1042,11 +1051,12 @@ void Hud::begin(int w, int h, float altoLogico) {
       const float bw = std::max(borde + wRot + 14.0f + wNum + 4.0f + wFps + borde, borde + textWidth(titulo, 10.0f) + borde);
       const float bx = x0 - 10.0f - bw;
       if (bx >= 8.0f) {
-        solid(bx, y0, bw, ph, 0.0f, 0.0f, 0.0f, 0.82f);
-        text(titulo, bx + borde, y0 + 9.0f, 10.0f, accent[0], accent[1], accent[2], 1.0f);
+        /* (v1.16) del mismo alto y color que la pastilla, pegado arriba */
+        mask9({bx, y0 - 8.0f, bw, ph + 8.0f}, 1, 8.0f, 0x0B / 255.0f, 0x0A / 255.0f, 0x0E / 255.0f, 0.94f);
+        text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
         const float colFps = bx + bw - borde - wFps;
-        float filas[2] = {y0 + 28.0f, y0 + 50.0f};
-        if (!dlss) filas[0] = y0 + 39.0f;
+        float filas[2] = {y0 + (compacta ? 20.0f : 28.0f), y0 + (compacta ? 36.0f : 50.0f)};
+        if (!dlss) filas[0] = y0 + (compacta ? 27.0f : 39.0f);
         const char *rot[2] = {rJ, rC};
         const char *num[2] = {nj, nc};
         for (int k = 0; k < nFilas; k++) {
@@ -1061,18 +1071,18 @@ void Hud::begin(int w, int h, float altoLogico) {
        Un boton redondo (antes el interruptor ON/OFF, «en vez de on y off un boton redondo de apagado»,
        Rodolfo): encendido, del color de la pastilla con el simbolo en blanco; apagado, gris. Manda el
        mismo golpe que el interruptor (Hit3D). */
-    sw3D_ = {x0 + aire, y0 + 17.0f, anchoEnc, 32.0f};
+    sw3D_ = {x0 + aire, y0 + 17.0f + dy, anchoEnc, 32.0f};
     swKnob_ = {-10.0f, -10.0f, 0.0f, 0.0f};
     {
       const bool hov3 = sw3D_.inside(mx_, my_);
       const Rect ico{sw3D_.x + 6.0f, sw3D_.y + 6.0f, 20.0f, 20.0f};
       if (st_.weaveOn) {
         const float t = hov3 ? 1.12f : 1.0f;
-        mask9(sw3D_, 0, 16.0f, std::min(1.0f, accent[0] * t), std::min(1.0f, accent[1] * t), std::min(1.0f, accent[2] * t), 0.95f);
+        mask9(sw3D_, 0, 4.0f, std::min(1.0f, accent[0] * t), std::min(1.0f, accent[1] * t), std::min(1.0f, accent[2] * t), 0.95f);
         icono(ico, icoEncender_, 1.0f, 1.0f, 1.0f, 1.0f);
       } else {
         const float g = hov3 ? 0.32f : 0.24f;
-        mask9(sw3D_, 0, 16.0f, g, g + 0.02f, g + 0.05f, 0.95f);
+        mask9(sw3D_, 0, 4.0f, g, g + 0.02f, g + 0.05f, 0.95f);
         icono(ico, icoEncender_, 0.80f, 0.82f, 0.86f, hov3 ? 1.0f : 0.85f);
       }
     }
@@ -1081,13 +1091,13 @@ void Hud::begin(int w, int h, float altoLogico) {
        cualquier parte lo pasa al otro extremo, en marcha (HitModoRed). */
     pillModo_ = {-10.0f, -10.0f, 0.0f, 0.0f};
     if (hubConv) {
-      pillModo_ = {sw3D_.x + sw3D_.w + 12.0f, y0 + 17.0f, anchoModo, 32.0f};
+      pillModo_ = {sw3D_.x + sw3D_.w + 12.0f, y0 + 17.0f + dy, anchoModo, 32.0f};
       const bool rend = st_.rendimiento, hovM = pillModo_.inside(mx_, my_);
-      const float c[3] = {rend ? 0.93f : 0.40f, rend ? 0.62f : 0.72f, rend ? 0.12f : 1.0f};
+      const float c[3] = {accent[0], accent[1], accent[2]};   /* (v1.16) el morado o el ambar de la paleta soft */
       const float t = hovM ? 1.08f : 1.0f;
-      mask9(pillModo_, 0, 16.0f, std::min(1.0f, c[0] * t), std::min(1.0f, c[1] * t), std::min(1.0f, c[2] * t), 0.95f);
+      mask9(pillModo_, 0, 4.0f, std::min(1.0f, c[0] * t), std::min(1.0f, c[1] * t), std::min(1.0f, c[2] * t), 0.95f);
       const Rect bolaM{rend ? pillModo_.x + pillModo_.w - 4.0f - 26.0f : pillModo_.x + 4.0f, pillModo_.y + 3.0f, 26.0f, 26.0f};
-      mask9(bolaM, 0, 13.0f, 0.97f, 0.97f, 0.99f, 1.0f);
+      mask9(bolaM, 0, 4.0f, 0.97f, 0.97f, 0.99f, 1.0f);
       icono({bolaM.x + 4.0f, bolaM.y + 4.0f, 18.0f, 18.0f}, rend ? icoRayo_ : icoChip_, c[0] * 0.85f, c[1] * 0.85f, c[2] * 0.85f, 1.0f);
       const char *nombreModo = rend ? nRendModo : nNeural;
       const float huecoM = wModo - textWidth(nombreModo, 13.0f);
@@ -1123,9 +1133,9 @@ void Hud::begin(int w, int h, float altoLogico) {
     const bool cabeBloque = anchoBloque > 0.0f && bloqueX + anchoBloque + sitioEngranaje + aire <= x0 + pw + 0.5f;
     /* ---- el engranaje: abre el panel de ajustes por encima del video (v0.84) ---- */
     if (st_.engranaje) {
-      btnEngranaje_ = {x0 + pw - aire - 30.0f, y0 + 23.0f, 30.0f, 30.0f};
+      btnEngranaje_ = {x0 + pw - aire - 30.0f, y0 + (ph - 30.0f) * 0.5f, 30.0f, 30.0f};
       const bool hov = btnEngranaje_.inside(mx_, my_);
-      if (hov) mask9(btnEngranaje_, 0, 15.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+      if (hov) mask9(btnEngranaje_, 0, 4.0f, 1.0f, 1.0f, 1.0f, 0.14f);
       icono({btnEngranaje_.x + 4.0f, btnEngranaje_.y + 4.0f, 22.0f, 22.0f}, icoEngranaje_, ink[0], ink[1], ink[2],
             hov ? 1.0f : 0.78f);
     }
@@ -1179,11 +1189,11 @@ void Hud::begin(int w, int h, float altoLogico) {
        Dice el preajuste puesto («A mano» si los valores no son los de ninguno) y despliega debajo
        de la pastilla el menu del modo. Abierto, va relleno de ambar. */
     if (cabeBloque && st_.rendimiento) {
-      const float by = y0 + 18.0f, bh = 30.0f;
+      const float by = y0 + 18.0f + dy, bh = 30.0f;
       btnRayo_ = {bloqueX, by, anchoBloque, bh};
       const bool abierto = st_.menuRendimiento, hov = btnRayo_.inside(mx_, my_);
-      if (abierto) mask9(btnRayo_, 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
-      else mask9(btnRayo_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+      if (abierto) mask9(btnRayo_, 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+      else mask9(btnRayo_, 0, 4.0f, hov ? 0x2A / 255.0f : 0x20 / 255.0f, hov ? 0x26 / 255.0f : 0x1D / 255.0f, hov ? 0x35 / 255.0f : 0x29 / 255.0f, 1.0f);
       const float t[3] = {abierto ? 0.10f : ink[0], abierto ? 0.08f : ink[1], abierto ? 0.04f : ink[2]};
       text(nombreRend, bloqueX + 14.0f, by + 6.5f, 13.0f, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnRayo_.x + btnRayo_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, t[0], t[1], t[2], abierto || hov ? 1.0f : 0.80f);
@@ -1192,11 +1202,11 @@ void Hud::begin(int w, int h, float altoLogico) {
        El chip solo, en su trazo azul claro (sin fondo propio), «Auto» o «Manual» y la flechita del menu.
        Abierto, el boton se tiñe del azul en vez de rellenarse. */
     if (cabeBloque && hubNormal) {
-      const float by = y0 + 18.0f, bh = 30.0f;
+      const float by = y0 + 18.0f + dy, bh = 30.0f;
       btnFoco_ = {bloqueX, by, anchoBloque, bh};
       const bool abierto = st_.menuNormal, hov = btnFoco_.inside(mx_, my_);
-      if (abierto) mask9(btnFoco_, 0, 15.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
-      else mask9(btnFoco_, 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+      if (abierto) mask9(btnFoco_, 0, 4.0f, accent[0], accent[1], accent[2], hov ? 0.36f : 0.28f);
+      else mask9(btnFoco_, 0, 4.0f, hov ? 0x2A / 255.0f : 0x20 / 255.0f, hov ? 0x26 / 255.0f : 0x1D / 255.0f, hov ? 0x35 / 255.0f : 0x29 / 255.0f, 1.0f);
       /* (v1.16) sin el chip ni la llave: el icono va solo en la capsula de la izquierda */
       text(nombreFoco, bloqueX + 14.0f, by + 6.5f, 13.0f, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.90f);
       icono({btnFoco_.x + btnFoco_.w - 24.0f, by + 9.0f, 12.0f, 12.0f}, icoBajar_, ink[0], ink[1], ink[2], abierto || hov ? 1.0f : 0.80f);
@@ -1225,7 +1235,14 @@ void Hud::begin(int w, int h, float altoLogico) {
        (v1.09: con atajos cambiados el renglon es largo y se metia debajo de su letra) */
     if (cabeBloque && st_.recordarVisible && !st_.rendimiento && !hubNormal) cabe = std::min(cabe, bloqueX - 14.0f - (x0 + aire));
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
-    text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
+    if (!compacta) text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
+    /* (v1.16) en la pastilla de 56 las teclas salen al pasar el raton por ella (sin un menu abierto) */
+    if (compacta && pillPanel_.inside(mx_, my_) && !st_.menuNormal && !st_.menuRendimiento &&
+        !(pillModo_.w > 0.0f && pillModo_.inside(mx_, my_))) {
+      const std::vector<std::string> lineas = {teclas};
+      const float wT = textWidth(teclas, 12.5f) + 24.0f;
+      cajaAyuda(lineas, std::max(8.0f, x0 + pw - 8.0f - wT), y0 + ph + 8.0f, 12.5f);
+    }
     /* (v1.12) la ayuda del interruptor Neural | Rendimiento de la pastilla, como la del panel */
     if (pillModo_.w > 0.0f && pillModo_.inside(mx_, my_) && !st_.menuNormal && !st_.menuRendimiento) {
       const std::vector<std::string> lineas = renglones(
@@ -1244,9 +1261,9 @@ void Hud::begin(int w, int h, float altoLogico) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f;
       const char *nota = idioma::tr("Volver a la red: el interruptor Neural | Rendimiento del panel");
       const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
-      const float mx0 = std::floor(x0 + (pw - mw) * 0.5f), my0 = y0 - 6.0f - mh;   /* (v1.16) encima, centrado */
+      const float mx0 = x0 + pw - mw, my0 = y0 + ph + 6.0f;   /* (v1.16) otra vez debajo, pegado a su orilla derecha */
       menuRend_ = {mx0, my0, mw, mh};
-      solid(mx0, my0, mw, mh, 0.0f, 0.0f, 0.0f, 0.88f);
+      mask9({mx0, my0, mw, mh}, 1, 8.0f, 0x12 / 255.0f, 0x11 / 255.0f, 0x17 / 255.0f, 0.97f);   /* (v1.16) la tarjeta de vkDaedalus */
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
       text(idioma::tr("MODO RENDIMIENTO"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
       std::string ayuda;
@@ -1260,8 +1277,8 @@ void Hud::begin(int w, int h, float altoLogico) {
       for (int k = 0; k < 3; k++) {
         btnPre_[k] = {mx0 + pad + (float)k * (bw + 6.0f), my0 + 36.0f, bw, 30.0f};
         const bool puesto = st_.preajuste == k, hov = btnPre_[k].inside(mx_, my_);
-        if (puesto) mask9(btnPre_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
-        else mask9(btnPre_[k], 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+        if (puesto) mask9(btnPre_[k], 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+        else mask9(btnPre_[k], 0, 4.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
         textoCabe(nombrePre[k], btnPre_[k].x + bw * 0.5f, btnPre_[k].y + 7.0f, 12.5f, bw - 12.0f, puesto ? 0.10f : ink[0],
                   puesto ? 0.08f : ink[1], puesto ? 0.04f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
         if (hov) ayuda = ayudaPre[k], ayudaY = btnPre_[k].y;
@@ -1323,7 +1340,7 @@ void Hud::begin(int w, int h, float altoLogico) {
        la imagen). Debajo, el tipo de video y la casilla de «no volver a preguntar». */
     if (hubNormal && st_.menuNormal && btnFoco_.w > 0.0f) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f, tam = 12.0f;
-      const float mx0 = std::floor(x0 + (pw - mw) * 0.5f);   /* (v1.16) encima de la pastilla, centrado */
+      const float mx0 = x0 + pw - mw;   /* (v1.16) otra vez debajo de la pastilla, a su derecha */
       const bool manual = !autoPuesto;
       std::vector<std::string> nota;
       if (!manual)
@@ -1335,9 +1352,9 @@ void Hud::begin(int w, int h, float altoLogico) {
       if (st_.modoVisible) alto += 46.0f;
       if (st_.recordarVisible) alto += 32.0f;
       alto += 8.0f;
-      const float my0 = y0 - 6.0f - alto;   /* (v1.16) encima de la pastilla */
+      const float my0 = y0 + ph + 6.0f;
       menuRend_ = {mx0, my0, mw, alto};
-      solid(mx0, my0, mw, alto, 0.0f, 0.0f, 0.0f, 0.88f);
+      mask9({mx0, my0, mw, alto}, 1, 8.0f, 0x12 / 255.0f, 0x11 / 255.0f, 0x17 / 255.0f, 0.97f);   /* (v1.16) la tarjeta de vkDaedalus */
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
       text(idioma::tr("RELIEVE"), mx0 + pad, my0 + 14.0f, 11.0f, accent[0], accent[1], accent[2], 1.0f);
       std::string ayuda;
@@ -1347,8 +1364,8 @@ void Hud::begin(int w, int h, float altoLogico) {
       for (int k = 0; k < 2 && conAuto; k++) {
         btnAM_[k] = {mx0 + pad + (float)k * (bw + 6.0f), my0 + 36.0f, bw, 30.0f};
         const bool puesto = (k == 0) == st_.focoAuto, hov = btnAM_[k].inside(mx_, my_);
-        if (puesto) mask9(btnAM_[k], 0, 15.0f, accent[0], accent[1], accent[2], 0.95f);
-        else mask9(btnAM_[k], 0, 15.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
+        if (puesto) mask9(btnAM_[k], 0, 4.0f, accent[0], accent[1], accent[2], 0.95f);
+        else mask9(btnAM_[k], 0, 4.0f, 1.0f, 1.0f, 1.0f, hov ? 0.16f : 0.07f);
         textoCabe(opc[k], btnAM_[k].x + bw * 0.5f, btnAM_[k].y + 7.0f, 12.5f, bw - 12.0f, puesto ? 0.06f : ink[0],
                   puesto ? 0.10f : ink[1], puesto ? 0.16f : ink[2], puesto || hov ? 1.0f : 0.85f, true);
         if (hov) {
@@ -1447,7 +1464,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 186.0f;
     /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
     const float ax = (float)vw - 24.0f - aw,
-                ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
+                ay = (float)vh - 24.0f - ah;   /* (v1.16) la pastilla volvio arriba */
     askPanel_ = {ax, ay, aw, ah};
     fondoTarjeta(ax, ay, aw, ah);
     const float borde = 26.0f;
@@ -1492,7 +1509,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ah = 118.0f + 20.0f * (float)st_.askAvisoLineas.size();
     /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
     const float ax = (float)vw - 24.0f - aw,
-                ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
+                ay = (float)vh - 24.0f - ah;   /* (v1.16) la pastilla volvio arriba */
     askPanel_ = {ax, ay, aw, ah};
     fondoTarjeta(ax, ay, aw, ah);
     const float borde = 26.0f;
@@ -1524,7 +1541,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float aw = std::min(500.0f, (float)vw - 48.0f), ah = 316.0f;
     /* (v1.16) con la pastilla abajo a la derecha, la tarjeta va encima de ella */
     const float ax = (float)vw - 24.0f - aw,
-                ay = (float)vh - 24.0f - ah - (st_.overlayOn && pillPanel_.w > 0.0f ? pillPanel_.h + 12.0f : 0.0f);
+                ay = (float)vh - 24.0f - ah;   /* (v1.16) la pastilla volvio arriba */
     askPanel_ = {ax, ay, aw, ah};
     fondoTarjeta(ax, ay, aw, ah);   /* el filo claro */
     auto encaja = [&](const std::string &s, float tam, float maxAncho) {
@@ -1783,10 +1800,11 @@ void Hud::dibujaPanel(int vw, int vh) {
     }
     /* el velo: no se mueve, solo se oscurece al abrirse (el de vkDaedalus es 5,7,10); en la ventana, su fondo y su filo */
     if (!ventana) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
-    /* lo demas sube desde la pastilla, que esta abajo en el centro (Rodolfo: «la herramienta desplace el resto de
-       la interfaz hacia la pantalla»), y se hace opaco */
+    /* lo demas sale de la pastilla (Rodolfo: «la herramienta desplace el resto de la interfaz hacia la pantalla»; y con
+       la pastilla otra vez arriba, «quiero que presionar la herramientita saque el menu»): baja desde arriba y se hace
+       opaco */
     alfaGlobal_ = a;
-    desplazY_ = (1.0f - a) * (1.0f - a) * 90.0f * s;
+    desplazY_ = -(1.0f - a) * (1.0f - a) * 90.0f * s;
     auto relleno = [&](Rect r, float radio, uint32_t c, float al) {
       if (radio <= 0.0f) solid(r.x, r.y, r.w, r.h, hex(c, 0), hex(c, 1), hex(c, 2), al);
       else mask9(r, 1, radio, hex(c, 0), hex(c, 1), hex(c, 2), al);
@@ -2648,10 +2666,9 @@ bool Hud::huecoDeLaPastilla(float *x, float *y, float *w, float *h) const {
      teclado. Dejamos este rinconcito pinchable y el visor lo vigila: en cuanto entra el puntero,
      la pastilla reaparece sola. */
   if (pillPanel_.w <= 0.0f) return false;
-  /* (v1.16) con la pastilla abajo en el centro, el tramo del medio de donde esta (o estaba) */
   const float ancho = 170.0f * sc_;
-  const float centro = (pillPanel_.x + pillPanel_.w * 0.5f) * sc_;
-  if (x) *x = centro - ancho * 0.5f;
+  const float der = (pillPanel_.x + pillPanel_.w) * sc_;   /* (v1.16) otra vez la punta derecha: volvio arriba */
+  if (x) *x = der - ancho;
   if (y) *y = pillPanel_.y * sc_;
   if (w) *w = ancho;
   if (h) *h = pillPanel_.h * sc_;

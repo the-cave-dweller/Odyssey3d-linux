@@ -3,6 +3,33 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La pastilla, otra vez arriba a la derecha, del alto de la barra y al estilo del resto (v1.16)
+
+- Rodolfo, con una foto de la pastilla abajo en el centro: «devuelve el pill a la orilla superior derecha, pero
+  integralo a la barra de titulo en cuanto a tamaño, el ancho dejalo asi, quiero que presionar la herramientita
+  saque el menu, tambien, adapta el estilo cuadrado al del resto de la aplicacion, que los botones sigan la misma
+  forma que el resto».
+- **Sitio y tamaño**: pegada a las orillas de arriba y de la derecha, como un trozo de barra de título. Mide 56 de
+  alto, lo mismo que la barra del panel (76 solo en el modo de legado, que lleva deslizadores), y el mismo ancho
+  de antes. Lo de dentro va centrado en ese alto. El renglón de las teclas pasa a la ayuda que sale al pasar el
+  ratón por ella.
+- **Estilo**:
+  - el color de la barra del panel, con la esquina de abajo a la izquierda redonda (8), y la letra Barlow;
+  - la paleta soft: el morado con la red (el encendido y la cápsula Neural, antes azul cielo) y el ámbar en el
+    modo rendimiento;
+  - los botones con esquinas de 4 como los del resto (el encendido ya no es redondo) y la cápsula Auto/Manual en
+    el gris de los controles. El cuadrito de FPS va del mismo alto y color, a su izquierda.
+- **Sus menús** (Relieve, el del rayo) vuelven a abrirse hacia abajo, pegados a su derecha, en la tarjeta de
+  vkDaedalus (121117, esquinas de 8). La tarjeta de aviso vuelve a su esquina de abajo, sin nada encima. El rincón
+  que trae la pastilla oculta vuelve a ser su punta derecha.
+- **El engranaje** ya abría el panel: el registro de Rodolfo lo dice en cada clic («engranaje: el panel de ajustes»
+  y «panel puesto»). Ahora el panel sale de la pastilla: al abrirse baja desde arriba, en vez de subir desde abajo.
+- **Probado**:
+  - pintado con `ctl hud` (la pastilla con la red, en rendimiento y con el menú Relieve; el panel a media
+    aparición);
+  - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
+    escala 2), y sigue ocultándose sola.
+
 ## Las aplicaciones de captura de pantalla no entran al 3D (v1.16)
 
 - Rodolfo: «excluye las aplicaciones de captura de pantalla del 3d». Spectacle, por ejemplo, tapa la pantalla
