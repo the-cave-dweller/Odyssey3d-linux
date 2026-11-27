@@ -120,6 +120,11 @@ int runViewer(const ViewerOpts &opts, SourceKind kind) {
 
   Rig rig;
   rig.bringUp(opts);
+  if (!rig.esperar()) {
+    rig.shutDown();
+    glfwTerminate();
+    return 1;
+  }
   glfwPollEvents(); /* que GLFW vea el cambio de modo del panel */
 
   GLFWmonitor *mon = pickMonitor(opts.output.empty() ? rig.output : opts.output);

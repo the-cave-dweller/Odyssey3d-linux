@@ -187,23 +187,25 @@ void Rig::bringUp(const ViewerOpts &o) {
         scalerOn = true;
         std::printf("[scaler] %s: modo 3D activado\n", dev.c_str());
       } else {
-        std::fprintf(stderr, "[aviso] no se pudo activar el modo 3D: %s\n", scaler.lastError().c_str());
+        scalerIncierto_ = true;   /* un timeout no garantiza que el monitor no recibiera la orden */
+        std::fprintf(stderr, "[error] no se pudo confirmar el modo 3D: %s; se devuelve el panel a 2D\n", scaler.lastError().c_str());
       }
     }
     marcaArranque("scaler");
   });
 }
 
-void Rig::esperar() {
+bool Rig::esperar() {
   if (hilo_.joinable()) hilo_.join();
+  return !scalerIncierto_;
 }
 
 void Rig::shutDown() {
   esperar();   /* (v1.12) si la lente o el scaler aun se estan poniendo, primero que acaben */
-  if (scalerOn) {
-    scaler.set3d(false);
-    std::printf("[scaler] modo 3D apagado\n");
-    scalerOn = false;
+  if (scalerOn || scalerIncierto_) {
+    if (scaler.set3d(false)) std::printf("[scaler] modo 3D apagado\n");
+    else std::fprintf(stderr, "[aviso] no se pudo confirmar el modo 2D: %s\n", scaler.lastError().c_str());
+    scalerOn = scalerIncierto_ = false;
   }
   if (lens.isOpen()) {
     lens.off();

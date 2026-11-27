@@ -2367,9 +2367,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   double desdeApartado = 0.0, intentoSitio = 0.0, ultimoChequeoVentana = 0.0;
   std::signal(SIGTERM, onTermSignal);
   std::signal(SIGINT, onTermSignal);
-  rig.esperar();   /* (v1.12) la lente y el scaler, puestos en su hilo, tienen que estar antes del primer cuadro */
-  marcaArranque("lente y scaler listos");
-  while (!glfwWindowShouldClose(win) && !ui.quit) {
+  bool hardwareListo = rig.esperar();
+  if (hardwareListo) marcaArranque("lente y scaler listos");
+  while (hardwareListo && !glfwWindowShouldClose(win) && !ui.quit) {
     if (gTerm && !ui.quit) {
       std::printf("[sesion] llego una senal de cierre: se sale devolviendo el panel, la lente y el scaler\n");
       std::fflush(stdout);
@@ -2923,6 +2923,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       ui.entregada = false;
       borrarEntregada();
       rig.bringUp(opts);
+      if (!(hardwareListo = rig.esperar())) break;
       glfwGetFramebufferSize(win, &fbW, &fbH);
       ui.fbW = fbW;
       ui.fbH = fbH;
@@ -3015,6 +3016,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if (panelApagado) {
           panelApagado = false;
           rig.bringUp(opts);
+          if (!(hardwareListo = rig.esperar())) break;
         }
         std::printf("[ventana] de vuelta: lienzo %dx%d en %s, intercambio y captura rehechos\n", fbW, fbH,
                     mon ? glfwGetMonitorName(mon) : "la ventana");
@@ -4633,5 +4635,5 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   borrarEntregada();   /* si nos fuimos minimizados, el aviso ya no vale para nada */
   rig.shutDown();
   glfwTerminate();
-  return 0;
+  return hardwareListo ? 0 : 1;
 }

@@ -83,9 +83,10 @@ bool Scaler::set3d(bool on, int *status, int *host_status) {
     last_error_ = std::string("ioctl SG_IO: ") + std::strerror(errno);
     return false;
   }
-  if (h.status != 0) {
+  if (h.status != 0 || h.host_status != 0 || h.driver_status != 0 || h.resid != 0) {
     last_error_ = "el scaler respondió status=" + std::to_string(h.status) +
-                  " host=" + std::to_string(h.host_status) + " driver=" + std::to_string(h.driver_status);
+                  " host=" + std::to_string(h.host_status) + " driver=" + std::to_string(h.driver_status) +
+                  " resid=" + std::to_string(h.resid);
     return false;
   }
   return true;

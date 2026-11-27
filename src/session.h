@@ -35,7 +35,7 @@ struct Rig {
      corren mientras se crean la ventana, Vulkan y la red); esperar() lo junta. shutDown() y el
      destructor esperan solos. */
   void bringUp(const ViewerOpts &o);
-  void esperar();
+  bool esperar();   /* falso si se envio la orden al scaler y no se confirmo */
   void shutDown();
   Rig() = default;
   Rig(const Rig &) = delete;
@@ -43,6 +43,7 @@ struct Rig {
   ~Rig() { esperar(); }
 
 private:
+  bool scalerIncierto_ = false;
   std::thread hilo_;
 };
 
