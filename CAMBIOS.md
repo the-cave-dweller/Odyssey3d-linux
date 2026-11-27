@@ -80,8 +80,11 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   SHA-256 que no cuadra, con un archivo que no está y con otra instalación en marcha, no queda nada puesto y el estado
   dice el archivo y el motivo (traducido); el camino del botón (aparte, leyendo cómo va cada 0,25 s); la línea de Steam
   con el generador puesto (y sin duplicarlo al leerla de vuelta, y respetando uno puesto a mano); una marca de otra
-  versión o un tamaño distinto no cuentan; y el menú pintado en sus cuatro casos nuevos. Falta bajarlo de verdad y
-  medir MAKO FG generando: eso baja 19 MB y acepta su licencia, y lo decide Rodolfo.
+  versión o un tamaño distinto no cuentan; y el menú pintado en sus cuatro casos nuevos.
+- **Instalado de verdad y MEDIDO** (Rodolfo: «ok, do it»): `odysseyvk mako instalar` bajó los 19,3 MB en 5 s con los
+  once SHA-256 bien. vkcube con `ENABLE_MAKO=1`, el modelo `mako-fg`, x2 y 60 de base, en un compositor aparte: MAKO dice
+  «fg-model selected=MAKO FG V1.24 source=release» y saca 60 reales + 60 generados = 120 en pantalla
+  (`generated_per_real=1`). Sin Lossless Scaling de por medio.
 
 ## La generación de cuadros de MAKO con el clic derecho en el cuadrito de los FPS (v1.18)
 
