@@ -327,8 +327,14 @@ Instalacion leerInstalacion() {
   return r;
 }
 
+std::string biblioteca() { return bibliotecaMako(); }
+
 bool lanzarInstalacion(std::string *err) {
   if (leerInstalacion().enMarcha) return true;
+  return lanzarOrden("instalar", err);
+}
+
+bool lanzarOrden(const char *sub, std::string *err) {
   /* `odysseyvk mako instalar`, aparte y suelto (doble fork, su propia sesion): el que la lanza (el visor, el panel) no la
      espera ni la mata al cerrarse. El programa: este mismo si es `odysseyvk`; si no (el panel), el de su carpeta o el del PATH */
   std::string bin;
@@ -354,7 +360,7 @@ bool lanzarInstalacion(std::string *err) {
     if (nulo >= 0) ::dup2(nulo, 0);
     if (log >= 0) ::dup2(log, 1), ::dup2(log, 2);
     for (int fd = 3; fd < 1024; fd++) ::close(fd);
-    ::execlp(bin.c_str(), bin.c_str(), "mako", "instalar", (char *)nullptr);
+    ::execlp(bin.c_str(), bin.c_str(), "mako", sub, (char *)nullptr);
     ::_exit(127);
   }
   int st = 0;

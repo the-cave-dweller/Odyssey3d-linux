@@ -50,6 +50,19 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## El desinstalador de MAKO, en la pestaña FG (v1.18)
+
+- Rodolfo: «también añade desinstalador de mako».
+- **«Desinstalar MAKO»** (en rojo, dos clics en 12 s como el de OdysseyVK) y `odysseyvk mako desinstalar`: quitan el MAKO FG
+  que instaló OdysseyVK y la capa de MAKO: con su desinstalador (`~/.local/bin/mako-installer --uninstall`) si se instaló
+  por usuario, o con `pkexec pacman -R` los paquetes que traen su biblioteca (y la de 32 bits si está), que pide la
+  clave. Su configuración (`~/.config/mako-render`) se queda. Avisa en el escritorio de cómo acabó.
+- **«Quitar»** junto a MAKO FG (el de OdysseyVK): solo ese, sin tocar MAKO.
+- El desinstalador de OdysseyVK quita ahora también lo de la 1.18 que faltaba: el contador de MAKO, su meta-capa y el
+  MAKO FG instalado desde OdysseyVK.
+- **Probado** en una carpeta personal de prueba con un `mako-installer` falso que solo apunta: lo llamó con `--uninstall`
+  y quitó el MAKO FG; el paquete de verdad no se tocó. El camino de `pacman` no se probó (quitaría el MAKO de Rodolfo).
+
 ## Sin cuadrito de FPS sobre los vídeos (v1.18)
 
 - Rodolfo: «no quiero contador de fps en videos tampoco, que se vaya ahí». Sobre un vídeo el cuadrito ya no llevaba FPS

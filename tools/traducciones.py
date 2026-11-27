@@ -540,6 +540,19 @@ T = {
 "generación en vídeos apagada": ("video frame generation off", "génération dans les vidéos désactivée", "Bildgenerierung in Videos aus", "视频补帧已关闭", "動画のフレーム生成をオフにしました"),
 "generación en vídeos: x{}": ("video frame generation: x{}", "génération dans les vidéos : x{}", "Bildgenerierung in Videos: x{}", "视频补帧：x{}", "動画のフレーム生成：x{}"),
 "Activar en vídeos": ("Turn on for videos", "Activer pour les vidéos", "Für Videos aktivieren", "在视频中启用", "動画で有効にする"),
+# (v1.18) el desinstalador de MAKO
+"Desinstalando MAKO": ("Uninstalling MAKO", "Désinstallation de MAKO", "MAKO wird deinstalliert", "正在卸载 MAKO", "MAKO をアンインストール中"),
+"Se pide tu clave para quitar su paquete del sistema.": ("Your password is needed to remove its system package.", "Votre mot de passe est demandé pour retirer son paquet du système.", "Für das Entfernen des Systempakets wird dein Passwort benötigt.", "需要你的密码来移除它的系统软件包。", "システムパッケージを削除するためにパスワードが必要です。"),
+"MAKO desinstalado": ("MAKO uninstalled", "MAKO désinstallé", "MAKO deinstalliert", "MAKO 已卸载", "MAKO をアンインストールしました"),
+"MAKO no se quitó": ("MAKO was not removed", "MAKO n'a pas été retiré", "MAKO wurde nicht entfernt", "MAKO 未被移除", "MAKO は削除されませんでした"),
+"Su configuración sigue en ~/.config/mako-render.": ("Its settings stay in ~/.config/mako-render.", "Sa configuration reste dans ~/.config/mako-render.", "Seine Einstellungen bleiben in ~/.config/mako-render.", "它的配置仍保留在 ~/.config/mako-render。", "設定は ~/.config/mako-render に残ります。"),
+"No se dio la clave o no se pudo: {}": ("The password wasn't given or it failed: {}", "Mot de passe non fourni ou échec : {}", "Kein Passwort eingegeben oder fehlgeschlagen: {}", "未提供密码或操作失败：{}", "パスワードが入力されなかったか、失敗しました：{}"),
+"Desinstalar MAKO": ("Uninstall MAKO", "Désinstaller MAKO", "MAKO deinstallieren", "卸载 MAKO", "MAKO をアンインストール"),
+"La capa y su MAKO FG; pide tu clave para su paquete. Su configuración se queda.": ("The layer and its MAKO FG; asks for your password for its package. Its settings stay.", "La couche et son MAKO FG ; demande votre mot de passe pour son paquet. Sa configuration reste.", "Die Ebene und ihr MAKO FG; fragt für das Paket nach deinem Passwort. Die Einstellungen bleiben.", "图层及其 MAKO FG；移除软件包需要你的密码。配置会保留。", "レイヤーとその MAKO FG。パッケージの削除にはパスワードが必要です。設定は残ります。"),
+"Quitar": ("Remove", "Retirer", "Entfernen", "移除", "削除"),
+"¿seguro? pica otra vez en los próximos 12 segundos": ("sure? click again within 12 seconds", "sûr ? cliquez à nouveau dans les 12 secondes", "sicher? innerhalb von 12 Sekunden erneut klicken", "确定吗？请在 12 秒内再点一次", "よろしいですか？12 秒以内にもう一度クリックしてください"),
+"desinstalando MAKO: se pide tu clave": ("uninstalling MAKO: your password is needed", "désinstallation de MAKO : mot de passe demandé", "MAKO wird deinstalliert: Passwort wird abgefragt", "正在卸载 MAKO：需要你的密码", "MAKO をアンインストール中：パスワードが必要です"),
+"quitando MAKO FG…": ("removing MAKO FG…", "retrait de MAKO FG…", "MAKO FG wird entfernt…", "正在移除 MAKO FG…", "MAKO FG を削除中…"),
 }
 
 from traducciones_ru import RU

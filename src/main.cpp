@@ -82,9 +82,10 @@ static const char *kUsage =
     "  odysseyvk ajustes [--juegos]  el panel flotante de ajustes y juegos (otra vez lo cierra)\n"
     "  odysseyvk integraciones [ver|escribir]  las opciones de lanzamiento de Steam de cada juego (pestana\n"
     "                                Integraciones): ver lo que hay y lo que falta; escribir, con Steam cerrado\n"
-    "  odysseyvk mako [estado|instalar|quitar]  MAKO FG, el generador de cuadros propio de MAKO: instalar lo baja\n"
+    "  odysseyvk mako [estado|instalar|quitar|desinstalar]  MAKO FG, el generador de cuadros propio de MAKO: instalar lo baja\n"
     "                                (19 MB, V1.24 de Hugging Face, SHA-256 comprobado) a ~/.local/share/odysseyvk/mako-fg\n"
-    "                                sin root, y los juegos con MAKO lo reciben con MAKO_FG_HOST (CC BY-NC 4.0)\n"
+    "                                sin root, y los juegos con MAKO lo reciben con MAKO_FG_HOST (CC BY-NC 4.0);\n"
+    "                                desinstalar quita MAKO entero (pide la clave para su paquete)\n"
     "  odysseyvk ctl lens   [info|auth|on|off|state] [--port /dev/ttyACM0]\n"
     "  odysseyvk ctl scaler [on|off] [--dev /dev/sg1]\n"
     "  odysseyvk ctl ir     [on|off] [--dev /dev/video2]\n"
@@ -2290,6 +2291,10 @@ static int cmdDesinstalar(int argc, char **argv) {
                comilla(datos + "/odysseyvk/fuente")).c_str());   /* (v1.16) models; modelos por si quedo */
   /* la capa de Vulkan de la profundidad de DLSS (v1.13): su manifiesto; la biblioteca va con lo de root */
   std::system(("rm -f " + comilla(datos + "/vulkan/implicit_layer.d/VkLayer_odysseyvk_capa.json")).c_str());
+  /* (v1.18) el contador de MAKO y su meta-capa, y el MAKO FG que se instalo desde OdysseyVK */
+  std::system(("rm -f " + comilla(datos + "/vulkan/implicit_layer.d/VkLayer_odysseyvk_mako_contado.json") + " " +
+               comilla(datos + "/vulkan/explicit_layer.d/VkLayer_odysseyvk_contador.json") + "; rm -rf " +
+               comilla(datos + "/odysseyvk/mako-fg")).c_str());
   const std::string raiz = "pkexec sh -c " + comilla("rm -f " + comilla(bindir + "/odysseyvk") + " " + comilla(bindir + "/odysseyvk-ajustes") +
                                                       " /etc/udev/rules.d/70-odysseyvk.rules; rm -rf " + comilla(prefijo + "/share/odysseyvk") +
                                                       " " + comilla(prefijo + "/lib/odysseyvk"));
@@ -3056,8 +3061,51 @@ static int cmdMako(int argc, char **argv) {
     std::printf("quitado: %s\n", mako::carpetaGenerador().c_str());
     return 0;
   }
+  /* (v1.18) Rodolfo: «tambien añade desinstalador de mako». MAKO entero: el MAKO FG de OdysseyVK y la capa de MAKO (su
+     paquete con pacman, que pide la clave con pkexec, o su desinstalador si se instalo por usuario). Su configuracion
+     (~/.config/mako-render) se queda */
+  if (que == "desinstalar") {
+    avisoEscritorio(idioma::tr("Desinstalando MAKO"), idioma::tr("Se pide tu clave para quitar su paquete del sistema."));
+    std::string err;
+    if (!mako::hostPropio().empty() && !mako::quitarGenerador(&err)) std::fprintf(stderr, "MAKO FG: %s\n", err.c_str());
+    const char *home = std::getenv("HOME");
+    const std::string suyo = std::string(home ? home : "") + "/.local/bin/mako-installer";
+    const std::string lib = mako::biblioteca();
+    int rc = 0;
+    std::string como = "nada que quitar";
+    if (fileExists(suyo)) {
+      como = suyo + " --uninstall";
+      rc = std::system((comilla(suyo) + " --uninstall").c_str());
+    } else if (!lib.empty()) {
+      /* los paquetes de pacman que traen su biblioteca (y la de 32 bits si esta) */
+      std::string paquetes;
+      for (const std::string &l : {lib, std::string("/usr/lib32/libmako-render.so")}) {
+        if (!fileExists(l)) continue;
+        if (FILE *f = ::popen(("pacman -Qqo " + comilla(l) + " 2>/dev/null").c_str(), "r")) {
+          char b[256];
+          while (std::fgets(b, sizeof b, f)) {
+            std::string p = strTrim(b);
+            if (!p.empty() && paquetes.find(" " + p + " ") == std::string::npos) paquetes += " " + p + " ";
+          }
+          ::pclose(f);
+        }
+      }
+      if (!strTrim(paquetes).empty()) {
+        como = "pacman -R" + paquetes;
+        rc = std::system(("pkexec pacman -R --noconfirm" + paquetes).c_str());
+      } else {
+        como = "no se sabe quien puso " + lib;
+        rc = 1;
+      }
+    }
+    std::printf("MAKO: %s → %s\n", como.c_str(), rc == 0 ? "hecho" : "no se quito");
+    avisoEscritorio(idioma::tr(rc == 0 ? "MAKO desinstalado" : "MAKO no se quitó"),
+                    rc == 0 ? std::string(idioma::tr("Su configuración sigue en ~/.config/mako-render."))
+                            : idioma::trf("No se dio la clave o no se pudo: {}", {como}));
+    return rc == 0 ? 0 : 1;
+  }
   if (que != "estado") {
-    std::fprintf(stderr, "uso: odysseyvk mako [estado|instalar|quitar]\n");
+    std::fprintf(stderr, "uso: odysseyvk mako [estado|instalar|quitar|desinstalar]\n");
     return 2;
   }
   const std::string sis = mako::hostSistema(), propio = mako::hostPropio(), juegos = mako::hostParaJuegos();

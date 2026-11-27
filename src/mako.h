@@ -74,6 +74,10 @@ struct Instalacion {
 };
 Instalacion leerInstalacion();
 bool lanzarInstalacion(std::string *err);
+/* (v1.18) `odysseyvk mako SUB` aparte (instalar, quitar, desinstalar), como la instalacion: para los botones de la pestana FG */
+bool lanzarOrden(const char *sub, std::string *err);
+/* la biblioteca de la capa de MAKO (la de su manifiesto), o vacio */
+std::string biblioteca();
 /* las dos de verdad (mako_instalar.cpp, solo en `odysseyvk`: el SHA-256 es de libcrypto): bajar cada archivo con curl a una
    carpeta aparte, comprobar su tamano y su SHA-256, y cambiarla por la de antes de una vez (a medias no queda nada puesto).
    `avance` (hecho, total), si se da, va diciendo como va */

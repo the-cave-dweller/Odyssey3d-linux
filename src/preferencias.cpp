@@ -797,6 +797,7 @@ std::set<std::string> &seccionesAbiertas() {
   return abiertas;
 }
 long g_confirmarDesinstalar = 0;   /* el desinstalador pide dos clics seguidos: hasta cuando vale el primero */
+long g_confirmarMako = 0, g_confirmarMakoFg = 0;   /* (v1.18) los de MAKO, igual */
 struct Comprobacion {
   pid_t pid = 0;
   std::string parte;
@@ -1849,6 +1850,14 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
     n.tipo = Hud::ItemPanel::Nota;
     n.rotulo = idioma::tr("MAKO no está instalado: la generación de cuadros es su capa de Vulkan (mako-render).");
     pon(n, "");
+  } else {
+    /* (v1.18) su desinstalador (Rodolfo: «tambien añade desinstalador de mako»): dos clics, como el de OdysseyVK */
+    Hud::ItemPanel b;
+    b.tipo = Hud::ItemPanel::Boton, b.rotulo = idioma::tr("Desinstalar MAKO");
+    b.nota = idioma::tr("La capa y su MAKO FG; pide tu clave para su paquete. Su configuración se queda.");
+    b.valorTexto = idioma::tr(g_confirmarMako > (long)::time(nullptr) ? "¿Seguro? Pica otra vez" : "Desinstalar");
+    b.valor = true, b.peligro = true;
+    pon(b, "fg:desinstalar");
   }
   /* su generador propio: el de MAKO, el de OdysseyVK, bajando, o su boton */
   {
@@ -1860,12 +1869,18 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
       b.tipo = Hud::ItemPanel::Nota;
       b.rotulo = idioma::trf("Bajando MAKO FG… {} de {} MB", {std::to_string(in.hecho / 1000000), std::to_string(megas)});
       pon(b, "");
-    } else if (!sis.empty() || !propio.empty()) {
+    } else if (!sis.empty()) {
       b.tipo = Hud::ItemPanel::Nota;
-      b.rotulo = !sis.empty() ? std::string(idioma::tr("MAKO FG: el de MAKO, junto a su biblioteca"))
-                              : idioma::trf("MAKO FG {} instalado: los juegos con MAKO lo reciben con MAKO_FG_HOST (uso no comercial, CC BY-NC 4.0)",
-                                            {mako::kVersionGenerador});
+      b.rotulo = idioma::tr("MAKO FG: el de MAKO, junto a su biblioteca");
       pon(b, "");
+    } else if (!propio.empty()) {
+      /* el que instalo OdysseyVK: se puede quitar solo el */
+      b.tipo = Hud::ItemPanel::Boton, b.rotulo = "MAKO FG";
+      b.nota = idioma::trf("MAKO FG {} instalado: los juegos con MAKO lo reciben con MAKO_FG_HOST (uso no comercial, CC BY-NC 4.0)",
+                           {mako::kVersionGenerador});
+      b.valorTexto = idioma::tr(g_confirmarMakoFg > (long)::time(nullptr) ? "¿Seguro? Pica otra vez" : "Quitar");
+      b.valor = true, b.peligro = true;
+      pon(b, "fg:quitar_fg");
     } else {
       b.tipo = Hud::ItemPanel::Boton, b.rotulo = "MAKO FG";
       b.nota = !in.error.empty() ? idioma::trf("No se pudo instalar MAKO FG: {}", {in.error})
@@ -1942,6 +1957,25 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
 
 /* lo que hace cada fila de la pestana FG: lo mismo que el menu del cuadrito (aplicarFg en vkview.cpp) */
 static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
+  /* (v1.18) desinstalar MAKO o quitar solo su MAKO FG: dos clics en 12 s */
+  if (que == "desinstalar" || que == "quitar_fg") {
+    long &hasta = que == "desinstalar" ? g_confirmarMako : g_confirmarMakoFg;
+    const long ahora = (long)::time(nullptr);
+    if (hasta <= ahora) {
+      hasta = ahora + 12;
+      if (aviso) *aviso = idioma::tr("¿seguro? pica otra vez en los próximos 12 segundos");
+      return true;
+    }
+    hasta = 0;
+    std::string err;
+    if (!mako::lanzarOrden(que == "desinstalar" ? "desinstalar" : "quitar", &err)) {
+      if (aviso) *aviso = err;
+      return true;
+    }
+    const bool todo = que == "desinstalar";
+    if (aviso) *aviso = idioma::tr(todo ? "desinstalando MAKO: se pide tu clave" : "quitando MAKO FG…");
+    return true;
+  }
   if (que == "instalar") {
     std::string err;
     const bool bien = mako::lanzarInstalacion(&err);
