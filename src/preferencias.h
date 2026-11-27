@@ -70,6 +70,7 @@ struct Valores {
   bool profDlss = true;                  /* `profundidad_dlss = no`: la red aunque llegue la de DLSS */
   bool hudPlano = true;                  /* `hud_plano = no`: el HUD del juego con el relieve de lo de detras */
   bool fpsJuego = true;                  /* `fps_juego = no`: sin el cuadrito de FPS junto a la pastilla */
+  int capaTope = 0;                      /* (v1.14) `capa_fps_tope`: copias por segundo de la capa, 0 = sin tope */
 };
 Valores leer();
 

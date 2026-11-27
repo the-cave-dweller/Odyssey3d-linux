@@ -75,7 +75,11 @@ static bool esOrdenTexto(const std::string &nombre) {
          nombre == "cargar_red" ||   /* `cargar_red = si` (v0.94): la red de profundidad recien bajada, al visor */
          nombre == "idioma" ||        /* `idioma = fr` (v1.07): el panel cambio el idioma; la pastilla tambien */
          nombre == "atajos" ||        /* `atajos = recargar` (v1.09): se cambio un atajo en el panel */
-         nombre == "preajuste";       /* `preajuste = 0|1|2`: el modo rendimiento */
+         nombre == "preajuste" ||     /* `preajuste = 0|1|2`: el modo rendimiento */
+         /* (v1.14) el cuadrito de FPS de la pastilla y el tope de FPS de la capa, al momento. MEDIDO al probar el tope:
+            `fps_juego` no estaba en esta lista y la orden de la ventana de ajustes nunca le llegaba al visor (el
+            interruptor solo valia desde el siguiente video) */
+         nombre == "fps_juego" || nombre == "capa_fps_tope";
 }
 
 bool esPalabra(const std::string &nombre) { return esOrdenTexto(nombre); }

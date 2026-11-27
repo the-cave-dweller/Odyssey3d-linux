@@ -317,6 +317,7 @@ Valores leer() {
   v.profDlss = si(de("profundidad_dlss"), true);
   v.hudPlano = si(de("hud_plano"), true);
   v.fpsJuego = si(de("fps_juego"), true);
+  v.capaTope = std::max(0, std::min(240, std::atoi(de("capa_fps_tope").c_str())));
   v.expPrioridad = de("exp_prioridad");
   if (v.expPrioridad != "alta" && v.expPrioridad != "tiempo_real") v.expPrioridad = "normal";
   if (!v.modelo.empty() && v.modelo[0] == '~') {
@@ -801,6 +802,14 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       pr.elegido = v.expPrioridad == "alta" ? 1 : (v.expPrioridad == "tiempo_real" ? 2 : 0);
       pr.ayuda = idioma::tr("Con un juego llenando la tarjeta, el cuadro 3D pasa por delante del juego y no espera su turno; el juego pierde un poco.");
       pon(pr, "exp_prioridad");
+      /* (v1.14) el tope de FPS de la capa de DLSS (Rodolfo: «en ajustes en fluidez añade una casilla de Layer FPS cap,
+         y limitala como te digan»): 0 = sin tope, y de 10 a 240 de 5 en 5 */
+      Hud::ItemPanel tc;
+      tc.tipo = Hud::ItemPanel::Deslizador, tc.rotulo = idioma::tr("Tope de FPS de la capa");
+      tc.ayuda = idioma::tr("Cuántas veces por segundo copia la capa de DLSS la profundidad y el HUD dentro del juego · 0 = sin tope. El visor hace 6 mapas por segundo de fábrica: con un tope, el juego gasta menos en copias que no se usan. Se aplica al momento.");
+      tc.frac = (float)v.capaTope / 240.0f;
+      tc.valorTexto = v.capaTope > 0 ? std::to_string(v.capaTope) + " fps" : std::string(idioma::tr("sin tope"));
+      pon(tc, "capa_fps_tope");
     }
     /* SEGUIMIENTO DE LA CABEZA (26-nov, «manda anticipar la cabeza a Ajustes»): salio de Experimental */
     {
@@ -1139,6 +1148,16 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     const bool ahora = id == "profundidad_dlss" ? v.profDlss : v.hudPlano;
     if (!fija(id, ahora ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  if (id == "capa_fps_tope") {
+    if (!soltado) return false;
+    int n = (int)std::lround(std::max(0.0f, std::min(1.0f, frac)) * 48.0f) * 5;
+    if (n > 0 && n < 10) n = 10;
+    if (!fija("capa_fps_tope", std::to_string(n))) return false;
+    avisarVisor({}, {{"capa_fps_tope", std::to_string(n)}});   /* al momento: el visor se lo pasa a la capa */
+    if (aviso)
+      *aviso = idioma::trf("tope de la capa: {}", {n > 0 ? std::to_string(n) + " fps" : std::string(idioma::tr("sin tope"))});
     return true;
   }
   if (id == "fps_juego") {

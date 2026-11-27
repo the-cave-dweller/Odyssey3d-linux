@@ -22,6 +22,7 @@
 #include "util.h"
 #ifdef HAVE_ORT
 #include "depth.h"
+#include "profjuego.h"
 #include "hoyos.h"
 #include <condition_variable>
 #endif
@@ -218,6 +219,13 @@ static std::string g_profJuego;
 static bool g_fpsCuadro = [] {
   const char *e = std::getenv("ODYSSEYVK_FPS_JUEGO");
   return !(e && e[0] == '0');
+}();
+/* (v1.14) el tope de FPS de la capa: `capa_fps_tope` en serve.conf (ODYSSEYVK_CAPA_TOPE) y la orden `capa_fps_tope`
+   de la ventana de ajustes, al momento; se le pasa a la capa con el latido (protocolo v6) */
+static const bool g_topeCapaPuesto = [] {
+  const char *e = std::getenv("ODYSSEYVK_CAPA_TOPE");
+  ponerTopeCapa(e ? (unsigned)std::max(0, std::atoi(e)) : 0u);
+  return true;
 }();
 static std::string g_tarjetaEnUso;    /* "NVIDIA" o "CPU": lo que reporta ONNX Runtime */
 /* La casilla de Previsualizacion de la ventana de ajustes (`vista = 1`): mientras esta pedida, la copia
@@ -2568,6 +2576,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              es otra orden, la de cambiar de red con el conversor ya en marcha.) */
           /* `idioma = fr` (v1.07): el panel de ajustes cambio el idioma. La pastilla y sus avisos
              salen ya en el nuevo: se rehace el atlas de letras (con las chinas o japonesas si toca). */
+          /* `capa_fps_tope = N` (v1.14): el tope de FPS de la capa, del deslizador de Fluidez; 0 = sin tope */
+          if (const auto ot = palabras.find("capa_fps_tope"); ot != palabras.end()) {
+            const int n = std::max(0, std::atoi(ot->second.c_str()));
+            ponerTopeCapa((unsigned)n);
+            std::printf("[capa] tope de FPS de la capa: %s\n", n > 0 ? (std::to_string(n) + " por segundo").c_str() : "sin tope");
+            std::fflush(stdout);
+          }
           /* `fps_juego = si|no` (v1.13): el interruptor de la ventana de ajustes, el cuadrito de FPS de la pastilla */
           if (const auto of = palabras.find("fps_juego"); of != palabras.end()) {
             const std::string v = strLower(of->second);

@@ -43,6 +43,11 @@ const char *nombreFormato(uint32_t f) {
 }
 }  // namespace
 
+namespace {
+std::atomic<unsigned> g_topeCapa{0};
+}  // namespace
+void ponerTopeCapa(unsigned fps) { g_topeCapa.store(fps > 500 ? 500 : fps); }
+
 ProfundidadJuego::~ProfundidadJuego() { cerrar(); }
 
 void ProfundidadJuego::cerrar() {
@@ -106,6 +111,7 @@ bool ProfundidadJuego::leer(std::vector<float> &cercania, int lado) {
     return !(e && e[0] == '0');
   }();
   c->lectorQuiereHud = kQuiereHud ? 1u : 0u;
+  c->lectorTopeFps = g_topeCapa.load();   /* (protocolo v6) */
   const uint32_t w = c->ancho, h = c->alto, bpp = c->bytesPunto, huecos = c->huecos;
   const uint64_t tamHueco = c->tamHueco;
   if (w < 2 || h < 2 || (bpp != 2 && bpp != 4) || huecos == 0 ||

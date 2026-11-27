@@ -28,6 +28,34 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
   las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
 
+## Tope de FPS de la capa, en Ajustes → Fluidez, y como media exacta (v1.14)
+
+- Rodolfo: «en ajustes en fluidez añade una casilla de Layer FPS cap, y limítala como te digan», y al ver la primera
+  medida: «compensate the displayed frames to the loss, for example if you cap 15 and it shows 13 then if someone
+  writes 15 make the actual cap 17».
+- **El deslizador** «Tope de FPS de la capa» (en inglés «Layer FPS cap»), en Fluidez: 0 = sin tope, y de 10 a 240 de 5
+  en 5 (`capa_fps_tope` en serve.conf). Es cuántas veces por segundo copia la capa, dentro del juego, la profundidad y
+  la máscara del HUD. Sin tope copia en cada cuadro del juego (~58 por segundo en la partida de Rodolfo) y el visor
+  hace 6 mapas por segundo de fábrica (`mapas_por_segundo`): el resto se copiaba para nada.
+- **Protocolo versión 6**: `lectorTopeFps`, el visor lo escribe con su latido (del entorno al arrancar,
+  `ODYSSEYVK_CAPA_TOPE` puesto por el servicio, y de la orden `capa_fps_tope` de la ventana de ajustes, **al
+  momento**) y la capa lo respeta en la copia de la profundidad y en la de la máscara (las capas de un mismo cuadro
+  van juntas). El registro de la capa apunta cada cambio.
+- **Media exacta** (`tocaPorTope`): cada copia adelanta su turno 1/tope. Con «al menos 1/tope desde la última» los
+  cuadros, que llegan a saltos fijos (16,7 ms a 60 fps), dejaban pasar uno de cada dos a partir de 31 de tope: con 45,
+  50 o 55 salían 30. Así sale lo que se escribe, en vez de sumarle a mano (el «+2» no vale: lo que se pierde depende
+  de los FPS del juego). La «13» que vio Rodolfo no era una pérdida: el lector contaba el arranque.
+- **MEDIDO** con vkcube a 60 fps y la capa (`ODYSSEYVK_CAPA_PRUEBA=1`, copia la profundidad en cada pasada): sin tope
+  60,2 copias por segundo; con 15, 15,2; con 20, 20,2; con 45, 45,2; con 50, 50,2; con 55, 55,2 (el 0,2 es el borde
+  de la ventana de la cuenta). La máscara del HUD con 45 de tope: 45,0 por segundo por el contador de la capa.
+- **De paso, un fallo de antes**: `fps_juego` (el interruptor del cuadrito de FPS) no estaba en la lista de órdenes
+  que deja pasar el canal vivo (`esOrdenTexto`): la orden de la ventana de ajustes nunca le llegaba al visor y el
+  interruptor solo valía desde el siguiente vídeo. Ahora pasan `fps_juego` y `capa_fps_tope`. MEDIDO con el visor
+  aparte: arranca con tope 30 (del entorno) y a los 10 s la orden lo pone en 12 y oculta el cuadrito, sin
+  reiniciar nada.
+- `tools/simula-capa.py` (versión 6) dice lo que pide el visor (la máscara y el tope). Cuatro textos nuevos en los
+  siete idiomas; la guía lleva la clave `capa_fps_tope`.
+
 ## Las carátulas ya no tapan la ayuda del panel (v1.14)
 
 - Rodolfo, con una captura: la ayuda del botón Copiar (la que sale al pasar el ratón) quedaba **debajo** de las

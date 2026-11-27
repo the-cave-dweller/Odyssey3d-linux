@@ -274,6 +274,10 @@ T = {
 "no se pudo copiar ({}): escríbelo a mano": ("couldn't copy ({}): type it by hand", "copie impossible ({}) : tapez-le à la main", "Kopieren nicht möglich ({}): bitte von Hand eintippen", "无法复制（{}）：请手动输入", "コピーできません（{}）：手で入力してください"),
 "no hay portapapeles de KDE ni wl-copy": ("no KDE clipboard nor wl-copy", "ni presse-papiers KDE ni wl-copy", "weder KDE-Zwischenablage noch wl-copy", "没有 KDE 剪贴板，也没有 wl-copy", "KDE のクリップボードも wl-copy もありません"),
 "Copiado": ("Copied", "Copié", "Kopiert", "已复制", "コピーしました"),
+"Tope de FPS de la capa": ("Layer FPS cap", "Plafond de FPS de la couche", "FPS-Grenze des Layers", "图层帧率上限", "レイヤーの FPS 上限"),
+"Cuántas veces por segundo copia la capa de DLSS la profundidad y el HUD dentro del juego · 0 = sin tope. El visor hace 6 mapas por segundo de fábrica: con un tope, el juego gasta menos en copias que no se usan. Se aplica al momento.": ("How many times per second the DLSS layer copies the depth and the HUD inside the game · 0 = no cap. The viewer makes 6 maps per second by default: with a cap, the game spends less on copies nobody uses. Applies right away.", "Combien de fois par seconde la couche DLSS copie la profondeur et le HUD dans le jeu · 0 = sans plafond. Le visualiseur fait 6 cartes par seconde par défaut : avec un plafond, le jeu dépense moins en copies inutilisées. S'applique tout de suite.", "Wie oft pro Sekunde der DLSS-Layer im Spiel die Tiefe und das HUD kopiert · 0 = ohne Grenze. Der Viewer macht standardmäßig 6 Karten pro Sekunde: Mit einer Grenze verschwendet das Spiel weniger für ungenutzte Kopien. Gilt sofort.", "DLSS 图层每秒在游戏内复制深度和 HUD 的次数 · 0 = 不限制。查看器默认每秒生成 6 张深度图：设上限后，游戏在用不到的复制上花费更少。立即生效。", "DLSS レイヤーがゲーム内で奥行きと HUD を 1 秒間にコピーする回数 · 0 = 上限なし。ビューアーは標準で毎秒 6 枚のマップを作ります。上限を付けると、使われないコピーにかかるゲームの負担が減ります。すぐに反映されます。"),
+"sin tope": ("no cap", "sans plafond", "ohne Grenze", "不限制", "上限なし"),
+"tope de la capa: {}": ("layer cap: {}", "plafond de la couche : {}", "Layer-Grenze: {}", "图层上限：{}", "レイヤーの上限：{}"),
 }
 
 from traducciones_ru import RU

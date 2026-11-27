@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 
+/* (v1.14, protocolo v6) el tope de FPS de la capa que pide el visor (Ajustes → Fluidez, `capa_fps_tope`): se le
+   escribe a la capa con el latido. 0 = sin tope. Desde cualquier hilo */
+void ponerTopeCapa(unsigned fps);
+
 class ProfundidadJuego {
 public:
   ProfundidadJuego() = default;

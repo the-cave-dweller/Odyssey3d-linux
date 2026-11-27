@@ -33,12 +33,16 @@
 
    Version 5: `lectorQuiereHud`, lo escribe el visor con su latido: 1 = quiere la mascara del HUD, 0 = no (el
    ajuste «HUD del juego en el plano de la pantalla» apagado). Con 0 la capa ni toca la imagen del HUD en el
-   juego: el interruptor apaga tambien el trabajo de la tarjeta del juego. */
+   juego: el interruptor apaga tambien el trabajo de la tarjeta del juego.
+
+   Version 6: `lectorTopeFps`, tambien del visor: cuantas copias por segundo hace la capa como mucho (la
+   profundidad y la mascara del HUD); 0 = sin tope. Es el ajuste «Tope de FPS de la capa» (Ajustes → Fluidez):
+   el visor hace 6 mapas por segundo de fabrica y el juego, sin tope, copia en cada cuadro. */
 #pragma once
 #include <stdint.h>
 
 #define ODVK_PROF_MAGIA 0x4f564450u   /* "PDVO" */
-#define ODVK_PROF_VERSION 5u
+#define ODVK_PROF_VERSION 6u
 #define ODVK_PROF_HUECOS 3u
 #define ODVK_PROF_CABECERA 4096u
 #define ODVK_PROF_DATOS 64u           /* los datos de cada hueco empiezan aqui; seqAntes va en el 0 */
@@ -70,7 +74,7 @@ typedef struct OdvkProfCabecera {
   uint32_t relleno;
   uint64_t presentes;                    /* version 4: los cuadros presentados por el juego (offset 112) */
   uint32_t lectorQuiereHud;              /* version 5: lo escribe el visor; 1 = quiere la mascara (offset 120) */
-  uint32_t relleno2;
+  uint32_t lectorTopeFps;                /* version 6: lo escribe el visor; copias por segundo, 0 = sin tope (124) */
 } OdvkProfCabecera;
 
 /* donde va cada cosa dentro de la region */

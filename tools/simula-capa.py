@@ -18,7 +18,7 @@ import struct
 import sys
 import time
 
-MAGIA, VERSION, HUECOS, CABECERA, DATOS = 0x4F564450, 5, 3, 4096, 64
+MAGIA, VERSION, HUECOS, CABECERA, DATOS = 0x4F564450, 6, 3, 4096, 64
 HUD_W, HUD_H, HUD_CAPAS = 960, 540, 2
 D32 = 126   # VK_FORMAT_D32_SFLOAT
 
@@ -84,7 +84,7 @@ def main():
     print(f"[simula] {ruta}: {a.ancho}x{a.alto} D32_SFLOAT, {HUECOS} huecos de {hueco} bytes"
           f"{', y la mascara del HUD de ' + a.hud if hud else ''}", flush=True)
     t0 = time.time()
-    seq, fin, lector, cual = 0, t0 + a.segundos, False, 0
+    seq, fin, lector, cual, pedido = 0, t0 + a.segundos, False, 0, (0, 0)
     try:
         while time.time() < fin:
             seq += 1
@@ -106,6 +106,11 @@ def main():
                 m[h + DATOS:h + DATOS + len(hud)] = hud
                 struct.pack_into("<Q", m, h + hud_hueco - 8, seq)
                 struct.pack_into("<Q", m, 88, seq)
+            quiere, tope = struct.unpack_from("<II", m, 120)   # version 5 y 6: lo que pide el visor
+            if (quiere, tope) != pedido:
+                pedido = (quiere, tope)
+                print(f"[simula] el visor pide: mascara del HUD {'si' if quiere else 'no'}, tope de FPS "
+                      f"{tope if tope else 'ninguno'} (cuadro {seq})", flush=True)
             latido = struct.unpack_from("<Q", m, 48)[0]
             ahora = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
             vivo = latido > 0 and 0 <= ahora - latido < 2_000_000_000

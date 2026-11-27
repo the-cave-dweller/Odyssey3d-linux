@@ -3804,6 +3804,7 @@ struct ServeCfg {
   std::string expTope;            /* si = tope de arrastre en el suavizado en el tiempo */
   /* (v1.13) los juegos con DLSS: `no` apaga cada cosa (la ventana de ajustes, seccion JUEGOS CON DLSS) */
   std::string profDlss, hudPlano, fpsJuego;
+  int capaTope = 0;   /* (v1.14) `capa_fps_tope`: el tope de FPS de la capa, 0 = sin tope */
   double expAnticipacion = -1.0;  /* ms de anticipacion de la cabeza; < 0 = no puesto (0) */
   std::string expPrioridad;       /* normal | alta | tiempo_real: la cola del visor en la tarjeta */
   std::string expSinRed;          /* no | suelo | imagen: la profundidad sin red (modo rendimiento) */
@@ -3974,6 +3975,7 @@ static void loadServeCfg(ServeCfg &cfg) {
     else if (k == "profundidad_dlss") cfg.profDlss = strLower(v);
     else if (k == "hud_plano") cfg.hudPlano = strLower(v);
     else if (k == "fps_juego") cfg.fpsJuego = strLower(v);
+    else if (k == "capa_fps_tope") cfg.capaTope = std::max(0, std::min(240, std::atoi(v.c_str())));
     else if (k == "exp_prioridad") cfg.expPrioridad = strLower(v);
     else if (k == "exp_sin_red") cfg.expSinRed = strLower(v);
     else if (k == "exp_sin_red_mezcla") {
@@ -4362,6 +4364,8 @@ static pid_t spawnViewer(const std::string &exe, const std::string &uuid, const 
       else ::unsetenv("ODYSSEYVK_HUD_PLANO");
       if (apagado(pila->fpsJuego)) ::setenv("ODYSSEYVK_FPS_JUEGO", "0", 1);
       else ::unsetenv("ODYSSEYVK_FPS_JUEGO");
+      if (pila->capaTope > 0) ::setenv("ODYSSEYVK_CAPA_TOPE", std::to_string(pila->capaTope).c_str(), 1);
+      else ::unsetenv("ODYSSEYVK_CAPA_TOPE");
       if (pila->expSinRed == "si" || pila->expSinRed == "suelo" || pila->expSinRed == "imagen")
         ::setenv("ODYSSEYVK_SIN_RED", pila->expSinRed == "si" ? "imagen" : pila->expSinRed.c_str(), 1);
       else
@@ -6176,6 +6180,7 @@ static int cmdServe(int argc, char **argv) {
           }
           cfg.expRed = nuevo.expRed, cfg.expMapa = nuevo.expMapa, cfg.expTope = nuevo.expTope;
           cfg.profDlss = nuevo.profDlss, cfg.hudPlano = nuevo.hudPlano, cfg.fpsJuego = nuevo.fpsJuego;
+          cfg.capaTope = nuevo.capaTope;
           cfg.expAnticipacion = nuevo.expAnticipacion;
           cfg.expPrioridad = nuevo.expPrioridad;
           cfg.expSinRed = nuevo.expSinRed;

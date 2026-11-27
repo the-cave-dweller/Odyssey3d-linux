@@ -318,6 +318,8 @@ struct Dispositivo {
   bool hudFallo = false;
   uint64_t hudSeq = 0;
   double hudUltima = 0.0;
+  double siguienteCopia = 0.0, hudSiguiente = 0.0;   /* (protocolo v6) el turno de la proxima copia con tope (tocaPorTope) */
+  uint32_t topeVisto = 0;        /* (protocolo v6) el ultimo tope de FPS que pidio el visor, para el registro */
   VkImage hudImagen = VK_NULL_HANDLE;   /* la ultima reconocida como HUD (para el registro) */
   long hudCopias = 0;
   int hudQuerido = -1;   /* (protocolo v5) lo ultimo que dijo el visor (-1 = aun nada) */
@@ -898,6 +900,19 @@ void grabarCompartida(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Ima
   d->copias++;
 }
 
+/* (v1.14) El tope de FPS de la capa como MEDIA EXACTA. Cada copia adelanta su turno 1/tope; no vale «al menos 1/tope
+   desde la ultima»: los cuadros del juego llegan a saltos fijos (16,7 ms a 60 fps) y con 50 de tope «20 ms desde la
+   ultima» deja pasar uno de cada dos, 30 por segundo y no 50 (Rodolfo: «compensate the displayed frames to the
+   loss»). Asi salen 5 de cada 6, 50 por segundo. Si el juego va mas lento que el tope, el turno no se queda atras
+   mas de un intervalo: se copian todos sus cuadros, sin rafagas. 2 ms de holgura por el temblor del reloj. */
+bool tocaPorTope(double &siguiente, double t, uint32_t tope) {
+  const double intervalo = 1.0 / (double)tope;
+  if (siguiente <= 0.0 || t - siguiente > intervalo) siguiente = t;
+  if (t + 0.002 < siguiente) return false;
+  siguiente += intervalo;
+  return true;
+}
+
 /* en cada lanzamiento de DLSS: como mucho una copia cada 4 ms (una por cuadro hasta 250 por segundo) */
 void compartir(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im,
                VkImageLayout desde = VK_IMAGE_LAYOUT_UNDEFINED) {
@@ -921,7 +936,16 @@ void compartir(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im
   if (!d->latidoVisto) anota("[compartir] el visor lee: copiando la profundidad cada cuadro");
   d->latidoVisto = true;
   const double t = ahora();
+  /* (protocolo v6) el tope de FPS de la capa, el que pida el visor (Ajustes → Fluidez), como media exacta (ver
+     tocaPorTope); con o sin tope, una copia cada 4 ms como mucho */
+  const uint32_t tope = ((volatile OdvkProfCabecera *)d->shm)->lectorTopeFps;
+  if (tope != d->topeVisto) {
+    if (tope) anota("[compartir] tope de FPS de la capa: %u por segundo (lo pide el visor)", tope);
+    else anota("[compartir] sin tope de FPS en la capa");
+    d->topeVisto = tope;
+  }
   if (t - d->ultimaCopia < 0.004) return;
+  if (tope > 0 && !tocaPorTope(d->siguienteCopia, t, tope)) return;
   d->ultimaCopia = t;
   grabarCompartida(d, cb, img, im, desde);
 }
@@ -1776,6 +1800,12 @@ void mirarHud(Dispositivo *d, VkCommandBuffer cb, const Ambito &a) {
      sin juego) empieza en la 0; una tercera del mismo cuadro no cabe y se deja */
   const double t = ahora();
   const bool nuevo = d->presentes != d->hudMarca || t - d->hudUltima > 0.010;
+  /* (protocolo v6) el tope de FPS de la capa tambien para la mascara: un cuadro nuevo solo si paso 1/tope desde la
+     ultima; las capas de un mismo cuadro (el HUD y el menu) van juntas */
+  if (nuevo) {
+    const uint32_t tope = ((volatile OdvkProfCabecera *)d->shm)->lectorTopeFps;
+    if (tope > 0 && !tocaPorTope(d->hudSiguiente, t, tope)) return;
+  }
   const int k = nuevo ? 0 : d->hudCapa + 1;
   if (k >= (int)ODVK_HUD_CAPAS) return;
   if (!prepararHud(d)) return;
