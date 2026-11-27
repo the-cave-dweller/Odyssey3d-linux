@@ -1447,6 +1447,17 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
   ui->inputChanged = true;
   if (key == GLFW_KEY_ESCAPE) {
     cerrarPanelDeAjustes();   /* Esc sale de todo: tambien del panel de ajustes si esta abierto */
+    /* (v1.18) sobre un juego, Esc es del juego (Rodolfo: «escape cierra el overlay, solo quiero que se cierre con escape si
+       escape cierra el juego»). Al visor solo le llega si se quedo con el teclado (un clic en la pastilla o el cuadrito): se
+       cierran los menus, el teclado vuelve al juego y el 3D sigue; se acaba solo cuando se cierra la ventana del juego */
+    if (sobreJuego(*ui)) {
+      Hud::State &st = ui->hud.state();
+      st.menuFg = st.menuNormal = st.menuRendimiento = false;
+      devolverCursor(*ui, "Esc");
+      std::printf("[tecla] ESC sobre un juego: el 3D sigue y el teclado vuelve al juego\n");
+      std::fflush(stdout);
+      return;
+    }
     /* ESC saca tambien al video de pantalla completa (v0.77, lo pidio Rodolfo): antes, con el
        teclado en el visor, solo cerraba el 3D y el video seguia a pantalla completa. */
     if (ui->opts && !ui->opts->captureUuid.empty()) sacarDePantallaCompleta(ui->opts->captureUuid);

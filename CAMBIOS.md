@@ -50,6 +50,14 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Esc sobre un juego ya no cierra el 3D (v1.18)
+
+- Rodolfo: «escape cierra el overlay, solo quiero que se cierre con escape si escape cierra el juego».
+- Al visor le llega una tecla solo si se quedó con el teclado: un clic en la pastilla o en el cuadrito de los FPS sobre un
+  juego le quita el cursor al juego. Entonces Esc (la tecla de los menús del juego) cerraba el 3D. Ahora, sobre un juego,
+  Esc cierra el panel y los menús del visor y le devuelve el teclado al juego; el 3D sigue y se acaba solo cuando se
+  cierra la ventana del juego. Sobre un vídeo, Esc sale como siempre.
+
 ## La pestaña FG: la generación de cuadros de MAKO arriba, con su multiplicador (v1.18)
 
 - Rodolfo: «quiero una pestaña de framegen aquí arriba», «que diga FG y en base a la activa cambie a X2 X3 y X4», «que
