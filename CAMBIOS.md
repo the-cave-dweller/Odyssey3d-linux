@@ -3,14 +3,16 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
-## La pastilla, abajo a la derecha (v1.16)
+## La pastilla, abajo en el centro (v1.16)
 
 - Rodolfo: «quiero que el hub siga igual de estilo pero al fondo a la derecha»; y para el resto, «un estilo como el
   de vkdaedalus», con su misma escala, en todas partes (es la primera parte: la pastilla).
-- La pastilla del visor va a 24 px de la esquina de abajo a la derecha, con el mismo estilo. Sus menús (Relieve, el
-  del rayo) se miden antes y se abren hacia arriba, pegados a su orilla derecha. La tarjeta de aviso, que ya iba
+- Luego: «que el pill sea igual de practico, pero que vaya al centro inferior y la herramienta desplace el resto de la
+  interfaz hacia la pantalla ya con el estilo de daedalus». La pastilla del visor va abajo en el centro, a 24 px del
+  borde, con el mismo estilo y los mismos controles. Sus menús (Relieve, el del rayo) se miden antes y se abren
+  hacia arriba, centrados encima de ella. La tarjeta de aviso, que ya iba
   abajo a la derecha, sube encima de la pastilla si está a la vista. El cuadrito de FPS sigue a su izquierda, y el
-  rincón que la trae de vuelta cuando está oculta va donde esté ella.
+  tramo que la trae de vuelta cuando está oculta es el del medio de donde estaba.
 - `ODYSSEYVK_HUD_ASK=0` (pruebas): `ctl hud` sin la tarjeta de la pregunta, para ver la pastilla y sus menús solos.
 - Probado: pintado con `ctl hud` (la pastilla con el menú Relieve abierto, y con un aviso encima). Sin probar en el
   visor de verdad.

@@ -490,7 +490,7 @@ const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativ
    llega por fichero) y el rincon pinchable del que habla Hud::huecoDeLaPastilla. Lo unico que se quita
    es la interfaz: la trama sigue tejiendose y el rastreo sigue mirando los ojos, que es lo que uno
    quiere mientras ve algo a pantalla completa. La region de entrada se rehace con `inputChanged`,
-   porque sin pastilla no hay nada que picar salvo el rincon de arriba a la derecha. */
+   porque sin pastilla no hay nada que picar salvo el tramo donde estaba (abajo en el centro desde v1.16). */
 /* ---- el tipo de video, detectado en los primeros segundos (rama experimental) ----
    En un video dividido las dos mitades son casi la misma imagen, corrida unos puntos en horizontal (el
    paralaje); en uno normal no se parecen. Se miran dos cosas, sobre el cuadro chico que ya se lee para
@@ -1292,7 +1292,7 @@ void aplicarRegionEntrada(GLFWwindow *win, RegionEntrada *re, VkUi *ui, bool dej
               pleno ? (dejarPasar ? "arrastrando: el raton se queda en el visor"
                                   : ui->robando ? "la pastilla le quito el cursor al juego: el raton entero es del visor"
                                                 : "el visor se queda todos los clics (--sin-pasar-raton)")
-                    : (re->hayHogar ? "pastilla oculta: solo se pica su rincon de arriba a la derecha"
+                    : (re->hayHogar ? "pastilla oculta: solo se pica el tramo de abajo en el centro donde estaba"
                                     : (n ? "el raton atraviesa el visor fuera de la pastilla"
                                          : "sin pastilla ni aviso: el raton pasa entero")),
               firma.empty() ? " ninguna" : (" " + firma).c_str());
@@ -4120,7 +4120,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         ui.mx >= ui.region.hogar[0] && ui.mx <= ui.region.hogar[0] + ui.region.hogar[2] &&
         ui.my >= ui.region.hogar[1] && ui.my <= ui.region.hogar[1] + ui.region.hogar[3]) {
       ui.hud.showOverlay();
-      std::printf("[pastilla] el puntero llego al rincon de arriba a la derecha: la pastilla vuelve"
+      std::printf("[pastilla] el puntero llego a donde estaba la pastilla (abajo en el centro): vuelve"
                   "  (Ctrl+Shift+2 la oculta otra vez)\n");
       std::fflush(stdout);
     }

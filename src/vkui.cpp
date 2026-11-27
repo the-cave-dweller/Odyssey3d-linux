@@ -835,9 +835,10 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float ph = 76.0f;
     panelW_ = pw;
     panelH_ = ph;
-    /* (v1.16) abajo a la derecha (Rodolfo: «quiero que el hub siga igual de estilo pero al fondo a la derecha»):
-       sus menus se abren hacia arriba */
-    const float x0 = (float)vw - 24.0f - pw, y0 = (float)vh - 24.0f - ph;
+    /* (v1.16) abajo en el centro (Rodolfo: «que el pill sea igual de practico, pero que vaya al centro inferior y la
+       herramienta desplace el resto de la interfaz hacia la pantalla ya con el estilo de daedalus»): sus menus se
+       abren hacia arriba, centrados encima de ella */
+    const float x0 = std::floor(((float)vw - pw) * 0.5f), y0 = (float)vh - 24.0f - ph;
     pillPanel_ = {x0, y0, pw, ph};
     solid(pillPanel_.x, pillPanel_.y, pw, ph, 0.0f, 0.0f, 0.0f, 0.82f);   /* negro un poco transparente (26-nov) */
 
@@ -1070,7 +1071,7 @@ void Hud::begin(int w, int h, float altoLogico) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f;
       const char *nota = idioma::tr("Volver a la red: el interruptor Neural | Rendimiento del panel");
       const float mh = 78.0f + 4.0f * filaAlto + 26.0f;
-      const float mx0 = x0 + pw - mw, my0 = y0 - 6.0f - mh;   /* (v1.16) encima de la pastilla */
+      const float mx0 = std::floor(x0 + (pw - mw) * 0.5f), my0 = y0 - 6.0f - mh;   /* (v1.16) encima, centrado */
       menuRend_ = {mx0, my0, mw, mh};
       solid(mx0, my0, mw, mh, 0.0f, 0.0f, 0.0f, 0.88f);
       solid(mx0, my0, mw, 2.0f, accent[0], accent[1], accent[2], 0.9f);
@@ -1149,7 +1150,7 @@ void Hud::begin(int w, int h, float altoLogico) {
        la imagen). Debajo, el tipo de video y la casilla de «no volver a preguntar». */
     if (hubNormal && st_.menuNormal && btnFoco_.w > 0.0f) {
       const float mw = std::min(400.0f, (float)vw - 48.0f), pad = 16.0f, filaAlto = 50.0f, tam = 12.0f;
-      const float mx0 = x0 + pw - mw;
+      const float mx0 = std::floor(x0 + (pw - mw) * 0.5f);   /* (v1.16) encima de la pastilla, centrado */
       const bool manual = !autoPuesto;
       std::vector<std::string> nota;
       if (!manual)
@@ -2211,9 +2212,10 @@ bool Hud::huecoDeLaPastilla(float *x, float *y, float *w, float *h) const {
      teclado. Dejamos este rinconcito pinchable y el visor lo vigila: en cuanto entra el puntero,
      la pastilla reaparece sola. */
   if (pillPanel_.w <= 0.0f) return false;
+  /* (v1.16) con la pastilla abajo en el centro, el tramo del medio de donde esta (o estaba) */
   const float ancho = 170.0f * sc_;
-  const float der = (pillPanel_.x + pillPanel_.w) * sc_;
-  if (x) *x = der - ancho;
+  const float centro = (pillPanel_.x + pillPanel_.w * 0.5f) * sc_;
+  if (x) *x = centro - ancho * 0.5f;
   if (y) *y = pillPanel_.y * sc_;
   if (w) *w = ancho;
   if (h) *h = pillPanel_.h * sc_;
