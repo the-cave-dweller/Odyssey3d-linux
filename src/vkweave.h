@@ -47,6 +47,14 @@ public:
   void setFuenteGenerada(VkImageView v) { fuenteGenerada_ = v; }
   /* (v1.18) los efectos de ReShade sobre la fuente, antes de la trama (efectos_vk.h): el visor le da los ajustes del juego */
   CadenaEfectos &efectos() { return efectos_; }
+  /* (v1.18) los efectos en la trama, o solo en la vista de los efectos (la pestana Efectos abierta con ellos apagados) */
+  void efectosEnPantalla(bool si) { efectosEnPantalla_ = si; }
+  /* (v1.18) la vista de los efectos para el panel (Rodolfo: «on the effects tab, show a preview square for the game with
+     the effect applied on the half of the screen shown»): mientras se pida, unas 4 veces por segundo, una copia chica del
+     cuadro del juego con la mitad izquierda sin efectos y la derecha con ellos. Se copia en el buffer de mando del cuadro y
+     se lee cuando ese hueco vuelve (su valla ya esperada): sin esperas. tomarVista da la ultima nueva */
+  void pedirVista(bool si) { vistaPedida_ = si; }
+  bool tomarVista(std::vector<uint8_t> &rgba, int &w, int &h);
   /* la fuente real mas nueva (la que llego y aun no paso por frame(), o la ultima que paso) */
   const VkImg *fuenteReal() const;
 
@@ -237,6 +245,19 @@ private:
   VkImageView fuenteGenerada_ = VK_NULL_HANDLE;   /* (v1.18) */
   CadenaEfectos efectos_;                          /* (v1.18) */
   int efectosGen_ = -1;                            /* la fuente que ya paso por los efectos */
+  bool efectosEnPantalla_ = true;                  /* (v1.18) */
+  /* (v1.18) la vista de los efectos: su imagen chica, el buffer donde se lee, el hueco que la lleva en vuelo y la ultima */
+  bool vistaPedida_ = false;
+  VkImg vista_{};
+  VkBuffer vistaBuf_ = VK_NULL_HANDLE;
+  VkDeviceMemory vistaMem_ = VK_NULL_HANDLE;
+  void *vistaMapa_ = nullptr;
+  int vistaHueco_ = -1;
+  bool vistaNueva_ = false, vistaPuesta_ = false;
+  std::vector<uint8_t> vistaLista_;
+  int vistaW_ = 0, vistaH_ = 0;
+  double vistaUltima_ = 0.0;
+  bool copiarVista(VkCommandBuffer cb, const VkImg &fuente, VkImage conEfectos);
   VkImg black_{};          /* reserva por si aún no hay fuente */
   VkImg corrA_{};          /* neutros si no hay ficheros */
   VkImg corrB_{};

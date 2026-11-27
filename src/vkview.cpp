@@ -3285,19 +3285,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       static long long firmaEf = -1;
       static int juegoEf = -2;
       static std::string appEf;
+      static bool vistaEf = false;
       const double tAhora = glfwGetTime();
       if (tAhora - tEf >= 0.5) {
         tEf = tAhora;
         if (ui.esJuego < 0) sobreJuego(ui);
+        /* (v1.18) la pestana Efectos del panel abierta: la vista de los efectos (mitad sin, mitad con) */
+        const bool vista = efectos::vistaPedida();
         /* ODYSSEYVK_EFECTOS_JUEGO=APPID (o «todos»): para las pruebas, como si la fuente fuera ese juego */
         static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
         const bool esJuego = forzado || ui.esJuego == 1;
         const std::string app = forzado ? (std::string(forzado) == "todos" ? std::string() : std::string(forzado)) : ui.appJuego;
         const long long f = esJuego ? efectos::firma(app) : 0;
-        if ((esJuego ? 1 : ui.esJuego) != juegoEf || f != firmaEf || app != appEf) {
-          juegoEf = esJuego ? 1 : ui.esJuego, firmaEf = f, appEf = app;
+        if ((esJuego ? 1 : ui.esJuego) != juegoEf || f != firmaEf || app != appEf || vista != vistaEf) {
+          juegoEf = esJuego ? 1 : ui.esJuego, firmaEf = f, appEf = app, vistaEf = vista;
           const efectos::Ajustes aj = esJuego ? efectos::cargar(app) : efectos::Ajustes{};
-          wv.efectos().ajustar(aj);
+          /* con la vista pedida, la cadena corre aunque esten apagados, pero solo para la vista */
+          efectos::Ajustes paraCadena = aj;
+          if (vista && esJuego) paraCadena.puestos = true;
+          wv.efectosEnPantalla(aj.puestos);
+          wv.pedirVista(vista && esJuego);
+          wv.efectos().ajustar(paraCadena);
           if (esJuego) {
             std::string lista;
             for (const efectos::Efecto &e : aj.lista)
@@ -3308,6 +3316,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           }
         }
       }
+    }
+    /* (v1.18) la vista de los efectos que acabe de salir, al panel */
+    {
+      std::vector<uint8_t> px;
+      int vw = 0, vh = 0;
+      if (wv.tomarVista(px, vw, vh)) efectos::escribirVista(px, vw, vh);
     }
 #ifdef HAVE_ORT
     if (ui.alternarModelo) {
@@ -5388,6 +5402,36 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                                     : juegoActivo ? "KWin no hizo caso: el juego sigue siendo la ventana activa"
                                                   : "el juego ya no es la ventana activa");
         std::fflush(stdout);
+      }
+      /* (v1.18) Sobre un juego el visor no se queda con el foco (Rodolfo, con Stray: «it sent stray to the bottom and it
+         recovered by reclick», «still misplaces by itself to the bottom or minimize»). MEDIDO el 27-nov a las 13:31: al
+         aparecer la ventana del visor KWin la hace la activa (foreground_booster: «Switching from steam_app_1332010 to
+         odysseyvk»); el juego, a pantalla completa y debajo, pierde el foco al segundo, a los 6-9 s se minimiza solo (lo que
+         hace un juego de Wine a pantalla completa sin foco) y el servicio cierra el 3D; un clic en el juego lo devolvia, y
+         el 3D siguiente volvia a lo mismo. Salvo con la pastilla quitandole el cursor (robando), si el visor es la ventana
+         activa el foco vuelve al juego, y si se habia minimizado, se le saca. Cada medio segundo */
+      {
+        static double miradoFoco = -1.0;
+        if (!ui.robando && ui.esJuego == 1 && ui.opts && !ui.opts->captureUuid.empty() && now - miradoFoco >= 0.5 && monitorVentanas(ui)) {
+          miradoFoco = now;
+          bool visorActivo = false, hay = false, juegoActivo = false, juegoMinimizado = false;
+          for (const WindowInfo &w : ui.wm.windows()) {
+            if (w.pid == (uint32_t)::getpid() && w.active()) visorActivo = true;
+            if (w.uuid == ui.opts->captureUuid) hay = true, juegoActivo = w.active(), juegoMinimizado = w.minimized();
+          }
+          if (visorActivo && hay && !juegoActivo) {
+            std::string e;
+            if (juegoMinimizado) ui.wm.setState(ui.opts->captureUuid, WindowInfo::Minimized, false, &e);
+            const bool ok = ui.wm.setState(ui.opts->captureUuid, WindowInfo::Active, true, &e);
+            ui.wm.flush();
+            static int dichos = 0;
+            if (dichos++ < 5) {
+              std::printf("[ventana] el visor se quedo con el foco del juego: se le devuelve%s%s%s\n", juegoMinimizado ? " (y se le saca de minimizado)" : "",
+                          ok ? "" : ": no se pudo, ", ok ? "" : e.c_str());
+              std::fflush(stdout);
+            }
+          }
+        }
       }
 #endif
     }

@@ -2027,7 +2027,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       panelCaja_ = F;
     }
     /* el velo: no se mueve, solo se oscurece al abrirse (el de vkDaedalus es 5,7,10); en la ventana, su fondo y su filo */
-    if (!ventana && !st_.depuracion && !st_.vistaPrevia) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
+    if (!ventana && !st_.depuracion) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
     /* lo demas sale de la pastilla (Rodolfo: «la herramienta desplace el resto de la interfaz hacia la pantalla»; y con
        la pastilla otra vez arriba, «quiero que presionar la herramientita saque el menu»): baja desde arriba y se hace
        opaco */
@@ -2042,8 +2042,7 @@ void Hud::dibujaPanel(int vw, int vh) {
        sin teselas ni tarjeta; una columna a la izquierda con sus filas (la casilla de la vista y lo que rinde la red
        arriba, las redes de siempre en la mitad de arriba y las de video en la de abajo) y el pie. Lo demas deja ver el
        video, y la region de entrada (panelCaja_) se queda en la columna: fuera de ella el raton va a lo de debajo */
-    panelBotonTitulo_ = fuera;
-    if ((st_.depuracion || st_.vistaPrevia) && !ventana) {   /* (v1.18) y la vista previa de los efectos */
+    if (st_.depuracion && !ventana) {
       const float m = 16.0f * s, cw = std::min(500.0f * s, (float)vw * 0.42f);
       const Rect col{m, m, cw, (float)vh - 2.0f * m};
       panelCaja_ = col;
@@ -2183,18 +2182,38 @@ void Hud::dibujaPanel(int vw, int vh) {
     fuente_ = hayBarlow_ ? 2 : 0;
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
     fuente_ = hayBarlow_ ? 1 : 0;
-    /* (v1.18) el boton junto al nombre (Rodolfo: «junto al nombre del menu efectos pon un boton llamado vista previa») */
-    if (!st_.botonTitulo.empty()) {
-      fuente_ = hayBarlow_ ? 2 : 0;
-      const float xb = tarjeta.x + 18.0f * s + textWidth(nombrePest(st_.pestana), 20.0f * s) + 16.0f * s;
-      fuente_ = hayBarlow_ ? 1 : 0;
-      const float wb = textWidth(st_.botonTitulo, 13.5f * s) + 28.0f * s;
-      panelBotonTitulo_ = {xb, tarjeta.y + 12.0f * s, wb, 28.0f * s};
-      const bool hb = panelBotonTitulo_.inside(mx_, my_) && !st_.menuIdioma;
-      relleno(panelBotonTitulo_, 14.0f * s, hb ? pal_.fuerteHov : pal_.fuerte, 1.0f);
-      text(st_.botonTitulo, xb + wb * 0.5f, panelBotonTitulo_.y + 6.0f * s, 13.5f * s, 1.0f, 1.0f, 1.0f, 1.0f, true);
-    }
     panelCuerpo_ = {tarjeta.x + 6.0f * s, tarjeta.y + 52.0f * s, tarjeta.w - 12.0f * s, tarjeta.h - 52.0f * s - 44.0f};
+    /* (v1.18) la vista de los efectos: las filas a la izquierda (sus controles, mas cerca de sus nombres) y el cuadro a la
+       derecha, fijo */
+    if (st_.vistaEfectosCaja) {
+      const float wFilas = std::floor(panelCuerpo_.w * 0.52f);
+      const Rect zona{panelCuerpo_.x + wFilas + 18.0f * s, panelCuerpo_.y + 6.0f * s, panelCuerpo_.w - wFilas - 26.0f * s, 0.0f};
+      panelCuerpo_.w = wFilas;
+      const bool hay = st_.vistaEfectos && st_.vistaEfectosW > 0 && st_.vistaEfectosH > 0;
+      const float aspecto = hay ? (float)st_.vistaEfectosH / (float)st_.vistaEfectosW : 9.0f / 16.0f;
+      const Rect cuadro{zona.x, zona.y, zona.w, std::floor(zona.w * aspecto)};
+      relleno({cuadro.x - 1.0f, cuadro.y - 1.0f, cuadro.w + 2.0f, cuadro.h + 2.0f}, 6.0f * s, pal_.filo, 1.0f);
+      relleno(cuadro, 6.0f * s, pal_.ventana, 1.0f);
+      if (hay) {
+        imagenes_.push_back({Rect{cuadro.x, cuadro.y + desplazY_, cuadro.w, cuadro.h}, Rect{cuadro.x, cuadro.y + desplazY_, cuadro.w, cuadro.h},
+                             st_.vistaEfectos->data(), st_.vistaEfectosW, st_.vistaEfectosH, 6.0f * s, v_.size(), alfaGlobal_, false});
+        /* la raya del medio y lo que es cada mitad */
+        solid(cuadro.x + cuadro.w * 0.5f - 1.0f, cuadro.y, 2.0f, cuadro.h, 1.0f, 1.0f, 1.0f, 0.85f);
+        auto rotulo = [&](const std::string &t, float x, bool derecha) {
+          const float w = textWidth(t, 12.0f * s) + 16.0f * s;
+          const Rect r{derecha ? x - w : x, cuadro.y + cuadro.h - 30.0f * s, w, 22.0f * s};
+          mask9(r, 0, 11.0f * s, 0.0f, 0.0f, 0.0f, 0.70f);
+          text(t, r.x + r.w * 0.5f, r.y + 4.5f * s, 12.0f * s, 1.0f, 1.0f, 1.0f, 0.95f, true);
+        };
+        rotulo(idioma::tr("Sin efectos"), cuadro.x + 8.0f * s, false);
+        rotulo(idioma::tr("Con efectos"), cuadro.x + cuadro.w - 8.0f * s, true);
+      } else {
+        textoCabe(idioma::tr("Con un juego en 3D, aquí se ve con sus efectos"), cuadro.x + 16.0f * s, cuadro.y + cuadro.h * 0.5f - 20.0f * s,
+                  14.0f * s, cuadro.w - 32.0f * s, ink[0], ink[1], ink[2], 0.85f);
+        textoCabe(idioma::tr("A la izquierda sin ellos, a la derecha con ellos"), cuadro.x + 16.0f * s, cuadro.y + cuadro.h * 0.5f + 4.0f * s,
+                  12.5f * s, cuadro.w - 32.0f * s, dim[0], dim[1], dim[2], 0.85f);
+      }
+    }
     pieCaja = {tarjeta.x, tarjeta.y + tarjeta.h - 44.0f, tarjeta.w, 44.0f};
     }   /* (v1.16) fin de lo que no sale con la vista de depuracion */
   } else {
@@ -2855,7 +2874,7 @@ void Hud::dibujaPanel(int vw, int vh) {
                            st_.items[(size_t)st_.desplegado].tipo == ItemPanel::Desplegable && !st_.items[(size_t)st_.desplegado].grupos.empty();
     if (porGrupos) {
       const ItemPanel &it = st_.items[(size_t)st_.desplegado];
-      const bool columna = st_.depuracion || st_.vistaPrevia;
+      const bool columna = st_.depuracion;
       /* en el panel, de orilla a orilla y hasta abajo (la region de entrada es la pantalla entera: hay sitio para mas
          columnas que en la tarjeta); en la columna, la columna */
       const Rect zona = columna ? Rect{panelCuerpo_.x, panelCuerpo_.y, panelCuerpo_.w - 4.0f, panelCuerpo_.h}
@@ -3121,7 +3140,6 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (st_.marco && panelVolver_.inside(mx, my)) return HitPanelVolver;   /* (v1.16) */
-  if (st_.marco && panelBotonTitulo_.inside(mx, my)) return HitPanelBotonTitulo;   /* (v1.18) */
   if (panelFijar_.inside(mx, my)) return HitPanelFijar;
   if (panelEsquina_.inside(mx, my)) return HitPanelRedimensionar;
   if (panelLogo_.inside(mx, my)) {   /* el logo: la primera pestana */

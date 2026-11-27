@@ -163,10 +163,13 @@ public:
     /* (v1.16) las pestanas que se ven pero no se pueden abrir (Integraciones dentro de un juego): en gris */
     std::vector<bool> pestanaGris;
     std::vector<int> ordenPestanas;   /* (v1.18) en que orden se ven (vacio: el de sus numeros) */
-    /* (v1.18) un boton junto al nombre de la tarjeta (vacio = ninguno): «Vista previa» en Efectos. Y la vista previa: como
-       la de depuracion, sin velo ni teselas y la lista en una columna a la izquierda, con el juego a la vista */
-    std::string botonTitulo;
-    bool vistaPrevia = false;
+    /* (v1.18) la vista de los efectos (Rodolfo: «on the effects tab, show a preview square for the game with the effect
+       applied on the half of the screen shown, make the rectangle not movable», «meant here, make the options more to the
+       left»): con `vistaEfectosCaja`, la tarjeta deja las filas en su mitad izquierda y a la derecha, quieto (no corre con
+       la lista), el cuadro del juego que manda el visor: la mitad izquierda sin efectos y la derecha con ellos */
+    bool vistaEfectosCaja = false;
+    std::shared_ptr<const std::vector<uint8_t>> vistaEfectos;
+    int vistaEfectosW = 0, vistaEfectosH = 0;
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;
@@ -362,8 +365,7 @@ public:
     HitFgCuadro,
     HitFgFondo,
     HitFgOpcion0,
-    HitFgOpcionFin = HitFgOpcion0 + 47,
-    HitPanelBotonTitulo   /* (v1.18) el boton junto al nombre de la tarjeta (State::botonTitulo) */
+    HitFgOpcionFin = HitFgOpcion0 + 47
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -633,7 +635,6 @@ private:
   std::vector<Rect> panelPestanas_;
   std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */
   Rect panelVolver_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) la flecha de volver a la pastilla */
-  Rect panelBotonTitulo_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) el boton junto al nombre de la tarjeta */
   std::vector<ZonaItem> zonas_;
   float contenidoAlto_ = 0.0f;
 };

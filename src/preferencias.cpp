@@ -2532,7 +2532,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
   /* (v1.15) la 2, la de Rendimiento que ya no se ensenaba, es ahora Integraciones: queda entre Juegos y Ajustes */
   st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes"), "FG", idioma::tr("Efectos")};   /* (v1.18) y FG, y los efectos */
   st.ordenPestanas = {0, 1, 5, 2, 3, 4};   /* (v1.18) Efectos junto a Juegos (Rodolfo: «beside games, call it effects») */
-  st.botonTitulo = st.pestana == 5 ? std::string(idioma::tr("Vista previa")) : std::string();
+  st.vistaEfectosCaja = st.pestana == 5 && st.marco && !st.depuracion;   /* (v1.18) la vista de los efectos, a la derecha */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
@@ -2582,17 +2582,6 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
         const size_t n = monitorElegido().size();
         if (v.fpsJuego && n > 0) t.valor = idioma::trf("{} · {} más", {t.valor, std::to_string(n)});
       }
-  }
-  /* (v1.18) la vista previa de los efectos: solo su lista, en la columna de la izquierda, con el renglon de salir */
-  if (st.vistaPrevia && st.marco) {
-    Hud::ItemPanel vp;
-    vp.tipo = Hud::ItemPanel::Boton, vp.rotulo = idioma::tr("Vista previa");
-    vp.nota = idioma::tr("Pruébalos con el juego a la vista");
-    vp.valorTexto = idioma::tr("Salir"), vp.valor = true;
-    st.items.push_back(vp);
-    ids.push_back("vista_previa");
-    filasEfectos(st, ids, juegos);
-    return;
   }
   /* (v1.16) la vista de depuracion: solo las dos listas de redes, en la columna de la izquierda (vkui.cpp) */
   if (st.depuracion && st.marco) {

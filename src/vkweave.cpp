@@ -541,6 +541,11 @@ void VkWeave::destroy() {
   if (!dev_) return;
   waitIdle();
   efectos_.destruir();   /* (v1.18) */
+  if (vistaMapa_) vkUnmapMemory(dev_->device(), vistaMem_), vistaMapa_ = nullptr;
+  if (vistaBuf_) vkDestroyBuffer(dev_->device(), vistaBuf_, nullptr), vistaBuf_ = VK_NULL_HANDLE;
+  if (vistaMem_) vkFreeMemory(dev_->device(), vistaMem_, nullptr), vistaMem_ = VK_NULL_HANDLE;
+  if (vista_.valid()) dev_->destroyImg(vista_);
+  vista_ = VkImg{}, vistaPuesta_ = false, vistaHueco_ = -1;
   destroyFrames();
   for (Keep &k : keep_) dev_->destroyImg(k.img);
   keep_.clear();
@@ -997,6 +1002,63 @@ void VkWeave::fillUbo(uint8_t *dst) {
   }
 }
 
+bool VkWeave::tomarVista(std::vector<uint8_t> &rgba, int &w, int &h) {
+  if (!vistaNueva_) return false;
+  vistaNueva_ = false;
+  rgba = vistaLista_, w = vistaW_, h = vistaH_;
+  return true;
+}
+
+/* (v1.18) la vista de los efectos: a una imagen de 640 de ancho, la mitad izquierda de la fuente y la derecha de la salida de
+   los efectos (o de la fuente, sin ellos), y de ahi al buffer que se lee en la CPU */
+bool VkWeave::copiarVista(VkCommandBuffer cb, const VkImg &fuente, VkImage conEfectos) {
+  const int W = 640, Hh = std::max(2, (int)std::lround(640.0 * fuente.h / std::max(1, fuente.w))) & ~1;
+  if (!vista_.valid() || vistaW_ != W || vistaH_ != Hh) {
+    vkDeviceWaitIdle(dev_->device());
+    if (vistaMapa_) vkUnmapMemory(dev_->device(), vistaMem_), vistaMapa_ = nullptr;
+    if (vistaBuf_) vkDestroyBuffer(dev_->device(), vistaBuf_, nullptr), vistaBuf_ = VK_NULL_HANDLE;
+    if (vistaMem_) vkFreeMemory(dev_->device(), vistaMem_, nullptr), vistaMem_ = VK_NULL_HANDLE;
+    if (vista_.valid()) dev_->destroyImg(vista_);
+    vista_ = VkImg{}, vistaPuesta_ = false, vistaHueco_ = -1;
+    std::string e;
+    if (!dev_->createImage(W, Hh, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, vista_, &e) ||
+        !crearBufferDeLectura(dev_, (VkDeviceSize)W * Hh * 4u, vistaBuf_, vistaMem_, &e) ||
+        vkMapMemory(dev_->device(), vistaMem_, 0, VK_WHOLE_SIZE, 0, &vistaMapa_) != VK_SUCCESS) {
+      std::fprintf(stderr, "[efectos] sin vista para el panel: %s\n", e.c_str());
+      return false;
+    }
+    vistaW_ = W, vistaH_ = Hh;
+  }
+  if (!vistaPuesta_) {
+    barrier(cb, vista_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+    vistaPuesta_ = true;
+  }
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                       1, &mb, 0, nullptr, 0, nullptr);
+  const int mw = fuente.w / 2;
+  VkImageBlit bl{};
+  bl.srcSubresource = bl.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  bl.srcOffsets[1] = {mw, fuente.h, 1};
+  bl.dstOffsets[1] = {W / 2, Hh, 1};
+  vkCmdBlitImage(cb, fuente.img, VK_IMAGE_LAYOUT_GENERAL, vista_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bl, VK_FILTER_LINEAR);
+  bl.srcOffsets[0] = {mw, 0, 0}, bl.srcOffsets[1] = {fuente.w, fuente.h, 1};
+  bl.dstOffsets[0] = {W / 2, 0, 0}, bl.dstOffsets[1] = {W, Hh, 1};
+  vkCmdBlitImage(cb, conEfectos ? conEfectos : fuente.img, VK_IMAGE_LAYOUT_GENERAL, vista_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bl,
+                 VK_FILTER_LINEAR);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  VkBufferImageCopy c{};
+  c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  c.imageExtent = {(uint32_t)W, (uint32_t)Hh, 1};
+  vkCmdCopyImageToBuffer(cb, vista_.img, VK_IMAGE_LAYOUT_GENERAL, vistaBuf_, 1, &c);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+  vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  return true;
+}
+
 bool VkWeave::frame(std::string *err) {
   if (!dev_ || !sc_ || lost_) return false;
   if (atlasDirty_ && atlasW_ > 0) {
@@ -1028,6 +1090,12 @@ bool VkWeave::frame(std::string *err) {
   const auto tValla0 = std::chrono::steady_clock::now();
   vkWaitForFences(dev_->device(), 1, &s.fence, VK_TRUE, UINT64_MAX);
   tiempos_.vallaMax = std::max(tiempos_.vallaMax, msDesde(tValla0));
+  /* (v1.18) la vista de los efectos que se copio en este hueco ya esta en su buffer */
+  if (vistaHueco_ == (int)(frameNo_ % slots_.size()) && vistaMapa_) {
+    vistaLista_.assign((const uint8_t *)vistaMapa_, (const uint8_t *)vistaMapa_ + (size_t)vistaW_ * (size_t)vistaH_ * 4u);
+    vistaNueva_ = true;
+    vistaHueco_ = -1;
+  }
   vkResetFences(dev_->device(), 1, &s.fence);
   /* el cuadro anterior de este hueco ya acabo: sus dos marcas de tiempo estan listas */
   const uint32_t marca0 = (uint32_t)(slotIdx * 2);
@@ -1090,7 +1158,7 @@ bool VkWeave::frame(std::string *err) {
     VkImageView salidaEf = VK_NULL_HANDLE;
     if (efectos_.preparar(fuenteImg->w, fuenteImg->h, &salidaEf)) {
       correrEfectos = useGen != efectosGen_ || efectos_.sucia();
-      srcView = salidaEf;
+      if (efectosEnPantalla_) srcView = salidaEf;   /* (v1.18) si no, solo para la vista de los efectos */
     } else {
       efectosGen_ = -1;
     }
@@ -1163,6 +1231,15 @@ bool VkWeave::frame(std::string *err) {
     efectos_.grabar(cb, fuenteImg->img, fuenteImg->w, fuenteImg->h, depthUsable_ && depth_.valid() ? depth_.img : VK_NULL_HANDLE,
                     depthW_, depthH_);
     efectosGen_ = useGen;
+  }
+  /* (v1.18) la vista de los efectos, si la piden y no hay otra en vuelo */
+  if (vistaPedida_ && vistaHueco_ < 0 && !fuenteGenerada_ && fuenteImg && fuenteImg->valid()) {
+    const double ahora = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (ahora - vistaUltima_ >= 0.25 &&
+        copiarVista(cb, *fuenteImg, efectosGen_ == useGen && efectos_.vistaSalida() ? efectos_.imagenSalida() : VK_NULL_HANDLE)) {
+      vistaHueco_ = (int)slotIdx;
+      vistaUltima_ = ahora;
+    }
   }
 
   /* pasada 0: la profundidad de la fuente con el canto en su sitio (solo con los cantos finos) */
@@ -1386,7 +1463,7 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
 
   VkImageView srcView = keep_.empty() ? black_.view : keep_.back().img.view;
   /* (v1.18) con los efectos ya pasados por esta fuente, la captura sale como la pantalla: con ellos */
-  if (!keep_.empty() && keep_.back().gen == efectosGen_ && efectos_.vistaSalida()) srcView = efectos_.vistaSalida();
+  if (efectosEnPantalla_ && !keep_.empty() && keep_.back().gen == efectosGen_ && efectos_.vistaSalida()) srcView = efectos_.vistaSalida();
   VkDescriptorSet wset = ok ? newSet(srcSetLay_) : VK_NULL_HANDLE;
   VkDescriptorSet hset = ok ? newSet(hudSetLay_) : VK_NULL_HANDLE;
   if (ok && (!wset || !hset)) {

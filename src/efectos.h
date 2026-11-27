@@ -108,6 +108,15 @@ std::shared_ptr<Compilado> compilar(const std::string &ruta, int ancho, int alto
 /* una textura de un .fx (su anotacion `source`): busca en las carpetas de texturas */
 std::string rutaTextura(const std::string &nombre);
 
+/* ---- (v1.18) la vista de los efectos en el panel: el panel la pide (pedirVista, cada segundo con la pestana abierta) y el
+   visor, con un juego, deja en $XDG_RUNTIME_DIR/odysseyvk-efectos-vista una copia chica del cuadro con la mitad
+   izquierda sin efectos y la derecha con ellos (RGBA, tras «OKVV» y su ancho y alto) ---- */
+void pedirVista();
+bool vistaPedida();   /* pedida hace menos de 2,5 s */
+bool escribirVista(const std::vector<uint8_t> &rgba, int w, int h);
+/* la ultima, si cambio desde `*firma` (la hora del archivo); falso si no hay o no cambio */
+bool leerVista(std::vector<uint8_t> &rgba, int &w, int &h, long long *firma);
+
 /* ---- (v1.18) fuentes publicas de efectos: los repositorios de ReShade mas conocidos, con su boton de bajar ----
    Rodolfo: «add some public shader sources to the list with their download button» y «gray out already downloaded one
    unless the files differ, never duplicate files, always download the difference». No se baja el repositorio entero: se

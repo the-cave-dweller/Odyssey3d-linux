@@ -122,6 +122,32 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     mueven los deslizadores.
   - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
+## Stray y la ventana del visor: el foco vuelve al juego, y la vista de los efectos en su pestaña (v1.18)
+
+- Rodolfo: «remove vista previa button, fix stray layer issues», «it sent stray to the bottom and it recovered by
+  reclick», «but still misplaces by itself to the bottom or minimize», «on the effects tab, show a preview square for the
+  game with the effect applied on the half of the screen shown, make the rectangle not movable» y «meant here, make the
+  options more to the left».
+- **Stray**: lo de las «capas» eran las de las ventanas. MEDIDO en el registro de las 13:31: al salir el visor, KWin lo
+  hace la ventana activa (foreground_booster: «Switching from steam_app_1332010 to odysseyvk»); Stray, a pantalla
+  completa y debajo del visor, pierde el foco al segundo, a los 6-9 s se minimiza solo (un juego de Wine a pantalla
+  completa sin foco) y el servicio cierra el 3D; un clic en el juego lo devolvía y el 3D siguiente hacía lo mismo. Mientras
+  tanto la captura llegaba a ~1 cuadro por segundo. Ahora, sobre un juego, si el visor es la ventana activa (y no es la
+  pastilla quitándole el cursor), cada medio segundo el foco vuelve al juego, y si se había minimizado se le saca. Sin
+  probar con el juego delante.
+- **Fuera «Vista previa»** (el botón junto al nombre de la pestaña y su columna).
+- **La vista de los efectos**: en la pestaña Efectos las filas quedan en la mitad izquierda de la tarjeta (los controles
+  más cerca de sus nombres) y a la derecha, quieto aunque la lista corra, un cuadro del juego con la mitad izquierda sin
+  efectos y la derecha con ellos, unas 4 veces por segundo. El panel la pide cada segundo
+  (`$XDG_RUNTIME_DIR/odysseyvk-efectos-vista-pide`); el visor, con un juego, copia en el buffer de mando de un cuadro una
+  imagen de 640 de ancho (la mitad de la fuente y la mitad de la salida de los efectos) y la lee cuando ese hueco vuelve,
+  sin esperar a la tarjeta, y la deja en `$XDG_RUNTIME_DIR/odysseyvk-efectos-vista`. Con los efectos apagados la cadena
+  corre igual, solo para la vista: el 3D sigue sin ellos. Sin juego, el cuadro lo dice.
+- **Probado** en un gamescope sin salida con los efectos apagados: la salida del visor, idéntica con la vista pedida y sin
+  pedirla (diferencia 0); la vista, la mitad izquierda como la fuente (2/255, el escalado) y la derecha con los efectos
+  (14/255). Las capturas del visor (`--dump`) ya no llevan efectos que no se ven en pantalla. El panel, pintado en la CPU
+  con una vista de prueba y sin ella.
+
 ## Efectos: añadir por grupos en toda la pantalla, y las fuentes públicas bajando solo la diferencia (v1.18)
 
 - Rodolfo: «make the add effect option on the main tab show a list that is classified by depth and not depth, use the

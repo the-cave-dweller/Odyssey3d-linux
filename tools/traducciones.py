@@ -610,12 +610,6 @@ T = {
 "{} sube en la lista": ("{} moves up the list", "{} monte dans la liste", "{} rückt nach oben", "{} 在列表中上移", "{} をリストの上へ"),
 "{} añadido": ("{} added", "{} ajouté", "{} hinzugefügt", "已添加 {}", "{} を追加しました"),
 "Efectos de este juego (ReShade)": ("This game's effects (ReShade)", "Effets de ce jeu (ReShade)", "Effekte dieses Spiels (ReShade)", "此游戏的效果（ReShade）", "このゲームのエフェクト（ReShade）"),
-# (v1.18) la vista previa de los efectos
-"vista previa: prueba los efectos con el juego a la vista": ("preview: try the effects with the game in view", "aperçu : essayez les effets avec le jeu visible", "Vorschau: Effekte mit sichtbarem Spiel ausprobieren", "预览：在能看到游戏的情况下试用效果", "プレビュー：ゲームを見ながらエフェクトを試せます"),
-"vista previa quitada": ("preview off", "aperçu désactivé", "Vorschau aus", "已退出预览", "プレビューを終了"),
-"Vista previa": ("Preview", "Aperçu", "Vorschau", "预览", "プレビュー"),
-"Pruébalos con el juego a la vista": ("Try them with the game in view", "Essayez-les avec le jeu visible", "Mit sichtbarem Spiel ausprobieren", "在能看到游戏的情况下试用", "ゲームを見ながら試せます"),
-"Salir": ("Exit", "Quitter", "Beenden", "退出", "終了"),
 # (v1.18) el selector de efectos por grupos y las fuentes publicas
 "Usan la profundidad": ("Use depth", "Utilisent la profondeur", "Nutzen die Tiefe", "使用深度", "奥行きを使う"),
 "Sin profundidad": ("Without depth", "Sans profondeur", "Ohne Tiefe", "不使用深度", "奥行きなし"),
@@ -655,6 +649,11 @@ T = {
 "Bloom, AA, flujo óptico y más": ("Bloom, AA, optical flow and more", "Bloom, AA, flux optique et plus", "Bloom, AA, optischer Fluss und mehr", "Bloom、抗锯齿、光流等", "Bloom、AA、オプティカルフローなど"),
 "Oilify, ReVeil, Halftone...": ("Oilify, ReVeil, Halftone...", "Oilify, ReVeil, Halftone...", "Oilify, ReVeil, Halftone...", "Oilify、ReVeil、Halftone…", "Oilify、ReVeil、Halftone…"),
 "RTGI, UBR, color...": ("RTGI, UBR, color...", "RTGI, UBR, couleur...", "RTGI, UBR, Farbe...", "RTGI、UBR、色彩…", "RTGI、UBR、色…"),
+# (v1.18) la vista de los efectos en su pestana
+"Sin efectos": ("Without effects", "Sans effets", "Ohne Effekte", "无效果", "エフェクトなし"),
+"Con efectos": ("With effects", "Avec effets", "Mit Effekten", "有效果", "エフェクトあり"),
+"Con un juego en 3D, aquí se ve con sus efectos": ("With a game in 3D, it shows here with its effects", "Avec un jeu en 3D, il s'affiche ici avec ses effets", "Mit einem Spiel in 3D erscheint es hier mit seinen Effekten", "游戏在 3D 中运行时，这里会显示其效果", "3D でゲームを動かすと、ここにエフェクト付きで表示されます"),
+"A la izquierda sin ellos, a la derecha con ellos": ("Left without them, right with them", "À gauche sans, à droite avec", "Links ohne, rechts mit", "左侧无效果，右侧有效果", "左がなし、右があり"),
 }
 
 from traducciones_ru import RU

@@ -16,6 +16,7 @@
 #include "ajuste.h"
 #include "barra.h"
 #include "preferencias.h"
+#include "efectos.h"   /* (v1.18) la vista de los efectos */
 #include "integraciones.h"
 #include "bandeja.h"
 #include "idioma.h"
@@ -267,7 +268,7 @@ int cmdAjustes(int argc, char **argv) {
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
   /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
   paso("ventanas");
-  ov.showPanel(grande, quiereVelo && !st.fijado && !st.depuracion && !st.vistaPrevia);
+  ov.showPanel(grande, quiereVelo && !st.fijado && !st.depuracion);
   paso("puesto");
   {
     std::string t;
@@ -620,20 +621,6 @@ int cmdAjustes(int argc, char **argv) {
         st.pie.clear();
         rellenar();
         repintar = true;
-      } else if (g.tipo == (int)Hud::HitPanelBotonTitulo ||
-                 (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "vista_previa")) {
-        /* (v1.18) la vista previa de los efectos (Rodolfo: «que esto haga algo parecido a la vista de depuracion, desaparezca
-           todo y mueva a un lado la lista para probar cosas»): sin velo, sin teselas, la lista en la columna */
-        st.vistaPrevia = !st.vistaPrevia;
-        st.desplegado = -1;
-        st.corrida = 0.0f;
-        if (st.vistaPrevia) ov.quitarVelo();
-        else if (quiereVelo && !st.fijado) ov.showPanel(grande, true);
-        st.pie = idioma::tr(st.vistaPrevia ? "vista previa: prueba los efectos con el juego a la vista" : "vista previa quitada");
-        std::printf("[ajustes] vista previa de los efectos %s\n", st.vistaPrevia ? "puesta" : "quitada");
-        std::fflush(stdout);
-        rellenar();
-        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "depuracion") {
         /* (v1.16) la vista de depuracion: el visor ensena su mapa de profundidad (la orden `ver_profundidad`, lo de
            Ctrl+Mayus+9) y el panel deja solo las dos listas de redes en una columna a la izquierda, sin velo y con el
@@ -703,7 +690,7 @@ int cmdAjustes(int argc, char **argv) {
       }
     }
     /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
-    ov.modoTeclado(!(st.fijado || st.depuracion || st.vistaPrevia) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
+    ov.modoTeclado(!(st.fijado || st.depuracion) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
     {
@@ -765,6 +752,22 @@ int cmdAjustes(int argc, char **argv) {
       miradaRend = reloj();
       rellenar();
       repintar = true;
+    }
+    /* (v1.18) Efectos: la vista del juego con sus efectos (se pide cada segundo y se lee en cuanto el visor deja una nueva) */
+    if (st.pestana == 5) {
+      static double pedida = -10.0, mirada = -10.0;
+      static long long firmaVista = 0;
+      if (reloj() - pedida >= 1.0) pedida = reloj(), efectos::pedirVista();
+      if (reloj() - mirada >= 0.2) {
+        mirada = reloj();
+        std::vector<uint8_t> px;
+        int w = 0, h = 0;
+        if (efectos::leerVista(px, w, h, &firmaVista)) {
+          st.vistaEfectos = std::make_shared<const std::vector<uint8_t>>(std::move(px));
+          st.vistaEfectosW = w, st.vistaEfectosH = h;
+          repintar = true;
+        }
+      }
     }
     /* (v1.18) Efectos, cada segundo: lo de las fuentes publicas que se comprueban o se bajan aparte */
     if (st.pestana == 5 && reloj() - miradaRend >= 1.0) {
