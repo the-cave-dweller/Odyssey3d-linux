@@ -27,7 +27,21 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
   (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
 
-## El visor ya no se minimiza al abrir o cerrar el panel (lo que «recargaba la imagen» y pausaba el vídeo), y «DLSS» solo con su profundidad (v1.17)
+## Versión 1.18: el cuadrito de los FPS vigila lo que elijas, el 3D ya no se recarga al abrir o cerrar el panel, y la instalación en silencio (v1.18)
+
+- Rodolfo: «Sí, como 1.18». Lo de después de la 1.17 (cada cosa en su entrada, abajo):
+  - **El cuadrito de los FPS**, con una flechita en su tesela: cada tarjeta por separado, su temperatura, memoria y
+    consumo, el procesador, la memoria del sistema y el tiempo por cuadro, como MangoHud; se queda en la esquina
+    cuando se oculta la pastilla; dice «DLSS» solo con esa profundidad;
+  - **El foco**: el visor ya no se minimiza al abrir o cerrar el panel (el auto-iconify de GLFW), así que el 3D no se
+    rehace ni el navegador pausa el vídeo; si el vídeo se activa, el servicio le devuelve el foco al visor;
+  - **La tarjeta de «el juego se cerró»**, solo en los primeros 20 s;
+  - **`install.sh`** en silencio (el detalle en `build/compilacion.log`) y 0 avisos del compilador;
+  - **El panel**: sin la flecha de volver a la pastilla; la nota de la carpeta de las redes al pie de cada lista.
+- **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
+  `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## El visor ya no se minimiza al abrir o cerrar el panel (lo que «recargaba la imagen» y pausaba el vídeo), y «DLSS» solo con su profundidad (v1.18)
 
 - Rodolfo: «y sí, arregla el foco». **La causa, MEDIDA** en un KWin aparte (sin GPU) con una ventana GLFW a pantalla
   completa como la del visor, una de Alacritty a pantalla completa como el vídeo, el panel de verdad y una sonda con el
@@ -47,7 +61,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   se quedaba con lo último. Ahora pide además el conversor y el 3D puestos.
 - Sin probar aún en el monitor de verdad con Firefox.
 
-## El cuadrito de los FPS vigila lo que elijas, como MangoHud, y la tarjeta de «se cerró» solo en los primeros 20 s (v1.17)
+## El cuadrito de los FPS vigila lo que elijas, como MangoHud, y la tarjeta de «se cerró» solo en los primeros 20 s (v1.18)
 
 - Rodolfo: «añade una flechita ahí, donde también dé un dropdown de otras cosas que se puedan monitorear, como uso de
   cada gpu (listada por separado), y algunas como las de mangohud, pero mantén la estética de nuestro proyecto».
@@ -71,7 +85,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   (Rodolfo, con la de 112 s: «que esto solo se abra a los pocos segundos, como para crashes»). La caída que avisa, la
   de la pantalla completa exclusiva al cambiar de modo, es al empezar: ahora solo en los primeros 20 s.
 
-## El cuadrito de los FPS se queda aunque se oculte la pastilla (v1.17)
+## El cuadrito de los FPS se queda aunque se oculte la pastilla (v1.18)
 
 - Rodolfo: «cuando está prendido el counter de fps y se esconde el hub de 3d, el counter también se esconde, no quiero
   que lo haga, sino que se quede al frente y se mueva a la orilla de la pantalla salvo que lo apague». Se iba con la
@@ -83,7 +97,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - Probado con `ctl hud` en los dos estados (con la pastilla, 684 vértices; sin ella, 198: el cuadrito solo). Sin
   probar aún en un juego de verdad.
 
-## Sin la flecha de volver a la pastilla, la nota de la carpeta en cada lista, y lo que se recargaba (v1.17)
+## Sin la flecha de volver a la pastilla, la nota de la carpeta en cada lista, y lo que se recargaba (v1.18)
 
 - Rodolfo: «quita la flecha y mira porque presionar el boton luego hace que el pill recargue la imagen». La flecha (a
   la izquierda del aspa, con el panel abierto desde la pastilla) se quita: cerrar ya vuelve al vídeo.
@@ -100,7 +114,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   alentó: 165 cuadros por segundo y la vuelta por debajo de ~3 ms (tope 6,1) con la vista puesta y quitada. La
   miniatura del corte por la imagen se calcula ya solo con la red de vídeo (la única que la usa).
 
-## `install.sh` compila en silencio, y sin avisos del compilador (v1.17)
+## `install.sh` compila en silencio, y sin avisos del compilador (v1.18)
 
 - Rodolfo, con la salida de `./install.sh`: «mis usuarios ven esto?». Sí, quien instala a mano: cientos de avisos del
   compilador (no errores). Quien actualiza desde la tarjeta o la tesela de la Versión no, porque eso corre como un

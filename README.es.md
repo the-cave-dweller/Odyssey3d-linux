@@ -18,7 +18,29 @@ Lo que tienes:
 
 ![La pastilla y su menú del relieve](docs/img/es/pill.png)
 
-## Lo nuevo de la 1.17
+## Lo nuevo de la 1.18
+
+- **Vigila más que los FPS.** La flechita de la tesela *Cuadrito de FPS* abre una lista, como MangoHud: cada tarjeta
+  en su fila (el uso y, si se marcan, su temperatura, memoria y consumo), el uso y la temperatura del procesador, la
+  memoria del sistema y el tiempo por cuadro del juego. El cuadro se queda en la esquina de arriba a la derecha cuando
+  la pastilla se oculta y, con algo marcado, sale también sobre los vídeos. Dice «DLSS» solo mientras la profundidad
+  sale de ahí de verdad.
+- **El 3D ya no parpadea al abrir o cerrar el panel**, y el navegador ya no pausa el vídeo: el visor se minimizaba
+  solo cada vez que perdía el foco.
+- **La tarjeta de «el juego se cerró»** solo sale si el juego se cierra en los 20 segundos de entrar en 3D (una
+  caída), no al salir tú.
+- **Una instalación en silencio**: `install.sh` enseña unas pocas líneas; el detalle va a `build/compilacion.log`.
+
+| | Antes | 1.18 |
+|---|---|---|
+| Abrir o cerrar el panel sobre un vídeo | el 3D se rehacía y el vídeo se pausaba | al vídeo no le pasa nada |
+| Hacer clic en el vídeo | lo mismo | el 3D vuelve encima en ~20 ms |
+| Leer 3 tarjetas, el procesador y la memoria para el cuadro | — | 0,9 ms, una vez por segundo |
+| Avisos del compilador al instalar | 561 | 0 |
+
+![El menú de la tesela del cuadrito de FPS y el cuadro con lo que vigila](docs/img/es/monitor.png)
+
+### Lo nuevo de la 1.17
 
 - **Mira la profundidad mientras eliges la red.** La casilla *Vista de depuración* de la pestaña 3D enseña la
   profundidad en vivo y deja el panel en una columna a la izquierda. Cambias de red y ves la diferencia al momento;

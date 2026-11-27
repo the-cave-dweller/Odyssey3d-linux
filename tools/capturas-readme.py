@@ -137,6 +137,25 @@ def interfaz(lengua, destino):
         finally:
             os.remove(hub)
             os.remove(est)
+        # (v1.18) el menu de la tesela del cuadrito de los FPS (marcado lo mismo que sale en el cuadrito: las dos NVIDIA con
+        # temperatura, memoria y consumo, el procesador, la memoria y el tiempo por cuadro; las tarjetas, las de esta
+        # maquina) junto al cuadrito con esas filas de ejemplo (lo medido aqui el 27-nov), con un juego sin DLSS
+        try:
+            uuids = subprocess.run(["nvidia-smi", "--query-gpu=uuid,name", "--format=csv,noheader"], capture_output=True,
+                                   text=True, timeout=10).stdout.splitlines()
+        except Exception:
+            uuids = []
+        claves = [l.split(",")[0].strip() for l in uuids if "4090" in l or "5080" in l]
+        with open(os.path.join(casa, ".config", "odysseyvk", "serve.conf"), "a") as f:
+            f.write("monitor = %s\n" % ",".join(["gpu:" + c for c in claves] + ["temp", "vram", "vatios", "cpu", "cputemp", "ram", "ms"]))
+        im = pinta(casa, estado, lengua, "menu-monitor", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_MENU_TESELA="fps_juego")
+        menu = sobre(im, (2610, 140, 3140, 1060), 0)
+        im = pinta(casa, estado, lengua, "cuadrito", ODYSSEYVK_HUD_ASK=0, ODYSSEYVK_HUD_FPS=2, ODYSSEYVK_HUD_MONITOR=1)
+        cuadro = sobre(im, caja_alfa(im, (W // 2, 0, W, 600)))
+        hoja = fondo(menu.width + cuadro.width + 40, max(menu.height, cuadro.height))
+        hoja.paste(menu, (0, 0))
+        hoja.paste(cuadro, (menu.width + 40, 0))
+        guarda(hoja, os.path.join(destino, "monitor.png"), 1600)
         nave = Image.open(os.path.join(RAIZ, "docs", "img", "fuente", "depth-debug.png")).convert("RGB")
         prof = nave.crop((816, 40, 1616, 490)).resize((W, H), Image.LANCZOS).convert("RGBA")
         prof.alpha_composite(im)

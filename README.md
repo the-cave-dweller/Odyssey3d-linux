@@ -18,7 +18,28 @@ What you get:
 
 ![The pill and its relief menu](docs/img/pill.png)
 
-## New in 1.17
+## New in 1.18
+
+- **Monitor more than FPS.** The arrow on the *FPS box* tile opens a list, MangoHud-style: each GPU on its own row
+  (usage, plus temperature, memory and power if ticked), CPU usage and temperature, system memory and the game's
+  frame time. The box stays in the top-right corner when the pill hides, and with anything ticked it also shows over
+  videos. It says «DLSS» only while the depth really comes from DLSS.
+- **The 3D no longer flickers when you open or close the panel**, and the browser no longer pauses the video: the
+  viewer used to minimize itself whenever it lost focus.
+- **The «game closed» card** only shows if the game closes within 20 seconds of entering 3D (a crash), not when you
+  quit it.
+- **A quiet install**: `install.sh` shows a few lines; the details go to `build/compilacion.log`.
+
+| | Before | 1.18 |
+|---|---|---|
+| Opening or closing the panel over a video | 3D view rebuilt, video paused | nothing happens to the video |
+| Clicking the video | same | the 3D is back on top in ~20 ms |
+| Reading 3 GPUs, CPU and RAM for the box | — | 0.9 ms, once a second |
+| Compiler warnings while installing | 561 | 0 |
+
+![The FPS box tile menu and the box with what it monitors](docs/img/monitor.png)
+
+### New in 1.17
 
 - **Watch the depth while you choose the network.** The *Debug view* checkbox in the 3D tab shows the depth live and
   shrinks the panel to a column on the left. Switch networks and see the difference straight away; next to the
