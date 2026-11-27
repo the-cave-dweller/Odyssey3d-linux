@@ -46,9 +46,37 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **El offloading de Neural Forge en Integraciones**: su modelo en la segunda tarjeta, con su enlace PCIe;
   - **El monitor 3D en otra tarjeta**: el 3D en la del monitor y la tarjeta del juego en Integraciones;
   - **La generación de cuadros de MAKO** con el clic derecho en el cuadrito de los FPS, y un botón que instala MAKO FG
-    (su generador propio) sin root.
+    (su generador propio) sin root; el cuadrito cuenta los reales y los generados.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## Los cuadros generados en el cuadrito de los FPS: un contador debajo de MAKO, como el de vkDaedalus (v1.18)
+
+- Rodolfo: «you can see what are the generating frames, look how vkbasalt_overlay does it».
+- **Cómo lo hace vkDaedalus** (sus fuentes, `src/present_counter.cpp` y `config/order-layers/`): una segunda capa mínima
+  en su misma biblioteca, `VK_LAYER_VKDAEDALUS_present_counter`, que solo cuenta `vkQueuePresentKHR`, y una meta-capa
+  que pone `[vkDaedalus, MAKO, el contador]`: arriba se ven los cuadros del juego y debajo de MAKO, los del juego y los
+  generados.
+- **Aquí igual**: `VK_LAYER_odysseyvk_contador` (manifiesto explícito, en la biblioteca de la capa) y la meta-capa
+  `VK_LAYER_odysseyvk_mako_contado`, `[la capa de OdysseyVK, MAKO, el contador]`, que se enciende con
+  `ODYSSEYVK_CONTAR_MAKO=1`; Integraciones lo pone en la línea de Steam con `ODYSSEYVK=1` y `ENABLE_MAKO=1`. Las dos
+  cuentas van a una región aparte, `/odysseyvk-fg-<pid>` (la de la profundidad solo existe con DLSS): dos sumas por
+  cuadro, sin registro. El visor saca de ahí los reales y los generados por segundo, y el cuadrito añade «Reales» y
+  «Generados» (con título MAKO si no hay profundidad de DLSS). También en el `estado`: `fg_reales_generados`.
+- **MEDIDO con el cargador** (`VK_LOADER_DEBUG=layer`, `vulkaninfo`): con el contador solo en la meta-capa, el cargador
+  la ponía delante de las demás implícitas y la capa de OdysseyVK acababa debajo de MAKO (contaría los generados como
+  reales); con la capa dentro de la meta-capa queda Neural Forge → OdysseyVK → MAKO → contador. Una meta-capa implícita
+  necesita `disable_environment` (sin él, el cargador la salta): `ODYSSEYVK_NO_CONTAR=1`.
+- **Un fallo que se encontró probando**: el contador sin su propia negociación hacía que el cargador usara la de la capa
+  principal (la de nombre de fábrica de la biblioteca) también debajo de MAKO, y vkcube se caía dentro de
+  `vkCreateInstance` de MAKO. Ahora el manifiesto del contador nombra `OdysseyContador_Negotiate`. Y el generador de MAKO
+  (`mako-fg-host`) carga estas capas con el entorno del juego sin presentar nada: ahí el contador no crea región; las de
+  juegos que se mataron se borran al abrir la siguiente.
+- **Probado** con vkcube, MAKO FG x2 y 60 de base en la 5080 en un compositor aparte: 553 reales y 1086 salidos (x1,96;
+  lo que falta son los primeros cuadros, antes de generar), una sola región; el cuadrito pintado con `ctl hud`
+  (`ODYSSEYVK_HUD_FG_CUENTA=82,82`, con DLSS y sin él); la línea de Steam con y sin las variables.
+- Para que llegue a un juego: `install.sh` (pone los dos manifiestos nuevos en `~/.local/share/vulkan/`) y cerrar Steam
+  una vez (Integraciones escribe `ODYSSEYVK_CONTAR_MAKO=1`).
 
 ## MAKO FG, el generador propio de MAKO, con un botón que lo instala sin root (v1.18)
 

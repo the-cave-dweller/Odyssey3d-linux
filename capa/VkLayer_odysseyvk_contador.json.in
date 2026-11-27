@@ -1,0 +1,16 @@
+{
+  "file_format_version": "1.2.1",
+  "layer": {
+    "name": "VK_LAYER_odysseyvk_contador",
+    "type": "GLOBAL",
+    "library_path": "@CAPA_RUTA@",
+    "api_version": "1.3.0",
+    "implementation_version": "1",
+    "description": "OdysseyVK: cuenta los cuadros que salen de la generacion de cuadros de MAKO, debajo de ella",
+    "functions": {
+      "vkNegotiateLoaderLayerInterfaceVersion": "OdysseyContador_Negotiate",
+      "vkGetInstanceProcAddr": "OdysseyContador_GetInstanceProcAddr",
+      "vkGetDeviceProcAddr": "OdysseyContador_GetDeviceProcAddr"
+    }
+  }
+}

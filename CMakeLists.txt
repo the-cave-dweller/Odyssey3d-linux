@@ -322,10 +322,15 @@ target_compile_options(VkLayer_odysseyvk_capa PRIVATE -Wno-missing-field-initial
 target_link_options(VkLayer_odysseyvk_capa PRIVATE -static-libstdc++ -static-libgcc -Wl,--no-undefined)
 set(CAPA_RUTA ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_capa.so)
 configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_capa.json @ONLY)
+# (v1.18) el contador de la generacion de cuadros de MAKO (misma biblioteca) y la meta-capa que lo pone debajo de MAKO
+configure_file(capa/VkLayer_odysseyvk_contador.json.in ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_contador.json @ONLY)
+configure_file(capa/VkLayer_odysseyvk_mako_contado.json ${CMAKE_BINARY_DIR}/capa/VkLayer_odysseyvk_mako_contado.json COPYONLY)
 # y el manifiesto de la instalada (lo pone install.sh en ~/.local/share/vulkan/implicit_layer.d, donde lo
 # encuentra tambien el contenedor de Steam, como el de Neural Forge)
 set(CAPA_RUTA ${CMAKE_INSTALL_PREFIX}/lib/odysseyvk/VkLayer_odysseyvk_capa.so)
 configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/instalada/VkLayer_odysseyvk_capa.json @ONLY)
+configure_file(capa/VkLayer_odysseyvk_contador.json.in ${CMAKE_BINARY_DIR}/capa/instalada/VkLayer_odysseyvk_contador.json @ONLY)
+configure_file(capa/VkLayer_odysseyvk_mako_contado.json ${CMAKE_BINARY_DIR}/capa/instalada/VkLayer_odysseyvk_mako_contado.json COPYONLY)
 install(TARGETS VkLayer_odysseyvk_capa LIBRARY DESTINATION lib/odysseyvk)
 
 install(TARGETS odysseyvk RUNTIME DESTINATION bin)

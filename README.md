@@ -45,6 +45,9 @@ What you get:
   offer *Install MAKO FG · 19 MB*: MAKO FG V1.24 from Hugging Face, pinned and SHA-256 checked, into
   `~/.local/share/odysseyvk/mako-fg` without root; games with MAKO get it through `MAKO_FG_HOST` in their Steam line.
   Also `odysseyvk mako estado|instalar|quitar`. MAKO FG is non-commercial (CC BY-NC 4.0).
+- **Real and generated frames in the FPS box.** Like vkDaedalus, a second tiny layer counts the frames below MAKO
+  while the OdysseyVK layer counts them above it, so the box shows *Real* and *Generated* fps
+  (`ODYSSEYVK_CONTAR_MAKO=1`, added by Integrations next to `ODYSSEYVK=1` and `ENABLE_MAKO=1`).
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the
   log.

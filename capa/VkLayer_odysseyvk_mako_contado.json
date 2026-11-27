@@ -1,0 +1,17 @@
+{
+  "file_format_version": "1.1.2",
+  "layer": {
+    "name": "VK_LAYER_odysseyvk_mako_contado",
+    "type": "GLOBAL",
+    "api_version": "1.0.0",
+    "implementation_version": "1",
+    "description": "OdysseyVK encima de MAKO y su contador debajo: los cuadros reales y los generados",
+    "component_layers": ["VK_LAYER_odysseyvk_profundidad", "VK_LAYER_MAKO_render", "VK_LAYER_odysseyvk_contador"],
+    "enable_environment": {
+      "ODYSSEYVK_CONTAR_MAKO": "1"
+    },
+    "disable_environment": {
+      "ODYSSEYVK_NO_CONTAR": "1"
+    }
+  }
+}

@@ -32,6 +32,7 @@
 #include "rendimiento.h"
 #include "monitor.h"
 #include "mako.h"   /* (v1.18) la generacion de cuadros de MAKO, desde el cuadrito de los FPS */
+#include "../capa/protocolo.h"   /* (v1.18) OdvkFgCuenta: lo que cuenta el contador, debajo de MAKO */
 #include "vkui.h"
 #include "vkweave.h"
 
@@ -67,6 +68,8 @@ struct wl_region;
 #include <chrono>
 #include <poll.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 
@@ -658,6 +661,10 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
     s += std::string("fps_capa = ") + (g_profJuego.empty() ? "-" : num) + "\n";
     std::snprintf(num, sizeof num, "%.1f", g_hudJuego * 100.0f);
     s += std::string("hud_juego = ") + (g_profJuego.empty() || g_hudJuego < 0.0f ? "-" : num) + "\n";
+    /* (v1.18) la generacion de cuadros de MAKO, del contador: los cuadros del juego y los generados por segundo */
+    const Hud::State::Fg &fgE = ui.hud.state().fg;
+    std::snprintf(num, sizeof num, "%.1f %.1f", fgE.reales, fgE.generados);
+    s += std::string("fg_reales_generados = ") + (fgE.reales > 0.5f ? num : "-") + "\n";
   }
 #else
   s += "conversor = no compilado\n";
@@ -1000,6 +1007,47 @@ static void leerFg(Hud::State::Fg &g) {
   g.rendimiento = p.rendimiento;
   /* sin perfil, el modelo que hay: el suyo si esta, si no el de Lossless Scaling */
   g.modelo = p.existe ? (p.modelo == "lossless-scaling" ? 0 : 1) : (g.generador || !g.lsfg ? 1 : 0);
+}
+
+/* (v1.18) lo que cuenta el contador de la capa, debajo de MAKO (capa/protocolo.h, OdvkFgCuenta): la region del juego que
+   corre, y sus cuadros reales y generados por segundo, sacados de las dos cuentas cada segundo. Falso si no hay */
+static bool leerCuentaFg(long pid, double t, float *reales, float *generados) {
+  static long pidVisto = -1;
+  static const OdvkFgCuenta *c = nullptr;
+  static double t0 = 0.0, tMirada = -10.0;
+  static uint64_t r0 = 0, s0 = 0;
+  static float r = 0.0f, g = 0.0f;
+  if (pid != pidVisto || (!c && t - tMirada >= 2.0)) {
+    if (c) munmap((void *)c, ODVK_FG_TAM), c = nullptr;
+    pidVisto = pid, tMirada = t, r = g = 0.0f;
+    if (pid > 0) {
+      const std::string nombre = "/odysseyvk-fg-" + std::to_string(pid);
+      const int fd = shm_open(nombre.c_str(), O_RDONLY, 0);
+      if (fd >= 0) {
+        struct stat sb {};
+        void *m = fstat(fd, &sb) == 0 && sb.st_size >= (off_t)sizeof(OdvkFgCuenta)
+                      ? mmap(nullptr, ODVK_FG_TAM, PROT_READ, MAP_SHARED, fd, 0)
+                      : MAP_FAILED;
+        close(fd);
+        if (m != MAP_FAILED) {
+          c = (const OdvkFgCuenta *)m;
+          if (__atomic_load_n(&c->magia, __ATOMIC_ACQUIRE) != ODVK_FG_MAGIA || c->pid != (int32_t)pid) munmap(m, ODVK_FG_TAM), c = nullptr;
+          else t0 = t, r0 = __atomic_load_n(&c->reales, __ATOMIC_RELAXED), s0 = __atomic_load_n(&c->salida, __ATOMIC_RELAXED);
+        }
+      }
+    }
+  }
+  if (!c) return false;
+  if (t - t0 >= 1.0) {
+    const uint64_t r1 = __atomic_load_n(&c->reales, __ATOMIC_RELAXED), s1 = __atomic_load_n(&c->salida, __ATOMIC_RELAXED);
+    const double dt = t - t0;
+    r = (float)((double)(r1 - r0) / dt);
+    /* la salida son los reales y los generados juntos */
+    g = std::max(0.0f, (float)((double)(s1 - s0) / dt) - r);
+    t0 = t, r0 = r1, s0 = s1;
+  }
+  *reales = r, *generados = g;
+  return true;
 }
 
 /* (v1.18) cuando se pidio instalar MAKO FG desde el menu (segundos desde 1970), hasta que la instalacion dice como acabo */
@@ -4918,6 +4966,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             pid = (pid_t)w.pid;
 #endif
           e = ajenas::mirar(pid);
+          /* (v1.18) los cuadros reales y generados de MAKO, del contador de la capa */
+          Hud::State::Fg &fgC = ui.hud.state().fg;
+          const long antes = std::lround(fgC.reales) * 100000 + std::lround(fgC.generados);
+          if (!leerCuentaFg((long)pid, ahoraA, &fgC.reales, &fgC.generados)) fgC.reales = fgC.generados = 0.0f;
+          if (antes != std::lround(fgC.reales) * 100000 + std::lround(fgC.generados)) ui.inputChanged = true;
+        } else if (ui.hud.state().fg.reales > 0.0f) {
+          ui.hud.state().fg.reales = ui.hud.state().fg.generados = 0.0f, ui.inputChanged = true;
         }
         Hud::State &hsA = ui.hud.state();
         if (e.menuVkd && !apartada) {

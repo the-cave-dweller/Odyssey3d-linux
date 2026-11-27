@@ -967,11 +967,21 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
     /* (v1.18) con la generacion de cuadros de MAKO en el juego: lo que llega a la pantalla. MEDIDO con el cargador de
        Vulkan: MAKO va por debajo de la capa de OdysseyVK, asi que «Juego» (los cuadros que ve la capa) son los de verdad y
        los generados solo se ven aqui, en los que llegan al visor por la captura */
-    if (dlss && st_.fg.enJuego && st_.fg.puesta && st_.fg.enPantalla > 0.5f) {
+    if (dlss && st_.fg.enJuego && st_.fg.puesta && st_.fg.enPantalla > 0.5f && st_.fg.reales <= 0.5f) {
       char np[16];
       std::snprintf(np, sizeof np, "%d", (int)std::lround(st_.fg.enPantalla));
       filas.push_back({idioma::tr("En pantalla"), {{np, "fps"}}});
     }
+  }
+  /* (v1.18) con el contador de MAKO (la capa encima de MAKO y el contador debajo, como el de vkDaedalus): los cuadros del
+     juego y los que MAKO genera, cada segundo */
+  const bool cuenta = st_.fg.reales > 0.5f;
+  if (cuenta) {
+    char nr[16], ng[16];
+    std::snprintf(nr, sizeof nr, "%d", (int)std::lround(st_.fg.reales));
+    std::snprintf(ng, sizeof ng, "%d", (int)std::lround(st_.fg.generados));
+    filas.push_back({idioma::tr("Reales"), {{nr, "fps"}}});
+    filas.push_back({idioma::tr("Generados"), {{ng, "fps"}}});
   }
   for (const State::FilaMonitor &m : st_.monitor) {
     Fila f{m.rotulo, {}};
@@ -980,7 +990,8 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   }
   if (filas.empty()) return;
   const std::string titulo = dlss ? std::string("DLSS")
-                             : std::string(idioma::tr(st_.fpsModo == 2 ? "Modelo de serie" : "Monitor"));
+                             : (st_.fpsModo == 0 && cuenta ? std::string("MAKO")
+                                                           : std::string(idioma::tr(st_.fpsModo == 2 ? "Modelo de serie" : "Monitor")));
   const float tamR = 12.0f, tamN = 14.0f, tamF = 10.5f, borde = 14.0f, hueco = 10.0f;
   float wRot = 0.0f;
   size_t nCol = 0;

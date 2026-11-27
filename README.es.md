@@ -45,6 +45,9 @@ Lo que tienes:
   «Instalar MAKO FG · 19 MB»: MAKO FG V1.24 de Hugging Face, fijado y con el SHA-256 comprobado, en
   `~/.local/share/odysseyvk/mako-fg` sin root; los juegos con MAKO lo reciben con `MAKO_FG_HOST` en su línea de Steam.
   También `odysseyvk mako estado|instalar|quitar`. MAKO FG es de uso no comercial (CC BY-NC 4.0).
+- **Los cuadros reales y los generados en el cuadrito.** Como vkDaedalus, una segunda capa mínima cuenta los cuadros
+  debajo de MAKO y la de OdysseyVK encima, así que el cuadrito dice «Reales» y «Generados» (`ODYSSEYVK_CONTAR_MAKO=1`,
+  que Integraciones pone junto a `ODYSSEYVK=1` y `ENABLE_MAKO=1`).
 - **Una prueba en cada cambio de capa**: otra red, la profundidad de DLSS que llega o se va, u otro preset de DLSS en
   el juego, y el registro apunta 3 segundos de lo que corre (FPS del juego, mapas por segundo, refrescos perdidos y lo
   ocupada que va cada tarjeta).

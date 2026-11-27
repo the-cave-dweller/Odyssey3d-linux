@@ -483,6 +483,9 @@ std::string linea(const Ajustes &a, const std::string &nfExe, const std::string 
        que el juego ya traiga uno suyo en las demas variables: ese manda */
     if (std::strcmp(v.clave, "mako") == 0 && val("otros").find("MAKO_FG_HOST=") == std::string::npos)
       if (const std::string h = mako::hostParaJuegos(); !h.empty()) vars.push_back("MAKO_FG_HOST=" + citar(h));
+    /* (v1.18) con la capa de OdysseyVK y MAKO, la meta-capa que cuenta los cuadros generados (la capa encima de MAKO y su
+       contador debajo: ver el contador en capa/odysseyvk_capa.cpp) */
+    if (std::strcmp(v.clave, "mako") == 0 && si("odysseyvk")) vars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
     /* (v1.18) el modelo de Neural Forge en la segunda tarjeta: la que trajo su linea o la de secundariaNf */
     if (std::strcmp(v.clave, "neural_forge") == 0 && si("nf_offload")) {
       Secundaria s;
@@ -608,6 +611,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
   }
   std::vector<std::string> otrosVars;
   std::string exe, gpu, host;
+  bool contar = false;
   for (; r < c && esAsignacion(t[r].texto); r++) {
     const std::string &x = t[r].texto;
     const size_t ig = x.find('=');
@@ -625,6 +629,10 @@ bool leerLinea(const std::string &lin, Leida &l) {
     }
     if (!nuestra && nombre == "NEURAL_FORGE_OFFLOAD_GPU" && gpu.empty() && !valor.empty()) {   /* (v1.18) */
       gpu = valor;
+      nuestra = true;
+    }
+    if (!nuestra && nombre == "ODYSSEYVK_CONTAR_MAKO" && valor == "1" && !contar) {   /* (v1.18) */
+      contar = true;
       nuestra = true;
     }
     if (!nuestra && nombre == "MAKO_FG_HOST" && host.empty() && !valor.empty()) {   /* (v1.18) */
@@ -657,6 +665,8 @@ bool leerLinea(const std::string &lin, Leida &l) {
      mientras este instalado). Otro que se puso a mano se queda con las demas y no se pisa */
   if (!host.empty() && (a["mako"] != "1" || host != mako::carpetaGenerador() + "/mako-fg-host"))
     otrosVars.push_back("MAKO_FG_HOST=" + citar(host));
+  /* ODYSSEYVK_CONTAR_MAKO=1 sale de ODYSSEYVK=1 con ENABLE_MAKO=1: sin los dos, se queda con las demas */
+  if (contar && (a["mako"] != "1" || a["odysseyvk"] != "1")) otrosVars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
   a["otros"] = unir(otrosVars);
   if (r < c && nombreBase(t[r].texto) == "vkdaedalus-run") {
     a["vkdaedalus_run"] = "1";

@@ -53,7 +53,9 @@
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
 
+#include <dirent.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -80,6 +82,8 @@
 #define EXPORTA extern "C" __attribute__((visibility("default")))
 
 namespace {
+/* (v1.18) la cuenta de la generacion de cuadros de MAKO: ver el contador, al final */
+void contarReal();
 
 std::mutex g_mx;
 
@@ -1571,6 +1575,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue q, const VkPresentInfoKHR
     std::lock_guard<std::mutex> g(g_mx);
     d = dispositivo(q);
     d->presentes++;
+    contarReal();   /* (v1.18) para la generacion de cuadros de MAKO: ver el contador, abajo */
     /* (v1.13) lo apartado que ya cumplio sus kAplazar presentaciones */
     if (!d->aplazados.empty()) {
       std::vector<Dispositivo::Aplazado> quedan;
@@ -2401,6 +2406,226 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance inst, co
 }
 
 }  // namespace
+
+/* ---- (v1.18) el contador: una segunda capa en esta biblioteca, debajo de MAKO ----
+   Rodolfo: «you can see what are the generating frames, look how vkbasalt_overlay does it». vkDaedalus lo hace asi: una
+   capa minima que solo cuenta vkQueuePresentKHR (VK_LAYER_VKDAEDALUS_present_counter), puesta debajo de MAKO por una
+   meta-capa (MAKO genera debajo de la capa principal: arriba se ven los reales, debajo reales y generados). Aqui igual:
+   VK_LAYER_odysseyvk_contador (manifiesto explicito) y la meta-capa VK_LAYER_odysseyvk_mako_contado, con
+   ODYSSEYVK_CONTAR_MAKO=1: [esta capa, MAKO, el contador]. MEDIDO el 27-nov con el cargador (VK_LOADER_DEBUG=layer): asi
+   queda Neural Forge → OdysseyVK → MAKO → contador; con el contador solo en la meta-capa, el cargador ponia la meta-capa
+   delante de las demas implicitas y esta capa acababa DEBAJO de MAKO.
+   Las dos cuentas van a /odysseyvk-fg-<pid> (protocolo.h: OdvkFgCuenta). Las dos capas son la misma biblioteca, asi que
+   el puntero es el mismo; lo crea el contador al crear su dispositivo. Nada de registro por cuadro: dos sumas. */
+namespace {
+
+std::atomic<OdvkFgCuenta *> g_fgCuenta{nullptr};
+bool g_fgMia = false;
+
+void contarReal() {
+  if (OdvkFgCuenta *c = g_fgCuenta.load(std::memory_order_relaxed)) __atomic_fetch_add(&c->reales, 1, __ATOMIC_RELAXED);
+}
+
+std::string nombreFg() { return "/odysseyvk-fg-" + std::to_string((long)getpid()); }
+
+void abrirFg() {
+  static std::mutex mx;
+  std::lock_guard<std::mutex> g(mx);
+  if (g_fgCuenta.load()) return;
+  /* el generador de MAKO (mako-fg-host) es otro programa de Vulkan con el entorno del juego: tambien carga estas capas, pero
+     no presenta nada. MEDIDO: su region salia vacia junto a la del juego */
+  {
+    char exe[512];
+    const ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (n > 0 && std::strstr(std::string(exe, (size_t)n).c_str(), "mako-fg-host")) return;
+  }
+  /* las de juegos que se mataron (sin su destructor): las de un pid que ya no existe */
+  if (DIR *dir = opendir("/dev/shm")) {
+    while (dirent *e = readdir(dir)) {
+      long otro = 0;
+      if (std::sscanf(e->d_name, "odysseyvk-fg-%ld", &otro) == 1 && otro > 0 && otro != (long)getpid() && kill((pid_t)otro, 0) != 0 &&
+          errno == ESRCH)
+        shm_unlink((std::string("/") + e->d_name).c_str());
+    }
+    closedir(dir);
+  }
+  const std::string nombre = nombreFg();
+  shm_unlink(nombre.c_str());   /* la de un juego anterior con el mismo pid */
+  const int fd = shm_open(nombre.c_str(), O_CREAT | O_RDWR, 0600);
+  if (fd < 0) return;
+  void *m = MAP_FAILED;
+  if (ftruncate(fd, ODVK_FG_TAM) == 0) m = mmap(nullptr, ODVK_FG_TAM, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  close(fd);
+  if (m == MAP_FAILED) {
+    shm_unlink(nombre.c_str());
+    return;
+  }
+  OdvkFgCuenta *c = (OdvkFgCuenta *)m;
+  c->version = ODVK_FG_VERSION, c->pid = (int32_t)getpid();
+  __atomic_store_n(&c->magia, ODVK_FG_MAGIA, __ATOMIC_RELEASE);
+  g_fgMia = true;
+  g_fgCuenta.store(c);
+  anota("[contador] la generacion de cuadros de MAKO se cuenta en %s (reales encima, salida debajo)", nombre.c_str());
+}
+
+__attribute__((destructor)) void cerrarFg() {
+  if (g_fgMia) shm_unlink(nombreFg().c_str());
+}
+
+struct ContInstancia {
+  VkInstance instancia = VK_NULL_HANDLE;
+  PFN_vkGetInstanceProcAddr gipa = nullptr;
+  PFN_vkDestroyInstance destruir = nullptr;
+};
+struct ContDispositivo {
+  PFN_vkGetDeviceProcAddr gdpa = nullptr;
+  PFN_vkDestroyDevice destruir = nullptr;
+  PFN_vkQueuePresentKHR presentar = nullptr;
+};
+std::mutex g_contMx;
+std::unordered_map<void *, ContInstancia> g_contInst;
+std::unordered_map<void *, ContDispositivo> g_contDisp;
+
+template <typename H>
+void *claveCont(H h) {
+  return *reinterpret_cast<void **>(h);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL ContCreateInstance(const VkInstanceCreateInfo *ci, const VkAllocationCallbacks *a, VkInstance *inst) {
+  auto *l = (VkLayerInstanceCreateInfo *)ci->pNext;
+  while (l && !(l->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO && l->function == VK_LAYER_LINK_INFO))
+    l = (VkLayerInstanceCreateInfo *)l->pNext;
+  if (!l || !l->u.pLayerInfo) return VK_ERROR_INITIALIZATION_FAILED;
+  const PFN_vkGetInstanceProcAddr sig = l->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+  l->u.pLayerInfo = l->u.pLayerInfo->pNext;
+  auto crear = (PFN_vkCreateInstance)sig(VK_NULL_HANDLE, "vkCreateInstance");
+  if (!crear) return VK_ERROR_INITIALIZATION_FAILED;
+  const VkResult r = crear(ci, a, inst);
+  if (r != VK_SUCCESS) return r;
+  std::lock_guard<std::mutex> g(g_contMx);
+  g_contInst[claveCont(*inst)] = {*inst, sig, (PFN_vkDestroyInstance)sig(*inst, "vkDestroyInstance")};
+  return r;
+}
+
+VKAPI_ATTR void VKAPI_CALL ContDestroyInstance(VkInstance inst, const VkAllocationCallbacks *a) {
+  if (!inst) return;
+  PFN_vkDestroyInstance destruir = nullptr;
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    auto it = g_contInst.find(claveCont(inst));
+    if (it == g_contInst.end()) return;
+    destruir = it->second.destruir;
+    g_contInst.erase(it);
+  }
+  if (destruir) destruir(inst, a);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL ContCreateDevice(VkPhysicalDevice f, const VkDeviceCreateInfo *ci, const VkAllocationCallbacks *a, VkDevice *dev) {
+  auto *l = (VkLayerDeviceCreateInfo *)ci->pNext;
+  while (l && !(l->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO && l->function == VK_LAYER_LINK_INFO))
+    l = (VkLayerDeviceCreateInfo *)l->pNext;
+  if (!l || !l->u.pLayerInfo) return VK_ERROR_INITIALIZATION_FAILED;
+  const PFN_vkGetInstanceProcAddr sigI = l->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+  const PFN_vkGetDeviceProcAddr sigD = l->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+  l->u.pLayerInfo = l->u.pLayerInfo->pNext;
+  VkInstance inst = VK_NULL_HANDLE;
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    auto it = g_contInst.find(claveCont(f));
+    if (it != g_contInst.end()) inst = it->second.instancia;
+  }
+  if (inst == VK_NULL_HANDLE) return VK_ERROR_INITIALIZATION_FAILED;
+  auto crear = (PFN_vkCreateDevice)sigI(inst, "vkCreateDevice");
+  if (!crear) return VK_ERROR_INITIALIZATION_FAILED;
+  const VkResult r = crear(f, ci, a, dev);
+  if (r != VK_SUCCESS) return r;
+  ContDispositivo d;
+  d.gdpa = sigD;
+  d.destruir = (PFN_vkDestroyDevice)sigD(*dev, "vkDestroyDevice");
+  d.presentar = (PFN_vkQueuePresentKHR)sigD(*dev, "vkQueuePresentKHR");
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    g_contDisp[claveCont(*dev)] = d;
+  }
+  if (d.presentar) abrirFg();
+  return r;
+}
+
+VKAPI_ATTR void VKAPI_CALL ContDestroyDevice(VkDevice dev, const VkAllocationCallbacks *a) {
+  if (!dev) return;
+  PFN_vkDestroyDevice destruir = nullptr;
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    auto it = g_contDisp.find(claveCont(dev));
+    if (it == g_contDisp.end()) return;
+    destruir = it->second.destruir;
+    g_contDisp.erase(it);
+  }
+  if (destruir) destruir(dev, a);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL ContQueuePresentKHR(VkQueue q, const VkPresentInfoKHR *pi) {
+  PFN_vkQueuePresentKHR presentar = nullptr;
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    auto it = g_contDisp.find(claveCont(q));
+    if (it != g_contDisp.end()) presentar = it->second.presentar;
+  }
+  if (OdvkFgCuenta *c = g_fgCuenta.load(std::memory_order_relaxed)) __atomic_fetch_add(&c->salida, 1, __ATOMIC_RELAXED);
+  return presentar ? presentar(q, pi) : VK_ERROR_DEVICE_LOST;
+}
+
+}  // namespace
+
+EXPORTA VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL OdysseyContador_GetDeviceProcAddr(VkDevice dev, const char *n);
+EXPORTA VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL OdysseyContador_GetInstanceProcAddr(VkInstance inst, const char *n);
+
+EXPORTA VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL OdysseyContador_GetDeviceProcAddr(VkDevice dev, const char *n) {
+  if (!std::strcmp(n, "vkGetDeviceProcAddr")) return (PFN_vkVoidFunction)&OdysseyContador_GetDeviceProcAddr;
+  if (!std::strcmp(n, "vkDestroyDevice")) return (PFN_vkVoidFunction)&ContDestroyDevice;
+  PFN_vkGetDeviceProcAddr sig = nullptr;
+  bool presenta = false;
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    auto it = g_contDisp.find(claveCont(dev));
+    if (it == g_contDisp.end()) return nullptr;
+    sig = it->second.gdpa, presenta = it->second.presentar != nullptr;
+  }
+  if (!std::strcmp(n, "vkQueuePresentKHR") && presenta) return (PFN_vkVoidFunction)&ContQueuePresentKHR;
+  return sig(dev, n);
+}
+
+EXPORTA VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL OdysseyContador_GetInstanceProcAddr(VkInstance inst, const char *n) {
+  if (!std::strcmp(n, "vkGetInstanceProcAddr")) return (PFN_vkVoidFunction)&OdysseyContador_GetInstanceProcAddr;
+  if (!std::strcmp(n, "vkCreateInstance")) return (PFN_vkVoidFunction)&ContCreateInstance;
+  if (!std::strcmp(n, "vkDestroyInstance")) return (PFN_vkVoidFunction)&ContDestroyInstance;
+  if (!std::strcmp(n, "vkCreateDevice")) return (PFN_vkVoidFunction)&ContCreateDevice;
+  if (!std::strcmp(n, "vkGetDeviceProcAddr")) return (PFN_vkVoidFunction)&OdysseyContador_GetDeviceProcAddr;
+  if (!std::strcmp(n, "vkDestroyDevice")) return (PFN_vkVoidFunction)&ContDestroyDevice;
+  if (inst == VK_NULL_HANDLE) return nullptr;
+  PFN_vkGetInstanceProcAddr sig = nullptr;
+  {
+    std::lock_guard<std::mutex> g(g_contMx);
+    auto it = g_contInst.find(claveCont(inst));
+    if (it == g_contInst.end()) return nullptr;
+    sig = it->second.gipa;
+  }
+  return sig(inst, n);
+}
+
+/* el contador con su propia negociacion, nombrada en su manifiesto: si no, el cargador busca en la biblioteca la de nombre
+   de fabrica (vkNegotiateLoaderLayerInterfaceVersion), que es la de la capa principal, y pone la capa principal tambien
+   debajo de MAKO. MEDIDO el 27-nov: vkcube se caia (SIGSEGV dentro de vkCreateInstance de MAKO) */
+EXPORTA VKAPI_ATTR VkResult VKAPI_CALL OdysseyContador_Negotiate(VkNegotiateLayerInterface *v) {
+  if (!v || v->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT) return VK_ERROR_INITIALIZATION_FAILED;
+  if (v->loaderLayerInterfaceVersion >= 2) {
+    v->pfnGetInstanceProcAddr = &OdysseyContador_GetInstanceProcAddr;
+    v->pfnGetDeviceProcAddr = &OdysseyContador_GetDeviceProcAddr;
+    v->pfnGetPhysicalDeviceProcAddr = nullptr;
+    v->loaderLayerInterfaceVersion = 2;
+  }
+  return VK_SUCCESS;
+}
 
 EXPORTA VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *v) {
   if (!v || v->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT) return VK_ERROR_INITIALIZATION_FAILED;

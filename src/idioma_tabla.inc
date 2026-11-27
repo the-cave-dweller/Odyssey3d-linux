@@ -517,3 +517,5 @@
 {"no se pudo crear la carpeta", {"couldn't create the folder", "impossible de créer le dossier", "der Ordner konnte nicht erstellt werden", "无法创建文件夹", "フォルダーを作成できませんでした", "не удалось создать папку"}},
 {"bajó incompleto: vuelve a intentarlo", {"it downloaded incomplete: try again", "téléchargement incomplet : réessayez", "unvollständig geladen: erneut versuchen", "下载不完整：请重试", "ダウンロードが不完全です：もう一度お試しください", "загрузилось не полностью: попробуйте ещё раз"}},
 {"no es el archivo que se esperaba (su SHA-256 no cuadra): no se instala", {"it isn't the expected file (its SHA-256 doesn't match): not installed", "ce n'est pas le fichier attendu (son SHA-256 ne correspond pas) : pas installé", "nicht die erwartete Datei (SHA-256 stimmt nicht): wird nicht installiert", "不是预期的文件（SHA-256 不匹配）：不予安装", "想定したファイルではありません（SHA-256 が一致しません）：インストールしません", "это не ожидаемый файл (SHA-256 не совпадает): не устанавливается"}},
+{"Reales", {"Real", "Réelles", "Echt", "真实", "実フレーム", "Реальные"}},
+{"Generados", {"Generated", "Générées", "Generiert", "生成", "生成", "Сгенерированные"}},

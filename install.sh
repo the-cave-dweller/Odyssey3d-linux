@@ -79,6 +79,12 @@ fi
 capas=${XDG_DATA_HOME:-$HOME/.local/share}/vulkan/implicit_layer.d
 mkdir -p "$capas"
 cp -f "$here/build/capa/instalada/VkLayer_odysseyvk_capa.json" "$capas/VkLayer_odysseyvk_capa.json"
+# (v1.18) la generacion de cuadros de MAKO, contada: el contador (explicito: solo lo carga la meta-capa) y la meta-capa que
+# pone [la capa, MAKO, el contador] con ODYSSEYVK_CONTAR_MAKO=1 (lo escribe Integraciones con ODYSSEYVK y MAKO puestos)
+explicitas=${XDG_DATA_HOME:-$HOME/.local/share}/vulkan/explicit_layer.d
+mkdir -p "$explicitas"
+cp -f "$here/build/capa/instalada/VkLayer_odysseyvk_contador.json" "$explicitas/VkLayer_odysseyvk_contador.json"
+cp -f "$here/build/capa/instalada/VkLayer_odysseyvk_mako_contado.json" "$capas/VkLayer_odysseyvk_mako_contado.json"
 echo "capa de la profundidad de DLSS puesta: añade ODYSSEYVK=1 a las opciones de lanzamiento del juego en Steam"
 
 # --- el icono y el lanzador del menú (por usuario, sin sudo) ------------------

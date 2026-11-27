@@ -269,6 +269,9 @@ public:
       bool rendimiento = false;
       std::string aviso;          /* el pie: lo que paso al tocar, o por que no se puede */
       float enPantalla = 0.0f;    /* los cuadros que llegan al visor por segundo, generados incluidos */
+      /* (v1.18) lo que cuenta el contador, debajo de MAKO (Rodolfo: «you can see what are the generating frames»): por
+         segundo, los cuadros del juego y los generados; 0 = sin contador */
+      float reales = 0.0f, generados = 0.0f;
     } fg;
     /* (v1.14) en la pestana Juegos, en medio del pie del panel: el parametro de Steam para la profundidad de DLSS y
        su boton Copiar (Rodolfo: «el parametro ahi, por el centro»). `pieParametro` vacio = no sale. Recien copiado
@@ -386,7 +389,7 @@ public:
   /* Área útil de la ventana: lo que hay debajo de la pastilla sigue dibujando vídeo. */
   bool overlayVisible() const { return st_.overlayOn; }
   /* (v1.17) el cuadrito de los FPS del juego a la vista (sale aunque la pastilla este oculta) */
-  bool cuadroFps() const { return st_.fpsCuadro && (st_.fpsModo != 0 || !st_.monitor.empty()); }
+  bool cuadroFps() const { return st_.fpsCuadro && (st_.fpsModo != 0 || !st_.monitor.empty() || st_.fg.reales > 0.5f); }
   /* (v1.18) donde quedaron el cuadrito y el menu de la generacion de cuadros (pixeles del lienzo), para la region de
      entrada: el clic derecho en el cuadrito tiene que llegar al visor */
   bool cuadroFpsBounds(float *x, float *y, float *w, float *h) const;

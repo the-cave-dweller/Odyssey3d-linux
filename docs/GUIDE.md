@@ -174,6 +174,12 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   without root, and Integrations adds `MAKO_FG_HOST=` to the Steam line of games with `ENABLE_MAKO=1` (written once
   Steam is closed; not added if MAKO has its own or the game sets one by hand). `odysseyvk mako estado` shows what is
   found; `odysseyvk mako quitar` removes it. MAKO FG is licensed CC BY-NC 4.0 (non-commercial).
+- Real vs generated frames: `ODYSSEYVK_CONTAR_MAKO=1` (Integrations adds it with `ODYSSEYVK=1` and `ENABLE_MAKO=1`)
+  enables the meta-layer `VK_LAYER_odysseyvk_mako_contado` = [OdysseyVK layer, MAKO, `VK_LAYER_odysseyvk_contador`].
+  The OdysseyVK layer counts the game's presents above MAKO and the counter counts what MAKO presents below it, in
+  `/dev/shm/odysseyvk-fg-<pid>`; the FPS box shows *Real* and *Generated*. Same idea as vkDaedalus's present counter.
+  `install.sh` puts the counter in `~/.local/share/vulkan/explicit_layer.d` and the meta-layer next to the OdysseyVK
+  layer's manifest. `ODYSSEYVK_NO_CONTAR=1` turns it off.
 - Only one overlay in front at a time:
   - while the vkDaedalus menu is open (End), the OdysseyVK pill steps aside and the 3D goes flat, so the menu
     reads right. Its state is read from the file vkDaedalus's input hook keeps in `$XDG_RUNTIME_DIR`, so it needs

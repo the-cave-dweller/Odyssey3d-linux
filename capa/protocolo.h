@@ -77,6 +77,23 @@ typedef struct OdvkProfCabecera {
   uint32_t lectorTopeFps;                /* version 6: lo escribe el visor; copias por segundo, 0 = sin tope (124) */
 } OdvkProfCabecera;
 
+/* (v1.18) LA GENERACION DE CUADROS DE MAKO: cuantos cuadros presenta el juego (`reales`, los cuenta esta capa, encima de
+   MAKO) y cuantos llegan debajo de MAKO (`salida`, reales y generados: los cuenta el contador, una segunda capa de esta
+   misma biblioteca, VK_LAYER_odysseyvk_contador, que la meta-capa VK_LAYER_odysseyvk_mako_contado pone debajo de MAKO con
+   ODYSSEYVK_CONTAR_MAKO=1). Como el contador de vkDaedalus (VK_LAYER_VKDAEDALUS_present_counter). Una region aparte,
+   /odysseyvk-fg-<pid> (la de la profundidad solo existe con DLSS), que crea el contador; el visor saca los FPS de las
+   dos cuentas. Solo sumas atomicas en cada presentacion: ni registro ni nada mas */
+#define ODVK_FG_MAGIA 0x4746564fu   /* "OVFG" */
+#define ODVK_FG_VERSION 1u
+#define ODVK_FG_TAM 4096u
+typedef struct OdvkFgCuenta {
+  uint32_t magia, version;
+  int32_t pid;
+  uint32_t relleno;
+  uint64_t reales;   /* los del juego (encima de MAKO) */
+  uint64_t salida;   /* los que salen de MAKO (debajo): reales y generados */
+} OdvkFgCuenta;
+
 /* donde va cada cosa dentro de la region */
 static inline uint64_t odvkHueco(const OdvkProfCabecera *c, uint64_t i) {
   return ODVK_PROF_CABECERA + i * c->tamHueco;

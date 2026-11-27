@@ -3242,6 +3242,11 @@ static int cmdHudSelfTest(int argc, char **argv) {
     g.generadorJuego = caso != 6, g.instalando = caso == 5, g.avance = 0.4f;
     g.enPantalla = 180.0f;
   }
+  /* (v1.18) ODYSSEYVK_HUD_FG_CUENTA=reales,generados: lo del contador de MAKO en el cuadrito de los FPS */
+  if (const char *fc = std::getenv("ODYSSEYVK_HUD_FG_CUENTA")) {
+    float r = 0.0f, g = 0.0f;
+    if (std::sscanf(fc, "%f,%f", &r, &g) == 2) hud.state().fg.reales = r, hud.state().fg.generados = g;
+  }
   hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
   hud.state().hud = 3;
