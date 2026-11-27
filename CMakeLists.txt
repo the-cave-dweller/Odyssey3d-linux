@@ -175,6 +175,7 @@ add_executable(odysseyvk
   src/camera.cpp
   src/panel.cpp
   src/glutil.cpp
+  src/pngsave.cpp
   src/weave.cpp
   src/testsrc.cpp
   src/mpvsrc.cpp
@@ -192,6 +193,7 @@ add_executable(odysseyvk
   src/preferencias.cpp
   src/integraciones.cpp
   src/capasajenas.cpp
+  src/panel_ajustes.cpp
   src/idioma.cpp
   src/depth.cpp
   src/hoyos.cpp
@@ -261,6 +263,13 @@ if(OPENCV_FOUND)
   target_compile_definitions(odysseyvk PRIVATE HAVE_OPENCV=1)
 endif()
 
+# (v1.16) las caratulas de Juegos se leen con libjpeg (sin OpenCV: asi el panel ligero no lo carga)
+pkg_check_modules(JPEG libjpeg)
+if(JPEG_FOUND)
+  target_include_directories(odysseyvk PRIVATE ${JPEG_INCLUDE_DIRS})
+  target_link_libraries(odysseyvk PRIVATE ${JPEG_LIBRARIES})
+  target_compile_definitions(odysseyvk PRIVATE HAVE_JPEG=1)
+endif()
 if(PNG_FOUND)
   target_include_directories(odysseyvk PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(odysseyvk PRIVATE ${PNG_LIBRARIES})
@@ -315,6 +324,51 @@ configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/inst
 install(TARGETS VkLayer_odysseyvk_capa LIBRARY DESTINATION lib/odysseyvk)
 
 install(TARGETS odysseyvk RUNTIME DESTINATION bin)
+
+# --- (v1.16) el panel de ajustes, ligero -------------------------------------------------------------------
+# El mismo panel que `odysseyvk ajustes`, en un ejecutable que solo enlaza lo suyo (Wayland, FreeType, libjpeg,
+# xkbcommon, sd-bus): sin onnxruntime, OpenCV, mpv ni ffmpeg, que cargaban ~45 ms en cada apertura. Quien abre el
+# panel lo usa si esta junto a `odysseyvk`; si no, `odysseyvk ajustes`.
+if(WAYLAND_CLIENT_FOUND)
+  add_executable(odysseyvk-panel src/panel_main.cpp src/panel_ajustes.cpp src/overlay.cpp src/vkui.cpp src/preferencias.cpp
+                 src/integraciones.cpp src/wm.cpp src/ajuste.cpp src/idioma.cpp src/util.cpp src/atajos.cpp src/pngsave.cpp
+                 ${PROTO_GEN})
+  add_dependencies(odysseyvk-panel fuentes)
+  target_compile_definitions(odysseyvk-panel PRIVATE ODYSSEYVK_VERSION="${ODYSSEYVK_VERSION_STRING}" HAVE_WAYLAND_WM=1)
+  target_include_directories(odysseyvk-panel PRIVATE src ${PROTO_DIR} ${SP_DIR} ${WAYLAND_CLIENT_INCLUDE_DIRS})
+  target_link_libraries(odysseyvk-panel PRIVATE ${WAYLAND_CLIENT_LIBRARIES} pthread m)
+  if(WAYLAND_CURSOR_FOUND)
+    target_include_directories(odysseyvk-panel PRIVATE ${WAYLAND_CURSOR_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk-panel PRIVATE ${WAYLAND_CURSOR_LIBRARIES})
+    target_compile_definitions(odysseyvk-panel PRIVATE HAVE_WAYLAND_CURSOR=1)
+  endif()
+  if(LIBSYSTEMD_FOUND)
+    target_include_directories(odysseyvk-panel PRIVATE ${LIBSYSTEMD_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk-panel PRIVATE ${LIBSYSTEMD_LIBRARIES})
+    target_compile_definitions(odysseyvk-panel PRIVATE HAVE_SDBUS=1)
+  endif()
+  if(XKBCOMMON_FOUND)
+    target_include_directories(odysseyvk-panel PRIVATE ${XKBCOMMON_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk-panel PRIVATE ${XKBCOMMON_LIBRARIES})
+    target_compile_definitions(odysseyvk-panel PRIVATE HAVE_XKBCOMMON=1)
+  endif()
+  if(FREETYPE_FOUND)
+    target_include_directories(odysseyvk-panel PRIVATE ${FREETYPE_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk-panel PRIVATE ${FREETYPE_LIBRARIES})
+    target_compile_definitions(odysseyvk-panel PRIVATE HAVE_FREETYPE=1)
+  endif()
+  if(JPEG_FOUND)
+    target_include_directories(odysseyvk-panel PRIVATE ${JPEG_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk-panel PRIVATE ${JPEG_LIBRARIES})
+    target_compile_definitions(odysseyvk-panel PRIVATE HAVE_JPEG=1)
+  endif()
+  if(PNG_FOUND)
+    target_include_directories(odysseyvk-panel PRIVATE ${PNG_INCLUDE_DIRS})
+    target_link_libraries(odysseyvk-panel PRIVATE ${PNG_LIBRARIES})
+    target_compile_definitions(odysseyvk-panel PRIVATE HAVE_PNG=1)
+  endif()
+  install(TARGETS odysseyvk-panel RUNTIME DESTINATION bin)
+endif()
 install(FILES udev/70-odysseyvk.rules DESTINATION /etc/udev/rules.d)
 install(FILES calib/3DStackCorrection_A.png calib/3DStackCorrection_B.png DESTINATION share/odysseyvk/calib)
 if(EXISTS "${CMAKE_SOURCE_DIR}/modelos/face_detection_yunet_2023mar.onnx")

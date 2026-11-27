@@ -40,6 +40,36 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## `odysseyvk-panel`: el panel en un ejecutable ligero, que arranca en ~2 ms en vez de ~50 (v1.16)
+
+- Rodolfo, a la pregunta de si hacer un ejecutable aparte para quitar los ~47 ms de arranque: «Yes, do it».
+- **El panel, aparte**: `cmdAjustes` (y su señal de cierre) pasa de `main.cpp` a `src/panel_ajustes.cpp`, que
+  compilan los dos ejecutables. `odysseyvk ajustes` sigue igual.
+- **`odysseyvk-panel`** (`src/panel_main.cpp`): el mismo arranque que `odysseyvk` (los datos del nombre viejo, el
+  idioma, Wayland) y luego el panel, con los mismos argumentos.
+  - Solo enlaza lo suyo: Wayland, FreeType, libjpeg, libpng, xkbcommon y sd-bus, 18 bibliotecas frente a 285. Lleva
+    `overlay`, `vkui`, `preferencias`, `integraciones`, `wm`, `ajuste`, `idioma`, `util` y `atajos`.
+  - Para no arrastrar ni OpenCV ni OpenGL, dos cambios que valen para los dos ejecutables:
+    - las carátulas de Juegos se leen con libjpeg (descomprimidas ya a la mitad y bajadas a 280 × 420 con la media
+      de cada bloque, como el INTER_AREA de OpenCV de antes); OpenCV queda solo de reserva si no hay libjpeg;
+    - `glPngSave` pasa a `src/pngsave.cpp`, sin GL.
+- **Quien abre el panel lo prefiere** (`execPanelDeAjustes` en `util`): el engranaje de la pastilla, el icono de
+  la bandeja y el aviso de que falta la red. Usan `odysseyvk-panel` si está junto a `odysseyvk`, y si no
+  `odysseyvk ajustes`. `ODYSSEYVK_PANEL_PESADO=1` obliga a lo segundo, para comparar. El lanzador del menú
+  (`odysseyvk.desktop`) abre `odysseyvk-panel` y `odysseyvk-panel --juegos`. `install.sh` lo instala con
+  `cmake --install`, en `bin`, junto a `odysseyvk`.
+- **Medido**:
+  - sin compositor (arranca, no conecta y sale), mediana de 10: `odysseyvk ajustes` 47,9 ms, `odysseyvk-panel`
+    1,1 ms;
+  - en el KWin aparte, desde que arranca el proceso hasta que empieza el panel: 51 ms frente a 2-7.
+  - Con lo de la entrada de abajo, del lanzamiento al panel puesto pasa de ~150 ms a ~30.
+- **Probado**:
+  - qué abre `execPanelDeAjustes`: el ligero si está, el de siempre si no está o con `ODYSSEYVK_PANEL_PESADO=1`;
+  - el ligero en el KWin aparte: una tesela por `clic` (cambia `fps_juego`), Juegos con sus carátulas (libjpeg),
+    la flecha de volver a la pastilla y cierre con salida 0;
+  - `cmake --install` a una carpeta de prueba deja `bin/odysseyvk-panel`.
+- **Sin probar**: abierto desde la pastilla del visor de verdad y desde la bandeja.
+
 ## El panel se abre en 14-25 ms en vez de 87-100, y se cierra con su animación (v1.16)
 
 - Rodolfo: «optimize the opening and closing of the layer to your best».

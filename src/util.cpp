@@ -283,6 +283,34 @@ std::string usbIdToHex(uint16_t v) {
 #include <filesystem>
 #include <unistd.h>
 
+void execPanelDeAjustes(const std::vector<std::string> &args) {
+  char propio[4096] = {0};
+  const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
+  const std::string exe = n > 0 ? std::string(propio, (size_t)n) : std::string("odysseyvk");
+  const std::string ligero = exe.substr(0, exe.rfind('/') + 1) + "odysseyvk-panel";
+  const char *pesado = std::getenv("ODYSSEYVK_PANEL_PESADO");
+  std::vector<std::string> v;
+  if (!(pesado && pesado[0] == '1') && ::access(ligero.c_str(), X_OK) == 0) {
+    v.push_back(ligero);
+  } else {
+    v.push_back(exe);
+    v.push_back("ajustes");
+  }
+  v.insert(v.end(), args.begin(), args.end());
+  std::vector<char *> argv;
+  for (std::string &a : v) argv.push_back(a.data());
+  argv.push_back(nullptr);
+  ::execv(argv[0], argv.data());
+  if (v[0] == ligero) {   /* el ligero no arranco: el de siempre */
+    std::vector<std::string> w = {exe, "ajustes"};
+    w.insert(w.end(), args.begin(), args.end());
+    std::vector<char *> argw;
+    for (std::string &a : w) argw.push_back(a.data());
+    argw.push_back(nullptr);
+    ::execv(argw[0], argw.data());
+  }
+}
+
 std::string ensureWaylandEnv() {
   const char *wd = getenv("WAYLAND_DISPLAY");
   if (wd && *wd) return wd;

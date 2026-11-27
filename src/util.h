@@ -74,5 +74,10 @@ std::string usbIdToHex(uint16_t v);
 /* Asegura XDG_RUNTIME_DIR + WAYLAND_DISPLAY en el entorno del proceso.
    Devuelve el nombre del socket ("wayland-1") o vacío si no hay sesión Wayland. */
 std::string ensureWaylandEnv();
+/* (v1.16) abre el panel de ajustes con estos argumentos («--juegos», «--desde-pastilla»...) en este proceso, que se
+   sustituye: con `odysseyvk-panel` si esta junto a este ejecutable (sin las bibliotecas del visor: arranca en ~1 ms
+   en vez de ~48), si no con `odysseyvk ajustes`. ODYSSEYVK_PANEL_PESADO=1 obliga a lo segundo. Solo vuelve si no
+   pudo arrancar ninguno */
+void execPanelDeAjustes(const std::vector<std::string> &args);
 
 #endif

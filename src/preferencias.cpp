@@ -1,5 +1,7 @@
 /* preferencias.cpp — ver preferencias.h. */
 #include "preferencias.h"
+
+#include <stdexcept>
 #include "idioma.h"
 
 #include <algorithm>
@@ -30,7 +32,9 @@ extern char **environ;
 #include "integraciones.h"
 #include "util.h"
 
-#ifdef HAVE_OPENCV
+#if defined(HAVE_JPEG)
+#include <jpeglib.h>
+#elif defined(HAVE_OPENCV)
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #endif
@@ -86,7 +90,7 @@ std::vector<std::string> todosVdf(const std::string &txt, const std::string &cla
 /* La caratula vertical de un juego en la cache de Steam: `library_600x900.jpg`, suelta o dentro de
    una carpeta con nombre de huella; si no, `library_capsule.jpg`, que en la cache nueva es lo mismo. */
 void cargaCaratula(const std::string &raizSteam, Juego &j) {
-#ifdef HAVE_OPENCV
+#if defined(HAVE_JPEG) || defined(HAVE_OPENCV)
   const std::string dir = raizSteam + "/appcache/librarycache/" + j.id;
   std::error_code ec;
   std::string mejor, segunda;
@@ -98,6 +102,60 @@ void cargaCaratula(const std::string &raizSteam, Juego &j) {
   }
   const std::string ruta = !mejor.empty() ? mejor : segunda;
   if (ruta.empty()) return;
+#if defined(HAVE_JPEG)
+  /* (v1.16) con libjpeg, sin OpenCV: asi el panel ligero (odysseyvk-panel) no carga OpenCV. Se descomprime ya a la
+     mitad o menos (la de Steam mide 600 x 900: sale 300 x 450) y se baja a 280 x 420 con la media de cada bloque,
+     como el INTER_AREA de antes */
+  FILE *f = std::fopen(ruta.c_str(), "rbe");
+  if (!f) return;
+  jpeg_decompress_struct cinfo{};
+  jpeg_error_mgr jerr{};
+  cinfo.err = jpeg_std_error(&jerr);
+  jerr.error_exit = [](j_common_ptr c) { throw std::runtime_error(c->err->jpeg_message_table[c->err->msg_code]); };
+  std::vector<uint8_t> src;
+  int sw = 0, sh = 0;
+  try {
+    jpeg_create_decompress(&cinfo);
+    jpeg_stdio_src(&cinfo, f);
+    jpeg_read_header(&cinfo, TRUE);
+    cinfo.out_color_space = JCS_RGB;
+    cinfo.scale_num = 1;
+    cinfo.scale_denom = 1;
+    while (cinfo.scale_denom < 8 && (int)cinfo.image_width / (int)(cinfo.scale_denom * 2) >= 280 &&
+           (int)cinfo.image_height / (int)(cinfo.scale_denom * 2) >= 420)
+      cinfo.scale_denom *= 2;
+    jpeg_start_decompress(&cinfo);
+    sw = (int)cinfo.output_width, sh = (int)cinfo.output_height;
+    src.resize((size_t)sw * sh * 3u);
+    while (cinfo.output_scanline < cinfo.output_height) {
+      JSAMPROW fila = src.data() + (size_t)cinfo.output_scanline * sw * 3u;
+      jpeg_read_scanlines(&cinfo, &fila, 1);
+    }
+    jpeg_finish_decompress(&cinfo);
+  } catch (const std::exception &) {
+    sw = sh = 0;
+  }
+  jpeg_destroy_decompress(&cinfo);
+  std::fclose(f);
+  if (sw < 16 || sh < 16) return;
+  const int dw = 280, dh = 420;
+  auto px = std::make_shared<std::vector<uint8_t>>((size_t)dw * dh * 4u);
+  for (int y = 0; y < dh; y++) {
+    const int y0 = y * sh / dh, y1 = std::max(y0 + 1, (y + 1) * sh / dh);
+    for (int x = 0; x < dw; x++) {
+      const int x0 = x * sw / dw, x1 = std::max(x0 + 1, (x + 1) * sw / dw);
+      unsigned suma[3] = {0, 0, 0}, n = 0;
+      for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++, n++)
+          for (int c = 0; c < 3; c++) suma[c] += src[((size_t)yy * sw + xx) * 3u + c];
+      uint8_t *d = px->data() + ((size_t)y * dw + x) * 4u;
+      for (int c = 0; c < 3; c++) d[c] = (uint8_t)((suma[c] + n / 2) / n);
+      d[3] = 255;
+    }
+  }
+  j.cara = px;
+  j.caraW = dw, j.caraH = dh;
+#else
   cv::Mat m = cv::imread(ruta, cv::IMREAD_COLOR);
   if (m.empty() || m.cols < 16 || m.rows < 16) return;
   cv::Mat chico, rgba;
@@ -107,6 +165,7 @@ void cargaCaratula(const std::string &raizSteam, Juego &j) {
   for (int y = 0; y < rgba.rows; y++) std::memcpy(px->data() + (size_t)y * rgba.cols * 4u, rgba.ptr(y), (size_t)rgba.cols * 4u);
   j.cara = px;
   j.caraW = rgba.cols, j.caraH = rgba.rows;
+#endif
 #else
   (void)raizSteam;
   (void)j;

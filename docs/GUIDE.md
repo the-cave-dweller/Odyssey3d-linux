@@ -8,8 +8,8 @@ Install and overview: [README](../README.md).
 ```sh
 odysseyvk doctor                     # hardware, permissions and panel diagnosis
 odysseyvk serve                      # the service: watches fullscreen windows (runs as a user unit)
-odysseyvk ajustes                    # the floating settings panel (also from the app menu)
-odysseyvk ajustes --juegos           # the panel open on the Games tab
+odysseyvk-panel                      # the settings panel (also from the app menu; `odysseyvk ajustes` is the same, slower to start)
+odysseyvk-panel --juegos             # the panel open on the Games tab
 odysseyvk integraciones [ver|escribir]  # Steam launch options per game: show them / write the pending ones
 odysseyvk play video_sbs.mkv         # play a stereo file with the built-in mpv viewer
 odysseyvk test                       # fullscreen calibration pattern

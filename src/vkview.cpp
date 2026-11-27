@@ -200,8 +200,9 @@ static void abrirPanelDeAjustes() {
   if (pid == 0) {
     ::setsid();
     if (::fork() != 0) ::_exit(0);
-    /* (v1.16) desde la pastilla: el panel lleva la flecha de volver a ella, junto al aspa */
-    ::execl(exe.c_str(), exe.c_str(), "ajustes", "--desde-pastilla", (char *)nullptr);
+    /* (v1.16) desde la pastilla: el panel lleva la flecha de volver a ella, junto al aspa; y el ligero si esta */
+    execPanelDeAjustes({"--desde-pastilla"});
+    (void)exe;
     ::_exit(127);
   }
   if (pid > 0) {
