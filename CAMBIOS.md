@@ -34,6 +34,12 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## El panel, otra vez a pantalla completa en el escritorio (v1.16)
+
+- Rodolfo: «make the desktop version fullscreen again by default». La ventana movible del escritorio queda detrás
+  de `ODYSSEYVK_PANEL_VENTANA=1`; sin ella el panel es el marco de vkDaedalus a pantalla completa en todas partes.
+  `ODYSSEYVK_PANEL_COMPLETO` ya no hace falta. El arreglo de la escala del ratón (120 avos) sigue valiendo.
+
 ## Las aplicaciones de captura de pantalla no entran al 3D (v1.16)
 
 - Rodolfo: «excluye las aplicaciones de captura de pantalla del 3d». Spectacle, por ejemplo, tapa la pantalla
