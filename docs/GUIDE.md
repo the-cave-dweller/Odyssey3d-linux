@@ -178,6 +178,8 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   enables the meta-layer `VK_LAYER_odysseyvk_mako_contado` = [OdysseyVK layer, MAKO, `VK_LAYER_odysseyvk_contador`].
   The OdysseyVK layer counts the game's presents above MAKO and the counter counts what MAKO presents below it, in
   `/dev/shm/odysseyvk-fg-<pid>`; the FPS box shows *Real* and *Generated*. Same idea as vkDaedalus's present counter.
+  Integrations doesn't add it to games with Neural Forge: the meta-layer would pull MAKO above Neural Forge (implicit
+  layers load in discovery order, closest to the game first), and Neural Forge would then run its model on generated frames too.
   `install.sh` puts the counter in `~/.local/share/vulkan/explicit_layer.d` and the meta-layer next to the OdysseyVK
   layer's manifest. `ODYSSEYVK_NO_CONTAR=1` turns it off.
 - Since 1.18, Integrations puts `odysseyvk juego` before `%command%` in games with Neural Forge. It runs the game and

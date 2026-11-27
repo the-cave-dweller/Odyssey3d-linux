@@ -50,6 +50,27 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## El contador de MAKO ya no se pone con Neural Forge: Stray y el orden de las capas (v1.18)
+
+- Rodolfo: «diagnose stray crash as it did not happened before» y «layering issues it seems, please help me fix».
+- **Lo medido** (el registro del núcleo, el de Steam y el contenedor del juego):
+  - Los cuatro Xid 13 de Stray (11:14, 11:20, 11:21 y 12:02) llegan un segundo después de que Neural Forge carga su modelo,
+    al construir su red a 1920x1080; luego todo da -4 (dispositivo perdido). Siempre en Stray: el juego 730390 corrió seis
+    veces con MAKO y Neural Forge (09:20-09:54) y su red se construyó cada vez.
+  - Stray no corría con Neural Forge ni con MAKO antes (las del 25-nov no los cargan); hoy los lleva los dos, y desde las
+    09:19 `ENABLE_MAKO=1` con `MAKO_FG_HOST`. A las 13:09, sin el servidor del modelo, no hubo Xid pero sí paradas de 10 s:
+    la 4090 al 100 % y 407 W con el juego, MAKO FG a 4K y Neural Forge (unos 20 ms de tarjeta por cuadro).
+  - Su línea de Steam sigue con Neural Forge aunque en sus Integraciones está apagado: con Steam abierto se queda pendiente
+    (`integraciones-pendiente`) hasta que se cierre.
+  - El orden dentro del contenedor (`overrides/share/vulkan/implicit_layer.d`): 00 OdysseyVK, 01 la meta-capa del contador,
+    02 Neural Forge, 03-06 los de Steam, 10 MAKO... La primera es la más cerca del juego: juego → OdysseyVK → Neural Forge →
+    overlay de Steam → MAKO → controlador.
+- **El cambio**: Integraciones ya no pone `ODYSSEYVK_CONTAR_MAKO=1` con Neural Forge (y lo quita de una línea que lo traiga).
+  La meta-capa del contador (la 01) traía a MAKO encima de Neural Forge, que pasaría su modelo también por los cuadros
+  generados. Sin ella, Neural Forge solo ve los de verdad y el cuadrito reparte los FPS con el multiplicador.
+- Probado con `odysseyvk integraciones linea`: con Neural Forge y MAKO sale sin el contador (y con `odysseyvk juego`), sin
+  Neural Forge con él, y una línea que ya lo llevaba lo pierde.
+
 ## Los efectos de ReShade en el visor: una pestaña Efectos y el icono de cada carátula (v1.18)
 
 - Rodolfo: «Add a shaders icon to each game on the games tab menu, use the code from daedalus to get them working, and

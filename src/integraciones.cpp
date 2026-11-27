@@ -485,7 +485,13 @@ std::string linea(const Ajustes &a, const std::string &nfExe, const std::string 
       if (const std::string h = mako::hostParaJuegos(); !h.empty()) vars.push_back("MAKO_FG_HOST=" + citar(h));
     /* (v1.18) con la capa de OdysseyVK y MAKO, la meta-capa que cuenta los cuadros generados (la capa encima de MAKO y su
        contador debajo: ver el contador en capa/odysseyvk_capa.cpp) */
-    if (std::strcmp(v.clave, "mako") == 0 && si("odysseyvk")) vars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
+    /* (v1.18) Pero no con Neural Forge (Rodolfo: «layering issues it seems, please help me fix»). MEDIDO el 27-nov dentro
+       del contenedor de Steam de Stray: el cargador pone las capas implicitas en el orden en que las encuentra (00 la de
+       OdysseyVK, 01 la meta-capa del contador, 02 Neural Forge... 10 MAKO), y la primera es la mas cerca del juego. Sin el
+       contador: juego → OdysseyVK → Neural Forge → MAKO, y Neural Forge solo ve los cuadros de verdad. Con el contador, la
+       meta-capa (la 01) trae a MAKO encima de Neural Forge, que entonces pasaria su modelo por cada cuadro generado, el
+       doble o el triple de trabajo en la misma tarjeta. Sin el contador, el cuadrito reparte los FPS con el multiplicador */
+    if (std::strcmp(v.clave, "mako") == 0 && si("odysseyvk") && !si("neural_forge")) vars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
     /* (v1.18) el modelo de Neural Forge en la segunda tarjeta: la que trajo su linea o la de secundariaNf */
     if (std::strcmp(v.clave, "neural_forge") == 0 && si("nf_offload")) {
       Secundaria s;
@@ -667,7 +673,8 @@ bool leerLinea(const std::string &lin, Leida &l) {
      mientras este instalado). Otro que se puso a mano se queda con las demas y no se pisa */
   if (!host.empty() && (a["mako"] != "1" || host != mako::carpetaGenerador() + "/mako-fg-host"))
     otrosVars.push_back("MAKO_FG_HOST=" + citar(host));
-  /* ODYSSEYVK_CONTAR_MAKO=1 sale de ODYSSEYVK=1 con ENABLE_MAKO=1: sin los dos, se queda con las demas */
+  /* ODYSSEYVK_CONTAR_MAKO=1 sale de ODYSSEYVK=1 con ENABLE_MAKO=1 (y sin Neural Forge): sin los dos, se queda con las demas.
+     Con los dos y Neural Forge se quita: lo puso OdysseyVK antes de la regla de Neural Forge */
   if (contar && (a["mako"] != "1" || a["odysseyvk"] != "1")) otrosVars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
   a["otros"] = unir(otrosVars);
   /* (v1.18) la envoltura de Neural Forge: sale de NEURAL_FORGE_ENABLE=1 (linea() la pone), no es un comando propio */
