@@ -3162,6 +3162,10 @@ static int cmdAjustes(int argc, char **argv) {
     if (sinIntegraciones) {
       if (st.pestanaGris.size() > 2) st.pestanaGris[2] = true;
       if (st.pestana == 2) st.pestana = 0;
+      /* (v1.16) sin juego a la vista (un video en 3D) tampoco Juegos (Rodolfo: «si no se esta viendo un juego que la
+         pestaña juegos tambien sea gris, por ejemplo en un video») */
+      if (juegoActual.empty() && st.pestanaGris.size() > 1) st.pestanaGris[1] = true;
+      if (juegoActual.empty() && st.pestana == 1) st.pestana = 0;
       for (size_t k = 0; k < st.items.size() && k < ids.size(); k++)
         if (st.items[k].tipo == Hud::ItemPanel::Juego) {
           st.items[k].ayudas.clear();
@@ -3758,6 +3762,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
       hud.state().pestanaGris.assign(hud.state().pestanas.size(), false);
       hud.state().pestanaGris[2] = true;
       const char *jA = std::getenv("ODYSSEYVK_HUD_JUEGO");
+      if (!jA) hud.state().pestanaGris[1] = true;   /* sin juego (un video): Juegos tambien en gris */
       for (size_t k = 0; k < hud.state().items.size() && k < ids.size(); k++)
         if (hud.state().items[k].tipo == Hud::ItemPanel::Juego) {
           hud.state().items[k].ayudas.clear();

@@ -52,8 +52,10 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     luminancia, oscurecida), con el nombre tenue, y no se pican: desde dentro de un juego no se arranca otro.
     Ninguna lleva el engranaje que lleva a Integraciones;
   - el juego de ahora es el de la ventana activa (`steam_app_<id>`) o, con una sesión 3D, el de la ventana que se
-    ve en 3D: el hub apunta su uuid en `ventana` y el panel lo busca en la lista de ventanas. Con un vídeo no hay
-    juego de ahora: todas en gris.
+    ve en 3D: el hub apunta su uuid en `ventana` y el panel lo busca en la lista de ventanas;
+  - sin juego a la vista (un vídeo en 3D), Juegos también va en gris, como Integraciones (Rodolfo: «si no se esta
+    viendo un juego que la pestaña juegos tambien sea gris, por ejemplo en un video»). En `ctl hud`,
+    `ODYSSEYVK_HUD_SESION=1` sin `ODYSSEYVK_HUD_JUEGO`.
 - **Sin opciones repetidas**: en el panel nuevo, las filas que ya tienen su tesela salen de la lista de Ajustes
   (Usar la profundidad de DLSS, HUD en el plano, el cuadro de FPS, Seguir la cabeza, Idioma y la de la
   actualización), y con ellas el rótulo de una sección que se quede vacía («Juegos con DLSS»). En el panel de
