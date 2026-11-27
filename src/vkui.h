@@ -349,6 +349,7 @@ private:
     const uint8_t *px = nullptr;
     int w = 0, h = 0;
     float radio = 0.0f;
+    size_t orden = 0;        /* (v1.14) cuantos vertices habia en v_ al ponerla: se pinta en su turno, no encima de todo */
   };
   std::vector<ImagenCpu> imagenes_;
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,

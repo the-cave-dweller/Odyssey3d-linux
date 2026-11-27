@@ -28,6 +28,18 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
   las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
 
+## Las carátulas ya no tapan la ayuda del panel (v1.14)
+
+- Rodolfo, con una captura: la ayuda del botón Copiar (la que sale al pasar el ratón) quedaba **debajo** de las
+  carátulas de los juegos; la de Red Dead Redemption 2 tapaba media frase. El panel se pinta en la CPU
+  (`Hud::pintarCpu`) y pintaba primero todo lo demás y al final las carátulas, «encima de todo lo anterior»: lo que
+  se dibuja después de la lista (la ayuda, la lista de los idiomas) quedaba debajo de ellas.
+- Ahora cada carátula apunta cuánto del panel se había dibujado antes que ella y se pinta en su turno: encima de
+  lo de antes (su marco al pasar el ratón sigue asomando 3 puntos por fuera) y debajo de lo de después. Debajo de
+  la carátula solo van el nombre y el interruptor 3D | 2D, que no la pisan.
+- Probado con la biblioteca de Steam de Rodolfo (enlazada, sin tocarla, en un HOME aparte) y el puntero quieto
+  sobre Copiar (`ODYSSEYVK_HUD_RATON`): la ayuda sale entera por encima de las carátulas de Yakuza y de Red Dead.
+
 ## El parámetro de Steam en el pie de la pestaña Juegos, con un botón Copiar (v1.14)
 
 - Rodolfo: «On the bottom of games tab let user know to add the steam parameter, offer a copy button for it», y al

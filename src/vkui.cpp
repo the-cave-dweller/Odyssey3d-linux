@@ -564,7 +564,11 @@ float Hud::muestra(float u, float v) const {
    su opacidad. Un color por cuadro y sin espejos: la interfaz no usa otra cosa. */
 void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> &acum) const {
   acum.assign((size_t)ancho * (size_t)alto * 4u, 0.0f);
-  for (size_t i = 0; i + 5 < v_.size(); i += 6) {
+  /* (v1.14) cada caratula se pinta en su turno: despues de lo que se dibujo antes que ella y debajo de lo que vino
+     despues. Antes iban todas al final, encima de todo, y tapaban la ayuda que sale al pasar el raton (MEDIDO por
+     Rodolfo: la caratula de Red Dead Redemption 2 sobre la ayuda del boton Copiar del pie de Juegos) */
+  auto pintaCuadros = [&](size_t desde, size_t hasta) {
+  for (size_t i = desde; i + 5 < hasta; i += 6) {
     float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
     float u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
     for (int k = 0; k < 6; k++) {
@@ -615,9 +619,10 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
       }
     }
   }
-  /* las caratulas: encima de todo lo anterior, con las esquinas redondeadas por cuenta propia */
-  for (const ImagenCpu &im : imagenes_) {
-    if (!im.px || im.w <= 0 || im.h <= 0) continue;
+  };
+  /* una caratula, con las esquinas redondeadas por cuenta propia */
+  auto pintaImagen = [&](const ImagenCpu &im) {
+    if (!im.px || im.w <= 0 || im.h <= 0) return;
     const float cx0 = im.caja.x * sc_, cy0 = im.caja.y * sc_, cw = im.caja.w * sc_, ch = im.caja.h * sc_;
     const float rx0 = std::max(cx0, im.recorte.x * sc_), ry0 = std::max(cy0, im.recorte.y * sc_);
     const float rx1 = std::min(cx0 + cw, (im.recorte.x + im.recorte.w) * sc_);
@@ -648,7 +653,14 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
         d[3] = a + d[3] * (1.0f - a);
       }
     }
+  };
+  size_t hecho = 0;
+  for (const ImagenCpu &im : imagenes_) {
+    const size_t hasta = std::min(im.orden, v_.size());
+    if (hasta > hecho) pintaCuadros(hecho, hasta), hecho = hasta;
+    pintaImagen(im);
   }
+  pintaCuadros(hecho, v_.size());
 }
 
 const Hud::Glyph *Hud::glifo(unsigned cp) const {
@@ -1779,7 +1791,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         const Rect cara{z.caja.x, y, z.caja.w, z.caja.w * 1.5f};
         if (hov) mask9({cara.x - 3.0f, cara.y - 3.0f, cara.w + 6.0f, cara.h + 6.0f}, 1, 13.0f, accent[0], accent[1], accent[2], 1.0f);
         if (it.img && it.imgW > 0 && it.imgH > 0) {
-          imagenes_.push_back({cara, panelCuerpo_, it.img->data(), it.imgW, it.imgH, 10.0f});
+          imagenes_.push_back({cara, panelCuerpo_, it.img->data(), it.imgW, it.imgH, 10.0f, v_.size()});
         } else {
           unsigned semilla = 2166136261u;
           for (unsigned char ch : it.rotulo) semilla = (semilla ^ ch) * 16777619u;
