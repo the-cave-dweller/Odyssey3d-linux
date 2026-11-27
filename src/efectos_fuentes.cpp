@@ -221,6 +221,7 @@ struct Local {
   std::map<std::string, std::string> shaDe;                  /* «Shaders/SweetFX/CRT.fx» → su SHA-1 de git */
   std::set<std::string> shas;                                /* todos */
   std::map<std::string, std::vector<std::string>> porNombre;  /* «shaders/crt.fx» (lo de arriba y el nombre) → sus rutas */
+  std::map<std::string, std::vector<std::string>> porSha;     /* un contenido → donde esta */
 };
 Local indexar(const std::string &carpeta) {
   Local l;
@@ -238,6 +239,7 @@ Local indexar(const std::string &carpeta) {
       l.shaDe[rel] = sha;
       l.shas.insert(sha);
       l.porNombre[minusculas(std::string(arriba) + "/" + it->path().filename().string())].push_back(rel);
+      l.porSha[sha].push_back(rel);
     }
   }
   return l;
@@ -264,11 +266,16 @@ std::string rutaLocal(const Fuente &f, const std::string &ruta) {
   return {};
 }
 
+/* lo de arriba (Shaders o Textures) y el nombre, sin mayusculas: dos archivos con la misma clave serian un duplicado */
+std::string claveNombre(const std::string &rel) {
+  const size_t barra = rel.find('/');
+  return minusculas(rel.substr(0, barra + 1) + nombreBase(rel));
+}
+
 struct Plan {
   struct Pieza {
     Remoto r;
     std::string rel;
-    bool cambia = false;   /* reemplaza el que hay en `rel` */
   };
   std::vector<Pieza> bajar;
   int nuevos = 0, cambian = 0, conflictos = 0, total = 0;
@@ -287,22 +294,23 @@ Plan planear(const Fuente &f, const Local &l, const std::string &tmp) {
     p.error = e.empty() ? "arbol ilegible" : e;
     return p;
   }
-  std::set<std::string> vistas;
+  std::set<std::string> vistas, shasPlan, nombresPlan;
   for (const Remoto &r : rs) {
     const std::string rel = rutaLocal(f, r.ruta);
     if (rel.empty() || !vistas.insert(rel).second) continue;
     p.total++;
-    if (l.shas.count(r.sha)) continue;   /* ese contenido ya esta (aqui o en otro sitio): nada */
-    if (l.shaDe.count(rel)) {
-      p.bajar.push_back({r, rel, true}), p.cambian++, p.bytes += r.tam;
+    /* ese contenido ya esta (aqui o en otro sitio, o ya va en esta misma bajada): nada */
+    if (l.shas.count(r.sha) || shasPlan.count(r.sha)) continue;
+    /* (v1.18) Rodolfo: «dont replace old ones, delete duplicated downloaded files». Si ya hay uno con ese nombre (en el
+       mismo sitio, distinto, o en otro), se queda el que hay y este no se baja; tampoco dos con el mismo nombre en una
+       bajada */
+    const std::string clave = claveNombre(rel);
+    if (l.shaDe.count(rel) || l.porNombre.count(clave) || nombresPlan.count(clave)) {
+      p.conflictos++;
       continue;
     }
-    const size_t barra = rel.find('/');
-    if (l.porNombre.count(minusculas(rel.substr(0, barra + 1) + nombreBase(rel)))) {
-      p.conflictos++;   /* se llama como otro tuyo en otro sitio: no se duplica */
-      continue;
-    }
-    p.bajar.push_back({r, rel, false}), p.nuevos++, p.bytes += r.tam;
+    shasPlan.insert(r.sha), nombresPlan.insert(clave);
+    p.bajar.push_back({r, rel}), p.nuevos++, p.bytes += r.tam;
   }
   return p;
 }
@@ -353,6 +361,7 @@ int comprobarFuentes(const std::vector<std::string> &ids, bool decir) {
   }
   escribirEstado("efectos-comprobando", "estado = comprobando\npid = " + std::to_string((long)::getpid()) + "\nhora = " +
                                             std::to_string(horaComprobacion()) + "\n");
+  limpiarDuplicados(decir);   /* lo bajado que haya quedado duplicado, fuera antes de mirar */
   const Local l = indexar(carpeta);
   const std::string tmp = carpetaTmp();
   int fallos = 0;
@@ -365,7 +374,7 @@ int comprobarFuentes(const std::vector<std::string> &ids, bool decir) {
       std::printf("  %-16s %-34s %s\n", f.id, f.repo,
                   !p.error.empty() ? ("error: " + p.error).c_str()
                                    : (std::to_string(p.total) + " archivos · " + std::to_string(p.nuevos) + " nuevos · " +
-                                      std::to_string(p.cambian) + " cambiados · " + std::to_string(p.conflictos) + " con tu nombre · " +
+                                      std::to_string(p.conflictos) + " con un nombre que ya tienes · " +
                                       std::to_string(p.bytes / 1024) + " KiB que bajar")
                                          .c_str());
     std::error_code ec;
@@ -412,35 +421,88 @@ bool bajarFuente(const std::string &id, std::string *err) {
     if (!leer(destino, contenido) || blobDe(contenido) != pz.r.sha) return falla(pz.r.ruta + ": no es el que dice GitHub");
     anotar("bajando", ++hecho, (long)p.bajar.size(), "");
   }
-  /* y a su sitio: lo que se cambia, con copia; nada que ya este se toca */
-  char fecha[32];
-  const time_t t = std::time(nullptr);
-  std::strftime(fecha, sizeof fecha, "%Y%m%d-%H%M%S", std::localtime(&t));
-  const std::string copias = rutaEstadoOdyssey("efectos-copia") + "/" + fecha;
+  /* y a su sitio: solo lo que no esta; nunca se pisa uno que ya haya (si aparecio mientras, se deja el que hay). Cada uno
+     se apunta en efectos-bajados: es lo unico que limpiarDuplicados puede borrar */
+  int puestos = 0;
+  std::ofstream bajados(rutaEstadoOdyssey("efectos-bajados"), std::ios::app);
   for (const Plan::Pieza &pz : p.bajar) {
     const fs::path destino = fs::path(carpeta) / pz.rel;
+    if (fs::exists(destino, ec)) continue;
     fs::create_directories(destino.parent_path(), ec);
-    if (pz.cambia && fs::exists(destino, ec)) {
-      const fs::path copia = fs::path(copias) / pz.rel;
-      fs::create_directories(copia.parent_path(), ec);
-      fs::copy_file(destino, copia, fs::copy_options::overwrite_existing, ec);
-      if (ec) return falla(pz.rel + ": no se pudo copiar el de antes");
-    }
     const fs::path nuevo = destino.string() + ".odysseyvk-nuevo";
     fs::copy_file(fs::path(lote) / pz.rel, nuevo, fs::copy_options::overwrite_existing, ec);
     if (ec) return falla(pz.rel + ": " + ec.message());
     fs::rename(nuevo, destino, ec);
     if (ec) return falla(pz.rel + ": " + ec.message());
+    bajados << id << '\t' << pz.rel << '\t' << pz.r.sha << '\n';
+    puestos++;
   }
+  bajados.close();
   fs::remove_all(lote, ec);
-  std::printf("[efectos] %s: %d nuevos y %d cambiados puestos en %s%s\n", id.c_str(), p.nuevos, p.cambian, carpeta.c_str(),
-              p.cambian ? (" (los de antes, en " + copias + ")").c_str() : "");
+  std::printf("[efectos] %s: %d nuevos puestos en %s (%d con un nombre que ya tenias, sin bajar)\n", id.c_str(), puestos, carpeta.c_str(),
+              p.conflictos);
+  limpiarDuplicados(true);
   /* y lo que queda (nada, si todo fue bien) */
   Plan despues = planear(*f, indexar(carpeta), tmp);
   fs::remove(tmp + "/arbol-" + id + ".json", ec);
   anotarFuente(id, despues);
   anotar("lista", hecho, (long)p.bajar.size(), "");
   return true;
+}
+
+int limpiarDuplicados(bool decir) {
+  /* (v1.18) Rodolfo: «delete duplicated downloaded files». De lo que bajo OdysseyVK (efectos-bajados), lo que tenga otro
+     igual (mismo contenido) o con su nombre (en Shaders/ o en Textures/) se borra: lo mas nuevo primero, asi entre dos
+     bajados se queda el de antes. Lo tuyo no se toca nunca */
+  const std::string carpeta = efectos::carpeta();
+  if (carpeta.empty()) return 0;
+  std::vector<std::string> lineas;
+  {
+    std::ifstream f(rutaEstadoOdyssey("efectos-bajados"));
+    std::string ln;
+    while (std::getline(f, ln))
+      if (!ln.empty()) lineas.push_back(ln);
+  }
+  if (lineas.empty()) return 0;
+  Local l = indexar(carpeta);
+  std::vector<bool> quedan(lineas.size(), true);
+  int borrados = 0;
+  for (size_t k = lineas.size(); k-- > 0;) {
+    std::vector<std::string> c;
+    std::stringstream ss(lineas[k]);
+    std::string x;
+    while (std::getline(ss, x, '\t')) c.push_back(x);
+    if (c.size() < 2) {
+      quedan[k] = false;
+      continue;
+    }
+    const std::string &rel = c[1];
+    const auto it = l.shaDe.find(rel);
+    if (it == l.shaDe.end()) {   /* ya no esta: fuera de la lista */
+      quedan[k] = false;
+      continue;
+    }
+    const std::string sha = it->second, clave = claveNombre(rel);
+    if (l.porSha[sha].size() < 2 && l.porNombre[clave].size() < 2) continue;
+    std::error_code ec;
+    const fs::path ruta = fs::path(carpeta) / rel;
+    fs::remove(ruta, ec);
+    if (ec) continue;
+    /* y sus carpetas, si quedan vacias (sin pasar de Shaders/ o Textures/) */
+    for (fs::path d = ruta.parent_path(); d.filename() != "Shaders" && d.filename() != "Textures" && fs::is_empty(d, ec); d = d.parent_path())
+      fs::remove(d, ec);
+    auto quitar = [&](std::vector<std::string> &v) { v.erase(std::remove(v.begin(), v.end(), rel), v.end()); };
+    quitar(l.porSha[sha]), quitar(l.porNombre[clave]);
+    l.shaDe.erase(rel);
+    quedan[k] = false;
+    borrados++;
+    if (decir) std::printf("[efectos] borrado %s (bajado de %s): ya habia otro igual o con su nombre\n", rel.c_str(), c[0].c_str());
+  }
+  std::string txt;
+  for (size_t k = 0; k < lineas.size(); k++)
+    if (quedan[k]) txt += lineas[k] + "\n";
+  escribirEstado("efectos-bajados", txt);
+  return borrados;
 }
 
 }  // namespace efectos

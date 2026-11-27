@@ -67,7 +67,8 @@ What you get:
   name, moves the list to a column on the left and clears the rest, to tune them with the game in view. *Add an
   effect* opens a full-width picker split into effects that use depth and those that don't, with hover-to-scroll
   buttons. *Public sources* (ReShade, SweetFX, qUINT, prod80, AstrayFX...) download only the files you don't have,
-  compared by content against GitHub, never duplicating one; a source with nothing new is greyed out. The compiler is ReShade FX
+  compared by content against GitHub: files you already have by name are kept and never replaced, and downloaded files that
+  end up duplicated are deleted; a source with nothing new is greyed out. The compiler is ReShade FX
   (crosire, BSD-3) as patched by vkDaedalus.
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the

@@ -2364,17 +2364,17 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     } else if (!it->second.error.empty()) {
       r.nota += " · " + std::string(it->second.error == "limite" ? idioma::tr("GitHub no respondió por ahora") : it->second.error);
       r.valorTexto = idioma::tr("Reintentar"), r.valor = !mirando && !baj.enMarcha;
-    } else if (it->second.nuevos + it->second.cambian == 0) {
-      r.valorTexto = idioma::tr("Ya la tienes"), r.valor = false;   /* en gris: nada que bajar */
+    } else if (it->second.nuevos == 0) {
+      r.valorTexto = idioma::tr("Ya la tienes"), r.valor = false;   /* en gris: nada que bajar (nunca se pisa lo que hay) */
     } else {
-      const int n = it->second.nuevos + it->second.cambian;
+      const int n = it->second.nuevos;
       r.valorTexto = idioma::trf("Descargar · {} · {}", {n == 1 ? std::string(idioma::tr("1 archivo")) : idioma::trf("{} archivos", {std::to_string(n)}),
                                                         tamano(it->second.bytes)});
       r.valor = !mirando && !baj.enMarcha;
-      r.nota += " · " + idioma::trf("{} nuevos, {} cambiados", {std::to_string(it->second.nuevos), std::to_string(it->second.cambian)});
+      r.nota += " · " + idioma::trf("{} nuevos", {std::to_string(it->second.nuevos)});
     }
     if (it != estados.end() && it->second.conflictos > 0)
-      r.nota += " · " + idioma::trf("{} con el nombre de uno tuyo: no se duplican", {std::to_string(it->second.conflictos)});
+      r.nota += " · " + idioma::trf("{} ya los tienes con ese nombre: se quedan los tuyos", {std::to_string(it->second.conflictos)});
     if (!bajando && baj.id == f.id && !baj.error.empty())
       r.nota += " · " + idioma::trf("no se pudo: {}", {baj.error == "cortada" ? std::string(idioma::tr("se cortó a medias")) : baj.error});
     pon(r, std::string("efx:fuente:") + f.id);

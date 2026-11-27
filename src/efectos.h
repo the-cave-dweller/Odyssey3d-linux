@@ -112,12 +112,13 @@ std::string rutaTextura(const std::string &nombre);
    Rodolfo: «add some public shader sources to the list with their download button» y «gray out already downloaded one
    unless the files differ, never duplicate files, always download the difference». No se baja el repositorio entero: se
    pide su arbol a GitHub (la API de arboles: cada archivo con su SHA-1 de git) y se compara con lo que ya hay en la
-   carpeta de ReShade, por contenido. Lo que ya esta (en cualquier sitio) no se baja; lo que esta en el mismo sitio y es
-   distinto se pone en su lugar (con copia en ~/.local/state/odysseyvk/efectos-copia/); lo que falta pero se llama como
-   otro archivo tuyo en otro sitio no se baja (seria un duplicado: «conflicto»); lo demas se baja. Solo lo de Shaders/ y
-   Textures/ del repositorio, cada uno a la de la carpeta; ReShade.fxh y ReShadeUI.fxh solo de los de crosire. Cada
-   archivo bajado se comprueba con su SHA-1 de git antes de ponerlo. Lo hace `odysseyvk efectos fuentes` (comprobar) y
-   `odysseyvk efectos bajar ID` (efectos_fuentes.cpp, con libcrypto); el panel los arranca aparte y lee como van */
+   carpeta de ReShade, por contenido. Lo que ya esta (en cualquier sitio) no se baja; lo que se llama como uno que ya hay
+   (en el mismo sitio y distinto, o en otro) tampoco: se queda el que hay (Rodolfo: «dont replace old ones, delete
+   duplicated downloaded files»); lo demas se baja, sin pisar nada. Solo lo de Shaders/ y Textures/ del repositorio, cada
+   uno a la de la carpeta; ReShade.fxh y ReShadeUI.fxh solo de los de crosire. Cada archivo bajado se comprueba con su
+   SHA-1 de git antes de ponerlo y se apunta en ~/.local/state/odysseyvk/efectos-bajados: si despues queda duplicado (otro
+   igual o con su nombre), limpiarDuplicados lo borra. Lo hace `odysseyvk efectos fuentes` (comprobar), `odysseyvk
+   efectos bajar ID` y `odysseyvk efectos limpiar` (efectos_fuentes.cpp, con libcrypto); el panel los arranca aparte */
 struct Fuente {
   const char *id, *nombre, *repo, *nota;
 };
@@ -144,6 +145,8 @@ Bajada leerBajada();
 bool lanzarOrden(const std::vector<std::string> &args, std::string *err = nullptr);
 /* (efectos_fuentes.cpp, solo en `odysseyvk`) comprobar unas (todas si `ids` va vacio) y bajar una */
 int comprobarFuentes(const std::vector<std::string> &ids, bool decir);
+/* (v1.18) borra lo bajado por OdysseyVK que haya quedado duplicado (mismo contenido o mismo nombre que otro); cuantos */
+int limpiarDuplicados(bool decir);
 bool bajarFuente(const std::string &id, std::string *err);
 
 }  // namespace efectos

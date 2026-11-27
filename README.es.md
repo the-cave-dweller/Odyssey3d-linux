@@ -60,8 +60,8 @@ Lo que tienes:
   (`~/.config/odysseyvk/effects/`). *Vista previa*, junto al nombre
   de la pestaña, deja la lista en una columna a la izquierda y quita lo demás, para ajustarlos con el juego a la vista. *Añadir un efecto* abre un selector a lo ancho de la pantalla con los que usan
   la profundidad y los que no, que corre solo con el ratón sobre sus botones. Las *fuentes públicas* (ReShade, SweetFX,
-  qUINT, prod80, AstrayFX...) bajan solo los archivos que no tienes, comparados por contenido con GitHub y sin duplicar
-  ninguno; la que no tiene nada nuevo sale en gris. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
+  qUINT, prod80, AstrayFX...) bajan solo los archivos que no tienes, comparados por contenido con GitHub: lo que ya tienes con ese nombre
+  se queda y nunca se reemplaza, y lo bajado que quede duplicado se borra; la que no tiene nada nuevo sale en gris. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
 - **Teclas de juego.** Solo sobre un juego: `Insert` oculta o muestra la pastilla, `Supr` cambia la profundidad entre
   DLSS y el modelo elegido, `Fin` enciende o apaga la generación de cuadros de MAKO, `RePág` / `AvPág` dan x2 → x3 → x4 y
   al revés (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda

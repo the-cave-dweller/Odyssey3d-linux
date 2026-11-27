@@ -3204,6 +3204,10 @@ static int cmdEfectos(int argc, char **argv) {
     std::vector<std::string> ids(argv + 1, argv + argc);
     return efectos::comprobarFuentes(ids, true);
   }
+  if (que == "limpiar") {
+    std::printf("%d duplicados borrados de lo bajado\n", efectos::limpiarDuplicados(true));
+    return 0;
+  }
   if (que == "bajar" && argc > 1) {
     std::string err;
     if (!efectos::bajarFuente(argv[1], &err)) {
@@ -3212,7 +3216,7 @@ static int cmdEfectos(int argc, char **argv) {
     }
     return 0;
   }
-  std::fprintf(stderr, "uso: odysseyvk efectos [lista | describir NOMBRE | compilar NOMBRE | ajustes [APPID] | fuentes [ID...] | bajar ID]\n");
+  std::fprintf(stderr, "uso: odysseyvk efectos [lista | describir NOMBRE | compilar NOMBRE | ajustes [APPID] | fuentes [ID...] | bajar ID | limpiar]\n");
   return 2;
 }
 

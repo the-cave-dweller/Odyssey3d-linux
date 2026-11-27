@@ -141,19 +141,26 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   AstrayFX, Depth3D, FXShaders, fubax, OtisFX, CShade, Insane-Shaders y DH, cada una con su botón. No se baja el
   repositorio: `odysseyvk efectos fuentes` pide a GitHub su árbol (cada archivo con su SHA-1 de git) y lo compara por
   contenido con lo que hay en la carpeta de ReShade (Shaders/ y Textures/). Lo que ya está, en cualquier sitio, no se
-  baja; lo que está en el mismo sitio y es distinto se cambia (el de antes, en `~/.local/state/odysseyvk/efectos-copia/`);
-  lo que se llama como uno tuyo en otro sitio no se baja (no se duplica: «con el nombre de uno tuyo»); ReShade.fxh y
-  ReShadeUI.fxh solo de los de crosire. `odysseyvk efectos bajar ID` baja solo eso, comprueba cada archivo con su SHA-1
-  y, si uno no cuadra, no pone ninguno. Una fuente sin nada que bajar sale en gris, «Ya la tienes». Se mira sola al abrir
-  la pestaña si la última vez fue hace más de 12 h (como lo de la versión), y con «Buscar».
+  baja; lo que se llama como uno que ya hay (en el mismo sitio y distinto, o en otro) tampoco: se queda el que hay
+  (Rodolfo, después: «dont replace old ones, delete duplicated downloaded files»), y en una misma bajada no van dos con el
+  mismo nombre ni el mismo contenido; ReShade.fxh y ReShadeUI.fxh solo de los de crosire. `odysseyvk efectos bajar ID`
+  baja solo eso, comprueba cada archivo con su SHA-1 y, si uno no cuadra, no pone ninguno; nunca pisa uno que haya. Lo
+  bajado se apunta en `~/.local/state/odysseyvk/efectos-bajados`, y si después queda duplicado (otro igual, o con su
+  nombre) se borra, lo más nuevo primero (`odysseyvk efectos limpiar`, que corre también tras cada bajada y cada
+  comprobación); lo tuyo no se borra nunca. Una fuente sin nada que bajar sale en gris, «Ya la tienes». Se mira sola al
+  abrir la pestaña si la última vez fue hace más de 12 h (como lo de la versión), y con «Buscar».
+- **Comprobado contra GitHub** (Rodolfo: «Yes, check them»; sin bajar nada): las 13 existen. Con la carpeta de Rodolfo
+  (185 archivos), ReShade, SweetFX, qUINT, prod80 y AstrayFX no tienen nada que bajar; iMMERSE 24 nuevos, Depth3D 4,
+  FXShaders 59 (2 con un nombre que ya tiene), fubax 28 (5), OtisFX 34 (4), CShade 42 (1), Insane-Shaders 20, DH 19.
 - **La profundidad en el registro**: «[efectos] con la profundidad del 3D (WxH)» cuando empieza a llegar y «sin
   profundidad del 3D» si no hay (Rodolfo: «no tiene sentido que ninguno tenga profundidad, les diste acceso?»: los cinco
   de su lista no la leen; la reciben los que la usan).
 - **Probado sin red**, con un árbol y unos archivos falsos (`ODYSSEYVK_EFECTOS_API` y `ODYSSEYVK_EFECTOS_RAW` a `file://`)
-  y una carpeta de prueba: SweetFX con 8 archivos dio 6 que cuentan, 2 nuevos, 1 cambiado y 1 con tu nombre; bajó solo
-  esos 3 (con la copia del cambiado), nada duplicado, una ruta con espacios bien, y después 0 que bajar; uno que no
-  cuadra con su SHA-1 para la bajada sin poner nada; la de crosire, en gris; las que no están, «No está en GitHub». Sin
-  probar contra GitHub de verdad (los nombres de los repositorios no se han comprobado: el que no exista lo dirá).
+  y una carpeta de prueba: de un SweetFX con 10 archivos (uno cambiado en el mismo sitio, uno con el nombre de otro
+  tuyo, dos con el mismo nombre dentro del repositorio, uno igual a uno tuyo en otro sitio) bajó solo los 2 nuevos, el
+  cambiado se quedó como estaba, nada duplicado y una ruta con espacios bien; con un archivo tuyo con el nombre de uno
+  bajado y otro con el contenido de otro, `limpiar` borró los dos bajados (y la carpeta que quedó vacía) y dejó los
+  tuyos; uno que no cuadra con su SHA-1 para la bajada sin poner nada; la de crosire, en gris.
 
 
 - Rodolfo: «only show fps overlay once the hub pill is hidden, remember generation preferences per game and include them in
