@@ -44,9 +44,22 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **`mako-launch` no vale** con OdysseyVK: pone `VK_IMPLICIT_LAYER_PATH` solo en la carpeta de MAKO y deja fuera
     la capa de OdysseyVK y la de Neural Forge. `vkdaedalus-run` no lo usa (pone `ENABLE_MAKO=1` y sus capas de
     orden en `VK_ADD_IMPLICIT_LAYER_PATH`), así que con él sí carga.
-  - **Sin probar**: la generación de cuadros de MAKO de verdad. Para MAKO FG falta `mako-fg-host` y para MAKO LSFG
-    el `Lossless.dll` de Lossless Scaling (se le pidió a Steam que lo instale). Tampoco el orden con
-    `vkdaedalus-run`, porque vkDaedalus no está instalado.
+  - **Con vkDaedalus y MAKO LSFG, medido** (vkDaedalus instalado por Rodolfo en `/usr`, Lossless Scaling desde
+    Steam). Prueba: vkcube con `vkdaedalus-run` en un gamescope aparte, la capa de OdysseyVK puesta y el menú de
+    vkDaedalus manejado con `xdotool` (End y clics donde dice su `VKDAEDALUS_UI_MAP`), con sus ajustes y los de
+    MAKO en una copia aparte:
+    - en la tarjeta Frame generation se elige MAKO LSFG (lsfg-vk y MAKO FG salen en gris: no están instalados) y
+      On. Al volver a arrancar, MAKO lo dice en su fichero de estado: `frame_generation_active: true` a 2x;
+    - vkDaedalus cuenta ~30 FPS del juego y 60 enseñados;
+    - el orden, con «Effects after frame generation» (lo lleva el perfil default de Rodolfo): juego, MAKO,
+      vkDaedalus, OdysseyVK, gamescope WSI, controlador. Aquí la capa de OdysseyVK queda por debajo de MAKO y ve
+      también los cuadros generados: su contador de presentaciones (el FPS del juego del cuadrito) cuenta los
+      enseñados, como con la generación de cuadros de DLSS. La profundidad de DLSS sigue llegando una vez por
+      cuadro de verdad;
+    - MAKO crea su propia instancia y su dispositivo, que pasan también por la capa de OdysseyVK (`[instancia]
+      creada (mako)` en su registro). Allí no hay DLSS y no hace nada, sin errores.
+  - **Sin probar** con MAKO: un juego con DLSS de verdad, el 3D encima y la pastilla con el menú en un juego de
+    Wine (vkcube no es de Wine, así que su menú no escribe el fichero de `$XDG_RUNTIME_DIR`).
 - **Las otras capas** (`src/capasajenas.cpp`). Dibujan sobre el cuadro ya hecho, después del HUD del juego. La
   máscara del HUD no las ve, así que en el 3D tomaban el relieve de la escena. El visor las mira cuatro veces por
   segundo, sobre un juego, y sin tocarlas:
