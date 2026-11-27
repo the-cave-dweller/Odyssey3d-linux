@@ -34,7 +34,7 @@ lente con `rampa_x` y `rampa_y` (ver «Calibrar el paso contra la lente»).
   para la interfaz. Para el servicio de ventanas y la captura: `wayland`,
   `plasma-wayland-protocols`, `libpipewire`, `systemd-libs`. `mpv` es opcional (sólo `play`).
   Para el conversor de vídeo normal a 3D hacen falta además `onnxruntime-cuda` (o `onnxruntime` a
-  secas, que va por CPU y mucho más lento) y, en tiempo de ejecución, `cuda` y `cudnn`. Desde la 1.16, con una
+  secas, que va por CPU y mucho más lento) y, en tiempo de ejecución, `cuda` y `cudnn`. Desde la 1.17, con una
   tarjeta AMD, `onnxruntime-rocm` en su lugar (trae ROCm y el motor MIGraphX; aún sin probar en una AMD de verdad).
   En CachyOS/Arch:
 
@@ -177,7 +177,7 @@ odysseyvk capture3d --uuid '<id>' --conver --red 1    # la red en la GPU 1 (si l
 * La red de profundidad es la abierta, *Depth Anything V2 Small* en ONNX (95 MB), en
   `~/.local/share/odysseyvk/models/` (hasta la 1.15, `modelos/`: la 1.16 le cambia el nombre al arrancar). Desde la
   1.16 la pestaña 3D lista las redes con su casilla: la FP16 (50 MB, la recomendada), la FP32 (99 MB, las dos de
-  Hugging Face) y cualquier `.onnx` que se ponga en esa carpeta; aparte, *Solo para vídeos* (experimental): Video
+  Hugging Face) y cualquier `.onnx` que se ponga en esa carpeta; desde la 1.17, aparte, *Solo para vídeos* (experimental): Video
   Depth Anything pequeña, que mira los últimos 32 cuadros (solo con vídeos, solo en la tarjeta). Las dos listas van lado
   a lado y un lado con más de dos redes es un desplegable; la casilla *Vista de depuración*, encima, deja solo las listas
   en una columna a la izquierda, con la profundidad en vivo (lo de `Ctrl+Mayús+9`) y lo que tarda la red, para

@@ -18,17 +18,49 @@ Lo que tienes:
 
 ![La pastilla y su menú del relieve](docs/img/es/pill.png)
 
+## Lo nuevo de la 1.17
+
+- **Mira la profundidad mientras eliges la red.** La casilla *Vista de depuración* de la pestaña 3D enseña la
+  profundidad en vivo y deja el panel en una columna a la izquierda. Cambias de red y ves la diferencia al momento;
+  junto a la casilla, lo que cuesta la red, cada segundo.
+- **Usa la red de profundidad que quieras.** La pestaña 3D tiene dos listas lado a lado: las redes de siempre y las
+  de solo vídeos. Cualquier `.onnx` de profundidad que dejes en `~/.local/share/odysseyvk/models` sale ahí; una lista
+  con más de dos pasa a ser un desplegable.
+- **Una red que mira el tiempo (experimental, solo vídeos):** Video Depth Anything pequeña mira los últimos 32 cuadros,
+  así que la profundidad salta menos de un cuadro al siguiente. Ve los cambios de plano en la imagen, así que un plano
+  nuevo empieza limpio.
+- **Tarjetas AMD:** la red del 2D→3D puede ir por ROCm (aún sin probar en una AMD de verdad).
+- **La primera vez que una aplicación se pone a pantalla completa,** una ventanita pregunta 3D o 2D y lo recuerda.
+- **Más ligera en NVIDIA:** 30 MB menos de memoria por red y, con dos tarjetas, la otra ya no pierde 386 MB.
+
+Medido en una RTX 5080:
+
+| | Descarga | Tiempo por mapa de profundidad | Memoria en la tarjeta | Para |
+|---|---|---|---|---|
+| Depth Anything V2 pequeña FP16 (la recomendada) | 50 MB | 4,3 ms | 640 MB | vídeos y juegos |
+| Depth Anything V2 pequeña FP32 | 99 MB | 7,3 ms | 1 GB | la CPU, donde va 5 veces más rápida que la FP16 |
+| Video Depth Anything pequeña | 117 MB | 122 ms | 2,8 GB | solo vídeos |
+
+| Red de vídeo en un cambio de plano | Antes | Ahora |
+|---|---|---|
+| Profundidad del plano nuevo | hasta un 20 % desviada, de 2 a más de 7 segundos | bien desde el primer mapa |
+| Cortes falsos en 7 segundos de una persona hablando | 1 o 2 | ninguno |
+
+![Las dos listas de redes de la pestaña 3D](docs/img/es/networks.png)
+
+![Vista de depuración: la profundidad en vivo, con las listas a la izquierda](docs/img/es/debug-view.png)
+
 ## Instalar
 
-Arch / CachyOS, todo de una vez (una NVIDIA con CUDA, o desde la 1.16 una AMD con ROCm, para el conversor 2D→3D; lo
-demás va en cualquier tarjeta con Vulkan 1.3):
+Arch / CachyOS, todo de una vez (una NVIDIA con CUDA, o una AMD con ROCm, para el conversor 2D→3D; lo demás va en
+cualquier tarjeta con Vulkan 1.3):
 
 ```bash
 sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
 ```
 
-Con una tarjeta **AMD**, cambia `onnxruntime-cuda cuda cudnn` por `onnxruntime-rocm` (desde la 1.16; aún sin probar en
-una AMD de verdad): el conversor va entonces en la tarjeta con ROCm, con el motor MIGraphX de ONNX Runtime. La primera
+Con una tarjeta **AMD**, cambia `onnxruntime-cuda cuda cudnn` por `onnxruntime-rocm` (aún sin probar en una AMD de
+verdad): el conversor va entonces en la tarjeta con ROCm, con el motor MIGraphX de ONNX Runtime. La primera
 vez de cada sesión la red se prepara para la tarjeta y puede tardar. Si el procesador trae gráfica Radeon integrada,
 la red va a la tarjeta con más memoria (`HIP_VISIBLE_DEVICES` fija una). Sin motor para la tarjeta, la red va por la
 CPU. La profundidad de DLSS de los juegos es solo de NVIDIA.
@@ -52,39 +84,37 @@ el monitor: reinicia su hub interno y la lente, el scaler y la cámara desaparec
 La primera vez que el servicio arranca sin red de profundidad, el panel de ajustes se abre solo en su pestaña 3D,
 que lista las redes con su casilla: Depth Anything V2 pequeña, de
 [huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small),
-en **FP16** (50 MB, la recomendada: el mismo mapa que la FP32 con un 35 % menos de tiempo de red y 260 MB menos en la
-tarjeta) o **FP32** (99 MB, a precisión completa). La que aún no está bajada sale en gris: al picarla se baja y queda
-puesta; las bajadas llevan una etiqueta azul, y la marcada es la que se usa. Cualquier otra red de profundidad
-`.onnx` que pongas en `~/.local/share/odysseyvk/models` sale en la misma lista (la carpeta se llamaba `modelos`
-hasta la 1.15; la 1.16 le cambia el nombre al arrancar). Al acabar la primera descarga el panel se cierra y la red se
-carga. Desde la terminal es:
+en **FP16** (la recomendada: el mismo mapa que la FP32, más rápida y más ligera) o **FP32**. La que aún no está bajada
+sale en gris: al picarla se baja y queda puesta; las bajadas llevan una etiqueta azul, y la marcada es la que se usa.
+Cualquier otra red de profundidad `.onnx` que pongas en `~/.local/share/odysseyvk/models` sale en la misma lista. Al
+acabar la primera descarga el panel se cierra y la red se carga. Desde la terminal es:
 
 ```bash
 odysseyvk ctl net download        # FP16
 odysseyvk ctl net download fp32   # FP32
 ```
 
-Cuando la red tiene que ir por el procesador (sin CUDA, o sin sitio en ninguna tarjeta), OdysseyVK usa la FP32 en vez
-de la FP16 si está bajada: en la CPU va unas 5 veces más rápida (298 contra 1447 ms por mapa, medido por
-[Noa3](https://github.com/Noa3) en un Ryzen 9 7950X3D). Con dos tarjetas, la memoria libre se casa con cada una por
-su UUID, así que `red = N` en `serve.conf` es siempre la tarjeta CUDA N.
+Cuando la red tiene que ir por el procesador (sin motor para la tarjeta, o sin sitio en ninguna), OdysseyVK usa la
+FP32 en vez de la FP16 si está bajada: en la CPU va unas 5 veces más rápida (298 contra 1447 ms por mapa, medido por
+[Noa3](https://github.com/Noa3) en un Ryzen 9 7950X3D). Con dos tarjetas, `red = N` en `serve.conf` elige la tarjeta
+CUDA N.
 
-**Solo para vídeos (experimental, desde la 1.16):** a la derecha de la lista, *Solo para vídeos* ofrece
-[Video Depth Anything](https://github.com/DepthAnything/Video-Depth-Anything) pequeña (117 MB, Apache-2.0, una
-exportación a ONNX de la comunidad: no hay una oficial). Mira los últimos 32 cuadros en vez de uno, así que la
-profundidad salta menos de un cuadro al siguiente: medido con dos vídeos por el camino entero, la mitad de cambios de
-cerca y lejos en un paisaje y algo menos con una persona hablando. Cuesta unas 30 veces más trabajo de la tarjeta
-(unos 140 ms por mapa en una RTX 5080 a 504×280, dentro de los 6 mapas por segundo) y 2,8 GB, y no va por la CPU.
-Marcada, vale solo con los vídeos; los juegos siguen con la red de siempre. Cualquier `.onnx` con «video» en el nombre
-sale en esa lista. Desde la terminal: `odysseyvk ctl net download video`. Con más de dos redes en un lado, ese lado
-pasa a ser un desplegable.
+**Solo para vídeos (experimental):** a la derecha de la lista, *Solo para vídeos* ofrece
+[Video Depth Anything](https://github.com/DepthAnything/Video-Depth-Anything) pequeña (una exportación a ONNX de la
+comunidad del modelo Apache-2.0: no hay una oficial). Mira los últimos 32 cuadros en vez de uno, así que la
+profundidad salta menos de un cuadro al siguiente (la mitad de cambios de cerca y lejos en un paisaje, algo menos con
+una persona hablando). Cuesta mucho más trabajo de la tarjeta (mira la tabla de arriba), dentro de los 6 mapas por
+segundo del visor, y no va por la CPU. Marcada, vale solo con los vídeos; los juegos siguen con la red de siempre.
+Los cambios de plano se ven en la imagen antes de pasar la red, así que un plano nuevo empieza limpio. Cualquier
+`.onnx` con «video» en el nombre sale en esa lista. Desde la terminal: `odysseyvk ctl net download video`. Con más de
+dos redes en un lado, ese lado pasa a ser un desplegable.
 
-**Probar las redes en vivo (desde la 1.16).** *Vista de depuración*, la casilla encima de las dos listas, pone la
-vista de depuración de la profundidad del visor (la misma de `Ctrl+Mayús+9`, más abajo) y deja el panel en una
-columna a la izquierda: las redes de siempre en la mitad de arriba, las de vídeo en la de abajo y el vídeo a la vista
-al lado. Junto a la casilla sale lo que cuesta la red que va, cada segundo: milisegundos por mapa (la red sola y en
-total), mapas y cuadros por segundo. Se elige otra red y se ve cambiar la profundidad; al quitar la casilla vuelve el
-panel entero. Hace falta un vídeo o un juego abierto en 3D.
+**Probar las redes en vivo.** *Vista de depuración*, la casilla encima de las dos listas, pone la vista de depuración
+de la profundidad del visor (la misma de `Ctrl+Mayús+9`, más abajo) y deja el panel en una columna a la izquierda: las
+redes de siempre en la mitad de arriba, las de vídeo en la de abajo y el vídeo a la vista al lado. Junto a la casilla
+sale lo que cuesta la red que va, cada segundo: milisegundos por mapa (la red sola y en total), mapas y cuadros por
+segundo. Se elige otra red y se ve cambiar la profundidad; al quitar la casilla vuelve el panel entero. Hace falta un
+vídeo o un juego abierto en 3D.
 
 ![Primer arranque: el panel pide la red de profundidad](docs/img/es/first-run.png)
 
@@ -98,8 +128,7 @@ que no preguntan*). Con 3D, en sus primeros segundos el visor distingue
 un **vídeo normal** (una imagen, se convierte a 3D) de uno **dividido** (lado a lado o arriba y abajo),
 se cambia solo y deja de mirar. Compara las dos mitades del cuadro —la imagen y su detalle fino— y se
 midió con tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s bien en cada uno). Las
-aplicaciones marcadas como 2D y los juegos siguen su camino. (Hasta la 1.11 una tarjeta en la esquina
-preguntaba qué vídeo era.)
+aplicaciones marcadas como 2D y los juegos siguen su camino.
 
 La pastilla de arriba a la derecha, del alto de la barra de título del panel, se queda mientras dura el 3D: un botón
 redondo de encendido (el 3D sí o no), el interruptor **Neural | Rendimiento** (la profundidad con la red o sacada de
@@ -123,9 +152,8 @@ Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 Cada atajo se cambia en la página principal del panel → **Atajos de teclado** (la sección se pliega con la flechita de su
 cabecera, como *Aplicaciones que no preguntan*; las dos empiezan plegadas): pícalo y pulsa la combinación nueva
 o una tecla sola (Esc cancela y la flecha circular vuelve a la de fábrica). Una tecla sola, o con
-Mayús nada más, vale desde la 1.13 (hasta la 1.12 hacía falta Ctrl, Alt o Meta): mientras haya 3D,
-esa tecla ya no llega al vídeo ni al juego, y el panel lo avisa al ponerla. Vale cualquier letra,
-número o signo, F1–F24, las flechas y las de moverse por la página, Espacio y, desde la 1.13, también
+Mayús nada más, también vale: mientras haya 3D, esa tecla ya no llega al vídeo ni al juego, y el panel lo avisa al
+ponerla. Vale cualquier letra, número o signo, F1–F24, las flechas y las de moverse por la página, Espacio,
 Pausa/Inter, Impr Pant, Bloq Despl y Menú. Mientras el
 panel de ajustes está abierto se queda con todo el teclado, así que el juego de debajo no recibe
 teclas; Esc lo cierra.
@@ -133,11 +161,11 @@ teclas; Esc lo cierra.
 ![Los atajos de teclado en el panel de ajustes](docs/img/es/shortcuts.png)
 
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
-icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos). Desde la 1.16 ocupa
+icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos). Ocupa
 la pantalla entera al estilo del menú de vkDaedalus, del mismo tamaño en el escritorio y sobre un juego: una barra de
 título con el aspa (y, si se abrió desde la pastilla, una flecha para volver a ella); en medio una tesela grande por
 pestaña —**3D** (vídeo, pantalla, la red de profundidad, atajos de teclado, aplicaciones que no preguntan),
-**Juegos**, **Integraciones** (las opciones de lanzamiento de Steam de cada juego, desde la 1.15; ver más abajo) y
+**Juegos**, **Integraciones** (las opciones de lanzamiento de Steam de cada juego; ver más abajo) y
 **Ajustes** (los datos de rendimiento —visor 3D, tarjetas gráficas— y lo demás: fluidez, la anticipación de la
 cabeza, actualizaciones, barra de tareas y bandeja, y **Desinstalar** plegado bajo su flechita)—; y a cada lado tres
 teselas chicas que se cambian de un clic: la profundidad de DLSS, el HUD del juego, seguir la cabeza, el cuadrito de
@@ -148,9 +176,9 @@ también en `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios sin r
 
 ### Idioma
 
-La tesela del **Idioma** (Ajustes → Programa → Idioma hasta la 1.15) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
+La tesela del **Idioma** cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
 rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
-(`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel.)
+(`noto-fonts-cjk` en Arch).
 
 ## Qué hace bueno el 3D
 
@@ -211,7 +239,7 @@ entra solo en 3D al ponerse a pantalla
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
 a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
 visor o se cierra poco después de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego
-tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón). Desde la 1.15, al pasar el
+tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón). Al pasar el
 ratón por una carátula sale un engranaje arriba a la derecha: abre las
 [integraciones](#integraciones-las-opciones-de-lanzamiento-de-steam) de ese juego.
 
@@ -223,10 +251,10 @@ ratón por una carátula sale un engranaje arriba a la derecha: abre las
 
 El servicio mira este repositorio cada seis horas. Con una versión nueva sale una tarjeta en la
 esquina con **Actualizar**, **Luego** y un pequeño «No avisar de actualizaciones»; en el panel, la tesela de la
-**Versión** pone su flecha en ámbar y dice qué versión hay (hasta la 1.15 lo hacía una flecha junto al aspa). Al
+**Versión** pone su flecha en ámbar y dice qué versión hay. Al
 picarla se instala, o se vuelve a mirar si no hay nada nuevo. Actualizar baja, compila, instala (una ventana
 pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. La pestaña
-**Ajustes** (Programa hasta la 1.11) tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
+**Ajustes** tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
 
 ![La pestaña Ajustes y la tarjeta de actualización](docs/img/es/settings-program.png)
 
@@ -289,7 +317,7 @@ variable queda como la tenga el escritorio.
 
 ## Profundidad exacta en los juegos con DLSS
 
-Desde la 1.14, en los juegos que usan DLSS, OdysseyVK puede usar la profundidad del propio juego en vez de adivinarla
+En los juegos que usan DLSS, OdysseyVK puede usar la profundidad del propio juego en vez de adivinarla
 con la red: la que el juego le da a DLSS en cada cuadro, exacta y quieta, a la resolución de render
 del juego (en Cyberpunk 2077, 1920×1080). Hace falta una tarjeta NVIDIA, DLSS puesto en el juego
 (cualquier modo) y `ODYSSEYVK=1` en las opciones de lanzamiento de Steam del juego. Se pone para todos los juegos
@@ -317,14 +345,14 @@ de misión y los menús se quedan planos en la pantalla en vez de tomar la profu
 detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Junto a la pastilla, un cuadro pequeño
 dice los FPS del juego (los cuadros que presenta) y los de la capa (las profundidades que manda; con la
 generación de cuadros de DLSS, los del juego son el doble). En Ajustes → Juegos con DLSS se apaga cada
-una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS. Desde la 1.15, Ajustes →
+una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS. Ajustes →
 Fluidez → *Tope de FPS de la capa* limita cuántas profundidades y máscaras del HUD copia la capa por segundo
 dentro del juego (el visor hace 6 mapas de profundidad por segundo de fábrica): el juego gasta menos en
 copias que nadie usa. Se aplica al momento, como media exacta.
 
 ## Integraciones: las opciones de lanzamiento de Steam
 
-Desde la 1.15, la pestaña **Integraciones** del panel arma las opciones de lanzamiento de Steam de cada
+La pestaña **Integraciones** del panel arma las opciones de lanzamiento de Steam de cada
 juego por piezas, en vez de escribirlas: las capas (`ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`,
 `NEURAL_FORGE_ENABLE`, `ENABLE_VKBASALT`), otras variables, `vkdaedalus-run` o cualquier comando delante del
 juego, opciones detrás, y gamescope (la resolución de renderizado y la de salida por abreviatura, stretch o
@@ -352,15 +380,6 @@ abierto sobre un juego: un clic fuera de él lo cierra y devuelve el control, sa
 pin a la izquierda de su nombre: fijado, se queda encima y un clic en el juego solo le devuelve el
 ratón y el teclado.
 
-## La pestaña Experimental, hasta la 1.11
-
-Las pruebas que traía (sacadas de leer [Any2Odyssey](https://github.com/jlobue10/Any2Odyssey)) pasaron
-a la versión normal en la 1.12 o se quedaron como claves de `serve.conf`: la red viendo el cuadro a su
-proporción 16:9 (`exp_red = cuadrado | 518 | 770`) y un mapa de profundidad más grande
-(`exp_mapa = 518 | 770 | 1022`), solo como claves; el tope de arrastre y la prioridad del visor en la
-tarjeta, en *Ajustes → Fluidez*; la anticipación de la cabeza, en *Ajustes → Seguimiento de la cabeza*;
-el alcance del relieve se calcula solo en Auto y en Manual.
-
 ## Documentación
 
 - [docs/GUIA.md](docs/GUIA.md) — el manual completo en español, con las medidas detrás de cada decisión.
@@ -369,7 +388,7 @@ el alcance del relieve se calcula solo en Auto y en Manual.
 
 ## El equipo con que se hizo
 
-Samsung Odyssey 3D G90XF, KDE Plasma 6 en Wayland, NVIDIA RTX 4090 (CachyOS). Las constantes del
+Samsung Odyssey 3D G90XF, KDE Plasma 6 en Wayland, NVIDIA RTX 4090 y RTX 5080 (CachyOS). Las constantes del
 modelo de la lente vienen de un G90XF; el paso fino de tu unidad se ajusta con `rampa_x` /
 `rampa_y` (mira la guía). El cable USB-B del monitor tiene que estar conectado: la lente, el scaler
 y la cámara van por él.

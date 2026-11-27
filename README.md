@@ -18,17 +18,48 @@ What you get:
 
 ![The pill and its relief menu](docs/img/pill.png)
 
+## New in 1.17
+
+- **Watch the depth while you choose the network.** The *Debug view* checkbox in the 3D tab shows the depth live and
+  shrinks the panel to a column on the left. Switch networks and see the difference straight away; next to the
+  checkbox, what the network costs, updated every second.
+- **Use any depth network.** The 3D tab has two lists side by side: the usual networks, and networks for videos only.
+  Drop any depth `.onnx` into `~/.local/share/odysseyvk/models` and it shows up; a list with more than two becomes a
+  drop-down.
+- **A network that looks at time (experimental, videos only):** Video Depth Anything Small looks at the last 32
+  frames, so the depth jumps less from one frame to the next. It spots scene cuts in the picture, so a new shot
+  starts clean.
+- **AMD cards** can run the 2D→3D network through ROCm (not tested on AMD hardware yet).
+- **The first time an app goes fullscreen,** a small popup asks 3D or 2D and remembers it.
+- **Lighter on NVIDIA:** 30 MB less GPU memory per network, and with two GPUs the other card no longer loses 386 MB.
+
+Measured on an RTX 5080:
+
+| | Download | Time per depth map | GPU memory | For |
+|---|---|---|---|---|
+| Depth Anything V2 Small FP16 (recommended) | 50 MB | 4.3 ms | 640 MB | videos and games |
+| Depth Anything V2 Small FP32 | 99 MB | 7.3 ms | 1 GB | the CPU, where it's 5× faster than FP16 |
+| Video Depth Anything Small | 117 MB | 122 ms | 2.8 GB | videos only |
+
+| Video network at a scene cut | Before | Now |
+|---|---|---|
+| Depth of the new shot | up to 20 % off, for 2 to 7+ seconds | right from the first map |
+| False cuts in a 7-second talking-head clip | 1 or 2 | none |
+
+![The two network lists in the 3D tab](docs/img/networks.png)
+
+![Debug view: the depth live, with the lists on the left](docs/img/debug-view.png)
+
 ## Install
 
-Arch / CachyOS, everything in one go (an NVIDIA GPU with CUDA, or since 1.16 an AMD one with ROCm, for the 2D→3D
-converter; the rest works on any Vulkan 1.3 GPU):
+Arch / CachyOS, everything in one go (an NVIDIA GPU with CUDA, or an AMD one with ROCm, for the 2D→3D converter;
+the rest works on any Vulkan 1.3 GPU):
 
 ```bash
 sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
 ```
 
-With an **AMD** card, swap `onnxruntime-cuda cuda cudnn` for `onnxruntime-rocm` (since 1.16; not yet tested on AMD
-hardware): the converter then runs on the GPU through ROCm, with ONNX Runtime's MIGraphX engine. The first time in
+With an **AMD** card, swap `onnxruntime-cuda cuda cudnn` for `onnxruntime-rocm` (not yet tested on AMD hardware): the converter then runs on the GPU through ROCm, with ONNX Runtime's MIGraphX engine. The first time in
 each session the network is prepared for the card, which can take a while. If the processor has integrated Radeon
 graphics, the network goes to the card with more memory (`HIP_VISIBLE_DEVICES` pins one). Without a GPU engine the
 network runs on the CPU. The DLSS depth of games is NVIDIA-only.
@@ -52,38 +83,35 @@ monitor: it resets its internal hub and the lens, scaler and camera disappear un
 The first time the service starts without a depth network, the settings panel opens by itself on its 3D tab, which
 lists the networks with a checkbox each: Depth Anything V2 Small from
 [huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)
-in **FP16** (50 MB, the recommended one: the same map as the FP32 with 35 % less network time and 260 MB less GPU
-memory) or **FP32** (99 MB, full precision). One that isn't downloaded yet is grey: clicking it downloads it and sets
-it; downloaded ones carry a blue tag, and the ticked one is the one in use. Any other `.onnx` depth network you put in
-`~/.local/share/odysseyvk/models` shows up in the same list (the folder was called `modelos` up to 1.15; 1.16
-renames it on its first start). When the first download finishes the panel closes and the network loads. From a
-terminal it is:
+in **FP16** (recommended: the same map as the FP32, faster and lighter) or **FP32**. One that isn't downloaded yet is
+grey: clicking it downloads it and sets it; downloaded ones carry a blue tag, and the ticked one is the one in use.
+Any other `.onnx` depth network you put in `~/.local/share/odysseyvk/models` shows up in the same list. When the
+first download finishes the panel closes and the network loads. From a terminal it is:
 
 ```bash
 odysseyvk ctl net download        # FP16
 odysseyvk ctl net download fp32   # FP32
 ```
 
-When the network has to run on the processor (no CUDA, or no room on any GPU), OdysseyVK uses the FP32 instead of
-the FP16 if it is downloaded: on a CPU it is about 5 times faster (298 vs 1,447 ms per map, measured by
-[Noa3](https://github.com/Noa3) on a Ryzen 9 7950X3D). With two GPUs, free memory is matched to each card by its
-UUID, so `red = N` in `serve.conf` always means CUDA device N.
+When the network has to run on the processor (no GPU engine, or no room on any GPU), OdysseyVK uses the FP32 instead
+of the FP16 if it is downloaded: on a CPU it is about 5 times faster (298 vs 1,447 ms per map, measured by
+[Noa3](https://github.com/Noa3) on a Ryzen 9 7950X3D). With two GPUs, `red = N` in `serve.conf` picks CUDA device N.
 
-**Videos only (experimental, since 1.16):** to the right of the list, *Videos only* offers
-[Video Depth Anything](https://github.com/DepthAnything/Video-Depth-Anything) Small (117 MB, Apache-2.0, a community
-ONNX export: there is no official one). It looks at the last 32 frames instead of one, so the depth jumps less from
-frame to frame: measured on two clips through the whole pipeline, about half the near/far reordering on a landscape
-and somewhat less on a talking head. It costs about 30 times more GPU work (about 140 ms per map on an RTX 5080 at
-504×280, still within the 6 maps per second) and 2.8 GB, and doesn't run on the CPU. Ticked, it's used for videos
-only; games keep the regular network. Any `.onnx` with «video» in its name goes to this list. From a terminal:
+**Videos only (experimental):** to the right of the list, *Videos only* offers
+[Video Depth Anything](https://github.com/DepthAnything/Video-Depth-Anything) Small (a community ONNX export of the
+Apache-2.0 model: there is no official one). It looks at the last 32 frames instead of one, so the depth jumps less
+from frame to frame (about half the near/far reordering on a landscape, somewhat less on a talking head). It costs
+far more GPU work (see the table above), still within the viewer's 6 maps per second, and doesn't run on the CPU.
+Ticked, it's used for videos only; games keep the regular network. Scene cuts are found in the picture before the
+network runs, so a new shot starts clean. Any `.onnx` with «video» in its name goes to this list. From a terminal:
 `odysseyvk ctl net download video`. With more than two networks on either side, that side turns into a drop-down.
 
-**Try networks live (since 1.16).** *Debug view*, the checkbox above the two lists, turns on the viewer's depth
-debug view (the same as `Ctrl+Shift+9`, below) and clears the panel down to a column on the left: the usual networks
-in the top half, the video ones in the bottom half, and the video visible beside it. Next to the checkbox the panel
-shows what the running network costs, refreshed every second: milliseconds per map (the network alone and in
-total), maps and frames per second. Pick another network and watch the depth change; untick the box to get the
-whole panel back. It needs a video or game open in 3D.
+**Try networks live.** *Debug view*, the checkbox above the two lists, turns on the viewer's depth debug view (the
+same as `Ctrl+Shift+9`, below) and clears the panel down to a column on the left: the usual networks in the top half,
+the video ones in the bottom half, and the video visible beside it. Next to the checkbox the panel shows what the
+running network costs, refreshed every second: milliseconds per map (the network alone and in total), maps and frames
+per second. Pick another network and watch the depth change; untick the box to get the whole panel back. It needs a
+video or game open in 3D.
 
 ![First run: the panel asks for the depth network](docs/img/first-run.png)
 
@@ -97,8 +125,7 @@ seconds the viewer tells a
 **normal video** (one image, converted to 3D) from a **split** one (side by side or top and bottom),
 switches by itself and stops looking. It compares the two halves of the frame — the picture and its
 fine detail — and was measured on three side-by-side 3D videos and three normal ones (18 of 18
-three-second windows right on each). Apps marked as 2D and games keep their own way. (Up to 1.11 a
-card in the corner asked which kind of video it was.)
+three-second windows right on each). Apps marked as 2D and games keep their own way.
 
 The pill in the top-right corner, as tall as the panel's title bar, stays while the 3D is on: a round power button
 (3D on/off), the **Neural | Performance** switch (depth with the network or from the image on the CPU, switched on
@@ -122,20 +149,19 @@ Keys (they also work while the video or game has the keyboard):
 Every shortcut can be changed in the panel's main page → **Keyboard shortcuts** (the section folds with the arrow
 on its header, like *Apps that don't ask*; both start folded): click it and press the new
 combination or a single key (Esc cancels, the circular arrow puts the factory one back). A single
-key, or one with only Shift, works too since 1.13 (up to 1.12 it needed Ctrl, Alt or Meta): while
-the 3D is on, that key no longer reaches the video or the game, and the panel says so when you set
-it. Any letter, digit or sign, F1–F24, the arrows and navigation keys, Space, and since 1.13 also
-Pause/Break, Print Screen, Scroll Lock and Menu. While the settings panel is open it keeps the whole keyboard, so the game underneath gets
+key, or one with only Shift, works too: while the 3D is on, that key no longer reaches the video or the game, and the
+panel says so when you set it. Any letter, digit or sign, F1–F24, the arrows and navigation keys, Space, Pause/Break,
+Print Screen, Scroll Lock and Menu. While the settings panel is open it keeps the whole keyboard, so the game underneath gets
 no keys; Esc closes it.
 
 ![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
-taskbar icon or the system-tray icon (click: settings, middle click: games). Since 1.16 it fills the screen in the
+taskbar icon or the system-tray icon (click: settings, middle click: games). It fills the screen in the
 style of vkDaedalus's menu, at the same size on the desktop and over a game: a title bar with the close cross (and,
 when it was opened from the pill, an arrow back to the pill); in the middle a large tile per tab — **3D** (video,
 screen, the depth network, keyboard shortcuts, apps that don't ask), **Games**, **Integrations** (each game's Steam
-launch options, since 1.15; see below) and **Settings** (the performance figures — 3D viewer, GPUs — and the rest:
+launch options; see below) and **Settings** (the performance figures — 3D viewer, GPUs — and the rest:
 smoothness, head-tracking anticipation, updates, taskbar and tray, and **Uninstall** folded under its arrow) —; and
 on each side three small tiles that work at a click: DLSS depth, the game's HUD, head tracking, the FPS box, the
 version (check for an update or install it) and the language. Each option takes one row: its explanation shows when
@@ -145,9 +171,9 @@ Games is grey too. The colours follow the mode: blue with the network, amber in 
 
 ### Language
 
-The **Language** tile (Settings → App → Language up to 1.15) switches the language at once: the panel, the pill, the cards and
+The **Language** tile switches the language at once: the panel, the pill, the cards and
 the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
-(`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header.)
+(`noto-fonts-cjk` on Arch).
 
 ## What makes the 3D good
 
@@ -206,7 +232,7 @@ switches show it). Games must run in
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
 game above the 3D. If a game in 3D covers the viewer or closes shortly after entering 3D,
 OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a
-4-second countdown on its button). Since 1.15, hovering a cover shows a gear in its top-right corner: it
+4-second countdown on its button). Hovering a cover shows a gear in its top-right corner: it
 opens that game's [integrations](#integrations-steam-launch-options).
 
 ![Games tab](docs/img/games.png)
@@ -217,10 +243,10 @@ opens that game's [integrations](#integrations-steam-launch-options).
 
 The service checks this repository every six hours. With a new version, a card appears in the
 corner with **Update**, **Later** and a small "Don't notify about updates"; in the panel, the **Version** tile
-turns its arrow amber and says which version is out (up to 1.15 an arrow next to the close cross did this).
+turns its arrow amber and says which version is out.
 Clicking the tile installs it, or checks again when there is nothing new. Update downloads, builds, installs
 (a window asks for your password), restarts the service and reopens the video or game that was
-in 3D. The **Settings** tab (Program up to 1.11) also has "Update automatically" (off by default) and **Uninstall**.
+in 3D. The **Settings** tab also has "Update automatically" (off by default) and **Uninstall**.
 
 ![Settings tab and the update card](docs/img/settings-program.png)
 
@@ -281,7 +307,7 @@ see what it changes. In this mode variable refresh is left as the desktop has it
 
 ## Exact depth in DLSS games
 
-Since 1.14, in games that use DLSS, OdysseyVK can use the game's own depth instead of guessing it with the
+In games that use DLSS, OdysseyVK can use the game's own depth instead of guessing it with the
 depth network: the depth buffer the game hands to DLSS every frame, exact and steady, at the game's
 render resolution (in Cyberpunk 2077, 1920×1080). It needs an NVIDIA card, DLSS on in the game (any
 mode) and `ODYSSEYVK=1` in the game's Steam launch options. Switch it on for every game with the box at the bottom of the
@@ -308,14 +334,14 @@ transparent every frame) and hands its alpha to the viewer: the minimap, ammo, m
 stay flat on the screen instead of taking the depth of whatever is behind them. If a game draws its HUD
 some other way nothing changes. Next to the pill a small box shows the game's FPS (frames it presents)
 and the layer's (depths it sends; with DLSS frame generation the game's are double). Settings → Games
-with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box. Since 1.15,
+with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box.
 Settings → Smoothness → *Layer FPS cap* limits how many depths and HUD masks per second the layer copies
 inside the game (the viewer makes 6 depth maps a second by default), so the game spends less on copies
 nobody uses; it applies at once, as an exact average.
 
 ## Integrations: Steam launch options
 
-Since 1.15 the panel's **Integrations** tab puts together each game's Steam launch options from pieces
+The panel's **Integrations** tab puts together each game's Steam launch options from pieces
 instead of typing them: the layers (`ODYSSEYVK`, `MANGOHUD`, `ENABLE_VKDAEDALUS`, `NEURAL_FORGE_ENABLE`,
 `ENABLE_VKBASALT`), other variables, `vkdaedalus-run` or any command in front of the game, options after
 it, and gamescope (render and output resolution by abbreviation, stretch or fit, fullscreen, cursor grab,
@@ -342,14 +368,6 @@ the same while it is open over a game: a click outside it closes it and returns 
 pin it with the pin left of its name: pinned, it stays on top and a click on the game just gives the
 game the mouse and keyboard back.
 
-## The Experimental tab, until 1.11
-
-The trials it had (taken from reading [Any2Odyssey](https://github.com/jlobue10/Any2Odyssey)) went to
-the normal version in 1.12 or stayed as `serve.conf` keys: the network seeing the frame at its 16:9
-proportion (`exp_red = cuadrado | 518 | 770`) and a bigger depth map (`exp_mapa = 518 | 770 | 1022`),
-keys only; the drag cap and the viewer's GPU priority, in *Settings → Smoothness*; head anticipation,
-in *Settings → Head tracking*; the depth reach is worked out by itself in Auto and Manual.
-
 ## Documentation
 
 - [docs/GUIDE.md](docs/GUIDE.md) — the short guide in English: every command, every key, troubleshooting.
@@ -358,7 +376,7 @@ in *Settings → Head tracking*; the depth reach is worked out by itself in Auto
 
 ## Hardware this was built on
 
-Samsung Odyssey 3D G90XF, KDE Plasma 6 on Wayland, NVIDIA RTX 4090 (CachyOS). The lens model
+Samsung Odyssey 3D G90XF, KDE Plasma 6 on Wayland, NVIDIA RTX 4090 and RTX 5080 (CachyOS). The lens model
 constants come from a G90XF; the fine pitch of your unit is tuned with `rampa_x` / `rampa_y`
 (see the guide). The monitor's USB-B cable must be connected: lens, scaler and camera go through it.
 

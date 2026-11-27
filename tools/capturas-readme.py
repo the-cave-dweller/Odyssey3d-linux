@@ -14,7 +14,8 @@ RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BIN = os.path.join(RAIZ, "build", "odysseyvk")
 FUENTE = "/usr/share/fonts/TTF/DejaVuSans.ttf"
 W, H = 3840, 2160   # el panel del Odyssey: todo sale al doble, nitido
-CORRIDA_ATAJOS = int(os.environ.get("CORRIDA_ATAJOS", "470"))   # (v1.16) la red va antes de los atajos
+CORRIDA_ATAJOS = int(os.environ.get("CORRIDA_ATAJOS", "600"))   # (v1.16) la red va antes de los atajos (v1.17: y su casilla)
+CORRIDA_REDES = int(os.environ.get("CORRIDA_REDES", "220"))     # (v1.17) las dos listas de redes a la vista
 
 def fondo(w, h):
     """un escritorio de mentira: degradado morado y azul"""
@@ -79,8 +80,9 @@ def interfaz(lengua, destino):
                    ODYSSEYVK_HUD_MENU_NORMAL=1)
         guarda(sobre(im, caja_alfa(im, (W // 2, 0, W, 1300))), os.path.join(destino, "pill.png"), 1000)
         # el panel: primera vez (sin red), juegos, ajustes. (v1.16) A pantalla completa, con el velo en todo el lienzo:
-        # se recorta lo de en medio (las teselas y la tarjeta, 980 de ancho a escala 2), con la barra de arriba
-        contenido = (W // 2 - 1028, 136, W // 2 + 1028, 1860)
+        # se recorta lo de en medio (las teselas y la tarjeta, 980 de ancho a escala 2), con la barra de arriba.
+        # (v1.17) lo de en medio mide 1160 y la tarjeta llega a 700 de alto
+        contenido = (W // 2 - 1208, 136, W // 2 + 1208, 2060)
         im = pinta(casa, estado, lengua, "primera", ODYSSEYVK_HUD_PANEL=0)
         guarda(sobre(im, contenido, 0), os.path.join(destino, "first-run.png"), 1400)
         # (v1.12) de aqui en adelante, como con la red en su sitio: `modelo` apunta a un archivo vacio
@@ -111,6 +113,34 @@ def interfaz(lengua, destino):
         guarda(sobre(im, contenido, 0), os.path.join(destino, "shortcuts.png"), 1400)
         im = pinta(casa, estado, lengua, "aviso", ODYSSEYVK_HUD_AVISO=1)
         guarda(sobre(im, caja_alfa(im, (W // 2, H // 2, W, H))), os.path.join(destino, "card.png"), 1100)
+        # (v1.17) las dos listas de redes: la FP16 bajada y puesta, la FP32 por bajar y la de video bajada y marcada (otro
+        # archivo disperso de su tamano)
+        video = os.path.join(modelos, "video_depth_anything_small_fp32.onnx")
+        with open(video, "wb") as f:
+            f.truncate(116528885)
+        with open(os.path.join(casa, ".config", "odysseyvk", "serve.conf"), "a") as f:
+            f.write("modelo_video = %s\n" % video)
+        im = pinta(casa, estado, lengua, "redes", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_CORRIDA=CORRIDA_REDES)
+        guarda(sobre(im, contenido, 0), os.path.join(destino, "networks.png"), 1400)
+        # (v1.17) la vista de depuracion: una sesion 3D de mentira (el hub y el estado del visor, con lo medido con la
+        # FP16 en la RTX 5080) y, detras, la vista de depuracion de la nave de docs/img/fuente/depth-debug.png (su mitad
+        # derecha, 800 x 450 bajo la franja de los rotulos)
+        hub, est = os.path.join(estado, "odysseyvk", "hub"), os.path.join(estado, "odysseyvk", "estado")
+        with open(hub, "w") as f:
+            f.write("sesion = video\nsesion_modo = conv\n")
+        with open(est, "w") as f:
+            f.write("fps = 120.0\nmapa_ms = 10.5\nmapas_s = 6.0\nred_ms = 4.3\nver_profundidad = si\nconversor = puesto\n"
+                    "modelo = %s\ntarjeta = NVIDIA\nprof_juego = -\n" % os.path.join(modelos, "depth_anything_v2_small_fp16.onnx"))
+        try:
+            im = pinta(casa, estado, lengua, "depuracion", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_SESION=1,
+                       ODYSSEYVK_HUD_DEPURACION=1, ODYSSEYVK_HUD_PASTILLA=0)
+        finally:
+            os.remove(hub)
+            os.remove(est)
+        nave = Image.open(os.path.join(RAIZ, "docs", "img", "fuente", "depth-debug.png")).convert("RGB")
+        prof = nave.crop((816, 40, 1616, 490)).resize((W, H), Image.LANCZOS).convert("RGBA")
+        prof.alpha_composite(im)
+        guarda(prof.convert("RGB"), os.path.join(destino, "debug-view.png"), 1400)
     finally:
         shutil.rmtree(tmp)
 

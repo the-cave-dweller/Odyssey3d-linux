@@ -59,7 +59,7 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   blue tag. The ticked one goes to `modelo =` in `serve.conf` and a running viewer switches to it at once. From the
   terminal: `odysseyvk ctl net download` (FP16) or `odysseyvk ctl net download fp32`. If the Odyssey 3D Hub's own
   `mde_large.onnx` is in that folder it is used when nothing is ticked (key `1`/`2` switches).
-- Videos only (since 1.16, experimental): Video Depth Anything Small (`video_depth_anything_small_fp32.onnx`, a
+- Videos only (since 1.17, experimental): Video Depth Anything Small (`video_depth_anything_small_fp32.onnx`, a
   community ONNX export of the Apache-2.0 model; any `.onnx` with «video» in its name counts too) looks at a window of
   the last 32 frames at 504×280 and keeps the newest map; the window restarts at scene cuts, which for this network
   are found on the image before it runs (a 32×32 luminance thumbnail against the previous one; cut above 0.14). It goes to
@@ -67,12 +67,12 @@ player. `Tab` hands the screen back to the browser; clicking the taskbar returns
   session switches when it's ticked or unticked (a game ignores it). Needs ~2.3 GB on the GPU (the CUDA cap rises to
   3.5 GB for it) and refuses the CPU, falling back to the usual network. In the panel the two lists sit side by side
   (the usual on the left, videos only on the right), and a side with more than two networks becomes a drop-down.
-- Debug view (since 1.16): the panel's *Debug view* checkbox sends `ver_profundidad = 1|0` to the viewer (the
+- Debug view (since 1.17): the panel's *Debug view* checkbox sends `ver_profundidad = 1|0` to the viewer (the
   `Ctrl+Shift+9` view) and keeps only the two network lists, in a column on the left, without the veil and with the
   keyboard on demand, so networks can be switched while watching the depth. Beside the checkbox: `red_ms` (the
   network alone), `mapa_ms` (with preparing and cleaning the map), `mapas_s` and `fps` from the viewer's `estado`,
   refreshed every second. It mirrors the viewer: opening the panel while the depth view is on opens this layout.
-- GPU engine (since 1.16): whatever the installed ONNX Runtime offers, in this order: CUDA (`onnxruntime-cuda`,
+- GPU engine (since 1.17): whatever the installed ONNX Runtime offers, in this order: CUDA (`onnxruntime-cuda`,
   NVIDIA), MIGraphX (`onnxruntime-rocm`, AMD), the older ROCm engine, else the CPU (where the FP32 is used if
   present). `ODYSSEYVK_PROVEEDOR=cuda|migraphx|rocm|cpu` forces one. With AMD, ONNX Runtime's HIP device numbers are
   matched to the amdgpu cards by PCI address; if the requested card has under a quarter of the memory of the

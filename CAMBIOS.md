@@ -3,7 +3,31 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
-## La red en la CUDA 1 ya no deja un contexto de 386 MiB en la CUDA 0 (v1.16)
+## Versión 1.17: la red que quieras con la vista de depuración en vivo, una red solo para vídeos, AMD y la ventanita de 3D o 2D (v1.17)
+
+- Rodolfo: «haz el anuncio», «brinda mediciones», «usa las medidas fáciles y en tablita». `VERSION` seguía en 1.16
+  aunque después de la 1.16 se habían subido 14 cambios: a quien ya la tenía no le salía la tarjeta de actualización.
+  Con 1.17 se la ofrece.
+- **Lo que trae** (cada cosa en su entrada, abajo):
+  - **La vista de depuración en vivo**: una casilla en la pestaña 3D pone la profundidad a la vista y deja el panel en
+    una columna a la izquierda con las dos listas de redes y, junto a la casilla, lo que tarda la red cada segundo;
+  - **La red que quieras**: las de siempre y las de solo vídeos lado a lado, un desplegable con más de dos, y
+    cualquier `.onnx` de la carpeta `models`; el panel, más ancho;
+  - **Video Depth Anything pequeña**, solo para vídeos (experimental), con los cambios de plano vistos en la imagen;
+  - **AMD con ROCm** (MIGraphX; sin probar en una AMD de verdad), y OdysseyVK compila otra vez sin ONNX Runtime;
+  - **La primera vez de cada aplicación**, una ventanita pregunta 3D o 2D; lo de las PR #1 y #2 (los deslizadores
+    dicen su valor, la cámara por su enlace, `modo = flat`, la tarjeta CUDA por su UUID, la FP32 en la CPU, el scaler);
+  - **CUDA con sus opciones de verdad** (30 MiB menos por red) y sin los 386 MiB en la otra tarjeta; `ctl net
+    download` en inglés.
+- **Lo que no**: la red por Vulkan (ncnn), que quitaría la dependencia de CUDA y de ROCm, se está midiendo aparte y no
+  está en el programa (por ahora unas 10 veces más lenta que por CUDA): no se anuncia.
+- **El README**: «Lo nuevo de la 1.17» arriba, con dos tablitas (lo que cuesta cada red en la RTX 5080; la red de
+  vídeo en un cambio de plano, antes y ahora); fuera las notas de versiones viejas («desde la 1.13», «hasta la
+  1.15»...) y la sección de la pestaña Experimental; una tabla en vez del párrafo largo de la FP16 y la FP32. Las
+  capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
+  (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
+
+## La red en la CUDA 1 ya no deja un contexto de 386 MiB en la CUDA 0 (v1.17)
 
 - Cada proceso que abría la red en la 5080 (CUDA 1) se quedaba además con **386 MiB en la 4090** (CUDA 0), por eso
   los `capture3d` salían con C+G en la GPU 0. MEDIDO el 27-nov con onnxruntime-cuda 1.29, una sonda paso a paso y un
@@ -23,7 +47,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   El registro sigue diciendo CUDA 1 y los mapas salen iguales (máx. 1/255, lo mismo que entre dos corridas del mismo
   binario). En la sonda, por la vía vieja: 386 → 0 en la 0 y 666 MiB en la 1, igual que antes.
 
-## `tools/prueba-aparte.sh` ya no deja visores de prueba vivos (v1.16)
+## `tools/prueba-aparte.sh` ya no deja visores de prueba vivos (v1.17)
 
 - Rodolfo: «remove the running cyberpunk tests you found, always make the program end tests after closure». Había dos
   `odysseyvk test` de otra prueba con casi 10 h vivos (606 + 738 MiB de VRAM cada uno): `timeout` mataba gamescope,
@@ -34,7 +58,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Ctrl+C o por una señal, se mata todo lo marcado que siga vivo: SIGTERM y, a los 3 s, SIGKILL (probado con un
   proceso que no hace caso a SIGTERM: muerto a los ~5 s).
 
-## La red de vídeo ve los cambios de plano en la imagen, antes de pasar (v1.16)
+## La red de vídeo ve los cambios de plano en la imagen, antes de pasar (v1.17)
 
 - Rodolfo: «se pueden usar las separaciones de plano en depth anything video para mejorar o reemplazar las nuestras?».
   Video Depth Anything no tiene ninguna: ni su modo por ventanas ni el de flujo miran cortes ni vacían su memoria
@@ -60,7 +84,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   que antes. Son tres cortes de verdad: el 0,14 queda en medio, pero no está calibrado con muchos (un corte entre dos
   tomas muy parecidas podría quedar por debajo).
 
-## La pestaña 3D: las redes en dos mitades, desplegables y la vista de depuración en vivo (v1.16)
+## La pestaña 3D: las redes en dos mitades, desplegables y la vista de depuración en vivo (v1.17)
 
 - Rodolfo: «I want a dropdown button for Depth network once the user exceeds 2 models, Add to the right side, like
   half and half one for video only models … also add a debug view on and off button for live testing in the middle
@@ -93,7 +117,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   ajuste), «Ninguna» (`modelo_video = no`), poner y quitar la vista (`ver_profundidad = 1` y `0`, y la región de
   entrada cambia). Las traducciones: 0 sin traducir.
 
-## Una red de profundidad solo para vídeos: Video Depth Anything pequeña (v1.16, experimental)
+## Una red de profundidad solo para vídeos: Video Depth Anything pequeña (v1.17, experimental)
 
 - Rodolfo: «can we try this for videos only?» (github.com/DepthAnything). Video Depth Anything mira una ventana de
   los últimos 32 cuadros y da el mapa de todos; se queda el del cuadro de ahora. No hay ONNX oficial: es la
@@ -118,7 +142,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   cambio en vivo va y la orden vieja no se atiende; 60 cuadros por segundo con el bucle por debajo de 3 ms, y se
   cierra limpio.
 
-## La red por CUDA, con sus opciones de verdad: la vía V2 de ONNX Runtime 1.29 (v1.16)
+## La red por CUDA, con sus opciones de verdad: la vía V2 de ONNX Runtime 1.29 (v1.17)
 
 - Salió midiendo otra red (27-nov): `DepthNet::init` pedía CUDA por nombre (`AppendExecutionProvider("CUDA", …)`) y
   con `onnxruntime-cuda` 1.29.0 eso falla siempre («Unknown provider name 'CUDA'»: por nombre van DML, QNN,
@@ -143,7 +167,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Visto de paso, sin tocar**: cada proceso que abre la red en CUDA 1 ocupa además 386 MiB en la 4090 (CUDA 0)
   desde que se añade el proveedor CUDA a la sesión, por las dos vías igual.
 
-## `odysseyvk ctl net download`, en inglés (v1.16)
+## `odysseyvk ctl net download`, en inglés (v1.17)
 
 - Rodolfo, con las dos líneas del README: «change to english in this command». Ahora se escribe `odysseyvk ctl net
   download` (la FP16) y `odysseyvk ctl net download fp32`; también vale `network`. El de siempre, `ctl red
@@ -152,7 +176,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - Probado: `net download`, `net download fp32`, `network download fp32` y `red descargar` dicen que ya está;
   `net download fp64` da el uso; `net` sola, el estado.
 
-## La red de profundidad también en tarjetas AMD, con ROCm (v1.16)
+## La red de profundidad también en tarjetas AMD, con ROCm (v1.17)
 
 - Rodolfo: «can you implement rocm apart from cuda?, not sure if i talk nonsense». No lo era: la red va con ONNX
   Runtime, que tiene motores para AMD.
@@ -182,7 +206,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   probar**: la red en una tarjeta AMD de verdad (haría falta `onnxruntime-rocm`, que sustituye al de CUDA, y la pila
   de ROCm entera).
 
-## OdysseyVK compila otra vez sin ONNX Runtime (v1.16)
+## OdysseyVK compila otra vez sin ONNX Runtime (v1.17)
 
 - Rodolfo: «Haz esta tarea aquí: “Make OdysseyVK build without ONNX Runtime”». CMake dice que sin
   `onnxruntime-cuda` el programa se compila sin el conversor de 2D a 3D, pero no compilaba: se había ido rompiendo
@@ -204,7 +228,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   `mapa` dice que falta la red y el ejecutable no enlaza nada de ONNX. Sin probar: el visor sin red con un vídeo de
   verdad.
 
-## Lo que faltaba de la PR #2: `ctl red descargar` con algo raro, y la FP16 por la CPU (v1.16)
+## Lo que faltaba de la PR #2: `ctl red descargar` con algo raro, y la FP16 por la CPU (v1.17)
 
 - Rodolfo: «nothing else was missing?». Repasada la PR #2 entera contra lo pasado a mano, quedaban dos cosas chicas:
   - `odysseyvk ctl red descargar fp64` (o con algo de más) bajaba la FP16 sin decir nada; ahora da el uso,
@@ -216,7 +240,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   con sus pasos no se nota; queda aparte.
 - No hay más PR ni issues en el repositorio: las tres de Noa3, cerradas.
 
-## La primera vez de cada aplicación de vídeo, una ventanita pregunta 3D o 2D (v1.16)
+## La primera vez de cada aplicación de vídeo, una ventanita pregunta 3D o 2D (v1.17)
 
 - Rodolfo, sobre la PR #2 de Noa3 (lo de no pasar a 3D lo no apuntado): «he is right, it must be a popup first so that
   the overlay appears only after selecting ... and remembering, please make a consistent option to the pill», y luego
@@ -244,7 +268,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     se queda en 2D» y la segunda vez «marcada como 2D plano: no se hace nada»; con 3D, `auto = org.kde.konsole:conv`
     y la segunda vez sin preguntar.
 
-## La cámara por su enlace, `modo = flat`, la tarjeta CUDA por su UUID, la FP32 en la CPU y el scaler sin confirmar (v1.16)
+## La cámara por su enlace, `modo = flat`, la tarjeta CUDA por su UUID, la FP32 en la CPU y el scaler sin confirmar (v1.17)
 
 - Rodolfo, con la PR #2 de Noa3 («Fix stereo camera detection, 2D opt-in, depth selection and scaler rollback», hecha
   sobre la 1.14). Cinco arreglos; se pasaron a mano a la 1.16, cada uno mirado contra lo de ahora:
@@ -275,7 +299,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Sin probar** en una sesión 3D de verdad: el fallo del scaler (no se le puede pedir al monitor que falle) y lo de la
   cámara por su enlace.
 
-## Los deslizadores dicen su valor mientras se arrastran, y Anticipar la cabeza vuelve a 0 con su flechita (v1.16)
+## Los deslizadores dicen su valor mientras se arrastran, y Anticipar la cabeza vuelve a 0 con su flechita (v1.17)
 
 - Rodolfo, con la PR #1 de Noa3 («Preview head anticipation while dragging and add a reset button», hecha sobre la
   1.14): «this helps?, help me to implement». Ayuda: no entra tal cual (el panel cambió entero en la 1.16), así que
@@ -296,7 +320,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **Probado** en un KWin aparte, como la prueba de la PR: arrastrar de 12 a 45 ms y quedarse quieto 1,5 s (con la
   lista rehecha en medio): se ve 45 ms con la bola en 45 y serve.conf sigue en 12; al soltar, 45; la flechita, 0.
 
-## La tesela de la Versión, como el botón «Actualizar a» de antes (v1.16)
+## La tesela de la Versión, como el botón «Actualizar a» de antes (v1.17)
 
 - Rodolfo, con una foto del botón «Actualizar a 1.16» junto al aspa (lo que enseña la 1.15 instalada) y otra de la
   tesela diciendo «1.15, hay la 1.16»: «haz que esto ocurra aqui».
