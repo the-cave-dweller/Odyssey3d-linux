@@ -3149,9 +3149,19 @@ static int cmdAjustes(int argc, char **argv) {
   /* sobre un video o un juego en 3D no sale la pestana de Juegos (rama experimental): se lanzan desde
      el escritorio. Su nombre vacio la esconde y las demas conservan su numero. */
   if (haySesion && st.pestana == 1) st.pestana = 0;
+  /* (v1.16) y sobre un juego (o con una sesion 3D) tampoco la de Integraciones (Rodolfo: «sin menu de integraciones
+     cuando la interfaz esta sobre un juego, unicamente fuera en ajustes, en el escritorio»), ni el engranaje de
+     las caratulas que la abre */
+  bool sinIntegraciones = haySesion;
   auto rellenar = [&] {
     prefs::llenar(st, prefs::leer(), juegos, ids);
     if (haySesion && st.pestanas.size() > 1) st.pestanas[1].clear();
+    if (sinIntegraciones) {
+      if (st.pestanas.size() > 2) st.pestanas[2].clear();
+      if (st.pestana == 2) st.pestana = 0;
+      for (Hud::ItemPanel &it : st.items)
+        if (it.tipo == Hud::ItemPanel::Juego) it.ayudas.clear();
+    }
   };
   /* al abrirse, una mirada a GitHub (v0.99): asi la pestana Programa y el boton junto al aspa estan
      al dia sin esperar a la mirada del servicio. Es un curl aparte; si no hay red, no pasa nada. */
@@ -3174,6 +3184,10 @@ static int cmdAjustes(int argc, char **argv) {
         juegoUuid = w.uuid, juegoApp = w.appId;
       break;
     }
+  }
+  if (!juegoUuid.empty() && !sinIntegraciones) {
+    sinIntegraciones = true;   /* (v1.16) la ventana activa es un juego */
+    rellenar();
   }
   /* el pin (rama experimental): fijado encima, sin velo y con el teclado a pedido */
   st.fijado = panelFijado();
@@ -3413,7 +3427,7 @@ static int cmdAjustes(int argc, char **argv) {
         const std::string id = ids[(size_t)g.item];
         const bool cambio = prefs::aplicar(id, g.sub, g.frac, g.soltado, juegos, &aviso, &cerrar);
         /* (v1.15) el engranaje de una caratula o un juego de la lista de Integraciones: a esa pestana, arriba */
-        if (const int p = prefs::tomarPestana(); p >= 0) {
+        if (const int p = prefs::tomarPestana(); p >= 0 && !(p == 2 && sinIntegraciones)) {
           st.pestana = p;
           st.corrida = 0.0f;
         }
@@ -3675,7 +3689,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
       if (std::sscanf(tm, "%fx%f", &an, &al) == 2) hud.state().panelAncho = an, hud.state().panelAlto = al;
     }
     /* ODYSSEYVK_HUD_SESION=1: como con un video o un juego en 3D debajo (sin la pestana de Juegos) */
-    if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 1) hud.state().pestanas[1].clear();
+    if (std::getenv("ODYSSEYVK_HUD_SESION") && hud.state().pestanas.size() > 2)
+      hud.state().pestanas[1].clear(), hud.state().pestanas[2].clear();   /* (v1.16) ni Juegos ni Integraciones */
     hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);

@@ -13,6 +13,11 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   hacia arriba, centrados encima de ella. La tarjeta de aviso, que ya iba
   abajo a la derecha, sube encima de la pastilla si está a la vista. El cuadrito de FPS sigue a su izquierda, y el
   tramo que la trae de vuelta cuando está oculta es el del medio de donde estaba.
+- **Integraciones, solo en el escritorio** (Rodolfo: «sin menu de integraciones cuando la interfaz esta sobre un
+  juego, unicamente fuera en ajustes, en el escritorio»). Con una sesión 3D (vídeo o juego), o con un juego como
+  ventana activa al abrir el panel, la pestaña Integraciones no sale. Tampoco el engranaje de las carátulas que la
+  abre. Es como la de Juegos, que ya no salía con una sesión 3D. `ODYSSEYVK_HUD_SESION=1` en `ctl hud` quita las
+  dos.
 - `ODYSSEYVK_HUD_ASK=0` (pruebas): `ctl hud` sin la tarjeta de la pregunta, para ver la pastilla y sus menús solos.
 - Probado: pintado con `ctl hud` (la pastilla con el menú Relieve abierto, y con un aviso encima). Sin probar en el
   visor de verdad.
