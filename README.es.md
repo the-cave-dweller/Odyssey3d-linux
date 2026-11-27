@@ -345,4 +345,8 @@ Hecho sobre el trabajo de [macdissey-3d](https://github.com/Fulviuus/macdissey-3
 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) para la profundidad y
 [YuNet](https://github.com/opencv/opencv_zoo) para detectar caras. Licencia MIT.
 
+El panel sigue el estilo de [vkDaedalus](https://github.com/Daaboulex/vkDaedalus), para que los dos se sientan
+iguales en un juego, y usa su letra, [Barlow](https://github.com/jpt/barlow) (SIL Open Font License 1.1, ver
+`assets/fuentes/OFL-Barlow.txt`), metida en el programa.
+
 Las capturas se hacen con `python3 tools/capturas-readme.py`.

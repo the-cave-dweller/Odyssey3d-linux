@@ -113,6 +113,22 @@ public:
     bool panel = false;
     int pestana = 0;
     std::vector<std::string> pestanas;
+    /* (v1.16) el panel al estilo de vkDaedalus (Rodolfo: «la interfaz del resto siga un estilo como el de vkdaedalus
+       ... misma escala tambien, para que se sientan consistentes»): a pantalla completa con un velo, la barra de
+       arriba, una fila de teselas y la tarjeta de la pestana debajo. `marco` = false, el panel flotante de antes.
+       Las pestanas son las teselas grandes del centro, con `pestanasNota` debajo (lo que tiene cada una: «13
+       juegos»); `teselas`, las chicas de los lados (tres a la izquierda y tres a la derecha): un rotulo, lo que
+       vale y si esta puesto; al picarla se aplica su `id` como una fila. `aparicion` va de 0 a 1 al abrirse: la
+       interfaz sube desde la pastilla y se hace opaca */
+    bool marco = true;
+    std::vector<std::string> pestanasNota;
+    struct Tesela {
+      std::string id, titulo, valor;
+      bool puesta = false;   /* el valor, en el acento */
+      int icono = 0;         /* ver Hud::iconoTesela */
+    };
+    std::vector<Tesela> teselas;
+    float aparicion = 1.0f;
     std::vector<ItemPanel> items;
     float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
     std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
@@ -237,7 +253,8 @@ public:
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
     HitPanelItem,      /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
-    HitPanelCopiar     /* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam */
+    HitPanelCopiar,    /* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam */
+    HitPanelTesela     /* (v1.16) una tesela chica de los lados: `sub` = cual (State::teselas) */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -364,6 +381,7 @@ private:
     int w = 0, h = 0;
     float radio = 0.0f;
     size_t orden = 0;        /* (v1.14) cuantos vertices habia en v_ al ponerla: se pinta en su turno, no encima de todo */
+    float alfa = 1.0f;       /* (v1.16) con el panel apareciendo, se hace opaca con el */
   };
   std::vector<ImagenCpu> imagenes_;
   float text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
@@ -385,6 +403,10 @@ private:
      las dos siluetas del paisaje (todas en pixeles del atlas) */
   Rect icoCerrar_, icoPalomita_, icoAnillo_, hueco_, monteLejos_, monteCerca_, icoEngranaje_, icoFlecha_, icoGlobo_,
       icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_, icoLlave_, icoLogo_, icoEncender_;
+  /* (v1.16) los de las teselas al estilo de vkDaedalus: el cubo del 3D, el mando de Juegos, el enchufe de
+     Integraciones, los deslizadores de Ajustes, la cabeza del seguimiento, las barras de los FPS y las capas del HUD */
+  Rect icoCubo_, icoMando_, icoEnchufe_, icoDeslizadores_, icoCabeza_, icoBarras_, icoCapas_;
+  const Rect &iconoTesela(int k) const;
   /* el radio que trae dibujada cada mascara, en píxeles de la mascara: mask9 saca de ahi la
      porcion de esquina y la estira hasta el radio que se pida en pantalla. Con la píldora es la
      mitad del cuadrado (48 de 96), o sea un cuarto de circulo entero; de ahi sale la pista y la
@@ -397,6 +419,14 @@ private:
   std::vector<std::pair<unsigned, Glyph>> extra_;
   const Glyph *glifo(unsigned cp) const;
   float asc_ = 17.0f;   /* ascenso de la fuente en píxeles del atlas */
+  /* (v1.16) Barlow, la letra de vkDaedalus (dentro del programa): [0] normal, [1] seminegrita, solo el latino-1; lo
+     que no tenga (ruso, chino, japones) sale de la de siempre. `fuente_` elige con cual escriben text() y
+     textWidth(): 0 = la de siempre (la pastilla), 1 = Barlow, 2 = Barlow seminegrita */
+  Glyph glyphsB_[2][256]{};
+  float ascB_[2] = {17.0f, 17.0f};
+  bool hayBarlow_ = false;
+  int fuente_ = 0;
+  float alfaGlobal_ = 1.0f, desplazY_ = 0.0f;   /* (v1.16) la aparicion del panel: todo lo que se pinta, mas abajo y mas claro */
   bool hasText_ = false;
   std::vector<uint8_t> atlas_;
   int aw_ = 0, ah_ = 0;
@@ -443,6 +473,7 @@ public:
 private:
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelPestanas_;
+  std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */
   std::vector<ZonaItem> zonas_;
   float contenidoAlto_ = 0.0f;
 };

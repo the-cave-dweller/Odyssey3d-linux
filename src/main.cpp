@@ -3146,6 +3146,9 @@ static int cmdAjustes(int argc, char **argv) {
   Hud::State &st = ov.hud().state();
   st.pestana = enJuegos ? 1 : 0;
   st.version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
+  /* (v1.16) al estilo de vkDaedalus, a pantalla completa; ODYSSEYVK_PANEL_VIEJO=1 deja el panel flotante de antes */
+  st.marco = !(entornoOdyssey("ODYSSEYVK_PANEL_VIEJO") && entornoOdyssey("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
+  st.aparicion = st.marco ? 0.0f : 1.0f;
   /* sobre un video o un juego en 3D no sale la pestana de Juegos (rama experimental): se lanzan desde
      el escritorio. Su nombre vacio la esconde y las demas conservan su numero. */
   if (haySesion && st.pestana == 1) st.pestana = 0;
@@ -3190,7 +3193,7 @@ static int cmdAjustes(int argc, char **argv) {
     rellenar();
   }
   /* el pin (rama experimental): fijado encima, sin velo y con el teclado a pedido */
-  st.fijado = panelFijado();
+  st.fijado = st.marco ? false : panelFijado();   /* (v1.16) a pantalla completa no hay pin */
   /* y el acento del panel, el color de resaltado de KDE */
   colorResaltadoKde(st.acentoPanel);
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
@@ -3262,10 +3265,16 @@ static int cmdAjustes(int argc, char **argv) {
   std::string volcadoGuion;
   const double t0Guion = reloj();
   int idiomaDelAtlas = idioma::actual();
+  /* (v1.16) la aparicion: en 0,22 s la interfaz sube desde la pastilla y se hace opaca */
+  const double t0Aparicion = reloj();
   while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
-    ov.waitAndDispatch(guion.empty() ? 100 : 20);
+    ov.waitAndDispatch(st.aparicion < 1.0f ? 8 : (guion.empty() ? 100 : 20));
     Overlay::Golpe g;
     bool repintar = false;
+    if (st.aparicion < 1.0f) {
+      st.aparicion = (float)std::min(1.0, (reloj() - t0Aparicion) / 0.22);
+      repintar = true;
+    }
     while (!guion.empty() && reloj() - t0Guion >= guion.front().t) {
       const PasoGuion p = guion.front();
       guion.erase(guion.begin());
@@ -3284,6 +3293,10 @@ static int cmdAjustes(int argc, char **argv) {
       } else if (p.accion == "pestana") {
         Overlay::Golpe gg;
         gg.tipo = (int)Hud::HitPanelPestana, gg.sub = std::atoi(p.arg.c_str());
+        golpesGuion.push_back(gg);
+      } else if (p.accion == "tesela") {   /* (v1.16) una tesela chica: su numero (0..5) */
+        Overlay::Golpe gg;
+        gg.tipo = (int)Hud::HitPanelTesela, gg.sub = std::atoi(p.arg.c_str());
         golpesGuion.push_back(gg);
       } else if (p.accion == "escribe") {
         teclasGuion.push_back({"", p.arg});
@@ -3355,6 +3368,14 @@ static int cmdAjustes(int argc, char **argv) {
           repintar = true;
         }
       }
+      /* (v1.16) una tesela chica del panel al estilo de vkDaedalus: la del idioma y la de la version hacen lo de sus
+         botones de antes; las demas son interruptores, que se aplican como su fila */
+      std::string idTesela;
+      if (g.tipo == (int)Hud::HitPanelTesela && g.sub >= 0 && (size_t)g.sub < st.teselas.size()) {
+        idTesela = st.teselas[(size_t)g.sub].id;
+        if (idTesela == "menu_idioma") g.tipo = (int)Hud::HitPanelIdioma;
+        else if (idTesela == "buscar_actualizacion") g.tipo = (int)Hud::HitPanelActualizar;
+      }
       /* la lista de idiomas se cierra con cualquier clic que no sea en ella o en su boton */
       const bool clicIdioma = g.tipo == (int)Hud::HitPanelIdioma || g.tipo == (int)Hud::HitPanelIdiomaOpcion;
       if (st.menuIdioma && !clicIdioma) {
@@ -3363,6 +3384,16 @@ static int cmdAjustes(int argc, char **argv) {
       }
       if (g.tipo == (int)Hud::HitPanelCerrar) {
         g_cierraPanel = 1;
+      } else if (g.tipo == (int)Hud::HitPanelTesela && !idTesela.empty()) {
+        std::string aviso;
+        bool cerrar = false;
+        if (prefs::aplicar(idTesela, 0, 0.0f, true, juegos, &aviso, &cerrar)) {
+          std::printf("[ajustes] tesela %s%s%s\n", idTesela.c_str(), aviso.empty() ? "" : " · ", aviso.c_str());
+          std::fflush(stdout);
+          rellenar();
+        }
+        if (!aviso.empty()) st.pie = aviso;
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelModoRed) {
         /* el interruptor AI | Rendimiento de la cabecera: el video normal con la red o sin ella */
         std::string aviso;
@@ -3656,6 +3687,9 @@ static int cmdHudSelfTest(int argc, char **argv) {
   /* ODYSSEYVK_HUD_PANEL=0|1: el panel de ajustes en vez de la tarjeta, en esa pestana (0 = Ajustes,
      1 = Juegos), con lo que hay de verdad en serve.conf y en la biblioteca de Steam */
   hud.state().engranaje = true;
+  hud.state().marco = !(std::getenv("ODYSSEYVK_PANEL_VIEJO") && std::getenv("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
+  /* ODYSSEYVK_HUD_APARICION=0..1: el panel a media aparicion (cuanto ha subido) */
+  if (const char *ap = std::getenv("ODYSSEYVK_HUD_APARICION")) hud.state().aparicion = (float)std::atof(ap);
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;

@@ -71,6 +71,23 @@ foreach(entry ${SP_FILES})
 endforeach()
 add_custom_target(shaders ALL DEPENDS ${SP_GEN})
 
+# --- (v1.16) la letra de la interfaz al estilo de vkDaedalus: Barlow (SIL Open Font License, ver
+# assets/fuentes/OFL-Barlow.txt), dentro del programa como los shaders
+set(FUENTES_GEN "")
+foreach(entry "Barlow-Regular.ttf|kBarlowNormal" "Barlow-SemiBold.ttf|kBarlowSemi")
+  string(REPLACE "|" ";" partes "${entry}")
+  list(GET partes 0 archivo)
+  list(GET partes 1 variable)
+  set(hdr "${SP_DIR}/${variable}.h")
+  add_custom_command(
+    OUTPUT "${hdr}"
+    COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR}/assets/fuentes/${archivo} -DNAME=${variable} -DDST=${hdr} -P "${CMAKE_SOURCE_DIR}/cmake/embed.cmake"
+    DEPENDS "${CMAKE_SOURCE_DIR}/assets/fuentes/${archivo}" "${CMAKE_SOURCE_DIR}/cmake/embed.cmake"
+    COMMENT "metiendo ${archivo} en el programa")
+  list(APPEND FUENTES_GEN "${hdr}")
+endforeach()
+add_custom_target(fuentes ALL DEPENDS ${FUENTES_GEN})
+
 # --- protocolos de KWin (ventanas y captura) -------------------------------------
 # XMLs del paquete plasma-wayland-protocols. LGPL-2.1-or-later: los generamos en el
 # arranque de la compilación y no los repartimos con el programa.
@@ -180,7 +197,7 @@ add_executable(odysseyvk
   src/hoyos.cpp
 )
 
-add_dependencies(odysseyvk shaders)
+add_dependencies(odysseyvk shaders fuentes)
 
 target_compile_definitions(odysseyvk PRIVATE ODYSSEYVK_VERSION="${ODYSSEYVK_VERSION_STRING}")
 

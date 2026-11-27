@@ -1250,6 +1250,32 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
   const Actualizacion act = estadoActualizacion();
   st.actualizacion = act.pendiente ? act.remota : std::string();
   st.alDia = act.alDia;
+  /* (v1.16) las teselas del panel al estilo de vkDaedalus: debajo de las grandes (las pestanas), lo que tiene cada
+     una; a los lados, los interruptores que mas se tocan, la version y el idioma */
+  {
+    const integ::Estado ie = integ::cargar();
+    int conLoSuyo = 0;
+    for (const Juego &j : juegos) {
+      const auto it = ie.juegos.find(j.id);
+      if (it != ie.juegos.end() && (!it->second.propios.empty() || it->second.propia)) conLoSuyo++;
+    }
+    st.pestanasNota = {
+        idioma::trf("Relieve x{}", {conDecimal(v.relieve, 2)}),
+        juegos.size() == 1 ? std::string(idioma::tr("1 juego")) : idioma::trf("{} juegos", {std::to_string(juegos.size())}),
+        conLoSuyo == 0 ? std::string(idioma::tr("Todos igual")) : idioma::trf("{} con lo suyo", {std::to_string(conLoSuyo)}),
+        st.actualizacion.empty() ? std::string("OdysseyVK ") + ODYSSEYVK_VERSION : idioma::trf("Hay la {}", {st.actualizacion})};
+    auto onOff = [](bool b) { return std::string(idioma::tr(b ? "Encendido" : "Apagado")); };
+    st.teselas = {
+        {"profundidad_dlss", idioma::tr("Profundidad de DLSS"), onOff(v.profDlss), v.profDlss, 1},
+        {"hud_plano", idioma::tr("HUD del juego"), idioma::tr(v.hudPlano ? "En el plano" : "Con relieve"), v.hudPlano, 2},
+        {"rastreo", idioma::tr("Seguir la cabeza"), onOff(v.rastreo), v.rastreo, 3},
+        {"fps_juego", idioma::tr("Cuadrito de FPS"), onOff(v.fpsJuego), v.fpsJuego, 4},
+        {"buscar_actualizacion", idioma::tr("Versión"),
+         st.actualizacion.empty() ? std::string(ODYSSEYVK_VERSION) + (st.alDia ? std::string(" · ") + idioma::tr("al día") : std::string())
+                                  : idioma::trf("{}, hay la {}", {ODYSSEYVK_VERSION, st.actualizacion}),
+         !st.actualizacion.empty(), 5},
+        {"menu_idioma", idioma::tr("Idioma"), idioma::nombre(idioma::actual()), false, 6}};
+  }
   if (st.pestana == 3) {
     /* Ajustes (antes Programa, v0.95): arriba el rendimiento (el visor 3D, la red y las tarjetas), luego
        la version, la actualizacion, otros y el desinstalador */

@@ -330,4 +330,8 @@ Built on the work of [macdissey-3d](https://github.com/Fulviuus/macdissey-3d) (m
 [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) for depth and
 [YuNet](https://github.com/opencv/opencv_zoo) for face detection. MIT license.
 
+The panel is styled after [vkDaedalus](https://github.com/Daaboulex/vkDaedalus), so both feel the same in a game,
+and uses its typeface, [Barlow](https://github.com/jpt/barlow) (SIL Open Font License 1.1, see
+`assets/fuentes/OFL-Barlow.txt`), built into the program.
+
 The screenshots are made with `python3 tools/capturas-readme.py`.

@@ -3,6 +3,45 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## El panel, al estilo de vkDaedalus (v1.16)
+
+- Rodolfo: «quiero que la interfaz del resto siga un estilo como el de vkdaedalus cuando se esté en un juego, misma
+  escala tambien, para que se sientan consistentes»; al preguntarle, «Full menu like vkDaedalus» y en todas partes
+  (no solo en los juegos); y «la herramienta desplace el resto de la interfaz hacia la pantalla ya con el estilo de
+  daedalus».
+- **El panel de ajustes, a pantalla completa como el menú de vkDaedalus**, con sus medidas
+  (`overlay/frame_layout.hpp` de vkDaedalus):
+  - un lienzo de diseño de 1280 × 720 que se achica solo si la pantalla no llega; en 1080p mide lo mismo que el de
+    vkDaedalus;
+  - un velo oscuro (el 5,7,10 de vkDaedalus) y la barra de 56 arriba, con el logo y «OdysseyVK» y, a la derecha,
+    la actualización (si hay versión nueva, un botón «Actualizar a …» como su Preview) y el aspa;
+  - el contenido, de 980 en el centro. Las teselas empiezan en 88: en el centro, una grande por pestaña (3D,
+    Juegos, Integraciones, Ajustes) con su icono y una nota debajo («Relieve x1,00», «10 juegos», «Todos igual»,
+    la versión). Las que no salen sobre un juego no ocupan sitio;
+  - a los lados, seis chicas: Profundidad de DLSS, HUD del juego y Seguir la cabeza a la izquierda; Cuadrito de
+    FPS, Versión e Idioma a la derecha. Las cuatro primeras son interruptores: se cambian al picarlas, como su
+    fila. Versión busca la actualización e Idioma abre la lista;
+  - la tarjeta de la pestaña puesta, desde 304, con su nombre arriba, las filas y el pie.
+- **Su paleta, su letra y sus controles**:
+  - la paleta «soft» de vkDaedalus, la que tiene puesta Rodolfo (acento A88FD0, tarjeta 121117, letra E9ECEF);
+  - su letra, Barlow, en normal y seminegrita, metida en el programa (`assets/fuentes`, licencia OFL;
+    `cmake/embed.cmake` como los shaders). El ruso, el chino y el japonés salen de la de siempre, que Barlow no
+    los trae. El atlas pasa de 512 a 1024 de alto;
+  - las secciones van en frase («Tarjetas gráficas», no «TARJETAS GRÁFICAS»), dejando las siglas;
+  - los interruptores son casillas a la izquierda del rótulo, los botones van en el morado fuerte (6E4E8C) con
+    letra blanca, y las esquinas son de 4. La opción puesta va en un fondo más claro, no en el acento.
+- **Aparece desde la pastilla**: en 0,22 s la interfaz sube desde abajo, donde está la pastilla, y se hace opaca.
+  Las carátulas también. El velo solo se oscurece.
+- Sin arrastrar ni cambiar el tamaño (no hay ventana que mover) y sin el pin. Se cierra con el aspa o con Esc,
+  como antes. `ODYSSEYVK_PANEL_VIEJO=1` deja el panel flotante de antes; la pastilla no cambia de letra.
+- **Medido**: pintar la pantalla entera en la CPU cuesta 5 ms en 1080p y 22 ms en 4K.
+- **Probado**:
+  - pintado con `ctl hud` (las cuatro pestañas, a media aparición, en ruso);
+  - en un KWin aparte, el panel de verdad: lienzo de 1920 × 1080, la aparición y la tesela del cuadrito de FPS
+    (`tesela 3` en el guion).
+- **Sin probar** sobre un juego de verdad ni a 4K con la sesión 3D. Las capturas del README siguen siendo las de
+  antes (se rehacen al sacar la versión).
+
 ## La pastilla, abajo en el centro (v1.16)
 
 - Rodolfo: «quiero que el hub siga igual de estilo pero al fondo a la derecha»; y para el resto, «un estilo como el
