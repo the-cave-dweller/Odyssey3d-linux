@@ -40,6 +40,25 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - en el compositor aparte: la región de entrada de la pastilla es 2982,0 858×112 (arriba a la derecha, 56 a
     escala 2), y sigue ocultándose sola.
 
+## ODYSSEYVK=1, otra vez una opción (v1.16)
+
+- Rodolfo: «stop putting the odyssey parameter by yourself, return it as an option». Se deshace lo de «ODYSSEYVK=1
+  en todos los juegos, solo y sin poder quitarse» (más abajo), salvo que el botón Copiar de Juegos sigue fuera:
+  - en Integraciones vuelve a ser un interruptor como las demás variables, de fábrica apagado, para todos los
+    juegos o para uno;
+  - `efectivo` ya no la fuerza, y `fijar`, `cargar` y `sincronizar` la tratan como a las demás;
+  - el servicio ya no escribe las líneas por su cuenta (a los 20 s y cada 5 minutos). Solo escribe lo que quedó
+    pendiente de un cambio hecho con Steam abierto, al cerrarse Steam, como antes.
+- Lo que ya tenía Rodolfo se queda: su `integraciones.conf` guardó `odysseyvk = 1` para todos los juegos, así que
+  sigue puesta hasta que la quite. El README y la guía vuelven a decir que se pone en Integraciones o a mano.
+- **Probado** sobre una copia del `localconfig.vdf` de Rodolfo, en un HOME aparte:
+  - de fábrica no se le pone a nadie (Cyberpunk, sin nada, sigue sin nada; nada por escribir);
+  - puesta para todos, con los juegos ya vistos, a Cyberpunk le queda pendiente `ODYSSEYVK=1 %command%` y los
+    demás la llevan.
+  - Un `integraciones.conf` hecho a mano, sin haber visto los juegos, toma la línea vacía de Cyberpunk como suya
+    (sin ODYSSEYVK). Es lo de siempre de Integraciones (lo que trae la línea la primera vez queda como propio del
+    juego), no de este cambio.
+
 ## La carátula de Alice, el cierre al momento y cada cuadro del panel en 4K de ~72 ms a ~13 (v1.16)
 
 - Rodolfo: «alice lost its image, also, closing is still slow from a video».

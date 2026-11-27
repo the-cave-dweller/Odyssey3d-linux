@@ -980,14 +980,9 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
   struct Var {
     const char *clave, *nombre, *ayuda;
   };
-  /* (v1.16) ODYSSEYVK=1 ya no se elige: va siempre, y lo dice una nota */
-  {
-    Hud::ItemPanel n;
-    n.tipo = Hud::ItemPanel::Nota;
-    n.rotulo = idioma::tr("ODYSSEYVK=1 va siempre: con ella el 3D toma la profundidad de los juegos con DLSS.");
-    pon(n, "");
-  }
-  const Var vars[] = {{"mangohud", "MANGOHUD", "El contador de MangoHud encima del juego"},
+  /* (v1.16) ODYSSEYVK otra vez con su interruptor, como las demas (Rodolfo: «return it as an option») */
+  const Var vars[] = {{"odysseyvk", "ODYSSEYVK", "La capa de OdysseyVK: en los juegos con DLSS, el 3D usa la profundidad del juego"},
+                      {"mangohud", "MANGOHUD", "El contador de MangoHud encima del juego"},
                       {"vkdaedalus", "ENABLE_VKDAEDALUS", "La capa de vkDaedalus"},
                       {"neural_forge", "NEURAL_FORGE_ENABLE", "La capa de Neural Forge; su ejecutable (NEURAL_FORGE_TARGET_EXE) se toma de Neural Forge"},
                       {"vkbasalt", "ENABLE_VKBASALT", "Los filtros de vkBasalt"}};
