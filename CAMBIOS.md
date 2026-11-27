@@ -50,6 +50,48 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Los efectos de ReShade en el visor: una pestaña Efectos y el icono de cada carátula (v1.18)
+
+- Rodolfo: «Add a shaders icon to each game on the games tab menu, use the code from daedalus to get them working, and
+  use my folder for the shafer and lut files ... the shaders must have a toggle pill, each of them a scrollbar and their
+  respective setting sliders, do the settings in your own way», «Take this values as reference for this effects as they
+  are my favorites and I want the same default slider positions», «as you can take advantage of depth just as original
+  reshade did», «name it effects, for the config folder» y «beside games, call it effects».
+- **Dónde corren**: en el visor 3D, sobre cada cuadro que llega del juego y antes del 3D (no dentro del juego, como
+  vkDaedalus). Así valen en cualquier juego sin capa, pasan también por los cuadros que genera MAKO, y tienen
+  profundidad siempre: la del 3D (la de la red o la de DLSS) hace de bufer de profundidad de ReShade
+  (`RESHADE_DEPTH_INPUT_IS_REVERSED` y el plano lejano en 1: `ReShade::GetLinearizedDepth` da 0 cerca y 1 lejos).
+- **El compilador**: el de ReShade FX (crosire, BSD-3) en la versión de vkDaedalus con sus 18 arreglos, en
+  `third_party/reshadefx` (solo la parte de SPIR-V; su LICENSE.md al lado). El runtime es propio
+  (`src/efectos_vk.cpp`), siguiendo el de vkDaedalus (`effect_reshade.cpp`, zlib): texturas y destinos del .fx, sus
+  muestreadores, mezclas, sRGB, mipmaps, las texturas de archivo (las LUT), los uniformes que pone el programa (timer,
+  frametime, framecount, random, pingpong, date) y el back buffer a turnos entre dos imágenes. Se compila en otro hilo
+  (1-3 ms por efecto) y los valores cambian sin compilar. Sin pases de cómputo, texturas 3D ni stencil.
+- **La carpeta**: `~/.config/vkdaedalus/reshade` (Shaders/ y Textures/, con subcarpetas), o la de `efectos_carpeta` en
+  serve.conf. **Los ajustes**: `~/.config/odysseyvk/effects/all.conf` (todos los juegos) y `APPID.conf` (los de un
+  juego), con el formato de vkBasalt (`effects = A:B`, `disabledEffects`, `A.Valor = 1.5`, `A.Vector[1]`, `A@DEFINE`) y
+  `puestos = si|no`.
+- **De fábrica**, los favoritos de Rodolfo con sus valores (su vkdaedalus.conf): CRT y DPX apagados; FakeHDR
+  (HDRPower 0.958, radius1 0.883), LUT-RA y RGBSharpening encendidos. El interruptor de todos empieza **apagado**:
+  con vkDaedalus en el juego se aplicarían dos veces.
+- **El panel**: una pestaña **Efectos** junto a Juegos (la 5 por dentro: `ordenPestanas` la pinta en su sitio sin
+  cambiar los números de las demás), con los de todos los juegos; el icono de efectos (dos destellos) junto al
+  engranaje de cada carátula abre los de ese juego (dentro de un juego, el del suyo sí sale). Cada efecto: su cabecera
+  plegable, su pastilla (un interruptor de pastilla nuevo, `pildora`) y los controles de su .fx (deslizadores con la
+  flechita de volver al valor de fábrica, interruptores, opciones o desplegable); subir, quitar y «Añadir un efecto»
+  con los de la carpeta. Lo que se toca se escribe al momento y el visor lo recoge en medio segundo. Las capturas del
+  visor (`--dump`) salen ya con los efectos.
+- **Probado**: los 5 favoritos, CRT, DPX, DisplayDepth, SMAA (4 pases), MXAO (6), Depth_Cues (3) en la RTX 4090 con
+  `odysseyvk ctl efectos` (sin ventana): los tres favoritos en 0,12 ms por cuadro de 1080p; MagicBloom no, le falta
+  `MagicBloom_Dirt.png` en la carpeta (lo dice). DisplayDepth confirma la profundidad al derecho y cerca = negro. La
+  profundidad del 3D es de 8 bits: niebla, desenfoque y Depth_Cues bien; MXAO (normales) tosco. En el visor, con
+  `tools/prueba-aparte.sh` y `ODYSSEYVK_EFECTOS_JUEGO=todos`: la cadena corre a 3840x2160 y la captura cambia. El
+  panel, pintado en la CPU (la pestaña, la página de un juego, el icono de la carátula) y sus golpes
+  (`ODYSSEYVK_HUD_APLICAR`): encender, deslizar (Gamma al 25 % de 0-4 = 1), añadir, subir, quitar, los de un juego y
+  «Como todos». Sin probar: un juego de verdad con la pestaña abierta encima.
+- `odysseyvk efectos [lista|describir|compilar|ajustes]` y `odysseyvk ctl efectos ENTRADA.png SALIDA.png [--prof P.png]`.
+  `install.sh` pide `spirv-headers`.
+
 ## Teclas de juego, la generación de cada juego en Integraciones y Neural Forge fuera tras un fallo (v1.18)
 
 - Rodolfo: «only show fps overlay once the hub pill is hidden, remember generation preferences per game and include them in

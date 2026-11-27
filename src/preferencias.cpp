@@ -33,6 +33,7 @@ extern char **environ;
 #include "atajos.h"
 #include "integraciones.h"
 #include "mako.h"   /* (v1.18) MAKO FG: su boton de instalar, junto a ENABLE_MAKO */
+#include "efectos.h"   /* (v1.18) los efectos de ReShade: General y el icono de cada caratula */
 #include "util.h"
 
 #if defined(HAVE_JPEG)
@@ -2104,6 +2105,310 @@ static bool aplicarPerfilMako(const std::string &exe, const std::string &que, in
   return true;
 }
 
+/* ---- (v1.18) la pestana de los efectos de ReShade (efectos.h) -----------------------------------------------------
+   Rodolfo: «the shaders must have a toggle pill, each of them a scrollbar and their respective setting sliders, do the
+   settings in your own way» y «beside games, call it effects». La pestana 5, que se ve junto a Juegos, abre los efectos
+   de todos los juegos; el icono de efectos de cada caratula (Juegos), los de ese juego. La pagina: el interruptor de todos, y cada efecto con su
+   cabecera plegable, su pastilla y sus deslizadores (los de su .fx, con los valores de fabrica de los favoritos de
+   Rodolfo); debajo, añadir uno de la carpeta. Lo que se toca se escribe al momento y el visor lo recoge en medio segundo */
+namespace {
+std::string g_efectosDe;               /* los efectos que ensena la pestana: vacio o "*" = los de todos los juegos, o un appid */
+bool g_efectosDesdeJuegos = false;     /* se abrio desde una caratula: Volver lleva a Juegos */
+std::string g_juegoDelPanel;           /* el juego sobre el que se abrio el panel (un boton a sus efectos) */
+
+std::string numeroEfecto(float v, const efectos::Control &c) {
+  if (c.tipo == efectos::Control::Entero || c.tipo == efectos::Control::Lista) return std::to_string((long)std::lround(v));
+  int dec = 3;
+  if (c.paso > 0.0f) {
+    dec = 0;
+    for (float p = c.paso; p < 0.999f && dec < 4; p *= 10.0f) dec++;
+  }
+  char b[48];
+  std::snprintf(b, sizeof b, "%.*f", dec, (double)v);
+  std::string s = b;
+  if (s.find('.') != std::string::npos) {
+    while (!s.empty() && s.back() == '0') s.pop_back();
+    if (!s.empty() && s.back() == '.') s.pop_back();
+  }
+  if (s == "-0") s = "0";
+  return s;
+}
+/* el valor de fabrica de un control: el de los favoritos de Rodolfo si lo dicen, si no el del .fx */
+float fabricaDe(const std::string &efecto, const efectos::Control &c, int comp) {
+  static const efectos::Ajustes fab = efectos::deFabrica();
+  for (const efectos::Efecto &e : fab.lista)
+    if (e.nombre == efecto) return efectos::valorDe(e, c, comp);
+  return c.defecto[std::clamp(comp, 0, 3)];
+}
+std::string nombreDeJuego(const std::vector<Juego> &juegos, const std::string &app) {
+  for (const Juego &j : juegos)
+    if (j.id == app) return j.nombre;
+  return app;
+}
+}  // namespace
+
+static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const std::vector<Juego> &juegos) {
+  auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    st.items.push_back(std::move(it));
+    ids.push_back(id);
+  };
+  const std::string app = g_efectosDe == "*" ? std::string() : g_efectosDe;   /* vacio: los de todos */
+  const std::string nombre = app.empty() ? std::string() : nombreDeJuego(juegos, app);
+  const efectos::Ajustes a = efectos::cargar(app);
+  const auto disp = efectos::disponibles();
+  const std::string carpeta = efectos::carpeta();
+  Hud::ItemPanel s;
+  s.tipo = Hud::ItemPanel::Seccion;
+  s.rotulo = app.empty() ? std::string(idioma::tr("EFECTOS · TODOS LOS JUEGOS")) : idioma::trf("EFECTOS · {}", {nombre});
+  pon(s, "");
+  if (!app.empty()) {   /* los de un juego: su nombre y volver a los de todos (o a Juegos, si se vino de su caratula) */
+    Hud::ItemPanel b;
+    b.tipo = Hud::ItemPanel::Boton, b.rotulo = nombre;
+    b.nota = idioma::tr(a.propio ? "Este juego tiene los suyos" : "Como todos los juegos: lo que cambies aquí será solo de este");
+    b.valorTexto = idioma::tr("Atrás"), b.valor = true;
+    pon(b, "efx:volver");
+  } else {
+    Hud::ItemPanel n0;
+    n0.tipo = Hud::ItemPanel::Nota, n0.rotulo = idioma::tr("Los de cada juego que no tenga los suyos");
+    pon(n0, "");
+    /* sobre un juego: un boton a los suyos */
+    if (!g_juegoDelPanel.empty()) {
+      const efectos::Ajustes suyos = efectos::cargar(g_juegoDelPanel);
+      Hud::ItemPanel j;
+      j.tipo = Hud::ItemPanel::Boton, j.rotulo = idioma::trf("Efectos de {}", {nombreDeJuego(juegos, g_juegoDelPanel)});
+      j.nota = idioma::tr(suyos.propio ? "Este juego tiene los suyos" : "Como todos los juegos");
+      j.valorTexto = idioma::tr("Efectos"), j.valor = true;
+      pon(j, "efx:abrir:" + g_juegoDelPanel);
+    }
+  }
+  if (!app.empty() && a.propio) {
+    Hud::ItemPanel t;
+    t.tipo = Hud::ItemPanel::Boton, t.rotulo = idioma::tr("Volver a los de todos los juegos");
+    t.nota = idioma::tr("Se borran los de este juego");
+    t.valorTexto = idioma::tr("Como todos");
+    pon(t, "efx:como_todos");
+  }
+  if (carpeta.empty()) {
+    Hud::ItemPanel in;
+    in.tipo = Hud::ItemPanel::Info, in.rotulo = idioma::tr("No encontré la carpeta de ReShade");
+    in.nota = idioma::tr("Se busca en ~/.config/vkdaedalus/reshade (Shaders/ y Textures/); otra, con efectos_carpeta en serve.conf.");
+    pon(in, "");
+  }
+  Hud::ItemPanel m;
+  m.tipo = Hud::ItemPanel::Interruptor, m.rotulo = idioma::tr("Efectos"), m.valor = a.puestos;
+  m.nota = idioma::tr("Corren en el visor 3D sobre cada cuadro del juego, antes del 3D, con su profundidad");
+  m.ayuda = carpeta;
+  m.propio = !app.empty() && a.propio;
+  m.pildora = true;
+  pon(m, "efx:puestos");
+  const std::set<std::string> &abiertas = seccionesAbiertas();
+  for (size_t i = 0; i < a.lista.size(); i++) {
+    const efectos::Efecto &e = a.lista[i];
+    const auto it = disp.find(e.nombre);
+    efectos::Descripcion d;
+    if (it != disp.end()) d = efectos::describir(it->second);
+    const bool abierta = abiertas.count("efx:" + e.nombre) > 0;
+    Hud::ItemPanel sp;
+    sp.tipo = Hud::ItemPanel::Seccion, sp.rotulo = e.nombre, sp.plegable = true, sp.valor = abierta, sp.talCual = true;
+    pon(sp, "plegar:efx:" + e.nombre);
+    /* su pastilla */
+    Hud::ItemPanel p;
+    p.tipo = Hud::ItemPanel::Interruptor, p.rotulo = e.nombre, p.valor = e.activo, p.pildora = true;
+    if (it == disp.end()) {
+      p.apagado = true, p.pastilla = idioma::tr("No está"), p.nota = idioma::tr("No está en la carpeta de ReShade");
+    } else if (!d.ok) {
+      p.apagado = true, p.pastilla = idioma::tr("No compila"), p.nota = d.error.substr(0, 160);
+    } else if (d.computo) {
+      p.apagado = true, p.pastilla = idioma::tr("No corre aquí"), p.nota = idioma::tr("Lleva pases de cómputo");
+    } else {
+      p.nota = it->second.size() > carpeta.size() + 1 && it->second.rfind(carpeta, 0) == 0 ? it->second.substr(carpeta.size() + 1) : it->second;
+      if (d.usaProfundidad) p.nota += " · " + std::string(idioma::tr("usa la profundidad del 3D"));
+    }
+    pon(p, "efx:on:" + e.nombre);
+    if (!abierta || !d.ok) continue;
+    for (const efectos::Control &c : d.controles)
+      for (int k = 0; k < c.componentes && k < 4; k++) {
+        const std::string clave = efectos::claveDe(c, k);
+        const float val = efectos::valorDe(e, c, k);
+        std::string rot = c.rotulo;
+        if (c.componentes > 1) rot += c.color ? std::string(" ") + "RGBA"[k] : " [" + std::to_string(k) + "]";
+        const std::string id = "efx:v:" + e.nombre + ":" + clave;
+        Hud::ItemPanel f;
+        f.ayuda = c.ayuda;
+        if (c.tipo == efectos::Control::Bool) {
+          f.tipo = Hud::ItemPanel::Interruptor, f.rotulo = rot, f.valor = val > 0.5f;
+          pon(f, id);
+        } else if (c.tipo == efectos::Control::Lista && c.opciones.size() <= 4) {
+          f.tipo = Hud::ItemPanel::Opciones, f.rotulo = rot, f.opciones = c.opciones, f.elegido = (int)std::lround(val);
+          pon(f, id);
+        } else if (c.tipo == efectos::Control::Lista) {
+          f.tipo = Hud::ItemPanel::Desplegable, f.rotulo = rot, f.elegido = (int)std::lround(val);
+          std::string idl = "lista:efx-" + e.nombre + "-" + clave;
+          for (size_t o = 0; o < c.opciones.size(); o++) {
+            f.opciones.push_back(c.opciones[o]), f.ayudas.push_back(""), f.estadosOpc.push_back(0);
+            idl += '\x1f' + std::string("efx:lista:") + std::to_string(o) + ":" + e.nombre + ":" + clave;
+          }
+          f.valorTexto = f.elegido >= 0 && (size_t)f.elegido < c.opciones.size() ? c.opciones[(size_t)f.elegido] : std::string();
+          pon(f, idl);
+        } else {
+          const float rango = c.maximo - c.minimo;
+          f.tipo = Hud::ItemPanel::Deslizador, f.rotulo = rot;
+          f.frac = std::clamp((val - c.minimo) / rango, 0.0f, 1.0f);
+          f.valorTexto = numeroEfecto(val, c);
+          f.fracDefecto = std::clamp((fabricaDe(e.nombre, c, k) - c.minimo) / rango, 0.0f, 1.0f);
+          pon(f, id);
+        }
+      }
+    if (d.controles.empty()) {
+      Hud::ItemPanel n;
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No tiene ajustes");
+      pon(n, "");
+    }
+    if (i > 0) {
+      Hud::ItemPanel u;
+      u.tipo = Hud::ItemPanel::Boton, u.rotulo = idioma::tr("Orden"), u.nota = idioma::trf("Antes de {}", {a.lista[i - 1].nombre});
+      u.valorTexto = idioma::tr("Subir");
+      pon(u, "efx:subir:" + e.nombre);
+    }
+    Hud::ItemPanel q;
+    q.tipo = Hud::ItemPanel::Boton, q.rotulo = idioma::tr("Quitar de la lista"), q.valorTexto = idioma::tr("Quitar"), q.peligro = true;
+    pon(q, "efx:quitar:" + e.nombre);
+  }
+  /* añadir uno de la carpeta */
+  Hud::ItemPanel sa;
+  sa.tipo = Hud::ItemPanel::Seccion, sa.rotulo = idioma::tr("AÑADIR UN EFECTO");
+  pon(sa, "");
+  Hud::ItemPanel dsp;
+  dsp.tipo = Hud::ItemPanel::Desplegable, dsp.elegido = -1, dsp.valorTexto = idioma::tr("Elige uno…");
+  std::string idd = "lista:efx-anadir";
+  for (const auto &[n, r] : disp) {
+    bool ya = false;
+    for (const efectos::Efecto &e : a.lista) ya = ya || e.nombre == n;
+    if (ya) continue;
+    dsp.opciones.push_back(n), dsp.ayudas.push_back(""), dsp.estadosOpc.push_back(0);
+    idd += '\x1f' + std::string("efx:anadir:") + n;
+  }
+  pon(dsp, idd);
+  Hud::ItemPanel n;
+  n.tipo = Hud::ItemPanel::Nota;
+  n.rotulo = carpeta.empty() ? std::string() : idioma::trf("{} efectos en {}", {std::to_string(disp.size()), carpeta});
+  if (!n.rotulo.empty()) pon(n, "");
+  if (app.empty()) {
+    Hud::ItemPanel n2;
+    n2.tipo = Hud::ItemPanel::Nota;
+    n2.rotulo = idioma::tr("Los efectos (.fx) de ReShade corren en el visor 3D sobre cada cuadro del juego, con la profundidad del 3D. Cada juego puede tener los suyos: el icono de efectos de su carátula, en Juegos.");
+    pon(n2, "");
+  }
+}
+
+static bool aplicarEfectos(const std::string &que, int sub, float frac, std::string *aviso) {
+  if (que.rfind("abrir:", 0) == 0) {
+    g_efectosDe = que.substr(6), g_efectosDesdeJuegos = false;
+    g_pestanaPedida = 5;
+    return true;
+  }
+  if (que == "volver") {   /* a los de todos, o a Juegos si se vino de una caratula */
+    const bool aJuegos = g_efectosDesdeJuegos;
+    g_efectosDe.clear(), g_efectosDesdeJuegos = false;
+    g_pestanaPedida = aJuegos ? 1 : 5;
+    return true;
+  }
+  const std::string app = g_efectosDe == "*" ? std::string() : g_efectosDe;
+  if (que == "como_todos") {
+    efectos::quitarPropios(app);
+    if (aviso) *aviso = idioma::tr("este juego vuelve a los efectos de todos los juegos");
+    return true;
+  }
+  efectos::Ajustes a = efectos::cargar(app);
+  std::string dicho;
+  auto quitar = [&](const std::string &n) {
+    a.lista.erase(std::remove_if(a.lista.begin(), a.lista.end(), [&](const efectos::Efecto &e) { return e.nombre == n; }), a.lista.end());
+  };
+  if (que == "puestos") {
+    a.puestos = !a.puestos;
+    dicho = idioma::tr(a.puestos ? "efectos encendidos" : "efectos apagados");
+  } else if (que.rfind("on:", 0) == 0) {
+    efectos::Efecto *e = a.buscar(que.substr(3));
+    if (!e) return false;
+    e->activo = !e->activo;
+    dicho = idioma::trf(e->activo ? "{} encendido" : "{} apagado", {e->nombre});
+  } else if (que.rfind("quitar:", 0) == 0) {
+    quitar(que.substr(7));
+    dicho = idioma::trf("{} quitado de la lista", {que.substr(7)});
+  } else if (que.rfind("subir:", 0) == 0) {
+    for (size_t i = 1; i < a.lista.size(); i++)
+      if (a.lista[i].nombre == que.substr(6)) {
+        std::swap(a.lista[i], a.lista[i - 1]);
+        break;
+      }
+    dicho = idioma::trf("{} sube en la lista", {que.substr(6)});
+  } else if (que.rfind("anadir:", 0) == 0) {
+    const std::string n = que.substr(7);
+    if (a.buscar(n)) return false;
+    a.lista.push_back(efectos::Efecto{n, true, {}, {}});
+    /* su cabecera, abierta: se ven sus deslizadores */
+    seccionesAbiertas().insert("efx:" + n);
+    if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-secciones").c_str(), "we")) {
+      for (const std::string &c : seccionesAbiertas()) std::fprintf(f, "%s\n", c.c_str());
+      std::fclose(f);
+    }
+    dicho = idioma::trf("{} añadido", {n});
+  } else if (que.rfind("v:", 0) == 0 || que.rfind("lista:", 0) == 0) {
+    /* «v:EFECTO:CLAVE» (deslizador, interruptor u opciones) o «lista:K:EFECTO:CLAVE» (desplegable) */
+    std::string resto = que.substr(que[0] == 'v' ? 2 : 6);
+    long elegidaLista = -1;
+    if (que[0] == 'l') {
+      const size_t dp = resto.find(':');
+      if (dp == std::string::npos) return false;
+      elegidaLista = std::atol(resto.substr(0, dp).c_str());
+      resto = resto.substr(dp + 1);
+    }
+    const size_t dp = resto.find(':');
+    if (dp == std::string::npos) return false;
+    const std::string nom = resto.substr(0, dp), clave = resto.substr(dp + 1);
+    efectos::Efecto *e = a.buscar(nom);
+    const auto disp = efectos::disponibles();
+    const auto it = disp.find(nom);
+    if (!e || it == disp.end()) return false;
+    const efectos::Descripcion d = efectos::describir(it->second);
+    for (const efectos::Control &c : d.controles)
+      for (int k = 0; k < c.componentes && k < 4; k++) {
+        if (efectos::claveDe(c, k) != clave) continue;
+        std::string texto;
+        if (c.tipo == efectos::Control::Bool) {
+          const bool ahora = efectos::valorDe(*e, c, k) <= 0.5f;
+          texto = ahora ? "true" : "false";
+          dicho = c.rotulo + ": " + idioma::tr(ahora ? "Encendido" : "Apagado");
+        } else if (c.tipo == efectos::Control::Lista) {
+          const long o = elegidaLista >= 0 ? elegidaLista : sub;
+          if (o < 0 || (size_t)o >= c.opciones.size()) return false;
+          texto = std::to_string(o);
+          dicho = c.rotulo + ": " + c.opciones[(size_t)o];
+        } else {
+          float v = c.minimo + std::clamp(frac, 0.0f, 1.0f) * (c.maximo - c.minimo);
+          if (c.paso > 0.0f) v = c.minimo + std::round((v - c.minimo) / c.paso) * c.paso;
+          if (c.tipo == efectos::Control::Entero) v = std::round(v);
+          texto = numeroEfecto(v, c);
+          dicho = c.rotulo + " " + texto;
+        }
+        e->fijar(clave, texto);
+      }
+    if (dicho.empty()) return false;
+  } else {
+    return false;
+  }
+  std::string err;
+  if (!efectos::guardar(app, a, &err)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {err});
+    return false;
+  }
+  if (aviso) *aviso = dicho;
+  return true;
+}
+
+void juegoDelPanel(const std::string &appid) { g_juegoDelPanel = appid; }
+void efectosDe(const std::string &que) { g_efectosDe = que; }
+
 static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
   st.pieParametro.clear(), st.pieInterruptor = false;   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
   st.pieCopiado = false;
@@ -2111,7 +2416,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
   /* (v1.15) la 2, la de Rendimiento que ya no se ensenaba, es ahora Integraciones: queda entre Juegos y Ajustes */
-  st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes"), "FG"};   /* (v1.18) y FG */
+  st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes"), "FG", idioma::tr("Efectos")};   /* (v1.18) y FG, y los efectos */
+  st.ordenPestanas = {0, 1, 5, 2, 3, 4};   /* (v1.18) Efectos junto a Juegos (Rodolfo: «beside games, call it effects») */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
@@ -2132,12 +2438,14 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       const auto it = ie.juegos.find(j.id);
       if (it != ie.juegos.end() && (!it->second.propios.empty() || it->second.propia)) conLoSuyo++;
     }
+    const bool efectosTodos = efectos::cargar("").algoQueAplicar();   /* (v1.18) la nota de los efectos */
     st.pestanasNota = {
         idioma::trf("Relieve x{}", {conDecimal(v.relieve, 2)}),
         juegos.size() == 1 ? std::string(idioma::tr("1 juego")) : idioma::trf("{} juegos", {std::to_string(juegos.size())}),
         conLoSuyo == 0 ? std::string(idioma::tr("Todos igual")) : idioma::trf("{} con lo suyo", {std::to_string(conLoSuyo)}),
         st.actualizacion.empty() ? std::string("OdysseyVK ") + ODYSSEYVK_VERSION : idioma::trf("Hay la {}", {st.actualizacion}),
-        notaFg()};   /* (v1.18) la de FG: el multiplicador del juego que corre (X2, X3, X4) o Apagada */
+        notaFg(),   /* (v1.18) la de FG: el multiplicador del juego que corre (X2, X3, X4) o Apagada */
+        std::string(idioma::tr(efectosTodos ? "Encendidos" : "Apagados"))};
     auto onOff = [](bool b) { return std::string(idioma::tr(b ? "Encendido" : "Apagado")); };
     st.teselas = {
         {"profundidad_dlss", idioma::tr("Profundidad de DLSS"), onOff(v.profDlss), v.profDlss, 1},
@@ -2397,6 +2705,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     filasIntegraciones(st, juegos, ids);   /* (v1.15) las opciones de lanzamiento de Steam */
   } else if (st.pestana == 4) {
     filasFg(st, ids);   /* (v1.18) la generacion de cuadros de MAKO */
+  } else if (st.pestana == 5) {
+    filasEfectos(st, ids, juegos);   /* (v1.18) los efectos de ReShade */
   } else {
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "STEAM";
@@ -2413,7 +2723,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       /* 3D salvo que este apuntado como «sin 3D»: su ventana se llama steam_app_<id> */
       fila.valor = juegoEn3D(v, j.id);
       /* (v1.15) el engranaje de la caratula (al pasar el raton) abre sus integraciones: su ayuda */
-      fila.ayudas = {idioma::tr("Integraciones de este juego: sus opciones de lanzamiento de Steam")};
+      fila.ayudas = {idioma::tr("Integraciones de este juego: sus opciones de lanzamiento de Steam"),
+                     idioma::tr("Efectos de este juego (ReShade)")};   /* (v1.18) el icono de sus efectos */
       pon(fila, "juego:" + j.id);
     }
     Hud::ItemPanel n;
@@ -2566,6 +2877,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     return aplicarPerfilMako(id.substr(dos + 1), id.substr(4, dos - 4), sub, aviso);
   }
   /* (v1.15) el engranaje de una caratula: las Integraciones de ese juego */
+  /* (v1.18) el icono de efectos de una caratula: los efectos de ese juego, en su pestana */
+  if (id.rfind("juego:", 0) == 0 && sub == 3) {
+    g_efectosDe = id.substr(6), g_efectosDesdeJuegos = true;
+    g_pestanaPedida = 5;
+    return true;
+  }
+  if (id.rfind("efx:", 0) == 0) return aplicarEfectos(id.substr(4), sub, frac, aviso);
   if (id.rfind("juego:", 0) == 0 && sub == 2) {
     g_integJuego = id.substr(6);
     g_pestanaPedida = 2;

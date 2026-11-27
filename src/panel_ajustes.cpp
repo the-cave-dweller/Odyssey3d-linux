@@ -203,8 +203,11 @@ int cmdAjustes(int argc, char **argv) {
       st.pieParametro.clear(), st.pieInterruptor = false;   /* (v1.16) la casilla de ODYSSEYVK es de Integraciones: en el escritorio */
       for (size_t k = 0; k < st.items.size() && k < ids.size(); k++)
         if (st.items[k].tipo == Hud::ItemPanel::Juego) {
-          st.items[k].ayudas.clear();
           st.items[k].gris = ids[k] != "juego:" + juegoActual || juegoActual.empty();
+          /* (v1.18) sin engranaje (Integraciones, en el escritorio), pero el de ese juego si con su icono de efectos:
+             se ajustan con el juego delante */
+          if (st.items[k].gris || st.items[k].ayudas.size() < 2) st.items[k].ayudas.clear();
+          else st.items[k].ayudas[0].clear();
         }
     }
   };
@@ -247,6 +250,7 @@ int cmdAjustes(int argc, char **argv) {
       for (const WindowInfo &w : wmPanel.windows())
         if (w.uuid == ven->second) juegoActual = appDe(w.appId);
     if (!juegoActual.empty()) std::printf("[ajustes] dentro del juego %s: Integraciones en gris y en Juegos solo el suyo\n", juegoActual.c_str());
+    prefs::juegoDelPanel(juegoActual);   /* (v1.18) la pestana de efectos ofrece los suyos */
   }
   if (!juegoUuid.empty() || haySesion) {
     sinIntegraciones = true;   /* (v1.16) la ventana activa es un juego, o hay una sesion 3D */

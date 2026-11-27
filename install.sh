@@ -10,12 +10,14 @@ missing=()
 for pc in glfw3 libcrypto; do
   pkg-config --exists "$pc" || missing+=("$pc")
 done
+# (v1.18) el compilador de los efectos de ReShade (third_party/reshadefx) saca SPIR-V con las cabeceras de Khronos
+[ -f /usr/include/spirv/unified1/spirv.hpp ] || missing+=("spirv-headers")
 opt=()
 pkg-config --exists mpv    || opt+=("mpv (hace falta para `play`)")
 pkg-config --exists libpng || opt+=("libpng (mapas de corrección del panel)")
 if ((${#missing[@]})); then
   echo "faltan dependencias: ${missing[*]}" >&2
-  echo "  sudo pacman -S --needed cmake gcc pkgconf glfw openssl libpng mpv" >&2
+  echo "  sudo pacman -S --needed cmake gcc pkgconf glfw openssl libpng mpv spirv-headers" >&2
   exit 1
 fi
 if ((${#opt[@]})); then

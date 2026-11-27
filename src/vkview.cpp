@@ -32,6 +32,7 @@
 #include "rendimiento.h"
 #include "monitor.h"
 #include "mako.h"   /* (v1.18) la generacion de cuadros de MAKO, desde el cuadrito de los FPS */
+#include "efectos.h"   /* (v1.18) los efectos de ReShade de cada juego */
 #include "fgvideo.h"   /* (v1.18) y la de los videos, dentro del visor */
 #include "../capa/protocolo.h"   /* (v1.18) OdvkFgCuenta: lo que cuenta el contador, debajo de MAKO */
 #include "vkui.h"
@@ -3275,6 +3276,37 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         juegoVisto = ui.esJuego;
         atajos.ponerJuego(ui.esJuego == 1);
         if (ui.esJuego == 1) std::printf("[atajos] las de un juego: %s\n", atajos.resumen().c_str());
+      }
+    }
+    /* (v1.18) los efectos de ReShade del juego de debajo (efectos.h): los suyos o los de todos, mirados cada medio segundo
+       (el panel los escribe y aqui se recogen sin reabrir nada). Sobre lo que no es un juego, ninguno */
+    {
+      static double tEf = -1.0;
+      static long long firmaEf = -1;
+      static int juegoEf = -2;
+      static std::string appEf;
+      const double tAhora = glfwGetTime();
+      if (tAhora - tEf >= 0.5) {
+        tEf = tAhora;
+        if (ui.esJuego < 0) sobreJuego(ui);
+        /* ODYSSEYVK_EFECTOS_JUEGO=APPID (o «todos»): para las pruebas, como si la fuente fuera ese juego */
+        static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
+        const bool esJuego = forzado || ui.esJuego == 1;
+        const std::string app = forzado ? (std::string(forzado) == "todos" ? std::string() : std::string(forzado)) : ui.appJuego;
+        const long long f = esJuego ? efectos::firma(app) : 0;
+        if ((esJuego ? 1 : ui.esJuego) != juegoEf || f != firmaEf || app != appEf) {
+          juegoEf = esJuego ? 1 : ui.esJuego, firmaEf = f, appEf = app;
+          const efectos::Ajustes aj = esJuego ? efectos::cargar(app) : efectos::Ajustes{};
+          wv.efectos().ajustar(aj);
+          if (esJuego) {
+            std::string lista;
+            for (const efectos::Efecto &e : aj.lista)
+              if (e.activo) lista += (lista.empty() ? "" : ", ") + e.nombre;
+            std::printf("[efectos] %s (%s): %s\n", aj.puestos ? "puestos" : "apagados", aj.propio ? "los del juego" : "los de todos",
+                        lista.empty() ? "ninguno" : lista.c_str());
+            std::fflush(stdout);
+          }
+        }
       }
     }
 #ifdef HAVE_ORT

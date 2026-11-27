@@ -426,6 +426,16 @@ bool Hud::buildAtlas(std::string *err) {
       d = std::min(d, distSegmento(x, y, 30, 34, 25, 39) - 2.2f);
       return d;
     }, &icoFg_);
+    /* (v1.18) el de los efectos de ReShade: dos destellos de cuatro puntas, uno grande y uno chico. La forma es la de
+       sqrt|x| + sqrt|y| = sqrt(R) (un astroide); su distancia, la del valor partido por su pendiente */
+    dibujo([&](float x, float y) {
+      auto destello = [](float px, float py, float r) {
+        auto f = [&](float a, float b) { return std::sqrt(std::fabs(a)) + std::sqrt(std::fabs(b)) - std::sqrt(r); };
+        const float v = f(px, py), gx = (f(px + 0.5f, py) - f(px - 0.5f, py)), gy = (f(px, py + 0.5f) - f(px, py - 0.5f));
+        return v / std::max(0.02f, std::hypot(gx, gy));
+      };
+      return std::min(destello(x - 27.0f, y - 37.0f, 22.0f), destello(x - 48.0f, y - 15.0f, 10.0f));
+    }, &icoEfectos_);
     /* la cabeza del seguimiento: la cabeza y los hombros */
     dibujo([&](float x, float y) {
       float d = std::fabs(std::hypot(x - 32, y - 22) - 10.0f) - 2.4f;
@@ -2084,15 +2094,19 @@ void Hud::dibujaPanel(int vw, int vh) {
        ocupan sitio); a los lados las chicas, tres y tres */
     const float izqC = F.x + std::floor((F.w - anchoC * s) * 0.5f), arriba = F.y + arribaT * s;
     std::vector<int> vistas;
-    for (size_t i = 0; i < st_.pestanas.size(); i++)
-      if (i == 0 || !st_.pestanas[i].empty()) vistas.push_back((int)i);
+    /* (v1.18) en el orden de `ordenPestanas` si lo hay: Efectos (la 5) junto a Juegos sin cambiar los numeros de las demas */
+    std::vector<int> orden = st_.ordenPestanas;
+    if (orden.empty())
+      for (size_t i = 0; i < st_.pestanas.size(); i++) orden.push_back((int)i);
+    for (int i : orden)
+      if (i >= 0 && (size_t)i < st_.pestanas.size() && (i == 0 || !st_.pestanas[(size_t)i].empty())) vistas.push_back(i);
     const int nT = std::max(1, (int)vistas.size());
     const float sitioC = anchoC - 2.0f * 200.0f - 2.0f * 16.0f;
     const float anchoT = std::min(200.0f, (sitioC - 2.0f * (float)(nT - 1)) / (float)nT);
     const float centroW = (float)nT * anchoT + 2.0f * (float)(nT - 1);
     const float centroX = F.x + std::floor((F.w - centroW * s) * 0.5f);
     panelPestanas_.assign(st_.pestanas.size(), fuera);
-    const Rect *iconoPest[5] = {&icoCubo_, &icoMando_, &icoEnchufe_, &icoDeslizadores_, &icoFg_};
+    const Rect *iconoPest[6] = {&icoCubo_, &icoMando_, &icoEnchufe_, &icoDeslizadores_, &icoFg_, &icoEfectos_};   /* (v1.18) y los efectos */
     auto nombrePest = [&](int i) { return i == 0 ? std::string(idioma::tr("3D")) : st_.pestanas[(size_t)i]; };
     for (int k = 0; k < (int)vistas.size(); k++) {
       const int i = vistas[(size_t)k];
@@ -2108,7 +2122,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       textoCabe(nombrePest(i), t.x + t.w * 0.5f - std::min(t.w - 12.0f * s, textWidth(nombrePest(i), 18.0f * s)) * 0.5f, t.y + 16.0f * s,
                 18.0f * s, t.w - 12.0f * s, 1.0f, 1.0f, 1.0f, (puesta || hov ? 1.0f : 0.92f) * tenueT);
       fuente_ = hayBarlow_ ? 1 : 0;
-      if (i < 5)
+      if (i < 6)
         icono({t.x + (t.w - 56.0f * s) * 0.5f, t.y + 64.0f * s, 56.0f * s, 56.0f * s}, *iconoPest[i], puesta ? accent[0] : hex(0xC9D0D7u, 0),
               puesta ? accent[1] : hex(0xC9D0D7u, 1), puesta ? accent[2] : hex(0xC9D0D7u, 2), (puesta || hov ? 1.0f : 0.85f) * tenueT);
       /* en gris, la nota dice por que: solo se abre en el escritorio */
@@ -2363,7 +2377,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       case ItemPanel::Seccion:
         if (marco) {   /* (v1.16) como los grupos de vkDaedalus: en frase, seminegrita y clara */
           fuente_ = hayBarlow_ ? 2 : 0;
-          text(enFrase(it.rotulo), izq, y + 13.0f, 15.0f, 1.0f, 1.0f, 1.0f, 0.95f);
+          text(it.talCual ? it.rotulo : enFrase(it.rotulo), izq, y + 13.0f, 15.0f, 1.0f, 1.0f, 1.0f, 0.95f);
           fuente_ = hayBarlow_ ? 1 : 0;
         } else {
           text(it.rotulo, izq, y + 17.0f, 11.5f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
@@ -2406,14 +2420,15 @@ void Hud::dibujaPanel(int vw, int vh) {
       case ItemPanel::Interruptor: {
         /* (v1.15) en gris: el rotulo y el interruptor apagados, y la pastilla a su izquierda */
         const float ap = it.apagado ? 0.42f : 1.0f;
+        const bool casilla = marco && !it.pildora;   /* (v1.18) con `pildora`, el interruptor de pastilla tambien en el marco */
         /* (v1.16) al estilo de vkDaedalus, una casilla a la izquierda del rotulo en vez del interruptor */
         /* (v1.16) `centrado`: la casilla y su rotulo, juntos en medio de la fila */
         const float izqI = it.centrado ? std::floor(sitio[i].x + (sitio[i].w - 30.0f - textWidth(it.rotulo, 15.0f)) * 0.5f) : izq;
-        const float izqT = marco ? izqI + 30.0f : izqI;
-        float derTexto = marco ? der : der - 46.0f - 16.0f;
+        const float izqT = casilla ? izqI + 30.0f : izqI;
+        float derTexto = casilla ? der : der - 46.0f - 16.0f;
         if (!it.pastilla.empty()) {
           const float wp = textWidth(it.pastilla, 11.5f) + 20.0f;
-          const Rect pa{(marco ? der : der - 46.0f - 12.0f) - wp, y + (h - 22.0f) * 0.5f, wp, 22.0f};
+          const Rect pa{(casilla ? der : der - 46.0f - 12.0f) - wp, y + (h - 22.0f) * 0.5f, wp, 22.0f};
           if (it.pastillaAcento) {   /* (v1.16) en azul: la red ya bajada */
             mask9(pa, 0, R(11.0f), accent[0], accent[1], accent[2], 0.22f);
             text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, std::min(1.0f, accent[0] + 0.22f), std::min(1.0f, accent[1] + 0.22f),
@@ -2426,7 +2441,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         }
         textoCabe(it.rotulo, izqT, yr, 15.0f, derTexto - izqT, ink[0], ink[1], ink[2], ap);
         if (!it.nota.empty()) textoCabe(it.nota, izqT, y + 34.0f, 11.5f, derTexto - izqT, dim[0], dim[1], dim[2], 0.85f * (it.apagado ? 0.8f : 1.0f));
-        if (marco) {
+        if (casilla) {
           const Rect cas{izqI, yr + 1.0f, 18.0f, 18.0f};
           if (it.valor) {
             mask9(cas, 1, 4.0f, accent[0], accent[1], accent[2], ap);
@@ -2673,13 +2688,23 @@ void Hud::dibujaPanel(int vw, int vh) {
         text(it.valor ? "2D" : "3D", it.valor ? chip.x + 19.0f : chip.x + chip.w - 19.0f, chip.y + 6.0f, 10.5f, 1.0f, 1.0f, 1.0f, 0.55f * tenue, true);
         /* (v1.15) al pasar el raton, arriba a la derecha de la caratula, el engranaje de sus integraciones (Rodolfo:
            «un engranaje que aparezca al pasar el mouse donde te puse en la foto»). Es el sub 2 */
+        /* (v1.18) y a su izquierda el de sus efectos de ReShade (Rodolfo: «Add a shaders icon to each game on the games tab»),
+           el sub 3. Cada uno sale si tiene su ayuda: dentro de un juego, el engranaje no (Integraciones va en gris) y los
+           efectos si, en el de ese juego */
         if (hov && !it.ayudas.empty()) {
+          auto boton = [&](const Rect &b, const Rect &ico) {
+            const bool hb = dentro && b.inside(mx_, my_);
+            mask9(b, 0, R(15.0f), 0.0f, 0.0f, 0.0f, hb ? 0.88f : 0.66f);
+            if (hb) mask9({b.x - 1.0f, b.y - 1.0f, b.w + 2.0f, b.h + 2.0f}, 0, R(16.0f), accent[0], accent[1], accent[2], 0.55f);
+            icono({b.x + 6.0f, b.y + 6.0f, 18.0f, 18.0f}, ico, 1.0f, 1.0f, 1.0f, hb ? 1.0f : 0.88f);
+          };
           const Rect eng{cara.x + cara.w - 38.0f, cara.y + 8.0f, 30.0f, 30.0f};
-          z.subs.push_back(eng);
-          const bool he = dentro && eng.inside(mx_, my_);
-          mask9(eng, 0, R(15.0f), 0.0f, 0.0f, 0.0f, he ? 0.88f : 0.66f);
-          if (he) mask9({eng.x - 1.0f, eng.y - 1.0f, eng.w + 2.0f, eng.h + 2.0f}, 0, R(16.0f), accent[0], accent[1], accent[2], 0.55f);
-          icono({eng.x + 6.0f, eng.y + 6.0f, 18.0f, 18.0f}, icoEngranaje_, 1.0f, 1.0f, 1.0f, he ? 1.0f : 0.88f);
+          const bool conEng = !it.ayudas[0].empty(), conEf = it.ayudas.size() > 1 && !it.ayudas[1].empty();
+          const Rect efx{conEng ? eng.x - 36.0f : eng.x, eng.y, 30.0f, 30.0f};
+          z.subs.push_back(conEng ? eng : Rect{-1e6f, -1e6f, 0.0f, 0.0f});
+          z.subs.push_back(conEf ? efx : Rect{-1e6f, -1e6f, 0.0f, 0.0f});
+          if (conEng) boton(eng, icoEngranaje_);
+          if (conEf) boton(efx, icoEfectos_);
         }
         break;
       }
@@ -2699,6 +2724,8 @@ void Hud::dibujaPanel(int vw, int vh) {
       /* (v1.15) el engranaje de una caratula: su ayuda va en ayudas[0] */
       if (it.tipo == ItemPanel::Juego && z.subs.size() > 1 && !it.ayudas.empty() && z.subs[1].inside(mx_, my_))
         ayudaRaton = it.ayudas[0];
+      if (it.tipo == ItemPanel::Juego && z.subs.size() > 2 && it.ayudas.size() > 1 && z.subs[2].inside(mx_, my_))
+        ayudaRaton = it.ayudas[1];   /* (v1.18) el de los efectos */
       /* (v1.16, PR #1) la flechita de un deslizador: a que valor vuelve */
       if (it.tipo == ItemPanel::Deslizador && it.textoFraccion && it.fracDefecto >= 0.0f && !z.subs.empty() && z.subs[0].inside(mx_, my_))
         ayudaRaton = idioma::trf("Volver a {}", {it.textoFraccion(it.fracDefecto)});
@@ -3009,6 +3036,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
         if (it.gris) return HitPanel;   /* (v1.16) en gris, quieta */
         if (!z.subs.empty() && z.subs[0].inside(mx, my) && sub) *sub = 1;
         else if (z.subs.size() > 1 && z.subs[1].inside(mx, my) && sub) *sub = 2;   /* (v1.15) el engranaje */
+        else if (z.subs.size() > 2 && z.subs[2].inside(mx, my) && sub) *sub = 3;   /* (v1.18) los efectos */
         return HitPanelItem;
       case ItemPanel::Texto:   /* (v1.15) la fila entera pone a escribir en el campo */
         return HitPanelItem;

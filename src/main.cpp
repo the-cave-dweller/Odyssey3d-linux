@@ -15,6 +15,8 @@
 #include "preferencias.h"
 #include "integraciones.h"
 #include "mako.h"   /* (v1.18) `odysseyvk mako`: MAKO FG */
+#include "efectos.h"   /* (v1.18) `odysseyvk efectos`: los efectos de ReShade */
+#include "efectos_vk.h"
 #include "bandeja.h"
 #include "idioma.h"
 #include "wm.h"
@@ -3147,6 +3149,211 @@ static const std::vector<std::string> &idsJuegosSteam() {
    escribe lo que falta (con copia del fichero), con Steam abierto lo deja para el servicio */
 /* ---- (v1.18) `odysseyvk mako`: MAKO FG, el generador de cuadros de MAKO (ver mako.h) ----
    La hacen los botones del menu de los FPS y de Integraciones (mako::lanzarInstalacion), y se puede a mano */
+/* (v1.18) `odysseyvk efectos [lista|describir NOMBRE|compilar NOMBRE|ajustes [APPID]]`: los efectos de ReShade (efectos.h) */
+static int cmdEfectos(int argc, char **argv) {
+  const std::string que = argc > 0 ? argv[0] : "lista";
+  const auto disp = efectos::disponibles();
+  if (que == "lista") {
+    std::printf("carpeta: %s\n", efectos::carpeta().empty() ? "(ninguna)" : efectos::carpeta().c_str());
+    for (const auto &[n, r] : disp) std::printf("  %-34s %s\n", n.c_str(), r.c_str());
+    std::printf("%zu efectos\n", disp.size());
+    return 0;
+  }
+  if (que == "ajustes") {
+    const std::string app = argc > 1 ? argv[1] : "";
+    const efectos::Ajustes a = efectos::cargar(app);
+    std::printf("%s (%s) · puestos: %s\n", efectos::rutaAjustes(app).c_str(), a.propio ? "del juego" : "de todos", a.puestos ? "si" : "no");
+    for (const efectos::Efecto &e : a.lista) {
+      std::printf("  %s %s\n", e.activo ? "[x]" : "[ ]", e.nombre.c_str());
+      for (const auto &kv : e.valores) std::printf("      %s = %s\n", kv.first.c_str(), kv.second.c_str());
+    }
+    return 0;
+  }
+  if ((que == "describir" || que == "compilar") && argc > 1) {
+    const auto it = disp.find(argv[1]);
+    if (it == disp.end()) {
+      std::fprintf(stderr, "no hay %s.fx en %s\n", argv[1], efectos::carpeta().c_str());
+      return 1;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    if (que == "compilar") {
+      auto c = efectos::compilar(it->second, 3840, 2160, {});
+      const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      if (!c->ok) {
+        std::printf("%s: NO compila (%.0f ms)\n%s\n", argv[1], ms, c->error.c_str());
+        return 1;
+      }
+      size_t palabras = 0;
+      for (const auto &kv : c->spirv) palabras += kv.second.size();
+      std::printf("%s: compila en %.0f ms · %zu puntos de entrada, %zu palabras de SPIR-V\n", argv[1], ms, c->spirv.size(), palabras);
+      return 0;
+    }
+    const efectos::Descripcion d = efectos::describir(it->second);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    std::printf("%s (%.0f ms): %s%s%s\n", argv[1], ms, d.ok ? "bien" : d.error.c_str(), d.usaProfundidad ? " · usa la profundidad" : "",
+                d.computo ? " · con pases de computo" : "");
+    for (const efectos::Control &c : d.controles)
+      std::printf("  %-22s %-6s x%d  %g..%g paso %g  de fabrica %g %g  «%s»%s\n", c.nombre.c_str(),
+                  c.tipo == efectos::Control::Bool ? "bool" : c.tipo == efectos::Control::Entero ? "entero" : c.tipo == efectos::Control::Lista ? "lista" : "real",
+                  c.componentes, c.minimo, c.maximo, c.paso, c.defecto[0], c.defecto[1], c.rotulo.c_str(),
+                  c.opciones.empty() ? "" : (" · " + std::to_string(c.opciones.size()) + " opciones").c_str());
+    return d.ok ? 0 : 1;
+  }
+  std::fprintf(stderr, "uso: odysseyvk efectos [lista | describir NOMBRE | compilar NOMBRE | ajustes [APPID]]\n");
+  return 2;
+}
+
+/* (v1.18) `odysseyvk ctl efectos ENTRADA.png SALIDA.png [--prof PROF.png] [--veces N] [EFECTO...]`: la cadena de efectos en la
+   tarjeta, sin ventana: la imagen como si fuera un cuadro del juego (en BGRA, como llega de KWin) y la profundidad de un PNG
+   en grises (blanco = cerca, como el mapa del 3D). Sin efectos nombrados, los de todos los juegos (puestos aunque no lo
+   esten). Escribe la salida y lo que tarda */
+static int cmdPruebaEfectos(int argc, char **argv) {
+  if (argc < 2) {
+    std::fprintf(stderr, "uso: odysseyvk ctl efectos ENTRADA.png SALIDA.png [--prof PROF.png] [--veces N] [EFECTO...]\n");
+    return 2;
+  }
+  const std::string entrada = argv[0], salida = argv[1];
+  std::string rutaProf;
+  int veces = 1;
+  std::vector<std::string> nombres;
+  for (int i = 2; i < argc; i++) {
+    const std::string a = argv[i];
+    if (a == "--prof" && i + 1 < argc) rutaProf = argv[++i];
+    else if (a == "--veces" && i + 1 < argc) veces = std::max(1, std::atoi(argv[++i]));
+    else nombres.push_back(a);
+  }
+  int w = 0, h = 0;
+  std::vector<uint8_t> rgba;
+  if (!pngLoadRGBA(entrada, w, h, rgba)) {
+    std::fprintf(stderr, "no se pudo leer %s\n", entrada.c_str());
+    return 1;
+  }
+  efectos::Ajustes aj;
+  if (nombres.empty()) {
+    aj = efectos::cargar("");
+  } else {
+    const efectos::Ajustes fab = efectos::deFabrica();
+    for (const std::string &n : nombres) {
+      efectos::Efecto e;
+      e.nombre = n;
+      for (const efectos::Efecto &f : fab.lista)
+        if (f.nombre == n) e = f;
+      e.activo = true;
+      aj.lista.push_back(e);
+    }
+  }
+  aj.puestos = true;
+  VkDev dev;
+  std::string err;
+  if (!dev.init({}, &err) || !dev.createDevice({}, VK_NULL_HANDLE, &err)) {
+    std::fprintf(stderr, "Vulkan: %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("tarjeta: %s · %dx%d\n", dev.deviceName().c_str(), w, h);
+  /* sube una imagen RGBA a una imagen de la tarjeta (en GENERAL), con su formato */
+  auto subir = [&](const std::vector<uint8_t> &px, int iw, int ih, VkFormat f, size_t bpp, VkImg &out) -> bool {
+    if (!dev.createImage(iw, ih, f, VK_IMAGE_USAGE_SAMPLED_BIT, out, &err)) return false;
+    VkBuffer b = VK_NULL_HANDLE;
+    VkDeviceMemory m = VK_NULL_HANDLE;
+    if (!dev.createBuffer((VkDeviceSize)iw * ih * bpp, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, b, m, &err))
+      return false;
+    void *p = nullptr;
+    vkMapMemory(dev.device(), m, 0, VK_WHOLE_SIZE, 0, &p);
+    std::memcpy(p, px.data(), (size_t)iw * ih * bpp);
+    vkUnmapMemory(dev.device(), m);
+    VkCommandBuffer cb = dev.beginOneTime(&err);
+    VkImageMemoryBarrier ba{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    ba.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, ba.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    ba.srcQueueFamilyIndex = ba.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ba.image = out.img, ba.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}, ba.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ba);
+    VkBufferImageCopy c{};
+    c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    c.imageExtent = {(uint32_t)iw, (uint32_t)ih, 1};
+    vkCmdCopyBufferToImage(cb, b, out.img, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
+    const bool ok = dev.endOneTime(cb, &err);
+    vkDestroyBuffer(dev.device(), b, nullptr);
+    vkFreeMemory(dev.device(), m, nullptr);
+    return ok;
+  };
+  std::vector<uint8_t> bgra = rgba;
+  for (size_t k = 0; k < bgra.size(); k += 4) std::swap(bgra[k], bgra[k + 2]);
+  VkImg fuente, prof;
+  if (!subir(bgra, w, h, VK_FORMAT_B8G8R8A8_UNORM, 4, fuente)) {
+    std::fprintf(stderr, "fuente: %s\n", err.c_str());
+    return 1;
+  }
+  int pw = 0, ph = 0;
+  if (!rutaProf.empty()) {
+    std::vector<uint8_t> pr;
+    if (!pngLoadRGBA(rutaProf, pw, ph, pr)) {
+      std::fprintf(stderr, "no se pudo leer %s\n", rutaProf.c_str());
+      return 1;
+    }
+    std::vector<uint8_t> rg((size_t)pw * ph * 2);
+    for (size_t k = 0; k < (size_t)pw * ph; k++) rg[k * 2] = rg[k * 2 + 1] = pr[k * 4];
+    if (!subir(rg, pw, ph, VK_FORMAT_R8G8_UNORM, 2, prof)) {
+      std::fprintf(stderr, "profundidad: %s\n", err.c_str());
+      return 1;
+    }
+  }
+  int rc = 0;
+  {
+    CadenaEfectos cadena;
+    cadena.iniciar(&dev);
+    cadena.ajustar(aj);
+    VkImageView vista = VK_NULL_HANDLE;
+    const auto t0 = std::chrono::steady_clock::now();
+    while (!cadena.preparar(w, h, &vista) && std::chrono::steady_clock::now() - t0 < std::chrono::seconds(20)) ::usleep(5000);
+    const double msArmar = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    std::printf("%s (lista en %.0f ms)\n", cadena.resumen().c_str(), msArmar);
+    if (!vista) {
+      std::fprintf(stderr, "la cadena no quedo lista\n");
+      rc = 1;
+    } else {
+      double mejor = 1e9;
+      for (int v = 0; v < veces; v++) {
+        VkCommandBuffer cb = dev.beginOneTime(&err);
+        const auto t1 = std::chrono::steady_clock::now();
+        cadena.grabar(cb, fuente.img, w, h, prof.img, pw, ph);
+        dev.endOneTime(cb, &err);
+        vkDeviceWaitIdle(dev.device());
+        mejor = std::min(mejor, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
+      }
+      std::printf("una pasada: %.2f ms (la mejor de %d, con el envio)\n", mejor, veces);
+      VkBuffer b = VK_NULL_HANDLE;
+      VkDeviceMemory m = VK_NULL_HANDLE;
+      dev.createBuffer((VkDeviceSize)w * h * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, b, m, &err);
+      VkCommandBuffer cb = dev.beginOneTime(&err);
+      VkBufferImageCopy c{};
+      c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+      c.imageExtent = {(uint32_t)w, (uint32_t)h, 1};
+      vkCmdCopyImageToBuffer(cb, cadena.imagenSalida(), VK_IMAGE_LAYOUT_GENERAL, b, 1, &c);
+      dev.endOneTime(cb, &err);
+      vkDeviceWaitIdle(dev.device());
+      void *p = nullptr;
+      vkMapMemory(dev.device(), m, 0, VK_WHOLE_SIZE, 0, &p);
+      std::vector<uint8_t> out((size_t)w * h * 4);
+      std::memcpy(out.data(), p, out.size());
+      vkUnmapMemory(dev.device(), m);
+      vkDestroyBuffer(dev.device(), b, nullptr);
+      vkFreeMemory(dev.device(), m, nullptr);
+      for (size_t k = 3; k < out.size(); k += 4) out[k] = 255;
+      if (!glPngSave(salida, w, h, out.data())) rc = 1;
+      double dif = 0.0;
+      for (size_t k = 0; k < out.size(); k++)
+        if (k % 4 != 3) dif += std::abs((int)out[k] - (int)rgba[k]);
+      std::printf("salida: %s · diferencia media con la entrada %.2f/255\n", salida.c_str(), dif / ((double)w * h * 3));
+    }
+    cadena.destruir();
+  }
+  dev.destroyImg(fuente);
+  if (prof.valid()) dev.destroyImg(prof);
+  return rc;
+}
+
 static int cmdMako(int argc, char **argv) {
   const std::string que = argc > 0 ? argv[0] : "estado";
   if (que == "instalar") {
@@ -3444,7 +3651,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;
-    hud.state().pestana = std::max(0, std::min(4, std::atoi(pn)));   /* (v1.18) 4 = FG */
+    hud.state().pestana = std::max(0, std::min(5, std::atoi(pn)));   /* (v1.18) 4 = FG, 5 = efectos */
     std::vector<std::string> ids;
     /* ODYSSEYVK_HUD_CAPTURA=3d (v1.09): ese atajo esperando su combinacion nueva */
     std::string pieCaptura;
@@ -3455,6 +3662,25 @@ static int cmdHudSelfTest(int argc, char **argv) {
     /* (v1.15) ODYSSEYVK_HUD_INTEG=APPID: las Integraciones de ese juego (con ODYSSEYVK_HUD_PANEL=2);
        ODYSSEYVK_HUD_EDITA=clave=texto: escribiendo ese texto en ese campo */
     if (const char *ij = std::getenv("ODYSSEYVK_HUD_INTEG")) prefs::integracionesDe(ij);
+    /* (v1.18) ODYSSEYVK_HUD_EFECTOS=*|APPID: la pagina de efectos (con ODYSSEYVK_HUD_PANEL=5); ODYSSEYVK_HUD_JUEGO_PANEL=APPID:
+       el panel abierto sobre ese juego */
+    if (const char *ef = std::getenv("ODYSSEYVK_HUD_EFECTOS")) prefs::efectosDe(ef);
+    if (const char *jp = std::getenv("ODYSSEYVK_HUD_JUEGO_PANEL")) prefs::juegoDelPanel(jp);
+    /* (v1.18) ODYSSEYVK_HUD_APLICAR=id|sub|frac;...: esos golpes en el panel antes de pintarlo (lo que haria un clic) */
+    if (const char *ap = std::getenv("ODYSSEYVK_HUD_APLICAR")) {
+      std::string todo = ap, uno;
+      std::stringstream ss(todo);
+      while (std::getline(ss, uno, ';')) {
+        const size_t b1 = uno.find('|'), b2 = b1 == std::string::npos ? b1 : uno.find('|', b1 + 1);
+        const std::string id = uno.substr(0, b1);
+        const int sub = b1 == std::string::npos ? 0 : std::atoi(uno.c_str() + b1 + 1);
+        const float frac = b2 == std::string::npos ? 0.0f : (float)std::atof(uno.c_str() + b2 + 1);
+        std::string aviso;
+        bool cerrar = false;
+        const bool ok = prefs::aplicar(id, sub, frac, true, prefs::juegosSteam(), &aviso, &cerrar);
+        std::printf("  aplicar %s: %s%s%s\n", id.c_str(), ok ? "si" : "no", aviso.empty() ? "" : " · ", aviso.c_str());
+      }
+    }
     if (const char *ed = std::getenv("ODYSSEYVK_HUD_EDITA")) {
       const std::string t = ed;
       const size_t ig = t.find('=');
@@ -6821,6 +7047,7 @@ int main(int argc, char **argv) {
     if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
     if (sub == "vkprobe") return cmdVkProbe(argc - 3, argv + 3);
     if (sub == "hud") return cmdHudSelfTest(argc - 3, argv + 3);
+    if (sub == "efectos") return cmdPruebaEfectos(argc - 3, argv + 3);
     if (sub == "teclado") return Overlay::pruebaTeclado(argc > 3 ? argv[3] : "es");
     if (sub == "planos") return cmdPlanos(argc - 3, argv + 3);
     if (sub == "ajuste") return cmdAjuste(argc - 3, argv + 3);
@@ -6923,6 +7150,7 @@ int main(int argc, char **argv) {
   if (cmd == "integraciones")
     return cmdIntegraciones(argc - 2, argv + 2);
   if (cmd == "mako") return cmdMako(argc - 2, argv + 2);
+  if (cmd == "efectos") return cmdEfectos(argc - 2, argv + 2);
   if (cmd == "planos")
     return cmdPlanos(argc - 2, argv + 2);
   if (cmd == "mapa")

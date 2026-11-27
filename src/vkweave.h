@@ -7,6 +7,7 @@
 
 #include "frame.h"
 #include "vkdev.h"
+#include "efectos_vk.h"
 #include "vkui.h"
 #include "weave.h"
 #include "util.h"
@@ -44,6 +45,8 @@ public:
   /* (v1.18) la generacion de cuadros de los videos (fgvideo.h): mientras haya una vista aqui, la trama dibuja esa (un
      cuadro generado, en GENERAL) en lugar de la fuente real; VK_NULL_HANDLE = la real. La vista es de quien la pone */
   void setFuenteGenerada(VkImageView v) { fuenteGenerada_ = v; }
+  /* (v1.18) los efectos de ReShade sobre la fuente, antes de la trama (efectos_vk.h): el visor le da los ajustes del juego */
+  CadenaEfectos &efectos() { return efectos_; }
   /* la fuente real mas nueva (la que llego y aun no paso por frame(), o la ultima que paso) */
   const VkImg *fuenteReal() const;
 
@@ -232,6 +235,8 @@ private:
   uint64_t gen_ = 0;
   VkImg next_{};           /* fuente nueva pendiente de entrar */
   VkImageView fuenteGenerada_ = VK_NULL_HANDLE;   /* (v1.18) */
+  CadenaEfectos efectos_;                          /* (v1.18) */
+  int efectosGen_ = -1;                            /* la fuente que ya paso por los efectos */
   VkImg black_{};          /* reserva por si aún no hay fuente */
   VkImg corrA_{};          /* neutros si no hay ficheros */
   VkImg corrB_{};

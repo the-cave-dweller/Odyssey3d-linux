@@ -60,6 +60,11 @@ What you get:
 - **Neural Forge off after a crash.** With Neural Forge, Integrations runs the game through `odysseyvk juego`: if the GPU
   reports an Xid in the game's processes, Neural Forge is turned off for that game and the game reopens without it; it
   shows off in that game's Integrations until turned back on.
+- **ReShade effects, in the 3D viewer.** An **Effects** tab next to Games and an effects icon on each game's cover:
+  ReShade `.fx` effects from `~/.config/vkdaedalus/reshade` run on every game frame before the 3D, with the 3D's depth
+  as ReShade's depth buffer (so depth effects work in any game). Each effect has its toggle pill and its sliders; all
+  games share one set and any game can have its own (`~/.config/odysseyvk/effects/`). The compiler is ReShade FX
+  (crosire, BSD-3) as patched by vkDaedalus.
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the
   log.
@@ -111,7 +116,7 @@ Arch / CachyOS, everything in one go (an NVIDIA GPU with CUDA, or an AMD one wit
 the rest works on any Vulkan 1.3 GPU):
 
 ```bash
-sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
+sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers spirv-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
 ```
 
 With an **AMD** card, swap `onnxruntime-cuda cuda cudnn` for `onnxruntime-rocm` (not yet tested on AMD hardware): the converter then runs on the GPU through ROCm, with ONNX Runtime's MIGraphX engine. The first time in

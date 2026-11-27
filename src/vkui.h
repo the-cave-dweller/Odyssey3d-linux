@@ -92,6 +92,10 @@ public:
     int lado = 0;
     bool centrado = false;
     std::vector<int> estadosOpc;   /* Desplegable */
+    /* (v1.18) los efectos de ReShade (Rodolfo: «the shaders must have a toggle pill»): `pildora`, un Interruptor con el
+       interruptor de pastilla a la derecha en vez de la casilla; `talCual`, una Seccion con su rotulo como viene (CRT, no Crt) */
+    bool pildora = false;
+    bool talCual = false;
   };
 
   struct State {
@@ -148,6 +152,7 @@ public:
     bool desdePastilla = false;
     /* (v1.16) las pestanas que se ven pero no se pueden abrir (Integraciones dentro de un juego): en gris */
     std::vector<bool> pestanaGris;
+    std::vector<int> ordenPestanas;   /* (v1.18) en que orden se ven (vacio: el de sus numeros) */
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;
@@ -500,7 +505,8 @@ private:
       icoRayo_, icoBajar_, icoDerecha_, icoPin_, icoChip_, icoLlave_, icoLogo_, icoEncender_;
   /* (v1.16) los de las teselas al estilo de vkDaedalus: el cubo del 3D, el mando de Juegos, el enchufe de
      Integraciones, los deslizadores de Ajustes, la cabeza del seguimiento, las barras de los FPS y las capas del HUD */
-  Rect icoCubo_, icoMando_, icoEnchufe_, icoDeslizadores_, icoCabeza_, icoBarras_, icoCapas_, icoFg_;
+  Rect icoCubo_, icoMando_, icoEnchufe_, icoDeslizadores_, icoCabeza_, icoBarras_, icoCapas_, icoFg_,
+      icoEfectos_;   /* (v1.18) los efectos de ReShade: su pestana y el icono de cada caratula */
   Rect icoAtras_;   /* (v1.16) la flecha de volver a la pastilla: ← con su palo, como la de actualizar */
   const Rect &iconoTesela(int k) const;
   /* (v1.16) la paleta del modo (Rodolfo: «make the rest of the ui follow the yellow and blue tint on the currently

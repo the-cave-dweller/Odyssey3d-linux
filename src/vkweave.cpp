@@ -50,6 +50,7 @@ VkShaderModule makeModule(VkDevice dev, const unsigned char *spv, size_t n, std:
 
 bool VkWeave::init(VkDev &dev, VkSurfaceKHR surface, int w, int h, std::string *err) {
   dev_ = &dev;
+  efectos_.iniciar(&dev);
   surface_ = surface;
   if (!createSwapchain(w, h, err)) return false;
 
@@ -539,6 +540,7 @@ void VkWeave::waitIdle() {
 void VkWeave::destroy() {
   if (!dev_) return;
   waitIdle();
+  efectos_.destruir();   /* (v1.18) */
   destroyFrames();
   for (Keep &k : keep_) dev_->destroyImg(k.img);
   keep_.clear();
@@ -1077,9 +1079,22 @@ bool VkWeave::frame(std::string *err) {
     }
   }
   VkImageView srcView = black_.view;
+  const VkImg *fuenteImg = nullptr;
   for (const Keep &k : keep_)
-    if (k.gen == useGen) srcView = k.img.view;
+    if (k.gen == useGen) srcView = k.img.view, fuenteImg = &k.img;
   if (fuenteGenerada_) srcView = fuenteGenerada_;   /* (v1.18) un cuadro generado del video */
+  /* (v1.18) los efectos de ReShade del juego: la trama lee su salida. Se pasan con cada cuadro nuevo de la fuente, o si
+     cambio un ajuste o un efecto lleva tiempo (los de video, con fuenteGenerada_, no: son solo de juegos) */
+  bool correrEfectos = false;
+  if (!fuenteGenerada_ && fuenteImg && fuenteImg->valid()) {
+    VkImageView salidaEf = VK_NULL_HANDLE;
+    if (efectos_.preparar(fuenteImg->w, fuenteImg->h, &salidaEf)) {
+      correrEfectos = useGen != efectosGen_ || efectos_.sucia();
+      srcView = salidaEf;
+    } else {
+      efectosGen_ = -1;
+    }
+  }
 
   /* descriptores del hueco */
   writeWeaveSet(s.weave, srcView, s.ubo, finoEnUso_ ? fino_.view : VK_NULL_HANDLE);
@@ -1142,6 +1157,13 @@ bool VkWeave::frame(std::string *err) {
   }
   barrier(cb, imgs_[idx], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+
+  /* (v1.18) los efectos, antes que nada que lea la fuente */
+  if (correrEfectos) {
+    efectos_.grabar(cb, fuenteImg->img, fuenteImg->w, fuenteImg->h, depthUsable_ && depth_.valid() ? depth_.img : VK_NULL_HANDLE,
+                    depthW_, depthH_);
+    efectosGen_ = useGen;
+  }
 
   /* pasada 0: la profundidad de la fuente con el canto en su sitio (solo con los cantos finos) */
   if (pintarFino) pasoFino(cb, s.weavePre);
@@ -1363,6 +1385,8 @@ bool VkWeave::grab(std::vector<uint8_t> &out, std::string *err, bool copiaPura) 
   ok = ok && dev_->uploadBytes(hv, hbytes, vbo, vboMem, err);
 
   VkImageView srcView = keep_.empty() ? black_.view : keep_.back().img.view;
+  /* (v1.18) con los efectos ya pasados por esta fuente, la captura sale como la pantalla: con ellos */
+  if (!keep_.empty() && keep_.back().gen == efectosGen_ && efectos_.vistaSalida()) srcView = efectos_.vistaSalida();
   VkDescriptorSet wset = ok ? newSet(srcSetLay_) : VK_NULL_HANDLE;
   VkDescriptorSet hset = ok ? newSet(hudSetLay_) : VK_NULL_HANDLE;
   if (ok && (!wset || !hset)) {

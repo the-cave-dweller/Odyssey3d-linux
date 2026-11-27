@@ -188,6 +188,15 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
 - Game keys (registered with KDE only while the viewer is over a game): `Insert` pill, `Delete` DLSS depth or the
   chosen model, `End` MAKO frame generation, `Page Up` / `Page Down` multiplier. `End` collides with vkDaedalus's menu
   key; rebind one of them if you use both.
+- ReShade effects (since 1.18) run in the viewer, not in the game: `CadenaEfectos` (src/efectos_vk.cpp) blits the
+  captured frame to its own RGBA8 image, runs each enabled `.fx` (compiled by `third_party/reshadefx`, the ReShade FX
+  compiler with vkDaedalus's patches, on a worker thread) and the weave samples the result. ReShade's depth texture is
+  the 3D depth map (R8G8, 255 = near) stretched into a 16-bit image, with `RESHADE_DEPTH_INPUT_IS_REVERSED=1` and
+  `RESHADE_DEPTH_LINEARIZATION_FAR_PLANE=1.0`. Settings: `~/.config/odysseyvk/effects/all.conf` and `<appid>.conf`
+  (vkBasalt syntax plus `puestos = si|no`); folder: `efectos_carpeta` in serve.conf or `~/.config/vkdaedalus/reshade`.
+  Not supported: compute passes, 3D textures, stencil. Tests: `odysseyvk efectos compilar NAME`, `odysseyvk ctl
+  efectos IN.png OUT.png [--prof DEPTH.png] [NAME...]`, and `ODYSSEYVK_EFECTOS_JUEGO=APPID|todos` to force a game's
+  effects in a test viewer. If vkDaedalus also runs effects in the game, they apply twice.
 - Only one overlay in front at a time:
   - while the vkDaedalus menu is open (End), the OdysseyVK pill steps aside and the 3D goes flat, so the menu
     reads right. Its state is read from the file vkDaedalus's input hook keeps in `$XDG_RUNTIME_DIR`, so it needs

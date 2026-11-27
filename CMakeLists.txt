@@ -164,6 +164,24 @@ endif()
 
 find_package(OpenMP)
 
+# (v1.18) el compilador de ReShade FX (Patrick Mours / crosire, BSD-3; LICENSE.md junto a el), en la version de vkDaedalus
+# con sus arreglos (subprojects/reshade-7bf9de8b): los efectos .fx de ReShade en el visor. Solo la parte de SPIR-V
+find_path(SPIRV_HEADERS_DIR spirv.hpp PATH_SUFFIXES spirv/unified1)
+if(NOT SPIRV_HEADERS_DIR)
+  message(FATAL_ERROR "faltan las cabeceras de SPIR-V (sudo pacman -S spirv-headers)")
+endif()
+add_library(reshadefx STATIC
+  third_party/reshadefx/effect_codegen_spirv.cpp
+  third_party/reshadefx/effect_expression.cpp
+  third_party/reshadefx/effect_lexer.cpp
+  third_party/reshadefx/effect_parser_exp.cpp
+  third_party/reshadefx/effect_parser_stmt.cpp
+  third_party/reshadefx/effect_preprocessor.cpp
+  third_party/reshadefx/effect_symbol_table.cpp)
+set_target_properties(reshadefx PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
+target_include_directories(reshadefx PUBLIC third_party/reshadefx PRIVATE ${SPIRV_HEADERS_DIR})
+target_compile_options(reshadefx PRIVATE -w)
+
 add_executable(odysseyvk
   src/main.cpp
   src/profjuego.cpp
@@ -198,6 +216,8 @@ add_executable(odysseyvk
   src/mako_instalar.cpp
   src/fgvideo.cpp
   src/integraciones.cpp
+  src/efectos.cpp
+  src/efectos_vk.cpp
   src/capasajenas.cpp
   src/panel_ajustes.cpp
   src/idioma.cpp
@@ -223,7 +243,7 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(odysseyvk PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
-target_link_libraries(odysseyvk PRIVATE ${GLFW_LIBRARIES} ${CRYPTO_LIBRARIES} ${VULKAN_LIBRARIES} GL EGL pthread m)
+target_link_libraries(odysseyvk PRIVATE reshadefx ${GLFW_LIBRARIES} ${CRYPTO_LIBRARIES} ${VULKAN_LIBRARIES} GL EGL pthread m)
 if(WAYLAND_CLIENT_FOUND)
   target_include_directories(odysseyvk PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIRS})
   target_link_libraries(odysseyvk PRIVATE ${WAYLAND_CLIENT_LIBRARIES})
@@ -343,11 +363,12 @@ install(TARGETS odysseyvk RUNTIME DESTINATION bin)
 if(WAYLAND_CLIENT_FOUND)
   add_executable(odysseyvk-panel src/panel_main.cpp src/panel_ajustes.cpp src/overlay.cpp src/vkui.cpp src/preferencias.cpp src/monitor.cpp
                  src/integraciones.cpp src/mako.cpp src/wm.cpp src/ajuste.cpp src/idioma.cpp src/util.cpp src/atajos.cpp src/pngsave.cpp
+                 src/efectos.cpp
                  ${PROTO_GEN})
   add_dependencies(odysseyvk-panel fuentes)
   target_compile_definitions(odysseyvk-panel PRIVATE ODYSSEYVK_VERSION="${ODYSSEYVK_VERSION_STRING}" HAVE_WAYLAND_WM=1)
   target_include_directories(odysseyvk-panel PRIVATE src ${PROTO_DIR} ${SP_DIR} ${WAYLAND_CLIENT_INCLUDE_DIRS})
-  target_link_libraries(odysseyvk-panel PRIVATE ${WAYLAND_CLIENT_LIBRARIES} pthread m)
+  target_link_libraries(odysseyvk-panel PRIVATE reshadefx ${WAYLAND_CLIENT_LIBRARIES} pthread m)
   if(WAYLAND_CURSOR_FOUND)
     target_include_directories(odysseyvk-panel PRIVATE ${WAYLAND_CURSOR_INCLUDE_DIRS})
     target_link_libraries(odysseyvk-panel PRIVATE ${WAYLAND_CURSOR_LIBRARIES})

@@ -53,6 +53,11 @@ Lo que tienes:
 - **Los cuadros reales y los generados en el cuadrito.** Como vkDaedalus, una segunda capa mínima cuenta los cuadros
   debajo de MAKO y la de OdysseyVK encima, así que el cuadrito dice «Reales» y «Generados» (`ODYSSEYVK_CONTAR_MAKO=1`,
   que Integraciones pone junto a `ODYSSEYVK=1` y `ENABLE_MAKO=1`).
+- **Los efectos de ReShade, en el visor 3D.** Una pestaña **Efectos** junto a Juegos y un icono de efectos en cada
+  carátula: los `.fx` de ReShade de `~/.config/vkdaedalus/reshade` corren sobre cada cuadro del juego antes del 3D, con
+  la profundidad del 3D como bufer de profundidad de ReShade (así los de profundidad valen en cualquier juego). Cada
+  efecto con su pastilla y sus deslizadores; todos los juegos comparten unos y cualquiera puede tener los suyos
+  (`~/.config/odysseyvk/effects/`). El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
 - **Teclas de juego.** Solo sobre un juego: `Insert` oculta o muestra la pastilla, `Supr` cambia la profundidad entre
   DLSS y el modelo elegido, `Fin` enciende o apaga la generación de cuadros de MAKO, `RePág` / `AvPág` dan x2 → x3 → x4 y
   al revés (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda
@@ -114,7 +119,7 @@ Arch / CachyOS, todo de una vez (una NVIDIA con CUDA, o una AMD con ROCm, para e
 cualquier tarjeta con Vulkan 1.3):
 
 ```bash
-sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
+sudo pacman -S --needed cmake gcc pkgconf git glfw openssl libpng freetype2 vulkan-icd-loader vulkan-headers spirv-headers glslang wayland plasma-wayland-protocols libpipewire systemd-libs mpv onnxruntime-cuda cuda cudnn
 ```
 
 Con una tarjeta **AMD**, cambia `onnxruntime-cuda cuda cudnn` por `onnxruntime-rocm` (aún sin probar en una AMD de
