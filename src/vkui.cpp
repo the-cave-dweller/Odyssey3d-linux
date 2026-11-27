@@ -687,13 +687,19 @@ void Hud::icono(Rect r, const Rect &m, float cr, float cg, float cb, float ca, f
 /* Cielo, sol, sierra y lomas. En el video dividido cada mitad lleva la imagen entera aplastada a la
    mitad, como llega de verdad. Las esquinas se redondean tapandolas con el color de lo que hay
    detras (por eso se le pasa). */
-void Hud::paisaje(Rect r, float apretado, float luz, float radio, const float *fondo) {
-  solid(r.x, r.y, r.w, r.h, 0.42f * luz, 0.33f * luz, 0.88f * luz, 1.0f);
+void Hud::paisaje(Rect r, float apretado, float luz, float radio, const float *fondo, const float *tinte) {
+  /* (v1.16) con `tinte`, del color del modo (los dos botones del tipo de video en la pastilla: el azul de Neural o el
+     ambar del rendimiento; Rodolfo: «can the desktop buttons also have the yellow and blue colors?»); sin el, morado */
+  float cielo[3] = {0.42f, 0.33f, 0.88f}, sol[3] = {0.82f, 0.76f, 1.0f}, lejos[3] = {0.31f, 0.23f, 0.70f}, cerca[3] = {0.21f, 0.15f, 0.50f};
+  if (tinte)
+    for (int k = 0; k < 3; k++)
+      cielo[k] = tinte[k] * 0.72f, sol[k] = tinte[k] * 0.4f + 0.6f, lejos[k] = tinte[k] * 0.50f, cerca[k] = tinte[k] * 0.32f;
+  solid(r.x, r.y, r.w, r.h, cielo[0] * luz, cielo[1] * luz, cielo[2] * luz, 1.0f);
   const float d = r.h * 0.25f;
-  icono({r.x + r.w * 0.80f - d * apretado * 0.5f, r.y + r.h * 0.13f, d * apretado, d}, pill_, 0.82f * luz,
-        0.76f * luz, 1.0f * luz, 1.0f);
-  icono(r, monteLejos_, 0.31f * luz, 0.23f * luz, 0.70f * luz, 1.0f);
-  icono(r, monteCerca_, 0.21f * luz, 0.15f * luz, 0.50f * luz, 1.0f);
+  icono({r.x + r.w * 0.80f - d * apretado * 0.5f, r.y + r.h * 0.13f, d * apretado, d}, pill_, sol[0] * luz,
+        sol[1] * luz, sol[2] * luz, 1.0f);
+  icono(r, monteLejos_, lejos[0] * luz, lejos[1] * luz, lejos[2] * luz, 1.0f);
+  icono(r, monteCerca_, cerca[0] * luz, cerca[1] * luz, cerca[2] * luz, 1.0f);
   if (radio <= 0.0f) return;
   const Rect esq[4] = {{r.x, r.y, radio, radio},
                        {r.x + r.w - radio, r.y, radio, radio},
@@ -1172,14 +1178,14 @@ void Hud::begin(int w, int h, float altoLogico) {
            cual, 3 = suavizado); si no, a lo que haria al picarlo */
         const bool suave = st_.modo3d == 3 || (st_.modo3d != 2 && st_.suavizado);
         if (i == 0) {
-          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo);
+          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo, accent);
         } else if (!suave) {
           const float mitad = (iw - 3.0f) * 0.5f;
-          paisaje({ix, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
-          paisaje({ix + mitad + 3.0f, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo);
+          paisaje({ix, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo, accent);
+          paisaje({ix + mitad + 3.0f, iy, mitad, ih}, 0.5f, luz, 0.0f, fondo, accent);
         } else {
           /* la imagen entera con la raya del corte a trazos: viene partida, se ve de una pieza */
-          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo);
+          paisaje({ix, iy, iw, ih}, 1.0f, luz, 0.0f, fondo, accent);
           for (int k = 0; k < 4; k++)
             solid(ix + iw * 0.5f - 1.0f, iy + 1.0f + (float)k * 5.5f, 2.0f, 3.5f, luz, luz, luz, 1.0f);
         }

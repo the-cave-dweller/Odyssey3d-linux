@@ -23,6 +23,9 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     el modo rendimiento, y salen del menú Relieve. La pastilla se ensancha lo que miden.
   - Con la red, el encendido y la cápsula Neural van del mismo azul de la cápsula (66B8FF). En el modo rendimiento,
     del ámbar.
+  - Y esos dos botones, del color del modo (Rodolfo: «can the desktop buttons also have the yellow and blue colors?»
+    y, con una foto de ellos, «i dont mean the whole ui, i mean this ones»): su dibujo (`paisaje`, con un `tinte`
+    nuevo) va en el azul de Neural o en el ámbar del rendimiento. El de la tarjeta de la pregunta sigue morado.
 - **Sus menús** (Relieve, el del rayo) vuelven a abrirse hacia abajo, pegados a su derecha, en la tarjeta de
   vkDaedalus (121117, esquinas de 8). La tarjeta de aviso vuelve a su esquina de abajo, sin nada encima. El rincón
   que trae la pastilla oculta vuelve a ser su punta derecha.

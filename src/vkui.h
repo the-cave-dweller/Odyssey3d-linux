@@ -377,7 +377,7 @@ private:
   /* el paisaje de las teselas y de los botones de la pastilla: `apretado` lo estrecha (cada mitad
      del video dividido), `luz` lo apaga (el boton que no esta puesto) y `radio` > 0 le redondea las
      esquinas tapandolas con el color `fondo` */
-  void paisaje(Rect r, float apretado, float luz, float radio, const float *fondo);
+  void paisaje(Rect r, float apretado, float luz, float radio, const float *fondo, const float *tinte = nullptr);
   void dibujaPanel(int vw, int vh);
   /* recorte de todo lo que se pinte mientras este puesto (la lista del panel, que corre) */
   Rect recorte_;
