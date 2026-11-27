@@ -38,6 +38,10 @@ std::string rutaConfigOdyssey(const char *nombre);
 /* Ruta dentro de ~/.local/state/odysseyvk: lo que esta pasando ahora mismo (la instantanea del
    panel, la senal de que entregamos la pantalla a proposito), no una preferencia. */
 std::string rutaEstadoOdyssey(const char *nombre);
+/* (v1.18) un ajuste nuestro que antes vivia en ~/.local/state/odysseyvk (Rodolfo: «todo lo tuyo que tenga un setting debe
+   estar en tu carpeta, lo que no te sirva en otra»): su ruta en ~/.config/odysseyvk; la primera vez que no esta ahi y si en
+   la vieja, se pasa (se mueve) */
+std::string rutaAjusteOdyssey(const char *nombre);
 int leerRedPreferida();
 void grabarRedPreferida(int red);
 /* Ruta por convencion de la red nativa (la que baja tools/descargar-modelo.sh). */
@@ -79,7 +83,7 @@ std::string rutaRedVideo();
    da la linea con lo que tardo cada paso. */
 void marcaArranque(const char *paso);
 std::string resumenArranque();
-/* el pin del panel de ajustes (rama experimental): fijado encima o no, en ~/.local/state/odysseyvk/panel-fijado */
+/* el pin del panel de ajustes (rama experimental): fijado encima o no, en ~/.config/odysseyvk/panel-fijado (v1.18; antes en ~/.local/state) */
 bool panelFijado();
 void fijarPanel(bool si);
 /* el color de resaltado de KDE (de ~/.config/kdeglobals), 0..1; false si no lo hay */

@@ -2224,8 +2224,8 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   }
   if (carpeta.empty()) {
     Hud::ItemPanel in;
-    in.tipo = Hud::ItemPanel::Info, in.rotulo = idioma::tr("No encontré la carpeta de ReShade");
-    in.nota = idioma::tr("Se busca en ~/.config/vkdaedalus/reshade (Shaders/ y Textures/); otra, con efectos_carpeta en serve.conf.");
+    in.tipo = Hud::ItemPanel::Info, in.rotulo = idioma::tr("No encontré la carpeta de los efectos");
+    in.nota = idioma::tr("Van en ~/.config/odysseyvk/reshade (Shaders/ y Textures/); otra, con efectos_carpeta en serve.conf.");
     pon(in, "");
   }
   lado = 1;

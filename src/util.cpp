@@ -130,7 +130,7 @@ static int migrarCarpetaDeRedes(const std::string &h) {
   }
   int rutas = 0;
   const std::string a = "/odysseyvk/modelos/", b = "/odysseyvk/models/";
-  for (const std::string &f : {h + "/.config/odysseyvk/serve.conf", rutaEstadoOdyssey("ajuste"), rutaEstadoOdyssey("perfiles")}) {
+  for (const std::string &f : {h + "/.config/odysseyvk/serve.conf", rutaEstadoOdyssey("ajuste"), rutaAjusteOdyssey("perfiles")}) {
     std::string t;
     if (!readSmallFile(f, t) || t.find(a) == std::string::npos) continue;
     for (size_t p = t.find(a); p != std::string::npos; p = t.find(a, p + b.size())) t.replace(p, a.size(), b), rutas++;
@@ -190,6 +190,23 @@ const char *entornoOdyssey(const char *nombre) {
 std::string rutaConfigOdyssey(const char *nombre) {
   const char *home = std::getenv("HOME");
   return std::string(home ? home : "/home") + "/.config/odysseyvk/" + nombre;
+}
+
+std::string rutaAjusteOdyssey(const char *nombre) {
+  const std::string nueva = rutaConfigOdyssey(nombre);
+  std::error_code ec;
+  if (!std::filesystem::exists(nueva, ec)) {
+    const std::string vieja = rutaEstadoOdyssey(nombre);
+    if (std::filesystem::exists(vieja, ec)) {
+      std::filesystem::create_directories(std::filesystem::path(nueva).parent_path(), ec);
+      std::filesystem::rename(vieja, nueva, ec);
+      if (ec) {   /* otro sistema de archivos: se copia y se borra la vieja */
+        std::error_code ec2;
+        if (std::filesystem::copy_file(vieja, nueva, ec2)) std::filesystem::remove(vieja, ec2);
+      }
+    }
+  }
+  return nueva;
 }
 
 std::string rutaEstadoOdyssey(const char *nombre) {
@@ -508,10 +525,10 @@ std::string ensureWaylandEnv() {
    el panel fijado no lo cierra cuando se pica el juego */
 bool panelFijado() {
   std::string t;
-  return readSmallFile(rutaEstadoOdyssey("panel-fijado"), t) && strTrim(t) == "si";
+  return readSmallFile(rutaAjusteOdyssey("panel-fijado"), t) && strTrim(t) == "si";
 }
 void fijarPanel(bool si) {
-  if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-fijado").c_str(), "we")) {
+  if (FILE *f = std::fopen(rutaAjusteOdyssey("panel-fijado").c_str(), "we")) {
     std::fputs(si ? "si\n" : "no\n", f);
     std::fclose(f);
   }

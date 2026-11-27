@@ -519,15 +519,15 @@ struct Overlay::Impl {
 #endif
   }
   /* el sitio y el tamano del panel, para la proxima vez (rama experimental): margenes logicos y tamano
-     en puntos del lienzo, en ~/.local/state/odysseyvk/panel-ventana */
+     en puntos del lienzo, en ~/.config/odysseyvk/panel-ventana (v1.18; antes en ~/.local/state) */
   void guardaVentana() {
-    if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-ventana").c_str(), "we")) {
+    if (FILE *f = std::fopen(rutaAjusteOdyssey("panel-ventana").c_str(), "we")) {
       std::fprintf(f, "%d %d %.0f %.0f\n", margenIzq, margenArr, (double)hud.panelAnchoVisto(), (double)hud.panelAltoVisto());
       std::fclose(f);
     }
   }
   bool leeVentana(int &izq, int &arr, float &ancho, float &alto) const {
-    FILE *f = std::fopen(rutaEstadoOdyssey("panel-ventana").c_str(), "re");
+    FILE *f = std::fopen(rutaAjusteOdyssey("panel-ventana").c_str(), "re");
     if (!f) return false;
     const bool ok = std::fscanf(f, "%d %d %f %f", &izq, &arr, &ancho, &alto) == 4;
     std::fclose(f);

@@ -61,7 +61,7 @@ What you get:
   reports an Xid in the game's processes, Neural Forge is turned off for that game and the game reopens without it; it
   shows off in that game's Integrations until turned back on.
 - **ReShade effects, in the 3D viewer.** An **Effects** tab next to Games and an effects icon on each game's cover:
-  ReShade `.fx` effects from `~/.config/vkdaedalus/reshade` run on every game frame before the 3D, with the 3D's depth
+  ReShade `.fx` effects from OdysseyVK's own folder, `~/.config/odysseyvk/reshade` (copied once from vkDaedalus's or vkBasalt's the first time), run on every game frame before the 3D, with the 3D's depth
   as ReShade's depth buffer (so depth effects work in any game). Each effect has its toggle pill and its sliders; all
   games share one set and any game can have its own (`~/.config/odysseyvk/effects/`). The tab is split in two halves (your effects on the left; adding one and
   the public sources on the right) with a *Preview* checkbox on top: ticked over a game in 3D, the panel becomes a column

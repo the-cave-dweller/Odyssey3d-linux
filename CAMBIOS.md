@@ -122,6 +122,23 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     mueven los deslizadores.
   - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
+## Los ajustes de OdysseyVK, en su carpeta; los shaders en ~/.config/odysseyvk/reshade (v1.18)
+
+- Rodolfo: «los shaders deben ir en una carpeta tuya, donde los guardas, si no tienes muevelos y ajustate» (copiarlos y no
+  moverlos, porque vkDaedalus los lee de la suya: su `shader_manager.conf` apunta a `~/.config/vkdaedalus/reshade`), «todo
+  lo tuyo que tenga un setting debe estar en tu carpeta» y «lo que no te sirva en otra».
+- **Los shaders**: la carpeta de los efectos es ahora `~/.config/odysseyvk/reshade` (Shaders/ y Textures/), y ahí bajan las
+  fuentes públicas. La primera vez que no está, se copia entera de la de vkDaedalus o vkBasalt (a una carpeta aparte que
+  luego se renombra); después ya no se mira la de ellos. `efectos_carpeta` en serve.conf sigue mandando. Copiados los de
+  Rodolfo: 139 `.fx` (24 MB; la carpeta de vkDaedalus queda igual).
+- **Los ajustes que vivían en `~/.local/state/odysseyvk`** pasan a `~/.config/odysseyvk` (solos, la primera vez que se usan,
+  con `rutaAjusteOdyssey`): `perfiles` (los números guardados por red), `seleccion` (las redes a mano), `panel-fijado` (el pin)
+  y `panel-ventana` (el sitio y el tamaño del panel). En `~/.local/state` queda lo que no es un ajuste: los registros, lo
+  que pasa ahora (`hub`, `estado`, `ajuste`, `ventana`), lo medido (`tarjeta_red`), las secciones plegadas, los recados y
+  lo de las descargas.
+- **Probado** con una casa de prueba: la carpeta se copia de la de vkDaedalus (y esa no cambia), no queda la temporal, el
+  panel ve el efecto copiado, y `panel-fijado` pasa de `~/.local/state` a `~/.config/odysseyvk`.
+
 ## Efectos: el interruptor general en la vista previa, la tecla Inicio, arrastrarlos y su aspita; la vista entera (v1.18)
 
 - Rodolfo, con una foto del interruptor «Efectos»: «el boton de encendido general no hace nada, arreglalo, pon en los atajos

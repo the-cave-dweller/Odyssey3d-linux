@@ -54,7 +54,7 @@ Lo que tienes:
   debajo de MAKO y la de OdysseyVK encima, así que el cuadrito dice «Reales» y «Generados» (`ODYSSEYVK_CONTAR_MAKO=1`,
   que Integraciones pone junto a `ODYSSEYVK=1` y `ENABLE_MAKO=1`).
 - **Los efectos de ReShade, en el visor 3D.** Una pestaña **Efectos** junto a Juegos y un icono de efectos en cada
-  carátula: los `.fx` de ReShade de `~/.config/vkdaedalus/reshade` corren sobre cada cuadro del juego antes del 3D, con
+  carátula: los `.fx` de ReShade de la carpeta de OdysseyVK, `~/.config/odysseyvk/reshade` (la primera vez se copian de la de vkDaedalus o vkBasalt), corren sobre cada cuadro del juego antes del 3D, con
   la profundidad del 3D como bufer de profundidad de ReShade (así los de profundidad valen en cualquier juego). Cada
   efecto con su pastilla y sus deslizadores; todos los juegos comparten unos y cualquiera puede tener los suyos
   (`~/.config/odysseyvk/effects/`). La pestaña va en dos mitades (tus efectos a la izquierda; añadir uno y las

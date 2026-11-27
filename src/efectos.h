@@ -10,8 +10,9 @@
    su bufer de profundidad. Tambien pasan por los cuadros que genera MAKO, que llegan al visor por la captura.
 
    El compilador es el de ReShade (ReShade FX → SPIR-V, de crosire, BSD-3), en la version de vkDaedalus con sus arreglos
-   (third_party/reshadefx). Los .fx y sus texturas (las LUT) se leen de la carpeta de ReShade de Rodolfo,
-   ~/.config/vkdaedalus/reshade (Shaders/ y Textures/, con sus subcarpetas), o la de `efectos_carpeta` en serve.conf.
+   (third_party/reshadefx). Los .fx y sus texturas (las LUT) se leen de la carpeta nuestra, ~/.config/odysseyvk/reshade
+   (Shaders/ y Textures/, con sus subcarpetas; la primera vez se copia de la de vkDaedalus o vkBasalt), o de la de
+   `efectos_carpeta` en serve.conf. Las fuentes publicas bajan ahi.
 
    Los ajustes: ~/.config/odysseyvk/effects/all.conf (General → Efectos: los de todos los juegos) y
    ~/.config/odysseyvk/effects/APPID.conf (el icono de efectos de la caratula: los de ese juego). Un juego sin el suyo
@@ -29,9 +30,11 @@ struct effect_module;
 
 namespace efectos {
 
-/* la carpeta de ReShade: `efectos_carpeta` de serve.conf, o la primera que exista de ~/.config/vkdaedalus/reshade,
-   ~/.config/vkBasalt-overlay/reshade, ~/.config/vkBasalt/reshade; vacio si ninguna */
+/* la carpeta de los efectos: `efectos_carpeta` de serve.conf, o la nuestra (carpetaPropia), que la primera vez se copia
+   de ~/.config/vkdaedalus/reshade, ~/.config/vkBasalt-overlay/reshade o ~/.config/vkBasalt/reshade (la primera que haya;
+   sin ninguna, vacia con Shaders/ y Textures/); vacio si no se pudo */
 std::string carpeta();
+std::string carpetaPropia();   /* (v1.18) ~/.config/odysseyvk/reshade */
 /* sus carpetas de sombreadores y de texturas (Shaders/ y Textures/ con todas sus subcarpetas) */
 std::vector<std::string> carpetasSombreadores();
 std::vector<std::string> carpetasTexturas();

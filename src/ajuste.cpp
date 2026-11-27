@@ -590,7 +590,7 @@ int diferencias(const std::map<std::string, double> &numeros, const std::map<std
   return n;
 }
 
-std::string rutaPerfiles() { return rutaEstadoOdyssey("perfiles"); }
+std::string rutaPerfiles() { return rutaAjusteOdyssey("perfiles"); }   /* (v1.18) un ajuste: en ~/.config/odysseyvk */
 
 std::map<std::string, std::map<std::string, double>> leerPerfiles() {
   std::map<std::string, std::map<std::string, double>> todo;
@@ -670,7 +670,7 @@ bool borrarPerfil(const std::string &modelo, std::string *err) {
   return escribirPerfiles(todo, err);
 }
 
-std::string rutaSeleccion() { return rutaEstadoOdyssey("seleccion"); }
+std::string rutaSeleccion() { return rutaAjusteOdyssey("seleccion"); }   /* (v1.18) un ajuste: en ~/.config/odysseyvk */
 
 std::vector<std::string> leerSeleccion() {
   std::vector<std::string> rutas;

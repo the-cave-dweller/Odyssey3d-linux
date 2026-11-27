@@ -32,16 +32,48 @@ namespace fs = std::filesystem;
 namespace efectos {
 
 /* ---- la carpeta ---- */
+/* (v1.18) la nuestra (Rodolfo: «los shaders deben ir en una carpeta tuya [...] si no tienes muevelos y ajustate», que se
+   copien, no se muevan: vkDaedalus los sigue leyendo de la suya, y «todo lo tuyo que tenga un setting debe estar en tu
+   carpeta»): ~/.config/odysseyvk/reshade, junto a los ajustes de los efectos */
+std::string carpetaPropia() { return rutaConfigOdyssey("reshade"); }
+/* la primera vez que no esta: se copia de la de vkDaedalus o de vkBasalt (lo que haya), una sola vez y entera, a una
+   carpeta aparte que luego se renombra (otro proceso nunca ve una a medias). Despues no se vuelve a mirar la de ellos */
+static void importarSiFalta(const std::string &propia) {
+  std::error_code ec;
+  if (fs::exists(propia, ec)) return;
+  std::string conf;
+  if (const char *x = std::getenv("XDG_CONFIG_HOME"); x && *x) conf = x;
+  else if (const char *h = std::getenv("HOME")) conf = std::string(h) + "/.config";
+  std::string origen;
+  for (const char *rel : {"/vkdaedalus/reshade", "/vkBasalt-overlay/reshade", "/vkBasalt/reshade"})
+    if (fs::is_directory(conf + rel + "/Shaders", ec)) {
+      origen = conf + rel;
+      break;
+    }
+  fs::create_directories(fs::path(propia).parent_path(), ec);
+  const std::string tmp = propia + ".copiando-" + std::to_string((long)::getpid());
+  fs::remove_all(tmp, ec);
+  fs::create_directories(tmp, ec);
+  if (!origen.empty()) {
+    for (const char *sub : {"Shaders", "Textures"})
+      if (fs::is_directory(origen + "/" + sub, ec))
+        fs::copy(origen + "/" + sub, tmp + "/" + sub, fs::copy_options::recursive | fs::copy_options::skip_symlinks, ec);
+  }
+  fs::create_directories(tmp + "/Shaders", ec);
+  fs::create_directories(tmp + "/Textures", ec);
+  fs::rename(tmp, propia, ec);
+  if (ec) fs::remove_all(tmp, ec);   /* otro proceso la creo a la vez: vale la suya */
+  else std::fprintf(stderr, "[efectos] carpeta de los efectos: %s%s\n", propia.c_str(),
+                    origen.empty() ? " (vacia)" : (" (copiada de " + origen + ")").c_str());
+}
 std::string carpeta() {
   const auto sc = ajuste::leerServeConf();
   if (auto it = sc.find("efectos_carpeta"); it != sc.end() && !it->second.empty() && fs::is_directory(it->second))
     return it->second;
-  std::string conf;
-  if (const char *x = std::getenv("XDG_CONFIG_HOME"); x && *x) conf = x;
-  else if (const char *h = std::getenv("HOME")) conf = std::string(h) + "/.config";
-  for (const char *rel : {"/vkdaedalus/reshade", "/vkBasalt-overlay/reshade", "/vkBasalt/reshade"})
-    if (fs::is_directory(conf + rel)) return conf + rel;
-  return {};
+  const std::string propia = carpetaPropia();
+  importarSiFalta(propia);
+  std::error_code ec;
+  return fs::is_directory(propia, ec) ? propia : std::string();
 }
 
 static std::vector<std::string> subcarpetas(const std::string &base) {
