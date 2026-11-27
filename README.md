@@ -248,8 +248,9 @@ see what it changes. In this mode variable refresh is left as the desktop has it
 Since 1.14, in games that use DLSS, OdysseyVK can use the game's own depth instead of guessing it with the
 depth network: the depth buffer the game hands to DLSS every frame, exact and steady, at the game's
 render resolution (in Cyberpunk 2077, 1920×1080). It needs an NVIDIA card, DLSS on in the game (any
-mode) and `ODYSSEYVK=1` in the game's Steam launch options. Switch it on in the panel's Integrations tab (for every
-game, or for one with the gear on its cover) and OdysseyVK writes it into Steam (with Steam closed; with it open, as
+mode) and `ODYSSEYVK=1` in the game's Steam launch options. Switch it on for every game with the box at the bottom of the
+panel's Games tab (hover it for a reminder), or for one game with the gear on its cover (Integrations); games
+where you removed it one by one stay that way and OdysseyVK writes it into Steam (with Steam closed; with it open, as
 soon as it closes); or add it by hand:
 
 ```

@@ -259,8 +259,9 @@ variable queda como la tenga el escritorio.
 Desde la 1.14, en los juegos que usan DLSS, OdysseyVK puede usar la profundidad del propio juego en vez de adivinarla
 con la red: la que el juego le da a DLSS en cada cuadro, exacta y quieta, a la resolución de render
 del juego (en Cyberpunk 2077, 1920×1080). Hace falta una tarjeta NVIDIA, DLSS puesto en el juego
-(cualquier modo) y `ODYSSEYVK=1` en las opciones de lanzamiento de Steam del juego. Se pone en la pestaña
-Integraciones del panel (para todos los juegos, o para uno con el engranaje de su carátula) y OdysseyVK la escribe en
+(cualquier modo) y `ODYSSEYVK=1` en las opciones de lanzamiento de Steam del juego. Se pone para todos los juegos
+con la casilla del pie de la pestaña Juegos del panel (al pasar el ratón recuerda para qué es), o para uno con el
+engranaje de su carátula (Integraciones); los juegos a los que se les quitó uno a uno la siguen sin llevar y OdysseyVK la escribe en
 Steam (con Steam cerrado; con Steam abierto, en cuanto se cierra); o se añade a mano:
 
 ```

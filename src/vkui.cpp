@@ -2464,7 +2464,28 @@ void Hud::dibujaPanel(int vw, int vh) {
   /* (v1.14) en la pestana Juegos, en medio: el parametro de Steam y su boton Copiar (recien copiado, en verde y
      diciendo «Copiado» un momento); la frase del pie se queda a su izquierda */
   panelCopiar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
-  if (!st_.pieParametro.empty()) {
+  if (!st_.pieParametro.empty() && st_.pieInterruptor) {
+    /* (v1.16) la casilla de ODYSSEYVK=1 para todos, en medio del pie: casilla y rotulo se pican juntos */
+    const float tamP = 13.0f, ty = pieCaja.y + 14.0f;
+    const float wP = textWidth(st_.pieParametro, tamP), grupo = 18.0f + 10.0f + wP;
+    /* la casilla quieta (en el centro, menos un tanto): si cambia la cuenta de al lado, solo crece el rotulo */
+    const float gx = std::max(pieCaja.x + 200.0f, pieCaja.x + pieCaja.w * 0.5f - 130.0f);
+    panelCopiar_ = {gx - 8.0f, ty - 6.0f, grupo + 16.0f, 28.0f};
+    const bool hb = panelCopiar_.inside(mx_, my_);
+    if (hb) mask9(panelCopiar_, 0, R(4.0f), 1.0f, 1.0f, 1.0f, 0.06f);
+    const Rect cas{gx, ty - 1.0f, 18.0f, 18.0f};
+    if (st_.pieValor) {
+      mask9(cas, 1, 4.0f, accent[0], accent[1], accent[2], 1.0f);
+      icono({cas.x + 2.0f, cas.y + 2.0f, 14.0f, 14.0f}, icoPalomita_, 0.07f, 0.06f, 0.10f, 1.0f);
+    } else {
+      mask9(cas, 1, 4.0f, Hud::canal(pal_.filoCasilla, 0), Hud::canal(pal_.filoCasilla, 1), Hud::canal(pal_.filoCasilla, 2), 1.0f);
+      mask9({cas.x + 1.5f, cas.y + 1.5f, cas.w - 3.0f, cas.h - 3.0f}, 1, 3.0f, Hud::canal(pal_.pozo, 0), Hud::canal(pal_.pozo, 1),
+            Hud::canal(pal_.pozo, 2), 1.0f);
+    }
+    text(st_.pieParametro, gx + 28.0f, ty - 0.5f, tamP, ink[0], ink[1], ink[2], hb ? 1.0f : 0.90f);
+    if (hb && !st_.pieAyuda.empty()) ayudaRaton = st_.pieAyuda;   /* el recordatorio, solo al pasar el raton */
+    pieMax = std::min(pieMax, gx - (pieCaja.x + 28.0f) - 16.0f);
+  } else if (!st_.pieParametro.empty()) {
     const float tamP = 13.0f, tamB = 12.5f, ty = pieCaja.y + 14.0f;
     const std::string &etq = st_.pieCopiado ? st_.pieCopiadoTexto : st_.pieCopiar;
     const float wP = textWidth(st_.pieParametro, tamP);

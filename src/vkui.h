@@ -216,6 +216,11 @@ public:
        (`pieCopiado`), el boton dice `pieCopiadoTexto` un momento; `pieAyuda`, al pasar el raton */
     std::string pieParametro, pieCopiar, pieCopiadoTexto, pieAyuda;
     bool pieCopiado = false;
+    /* (v1.16) en vez del boton Copiar, una casilla (`pieValor`) con `pieParametro` al lado: ODYSSEYVK=1 para todos los
+       juegos, en el pie de Juegos; su recordatorio (`pieAyuda`) solo al pasar el raton (Rodolfo: «put a reminder to
+       enable the option either per game or globally for DLSS depth, show it only after hovering, place the option
+       there for the global setting») */
+    bool pieInterruptor = false, pieValor = false;
   };
 
   enum Hit {

@@ -3,6 +3,36 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## ODYSSEYVK=1 para todos desde el pie de Juegos, y el panel del escritorio del tamaño del de encima del juego (v1.16)
+
+- Rodolfo, con una foto del pie de Juegos (donde iba Copiar): «Put a reminder to enable the option either per game
+  or globally for DLSS depth, show it only after hovering, place the option there for the global setting but if any
+  game has it removed remember the specific exclusions, remember to still respect building the gamescope command as
+  told».
+- **La casilla**: en el pie de Juegos, «ODYSSEYVK=1 en todos los juegos», con la cuenta de los que la llevan a su
+  manera («· 1 sin ella» / «· 2 con ella»). Se pica la casilla o el rótulo. La casilla no se mueve aunque cambie la
+  cuenta (centrada, el segundo clic de la prueba caía fuera al encogerse el rótulo).
+- **El recordatorio**, solo al pasar el ratón: para la profundidad de DLSS hace falta ODYSSEYVK=1 en las opciones de
+  Steam; aquí para todos, uno a uno con el engranaje de la carátula; los que la llevan a su manera siguen así.
+- **Las exclusiones**: la casilla cambia solo lo de todos (`prefs::alternarOdysseyTodos`). Un juego con `odysseyvk =
+  0` propio la sigue sin llevar, encendida o apagada para todos. Los `odysseyvk = 1` propios (casi siempre lo tomado
+  de su línea de Steam la primera vez) siguen a lo de todos: si no, apagarla no la quitaba de ninguno (MEDIDO: los 8
+  juegos seguían con ella). La primera versión borraba los propios iguales a lo de todos y con eso, al volver a
+  encenderla, se perdía la exclusión de Cyberpunk: ya no.
+- **La línea**: la de siempre (`integ::linea`), con gamescope `... -- env ODYSSEYVK=1 MANGOHUD=1 ... %command%`.
+- **Dentro de un juego o con un vídeo** la casilla no sale (es de Integraciones, que va en gris).
+- Rodolfo, luego: «also, desktop app size does not match the overlay, adjust». MEDIDO en su registro: en el
+  escritorio el panel dibujaba a 1,50 (la escala del monitor) y sobre un juego a 2,00: un 25 % más chico. Con el
+  marco de vkDaedalus va siempre «al doble», como sobre el juego; y ese doble no pasa de lo que cabe del diseño de
+  1280×720 (en una pantalla de 1280×720, a 1,00: el marco se encogía a 0,5 y lo de dentro de la tarjeta no).
+- **Probado**:
+  - pintado con `ctl hud` (la casilla, y el recordatorio con el ratón encima);
+  - en un KWin aparte (1280×720), con una copia de `localconfig.vdf` y de `integraciones.conf` con Cyberpunk
+    excluido: apagar quita ODYSSEYVK=1 de los 8 que la tenían; encender la pone en 9 y Cyberpunk sigue sin ella; las
+    opciones de lanzamiento del `localconfig.vdf` de verdad, sin tocar;
+  - en un KWin aparte de 3840×2160: el panel del escritorio y el de encima de un vídeo, los dos a 2,00 y del mismo
+    tamaño.
+
 ## La pastilla, otra vez arriba a la derecha, del alto de la barra y al estilo del resto (v1.16)
 
 - Rodolfo, con una foto de la pastilla abajo en el centro: «devuelve el pill a la orilla superior derecha, pero

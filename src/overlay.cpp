@@ -1639,7 +1639,13 @@ void Overlay::showPanel(bool grande, bool velo) {
   s.hud.state().panel = true;
   s.hud.state().ask = false;
   s.hud.state().overlayOn = false;
-  s.hud.setScale(grande ? 2.0f : 0.0f);
+  /* (v1.16) al doble, pero sin pasarse de lo que cabe del diseno de 1280x720: en el 4K de la lente es 2,00, y en una
+     pantalla mas chica el marco se encogia (a 0,5 en 1280x720) sin que lo de dentro de la tarjeta lo siguiera */
+  auto escalaGrande = [&s] {
+    if (s.anchoE <= 0 || s.altoE <= 0) return 2.0f;
+    return std::max(1.0f, std::min(2.0f, std::min((float)s.anchoE / 1280.0f, (float)s.altoE / 720.0f)));
+  };
+  s.hud.setScale(grande ? escalaGrande() : 0.0f);
   s.hud.begin(s.anchoE, s.altoE, s.altoLogico());
 
   /* El escritorio puede haber cambiado desde que arrancó el servicio (otra pantalla
@@ -1657,6 +1663,7 @@ void Overlay::showPanel(bool grande, bool velo) {
   if (s.layer && s.capaEn != (s.elegido ? s.elegido->obj : nullptr))
     s.quitaEscuchaLayer();   /* destruye la capa: se volvera a crear sobre el monitor bueno */
 
+  if (grande) s.hud.setScale(escalaGrande());   /* con el monitor ya elegido */
   s.hud.begin(s.anchoE, s.altoE, s.altoLogico());   /* por si el monitor cambio de tamano */
   if (!s.ajustaGeometria()) return;
   if (entornoOdyssey("ODYSSEYVK_DEBUG_UI"))

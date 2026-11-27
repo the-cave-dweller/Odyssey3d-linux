@@ -144,7 +144,10 @@ int cmdAjustes(int argc, char **argv) {
   const auto hub = ajuste::leerEstadoHub();
   const auto ses = hub.find("sesion");
   const bool haySesion = ses != hub.end() && !ses->second.empty() && ses->second != "ninguna";
-  const bool grande = haySesion || forzarGrande;
+  /* (v1.16) con el marco de vkDaedalus, tambien en el escritorio: a la misma escala que sobre un juego (Rodolfo: «desktop
+     app size does not match the overlay, adjust»). MEDIDO en el G90XF: en el escritorio dibujaba a 1,50 (la escala del
+     monitor) y sobre el juego a 2,00, asi que salia un 25 % mas chico. Se decide abajo, cuando ya se sabe si hay marco */
+  bool grande = haySesion || forzarGrande;
   /* (v1.16) las caratulas se leen al entrar en Juegos (o ya, si se abre en Juegos): para lo demas basta la lista */
   std::vector<prefs::Juego> juegos = prefs::juegosSteam(enJuegos);
   bool conCaratulas = enJuegos;
@@ -162,6 +165,7 @@ int cmdAjustes(int argc, char **argv) {
   /* (v1.16) al estilo de vkDaedalus, a pantalla completa; ODYSSEYVK_PANEL_VIEJO=1 deja el panel flotante de antes */
   st.marco = !(entornoOdyssey("ODYSSEYVK_PANEL_VIEJO") && entornoOdyssey("ODYSSEYVK_PANEL_VIEJO")[0] == '1');
   st.aparicion = st.marco ? 0.0f : 1.0f;
+  if (st.marco) grande = true;
   /* (v1.16) dentro de un juego (o con una sesion 3D) las pestanas se ven, pero Integraciones va en gris y en Juegos
      solo sale en color el juego de ahora (Rodolfo: «si muestra el boton de juegos e integraciones, pero integraciones
      en gris, que juegos deje entrar pero solo se vea de color el juego actual»). Antes, con una sesion 3D, la de
@@ -179,6 +183,7 @@ int cmdAjustes(int argc, char **argv) {
          pestaña juegos tambien sea gris, por ejemplo en un video») */
       if (juegoActual.empty() && st.pestanaGris.size() > 1) st.pestanaGris[1] = true;
       if (juegoActual.empty() && st.pestana == 1) st.pestana = 0;
+      st.pieParametro.clear(), st.pieInterruptor = false;   /* (v1.16) la casilla de ODYSSEYVK es de Integraciones: en el escritorio */
       for (size_t k = 0; k < st.items.size() && k < ids.size(); k++)
         if (st.items[k].tipo == Hud::ItemPanel::Juego) {
           st.items[k].ayudas.clear();
@@ -280,7 +285,7 @@ int cmdAjustes(int argc, char **argv) {
   /* la entrada en la barra de tareas mientras el panel esta abierto (v1.04), si no se apago */
   if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
-              grande ? "al doble: hay una sesion 3D" : "tamano de escritorio", (int)juegos.size());
+              haySesion ? "al doble: hay una sesion 3D" : grande ? "al doble: el marco, como sobre un juego" : "tamano de escritorio", (int)juegos.size());
   std::fflush(stdout);
   if (!volcado.empty()) {
     ov.waitAndDispatch(150);
@@ -494,6 +499,15 @@ int cmdAjustes(int argc, char **argv) {
         std::string aviso;
         bool cerrar = false;
         if (prefs::aplicar("idioma", g.sub, 0.0f, true, juegos, &aviso, &cerrar)) st.pie = aviso;
+        repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelCopiar && st.pieInterruptor) {
+        /* (v1.16) la casilla del pie de Juegos: ODYSSEYVK=1 para todos (lo de cada juego se queda) */
+        std::string aviso;
+        prefs::alternarOdysseyTodos(juegos, &aviso);
+        std::printf("[ajustes] ODYSSEYVK=1 en todos los juegos: %s · %s\n", st.pieValor ? "se quita" : "se pone", aviso.c_str());
+        std::fflush(stdout);
+        st.pie = aviso;
+        rellenar();
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelCopiar) {
         /* (v1.14) el parametro de Steam al portapapeles: el boton dice «Copiado» un momento; si no se puede, el pie */

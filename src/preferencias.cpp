@@ -1306,7 +1306,7 @@ void probarEdicion(const std::string &clave, const std::string &texto) {
 }
 
 static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
-  st.pieParametro.clear();   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
+  st.pieParametro.clear(), st.pieInterruptor = false;   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
   st.pieCopiado = false;
   /* rama experimental: la primera (0) no es una pildora, la abre el logo y el nombre del programa; la de
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
@@ -1602,8 +1602,27 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     /* (v1.14) la profundidad de DLSS se pide juego a juego, en Steam: el parametro va en medio del pie del panel,
        a la vista sin bajar por la lista (Rodolfo: «On the bottom of games tab let user know to add the steam
        parameter, offer a copy button for it» y «el parametro ahi, por el centro») */
-    /* (v1.16) ya no: ODYSSEYVK=1 se escribe solo en la linea de Steam de cada juego (Rodolfo: «no need for copy button
-       anymore, just make sure the game automatically toggles the ODYSSEYVK parameter, make it not optional») */
+    /* (v1.16) ya no hay boton Copiar: una casilla de ODYSSEYVK=1 para todos los juegos, con su recordatorio al pasar el
+       raton y cuantos juegos la llevan a su manera (Rodolfo: «put a reminder to enable the option either per game or
+       globally for DLSS depth, show it only after hovering, place the option there for the global setting but if any
+       game has it removed remember the specific exclusions») */
+    {
+      const integ::Estado ie = integ::cargar();
+      const bool todos = ie.todos.count("odysseyvk") && ie.todos.at("odysseyvk") == "1";
+      int distintos = 0;
+      for (const Juego &j : juegos)
+        if (const auto it = ie.juegos.find(j.id); it != ie.juegos.end())
+          if (const auto p = it->second.propios.find("odysseyvk"); p != it->second.propios.end() && (p->second == "1") != todos)
+            distintos++;
+      st.pieInterruptor = true;
+      st.pieValor = todos;
+      st.pieParametro = std::string(idioma::tr("ODYSSEYVK=1 en todos los juegos")) +
+                        (distintos == 0 ? std::string()
+                                        : " · " + idioma::trf(todos ? "{} sin ella" : "{} con ella", {std::to_string(distintos)}));
+      st.pieAyuda = std::string(idioma::tr("Para la profundidad de DLSS, el juego necesita ODYSSEYVK=1 en sus opciones de lanzamiento de Steam.")) +
+                    " " + idioma::tr("Aquí se pone o se quita para todos los juegos; uno a uno, con el engranaje de su carátula (Integraciones).") +
+                    " " + idioma::tr("Los juegos que la llevan a su manera la siguen llevando así.");
+    }
   }
 }
 
@@ -1931,5 +1950,28 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
 
 /* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam al portapapeles del escritorio */
 bool copiarParametroSteam(std::string *err) { return copiarAlPortapapeles(kParametroSteam, err); }
+
+bool alternarOdysseyTodos(const std::vector<Juego> &juegos, std::string *aviso) {
+  std::vector<std::string> ids;
+  for (const Juego &j : juegos) ids.push_back(j.id);
+  integ::Estado e = integ::cargar();
+  std::map<std::string, std::string> steam;
+  if (integ::leerSteam(steam, nullptr)) integ::sincronizar(e, ids, steam);   /* lo cambiado por fuera, antes */
+  const bool ahora = e.todos.count("odysseyvk") && e.todos.at("odysseyvk") == "1";
+  /* un juego con ODYSSEYVK=1 propio (lo tomado de su linea de Steam la primera vez, casi siempre) sigue a lo de
+     todos: si no, apagarlo aqui no lo quitaria de ninguno. Los que la tienen quitada a su manera (=0) son las
+     exclusiones y se quedan asi, encendida o apagada para todos (Rodolfo: «if any game has it removed remember the
+     specific exclusions») */
+  for (auto &[id, j] : e.juegos)
+    if (const auto p = j.propios.find("odysseyvk"); p != j.propios.end() && p->second == "1") j.propios.erase(p);
+  integ::fijar(e, "", "odysseyvk", ahora ? "0" : "1");
+  std::string err;
+  if (!integ::guardar(e, &err)) {
+    if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {err});
+    return false;
+  }
+  if (aviso) *aviso = dichoDe(integ::aplicar(ids, true));
+  return true;
+}
 
 }  /* namespace prefs */

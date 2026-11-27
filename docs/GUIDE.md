@@ -75,7 +75,10 @@ The panel's **Integrations** tab builds each game's Steam launch options from pi
 the layer variables (`ODYSSEYVK=1`, `MANGOHUD=1`, `ENABLE_VKDAEDALUS=1`, `NEURAL_FORGE_ENABLE=1`, `ENABLE_VKBASALT=1`,
 shown without `=1` while off), other variables, `vkdaedalus-run` and a custom command before `%command%`, game options
 after it, and gamescope (render and output resolution by abbreviation, `-S stretch|fit`, `-f`,
-`--force-grab-cursor`, and upscaling with FSR or NIS, which turns gamescope on). The result follows this format:
+`--force-grab-cursor`, and upscaling with FSR or NIS, which turns gamescope on). Since 1.16 the Games tab's footer
+has a box for `ODYSSEYVK=1` in all games (DLSS depth; its reminder shows on hover, next to how many games have it
+their own way): it changes only the all-games value. A game with `ODYSSEYVK=1` of its own follows it; a game where it
+was removed (`odysseyvk = 0` in its section) keeps it removed either way. The result follows this format:
 
 ```
 gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- env MANGOHUD=1 ... vkdaedalus-run %command% --launcher-skip
