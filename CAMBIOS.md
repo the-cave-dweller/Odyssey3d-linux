@@ -50,6 +50,34 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## La generación de cuadros en los vídeos: MAKO FG dentro del visor (v1.18)
+
+- Rodolfo: «y no puedes poner una capa de vulkan entre los videos (no juegos) y el 3d donde se puedan generar?», «todo
+  esto puede no afectar a cómo lo hace con los juegos?, digo, ser independiente» y «Yes, build it in».
+- **Por qué no una capa**: una capa de Vulkan solo vive dentro del programa que dibuja; entre la ventana del vídeo y el
+  visor no hay ninguna. Así que el visor habla con `mako-fg-host` (el MAKO FG que instala la pestaña FG) por su protocolo
+  3, el de la capa de MAKO (`engine/mako-backend/src/mako_fg.cpp`): Hello, Devices (la tarjeta del visor por su
+  deviceUUID) y Open con 2 imágenes de entrada y N de salida RGBA8 de memoria exportada y un semáforo de línea de tiempo
+  exportado; cada cuadro real del vídeo se copia a la entrada, se piden los N intermedios y el host los señala.
+- **`src/fgvideo.cpp`**: los generados se copian a un anillo propio (el host reescribe sus salidas en el lote siguiente)
+  y se enseñan repartidos en el intervalo del vídeo: con x2, el generado en cuanto llega el real nuevo y el real medio
+  intervalo después. El vídeo va por eso un poco por detrás (21 ms a 24 fps con x2). La trama dibuja el generado en
+  lugar de la fuente real mientras toca (`VkWeave::setFuenteGenerada`); la red de profundidad sigue con los reales.
+- **Independiente de los juegos**: solo con el 3D sobre algo que no es un juego; su `mako-fg-host` es otro que el de cada
+  juego; nada va a la línea de Steam ni a la capa. Si algo falla (sin MAKO FG, el host no arranca o deja de contestar),
+  se apaga para esa sesión y el 3D sigue con los cuadros reales.
+- **La pestaña FG**, sección «Vídeos»: Apagada, x2, x3 o x4 (`fg_video` en serve.conf, 0 de fábrica); el visor la mira
+  cada 2 s. Sin juego, la tesela FG dice «Vídeos X2».
+- **MEDIDO**: primero fuera del visor (`tools/prueba_fg_video.cpp`, un cliente del protocolo con un clip real de 24 fps):
+  1,7 ms por cuadro a 1080p y 2,3 ms a 4K en la 4090, 2,0 ms en la 5080; los generados salen nítidos, en el medio de
+  los dos reales y sin doble imagen. Después en el visor, en el compositor aparte con ese clip (la fuente de prueba
+  nueva, `ODYSSEYVK_FUENTE_CUADROS` y `ODYSSEYVK_FUENTE_FPS`): 24 reales y 24 generados por segundo en pantalla a 60 Hz,
+  la tarjeta a 3,6 ms por cuadro con la trama; con x3 caben 24 de los 48 generados en 60 Hz (en el panel, a 165, caben
+  todos); y con un host que no existe, «apagada para esta sesión» y el 3D sigue a 60.
+- Dos fallos que salieron probando: el envío calculaba su valla con la dirección de una copia (se caía al primer
+  cuadro) y el destructor volvía a cerrar con el dispositivo ya destruido (abortaba al salir). El dispositivo del visor
+  pide ahora los semáforos de línea de tiempo y `VK_KHR_external_semaphore_fd`.
+
 ## Esc sobre un juego ya no cierra el 3D (v1.18)
 
 - Rodolfo: «escape cierra el overlay, solo quiero que se cierre con escape si escape cierra el juego».

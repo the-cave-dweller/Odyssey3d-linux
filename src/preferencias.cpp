@@ -1808,9 +1808,19 @@ JuegoFg juegoFg() {
 }
 }  // namespace
 
+/* (v1.18) la de los videos, en serve.conf: 0 = apagada, 2 a 4 = el multiplicador (fgvideo.h) */
+int fgVideoPuesta() {
+  const auto sc = ajuste::leerServeConf();
+  const auto it = sc.find("fg_video");
+  const int m = it == sc.end() ? 0 : std::atoi(it->second.c_str());
+  return m >= 2 && m <= 4 ? m : 0;
+}
+
 std::string notaFg() {
-  if (!mako::instalado()) return idioma::tr("No instalada");
   const JuegoFg j = juegoFg();
+  /* sin juego, la de los videos si esta puesta */
+  if (j.exe.empty() && fgVideoPuesta() >= 2) return idioma::trf("Vídeos X{}", {std::to_string(fgVideoPuesta())});
+  if (!mako::instalado()) return idioma::tr("No instalada");
   if (j.exe.empty()) return idioma::tr("Sin juego");
   const mako::Perfil p = mako::leer(j.exe);
   if (!p.existe || !p.puesta) return idioma::tr("Apagada");
@@ -1830,7 +1840,6 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
     n.tipo = Hud::ItemPanel::Nota;
     n.rotulo = idioma::tr("MAKO no está instalado: la generación de cuadros es su capa de Vulkan (mako-render).");
     pon(n, "");
-    return;
   }
   /* su generador propio: el de MAKO, el de OdysseyVK, bajando, o su boton */
   {
@@ -1856,6 +1865,26 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
       pon(b, "fg:instalar");
     }
   }
+  /* (v1.18) los videos: MAKO FG dentro del visor, aparte de los juegos (fgvideo.h) */
+  {
+    Hud::ItemPanel sv;
+    sv.tipo = Hud::ItemPanel::Seccion, sv.rotulo = idioma::tr("VÍDEOS");
+    pon(sv, "");
+    const bool hay = mako::generadorInstalado();
+    Hud::ItemPanel o;
+    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = idioma::tr("Generación en vídeos");
+    o.opciones = {idioma::tr("Apagada"), "x2", "x3", "x4"};
+    o.elegido = std::max(0, fgVideoPuesta() - 1);
+    o.ayuda = idioma::tr("Cuadros intermedios para los vídeos (no los juegos), hechos con MAKO FG dentro del visor. El vídeo va un poco por detrás: 21 ms a 24 fps con x2.");
+    if (!hay) o.apagado = true;
+    pon(o, "fg:video");
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota;
+    n.rotulo = hay ? idioma::tr("Vale en un par de segundos con el 3D abierto sobre un vídeo; con un juego debajo no hace nada.")
+                   : idioma::tr("Hace falta MAKO FG: instálalo arriba.");
+    pon(n, "");
+  }
+  if (!mako::instalado()) return;
   /* el perfil del juego que corre */
   const JuegoFg j = juegoFg();
   Hud::ItemPanel sj;
@@ -1902,6 +1931,16 @@ static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
     std::string err;
     const bool bien = mako::lanzarInstalacion(&err);
     if (aviso) *aviso = bien ? idioma::tr("instalando MAKO FG…") : idioma::trf("No se pudo instalar MAKO FG: {}", {err});
+    return true;
+  }
+  if (que == "video") {   /* (v1.18) la de los videos: el visor la mira cada 2 s */
+    std::string e;
+    const std::string val = sub <= 0 ? "0" : std::to_string(std::min(4, sub + 1));
+    if (!ajuste::fijarEnServeConf("fg_video", val, &e)) {
+      if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+      return true;
+    }
+    if (aviso) *aviso = sub <= 0 ? std::string(idioma::tr("generación en vídeos apagada")) : idioma::trf("generación en vídeos: x{}", {val});
     return true;
   }
   const JuegoFg j = juegoFg();

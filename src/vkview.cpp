@@ -32,6 +32,7 @@
 #include "rendimiento.h"
 #include "monitor.h"
 #include "mako.h"   /* (v1.18) la generacion de cuadros de MAKO, desde el cuadrito de los FPS */
+#include "fgvideo.h"   /* (v1.18) y la de los videos, dentro del visor */
 #include "../capa/protocolo.h"   /* (v1.18) OdvkFgCuenta: lo que cuenta el contador, debajo de MAKO */
 #include "vkui.h"
 #include "vkweave.h"
@@ -2236,6 +2237,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               dev.prioridadNota().empty() ? "" : " · ", dev.prioridadNota().c_str());
 
   VkWeave wv;
+  /* (v1.18) la generacion de cuadros de los videos (fgvideo.h): `fg_video` de serve.conf (0 = no, 2 a 4 = el
+     multiplicador), mirado cada 2 s; solo con una captura que no es un juego. Si falla, se apaga para la sesion */
+  FgVideo fgVideo;
+  int fgVideoMult = 0;
+  bool fgVideoRoto = false;
+  double fgVideoMirado = -10.0;
+  /* un cuadro real nuevo (el que acaba de entrar en la trama), a MAKO FG */
+  auto fgVideoReal = [&](VkFormat formato) {
+    if (fgVideoMult < 2 || fgVideoRoto || sobreJuego(ui)) return;
+    std::string efg;
+    const VkImg *real = wv.fuenteReal();
+    bool bien = real && fgVideo.preparar(dev, real->w, real->h, fgVideoMult, formato, &efg);
+    if (bien) bien = fgVideo.nuevoReal(*real, glfwGetTime(), &efg);
+    if (!bien) {
+      fgVideoRoto = true;
+      fgVideo.cerrar();
+      wv.setFuenteGenerada(VK_NULL_HANDLE);
+      std::printf("[fg-video] apagada para esta sesion: %s\n", efg.c_str());
+      std::fflush(stdout);
+    }
+  };
   if (!wv.init(dev, surface, fbW, fbH, &err)) {
     std::fprintf(stderr, "[error] trazador Vulkan: %s\n", err.c_str());
     vkDestroySurfaceKHR(dev.instance(), surface, nullptr);
@@ -4062,6 +4084,46 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       /* ODYSSEYVK_FUENTE_VIVA=1 (taller, v0.69): da la fuente por nueva en cada cuadro, sin volver a
          subirla. El conversor trabaja entonces con la cadencia de un video (una estimacion cada tres
          cuadros) y se puede medir el coste del bucle sin captura, sin navegador y sin panel. */
+      /* (v1.18, taller) ODYSSEYVK_FUENTE_CUADROS=carpeta (001.png, 002.png...) a ODYSSEYVK_FUENTE_FPS (24): un video de
+         verdad sin captura, para la generacion de cuadros de los videos en el compositor aparte */
+      {
+        static std::vector<std::vector<uint8_t>> cuadros;
+        static int cw = 0, ch = 0;
+        static double proximo = 0.0;
+        static size_t cual = 0;
+        static const std::string kCarpeta = [] {
+          const char *e = entornoOdyssey("ODYSSEYVK_FUENTE_CUADROS");
+          return e ? std::string(e) : std::string();
+        }();
+        static const double kFps = [] {
+          const char *e = entornoOdyssey("ODYSSEYVK_FUENTE_FPS");
+          return e && std::atof(e) > 1.0 ? std::atof(e) : 24.0;
+        }();
+#ifdef HAVE_PNG
+        if (!kCarpeta.empty() && cuadros.empty()) {
+          for (int i = 1; i <= 72; i++) {   /* 3 s a 24 fps: cargarlos lleva su rato */
+            char nom[32];
+            std::snprintf(nom, sizeof nom, "/%03d.png", i);
+            int pw = 0, ph = 0;
+            std::vector<uint8_t> px;
+            if (!pngLoadRGBA(kCarpeta + nom, pw, ph, px)) break;
+            if (cuadros.empty()) cw = pw, ch = ph;
+            if (pw != cw || ph != ch) break;
+            cuadros.push_back(std::move(px));
+          }
+          std::printf("[taller] fuente de cuadros: %zu de %dx%d a %.0f fps (%s)\n", cuadros.size(), cw, ch, kFps, kCarpeta.c_str());
+          std::fflush(stdout);
+          haveTest = !cuadros.empty(), testAnim = false;
+        }
+#endif
+        if (!cuadros.empty() && now >= proximo) {
+          proximo = proximo <= 0.0 ? now + 1.0 / kFps : proximo + 1.0 / kFps;
+          if (proximo < now) proximo = now + 1.0 / kFps;
+          newSource = wv.sourceFromRgba(cuadros[cual].data(), cw, ch, true, &err);
+          cual = (cual + 1) % cuadros.size();
+          if (newSource) fgVideoReal(VK_FORMAT_R8G8B8A8_UNORM);
+        }
+      }
       static const bool kFuenteViva = entornoOdyssey("ODYSSEYVK_FUENTE_VIVA") != nullptr;
       if (kFuenteViva && haveTest) newSource = true;
       if (!haveTest || (testAnim && now >= animNext)) {
@@ -4123,6 +4185,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           } else {
             fallosImport = 0;
             newSource = true;
+            fgVideoReal(VkDev::vkFormatFor(gf.fourcc) == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM
+                                                                            : VkDev::vkFormatFor(gf.fourcc));   /* (v1.18) */
           }
         }
       }
@@ -4234,6 +4298,38 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        faltaba para que el flujo se atragantara. Sin --siempre presentamos a 30 por segundo
        como techo cuando el cuadro no cambia (el panel ya muestra lo mismo). */
     bool algoNuevo = newSource || ui.inputChanged;
+    /* (v1.18) la generacion de cuadros de los videos: el ajuste (cada 2 s) y el cuadro que toca ahora (la fuente de prueba
+       vale para el taller) */
+    if (kind == SourceKind::Capture || kind == SourceKind::Test) {
+      if (now - fgVideoMirado >= 2.0) {
+        fgVideoMirado = now;
+        const auto sc = ajuste::leerServeConf();
+        const auto it = sc.find("fg_video");
+        const int m = it == sc.end() ? 0 : std::atoi(it->second.c_str());
+        const int quiere = m >= 2 && m <= 4 && !sobreJuego(ui) ? m : 0;
+        if (quiere != fgVideoMult) {
+          std::printf("[fg-video] %s\n", quiere ? ("x" + std::to_string(quiere)).c_str() : "apagada");
+          std::fflush(stdout);
+          fgVideoMult = quiere;
+          fgVideoRoto = false;
+          if (!quiere) fgVideo.cerrar(), wv.setFuenteGenerada(VK_NULL_HANDLE);
+        }
+      }
+      if (fgVideo.abierto()) {
+        bool cambio = false;
+        wv.setFuenteGenerada(fgVideo.vista(now, &cambio));
+        if (cambio) algoNuevo = true;
+        static double tCuenta = 0.0;
+        static long r0 = 0, g0 = 0;
+        if (now - tCuenta >= 5.0) {
+          if (tCuenta > 0.0)
+            std::printf("[fg-video] x%d · %.1f reales y %.1f generados por segundo en pantalla\n", fgVideo.multiplicador(),
+                        (double)(fgVideo.reales() - r0) / (now - tCuenta), (double)(fgVideo.generados() - g0) / (now - tCuenta));
+          std::fflush(stdout);
+          tCuenta = now, r0 = fgVideo.reales(), g0 = fgVideo.generados();
+        }
+      }
+    }
 #ifdef HAVE_OPENCV
     if (rastreoVivo) algoNuevo = true;
 #endif
@@ -5747,6 +5843,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   }
 
   devolverCursor(ui, "el visor se cierra");   /* si se lo habia quitado, el juego recupera el cursor */
+  wv.setFuenteGenerada(VK_NULL_HANDLE);
+  fgVideo.cerrar();   /* (v1.18) antes que la trama y el dispositivo */
 #ifdef HAVE_CAPTURE
   if (haveCap) cap.stop();
 #endif

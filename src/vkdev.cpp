@@ -234,8 +234,9 @@ bool VkDev::createDevice(const std::vector<const char *> &extraDevExts, VkSurfac
                has("VK_KHR_external_memory_fd");
 
   std::vector<const char *> names = extraDevExts;
+  /* (v1.18) VK_KHR_external_semaphore_fd: la linea de tiempo que se comparte con mako-fg-host (fgvideo.h) */
   const char *opt[] = {"VK_EXT_external_memory_dma_buf", "VK_EXT_image_drm_format_modifier",
-                       "VK_KHR_external_memory_fd", "VK_EXT_queue_family_foreign"};
+                       "VK_KHR_external_memory_fd", "VK_EXT_queue_family_foreign", "VK_KHR_external_semaphore_fd"};
   for (const char *o : opt)
     if (has(o)) names.push_back(o);
 
@@ -251,6 +252,16 @@ bool VkDev::createDevice(const std::vector<const char *> &extraDevExts, VkSurfac
   f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
   f13.dynamicRendering = VK_TRUE;
   f13.synchronization2 = VK_TRUE;
+  /* (v1.18) los semaforos de linea de tiempo (Vulkan 1.2): los de la generacion de cuadros de los videos */
+  VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+  {
+    VkPhysicalDeviceVulkan12Features hay{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    f2.pNext = &hay;
+    vkGetPhysicalDeviceFeatures2(phys_, &f2);
+    f12.timelineSemaphore = hay.timelineSemaphore;
+  }
+  f13.pNext = &f12;
 
   /* Prioridad de la cola (rama experimental, tirones en Cyberpunk 26-nov): con el juego llenando la
      tarjeta, nuestros cuadros esperaban en la fila detras de los suyos 15-23 ms al presentar. Con

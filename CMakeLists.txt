@@ -196,6 +196,7 @@ add_executable(odysseyvk
   src/monitor.cpp
   src/mako.cpp
   src/mako_instalar.cpp
+  src/fgvideo.cpp
   src/integraciones.cpp
   src/capasajenas.cpp
   src/panel_ajustes.cpp

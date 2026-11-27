@@ -41,6 +41,11 @@ public:
   bool sourceFromDma(const GpuFrame &f, std::string *err);
   bool sourceFromRgba(const uint8_t *rgba, int w, int h, bool topFirst, std::string *err);
   bool hasSource() const { return gen_ > 0; }
+  /* (v1.18) la generacion de cuadros de los videos (fgvideo.h): mientras haya una vista aqui, la trama dibuja esa (un
+     cuadro generado, en GENERAL) en lugar de la fuente real; VK_NULL_HANDLE = la real. La vista es de quien la pone */
+  void setFuenteGenerada(VkImageView v) { fuenteGenerada_ = v; }
+  /* la fuente real mas nueva (la que llego y aun no paso por frame(), o la ultima que paso) */
+  const VkImg *fuenteReal() const;
 
   /* mapas de corrección del panel (gris R8) */
   void setCorrections(const uint8_t *a, int aw, int ah, const uint8_t *b, int bw, int bh);
@@ -226,6 +231,7 @@ private:
   std::vector<Keep> keep_; /* fuentes vivas: cada hueco de cuadro apunta a una generación */
   uint64_t gen_ = 0;
   VkImg next_{};           /* fuente nueva pendiente de entrar */
+  VkImageView fuenteGenerada_ = VK_NULL_HANDLE;   /* (v1.18) */
   VkImg black_{};          /* reserva por si aún no hay fuente */
   VkImg corrA_{};          /* neutros si no hay ficheros */
   VkImg corrB_{};

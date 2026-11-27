@@ -530,6 +530,15 @@ T = {
 "EL JUEGO": ("THE GAME", "LE JEU", "DAS SPIEL", "游戏", "ゲーム"),
 "guardado; vale al volver a abrir el juego": ("saved; applies when the game is reopened", "enregistré ; s'applique à la réouverture du jeu", "gespeichert; gilt nach dem Neustart des Spiels", "已保存；重新打开游戏后生效", "保存しました。ゲームを開き直すと有効になります"),
 "guardado en el perfil de MAKO de {}": ("saved in {}'s MAKO profile", "enregistré dans le profil MAKO de {}", "im MAKO-Profil von {} gespeichert", "已保存到 {} 的 MAKO 配置", "{} の MAKO プロファイルに保存しました"),
+# (v1.18) la generacion de cuadros de los videos
+"Vídeos X{}": ("Videos X{}", "Vidéos X{}", "Videos X{}", "视频 X{}", "動画 X{}"),
+"VÍDEOS": ("VIDEOS", "VIDÉOS", "VIDEOS", "视频", "動画"),
+"Generación en vídeos": ("Video frame generation", "Génération dans les vidéos", "Bildgenerierung in Videos", "视频补帧", "動画のフレーム生成"),
+"Cuadros intermedios para los vídeos (no los juegos), hechos con MAKO FG dentro del visor. El vídeo va un poco por detrás: 21 ms a 24 fps con x2.": ("In-between frames for videos (not games), made with MAKO FG inside the viewer. The video runs slightly behind: 21 ms at 24 fps with x2.", "Images intermédiaires pour les vidéos (pas les jeux), créées avec MAKO FG dans la visionneuse. La vidéo a un léger retard : 21 ms à 24 i/s en x2.", "Zwischenbilder für Videos (nicht Spiele), mit MAKO FG im Viewer erzeugt. Das Video läuft etwas hinterher: 21 ms bei 24 fps mit x2.", "为视频（不是游戏）生成中间帧，由查看器内的 MAKO FG 完成。视频会稍有延后：24 fps、x2 时为 21 ms。", "動画（ゲームではない）の中間フレームを、ビューア内の MAKO FG で生成します。動画は少し遅れます：24 fps・x2 で 21 ms。"),
+"Vale en un par de segundos con el 3D abierto sobre un vídeo; con un juego debajo no hace nada.": ("Takes effect within a couple of seconds with 3D open over a video; with a game underneath it does nothing.", "S'applique en quelques secondes avec la 3D ouverte sur une vidéo ; avec un jeu dessous, rien ne change.", "Wirkt nach ein paar Sekunden, wenn 3D über einem Video läuft; mit einem Spiel darunter passiert nichts.", "在视频上打开 3D 时几秒内生效；下面是游戏时不起作用。", "動画の上で 3D を開いていれば数秒で有効になります。下がゲームのときは何もしません。"),
+"Hace falta MAKO FG: instálalo arriba.": ("MAKO FG is needed: install it above.", "MAKO FG est nécessaire : installez-le ci-dessus.", "MAKO FG wird benötigt: oben installieren.", "需要 MAKO FG：请在上方安装。", "MAKO FG が必要です：上でインストールしてください。"),
+"generación en vídeos apagada": ("video frame generation off", "génération dans les vidéos désactivée", "Bildgenerierung in Videos aus", "视频补帧已关闭", "動画のフレーム生成をオフにしました"),
+"generación en vídeos: x{}": ("video frame generation: x{}", "génération dans les vidéos : x{}", "Bildgenerierung in Videos: x{}", "视频补帧：x{}", "動画のフレーム生成：x{}"),
 }
 
 from traducciones_ru import RU

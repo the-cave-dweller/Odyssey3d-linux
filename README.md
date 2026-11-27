@@ -43,6 +43,8 @@ What you get:
   (`ENABLE_MAKO`).
 - **An FG tab.** A new top tile, FG, shows the running game's MAKO multiplier (X2, X3, X4); inside are MAKO FG's
   install button and the game's MAKO settings.
+- **Frame generation for videos.** In the FG tab, *Videos* (Off, x2, x3, x4): the 3D view itself asks MAKO FG for
+  in-between frames of a video (not games), about 2 ms a frame on an RTX 4090; the video runs ~21 ms behind at x2.
 - **MAKO FG with one button.** When MAKO's own frame generator (`mako-fg-host`) is missing, the menu and the FG tab
   offer *Install MAKO FG · 19 MB*: MAKO FG V1.24 from Hugging Face, pinned and SHA-256 checked, into
   `~/.local/share/odysseyvk/mako-fg` without root; games with MAKO get it through `MAKO_FG_HOST` in their Steam line.

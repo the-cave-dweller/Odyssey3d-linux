@@ -43,6 +43,9 @@ Lo que tienes:
   que llega a la pantalla. La capa de MAKO se pone en Integraciones (`ENABLE_MAKO`).
 - **Una pestaña FG.** Una tesela nueva arriba, FG, dice el multiplicador de MAKO del juego que corre (X2, X3, X4); dentro
   están el botón para instalar MAKO FG y el perfil de MAKO del juego.
+- **Generación de cuadros en los vídeos.** En la pestaña FG, «Vídeos» (Apagada, x2, x3, x4): el propio visor le pide a
+  MAKO FG los cuadros intermedios de un vídeo (no de los juegos), unos 2 ms por cuadro en una RTX 4090; el vídeo va unos
+  21 ms por detrás con x2.
 - **MAKO FG con un botón.** Si falta el generador propio de MAKO (`mako-fg-host`), el menú y la pestaña FG ofrecen
   «Instalar MAKO FG · 19 MB»: MAKO FG V1.24 de Hugging Face, fijado y con el SHA-256 comprobado, en
   `~/.local/share/odysseyvk/mako-fg` sin root; los juegos con MAKO lo reciben con `MAKO_FG_HOST` en su línea de Steam.

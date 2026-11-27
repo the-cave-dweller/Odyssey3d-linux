@@ -722,6 +722,11 @@ bool VkWeave::uploadRgba8(const uint8_t *px, int w, int h, VkImg &out, std::stri
   return ok;
 }
 
+const VkImg *VkWeave::fuenteReal() const {
+  if (next_.valid()) return &next_;
+  return keep_.empty() ? nullptr : &keep_.back().img;
+}
+
 bool VkWeave::sourceFromDma(const GpuFrame &f, std::string *err) {
   VkImg img{};
   if (!dev_->importImage(f, img, err, false) && !dev_->importImageImplicit(f, img, err, err)) return false;
@@ -1074,6 +1079,7 @@ bool VkWeave::frame(std::string *err) {
   VkImageView srcView = black_.view;
   for (const Keep &k : keep_)
     if (k.gen == useGen) srcView = k.img.view;
+  if (fuenteGenerada_) srcView = fuenteGenerada_;   /* (v1.18) un cuadro generado del video */
 
   /* descriptores del hueco */
   writeWeaveSet(s.weave, srcView, s.ubo, finoEnUso_ ? fino_.view : VK_NULL_HANDLE);
@@ -1089,7 +1095,7 @@ bool VkWeave::frame(std::string *err) {
     firma.insert(firma.end(), pre + kOffRes, pre + kOffRes + 8);
     firma.insert(firma.end(), pre + kOffTun3, pre + kOffTun9);
     firma.insert(firma.end(), pre + kOffTun10, pre + kOffTun10 + 16);
-    const uint64_t marcas[2] = {(uint64_t)(int64_t)useGen, mapaGen_};
+    const uint64_t marcas[3] = {(uint64_t)(int64_t)useGen, mapaGen_, (uint64_t)(uintptr_t)fuenteGenerada_};
     firma.insert(firma.end(), (const uint8_t *)marcas, (const uint8_t *)marcas + sizeof marcas);
     static const bool kSiempre = entornoOdyssey("ODYSSEYVK_AFINAR_SIEMPRE") != nullptr;
     pintarFino = kSiempre || firma != finoFirma_;
