@@ -40,8 +40,15 @@ static std::string fourccName(uint32_t code) {
   return name;
 }
 
+/* sysfs usa videoN aunque la camara se haya elegido por su enlace estable en /dev/v4l/by-id/. */
+static std::string nombreNodo(const std::string &device) {
+  char real[PATH_MAX];
+  const std::string ruta = ::realpath(device.c_str(), real) ? real : device;
+  return ruta.substr(ruta.rfind('/') + 1);
+}
+
 bool Camera::usbSysfs(const std::string &device, std::string *dir) {
-  const std::string nodo = device.substr(device.rfind('/') + 1);
+  const std::string nodo = nombreNodo(device);
   const std::string enlace = "/sys/class/video4linux/" + nodo + "/device";
   char ruta[PATH_MAX] = {};
   if (!::realpath(enlace.c_str(), ruta)) return false;
@@ -350,12 +357,6 @@ std::vector<Camera::Mode> Camera::modes(const std::string &device) {
   }
   ::close(fd);
   return out;
-}
-
-/* Nombre del nodo sysfs (/dev/video7 -> video7). */
-static std::string nombreNodo(const std::string &device) {
-  const size_t barra = device.find_last_of('/');
-  return barra == std::string::npos ? device : device.substr(barra + 1);
 }
 
 /* El nombre que anuncia el conductor de la camara estereo del monitor. */
