@@ -982,6 +982,11 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
     std::snprintf(ng, sizeof ng, "%d", (int)std::lround(st_.fg.generados));
     filas.push_back({idioma::tr("Reales"), {{nr, "fps"}}});
     filas.push_back({idioma::tr("Generados"), {{ng, "fps"}}});
+    /* y la suma, lo que sale de MAKO (Rodolfo: «no me da la cuenta»): con x3, cada real son tres en pantalla, uno real y dos
+       generados */
+    char nt[16];
+    std::snprintf(nt, sizeof nt, "%d", (int)std::lround(st_.fg.reales + st_.fg.generados));
+    filas.push_back({idioma::tr("En pantalla"), {{nt, "fps"}}});
   }
   for (const State::FilaMonitor &m : st_.monitor) {
     Fila f{m.rotulo, {}};
