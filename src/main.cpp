@@ -3276,7 +3276,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
   if (const char *pn = std::getenv("ODYSSEYVK_HUD_PANEL")) {
     hud.state().ask = false;
     hud.state().panel = true;
-    hud.state().pestana = std::max(0, std::min(3, std::atoi(pn)));
+    hud.state().pestana = std::max(0, std::min(4, std::atoi(pn)));   /* (v1.18) 4 = FG */
     std::vector<std::string> ids;
     /* ODYSSEYVK_HUD_CAPTURA=3d (v1.09): ese atajo esperando su combinacion nueva */
     std::string pieCaptura;

@@ -416,6 +416,16 @@ bool Hud::buildAtlas(std::string *err) {
       }
       return d;
     }, &icoDeslizadores_);
+    /* (v1.18) el de FG: un cuadro de verdad, otro generado detras (a trazos) y la flecha entre los dos */
+    dibujo([&](float x, float y) {
+      float d = std::fabs(cajaRedonda(x, y, 22, 34, 12, 14, 3)) - 2.4f;
+      const float atras = std::fabs(cajaRedonda(x, y, 44, 30, 12, 14, 3)) - 2.4f;
+      d = std::min(d, std::fmod(x + y + 64.0f, 8.0f) < 5.0f ? atras : 1e9f);
+      d = std::min(d, distSegmento(x, y, 18, 34, 30, 34) - 2.2f);
+      d = std::min(d, distSegmento(x, y, 30, 34, 25, 29) - 2.2f);
+      d = std::min(d, distSegmento(x, y, 30, 34, 25, 39) - 2.2f);
+      return d;
+    }, &icoFg_);
     /* la cabeza del seguimiento: la cabeza y los hombros */
     dibujo([&](float x, float y) {
       float d = std::fabs(std::hypot(x - 32, y - 22) - 10.0f) - 2.4f;
@@ -2075,7 +2085,7 @@ void Hud::dibujaPanel(int vw, int vh) {
     const float centroW = (float)nT * anchoT + 2.0f * (float)(nT - 1);
     const float centroX = F.x + std::floor((F.w - centroW * s) * 0.5f);
     panelPestanas_.assign(st_.pestanas.size(), fuera);
-    const Rect *iconoPest[4] = {&icoCubo_, &icoMando_, &icoEnchufe_, &icoDeslizadores_};
+    const Rect *iconoPest[5] = {&icoCubo_, &icoMando_, &icoEnchufe_, &icoDeslizadores_, &icoFg_};
     auto nombrePest = [&](int i) { return i == 0 ? std::string(idioma::tr("3D")) : st_.pestanas[(size_t)i]; };
     for (int k = 0; k < (int)vistas.size(); k++) {
       const int i = vistas[(size_t)k];
@@ -2091,7 +2101,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       textoCabe(nombrePest(i), t.x + t.w * 0.5f - std::min(t.w - 12.0f * s, textWidth(nombrePest(i), 18.0f * s)) * 0.5f, t.y + 16.0f * s,
                 18.0f * s, t.w - 12.0f * s, 1.0f, 1.0f, 1.0f, (puesta || hov ? 1.0f : 0.92f) * tenueT);
       fuente_ = hayBarlow_ ? 1 : 0;
-      if (i < 4)
+      if (i < 5)
         icono({t.x + (t.w - 56.0f * s) * 0.5f, t.y + 64.0f * s, 56.0f * s, 56.0f * s}, *iconoPest[i], puesta ? accent[0] : hex(0xC9D0D7u, 0),
               puesta ? accent[1] : hex(0xC9D0D7u, 1), puesta ? accent[2] : hex(0xC9D0D7u, 2), (puesta || hov ? 1.0f : 0.85f) * tenueT);
       /* en gris, la nota dice por que: solo se abre en el escritorio */

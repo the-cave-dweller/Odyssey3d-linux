@@ -519,3 +519,7 @@
 {"no es el archivo que se esperaba (su SHA-256 no cuadra): no se instala", {"it isn't the expected file (its SHA-256 doesn't match): not installed", "ce n'est pas le fichier attendu (son SHA-256 ne correspond pas) : pas installé", "nicht die erwartete Datei (SHA-256 stimmt nicht): wird nicht installiert", "不是预期的文件（SHA-256 不匹配）：不予安装", "想定したファイルではありません（SHA-256 が一致しません）：インストールしません", "это не ожидаемый файл (SHA-256 не совпадает): не устанавливается"}},
 {"Reales", {"Real", "Réelles", "Echt", "真实", "実フレーム", "Реальные"}},
 {"Generados", {"Generated", "Générées", "Generiert", "生成", "生成", "Сгенерированные"}},
+{"Sin juego", {"No game", "Aucun jeu", "Kein Spiel", "无游戏", "ゲームなし", "Нет игры"}},
+{"EL JUEGO", {"THE GAME", "LE JEU", "DAS SPIEL", "游戏", "ゲーム", "ИГРА"}},
+{"guardado; vale al volver a abrir el juego", {"saved; applies when the game is reopened", "enregistré ; s'applique à la réouverture du jeu", "gespeichert; gilt nach dem Neustart des Spiels", "已保存；重新打开游戏后生效", "保存しました。ゲームを開き直すと有効になります", "сохранено; применится при повторном запуске игры"}},
+{"guardado en el perfil de MAKO de {}", {"saved in {}'s MAKO profile", "enregistré dans le profil MAKO de {}", "im MAKO-Profil von {} gespeichert", "已保存到 {} 的 MAKO 配置", "{} の MAKO プロファイルに保存しました", "сохранено в профиле MAKO для {}"}},

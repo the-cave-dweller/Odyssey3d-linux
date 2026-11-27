@@ -41,7 +41,9 @@ What you get:
   writes the game's profile in MAKO's `conf.toml` (backed up first, checked with `mako-cli validate`), which MAKO
   reads on the fly; with DLSS depth the box adds what reaches the screen. MAKO's layer goes in Integrations
   (`ENABLE_MAKO`).
-- **MAKO FG with one button.** When MAKO's own frame generator (`mako-fg-host`) is missing, the menu and Integrations
+- **An FG tab.** A new top tile, FG, shows the running game's MAKO multiplier (X2, X3, X4); inside are MAKO FG's
+  install button and the game's MAKO settings.
+- **MAKO FG with one button.** When MAKO's own frame generator (`mako-fg-host`) is missing, the menu and the FG tab
   offer *Install MAKO FG · 19 MB*: MAKO FG V1.24 from Hugging Face, pinned and SHA-256 checked, into
   `~/.local/share/odysseyvk/mako-fg` without root; games with MAKO get it through `MAKO_FG_HOST` in their Steam line.
   Also `odysseyvk mako estado|instalar|quitar`. MAKO FG is non-commercial (CC BY-NC 4.0).

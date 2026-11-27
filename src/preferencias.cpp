@@ -1438,31 +1438,6 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
         st.items[ko].ayuda = idioma::tr("No hay una segunda tarjeta NVIDIA: el modelo se queda en la del juego");
       }
     }
-    /* (v1.18) MAKO FG, el generador propio de MAKO, debajo de ENABLE_MAKO (Rodolfo: «offer an install button»): sin el, su
-       boton (lo baja e instala sin root, ver mako.h); bajando, lo que lleva; puesto, de donde sale. Solo en los de todos */
-    if (std::strcmp(v.clave, "mako") == 0 && jid.empty() && integ::instalado("mako")) {
-      const mako::Instalacion in = mako::leerInstalacion();
-      const std::string sis = mako::hostSistema(), propio = mako::hostPropio();
-      const long megas = (mako::bytesGenerador() + 999999) / 1000000;
-      Hud::ItemPanel b;
-      if (in.enMarcha) {
-        b.tipo = Hud::ItemPanel::Nota;
-        b.rotulo = idioma::trf("Bajando MAKO FG… {} de {} MB", {std::to_string(in.hecho / 1000000), std::to_string(megas)});
-        pon(b, "");
-      } else if (!sis.empty() || !propio.empty()) {
-        b.tipo = Hud::ItemPanel::Nota;
-        b.rotulo = !sis.empty() ? std::string(idioma::tr("MAKO FG: el de MAKO, junto a su biblioteca"))
-                                : idioma::trf("MAKO FG {} instalado: los juegos con MAKO lo reciben con MAKO_FG_HOST (uso no comercial, CC BY-NC 4.0)",
-                                              {mako::kVersionGenerador});
-        pon(b, "");
-      } else {
-        b.tipo = Hud::ItemPanel::Boton, b.rotulo = "MAKO FG";
-        b.nota = !in.error.empty() ? idioma::trf("No se pudo instalar MAKO FG: {}", {in.error})
-                                   : idioma::trf("El modelo propio de MAKO ({} MB, no pide root; uso no comercial, CC BY-NC 4.0)", {std::to_string(megas)});
-        b.valorTexto = idioma::tr(in.error.empty() ? "Instalar" : "Reintentar"), b.valor = true;
-        pon(b, "integ:mako_fg");
-      }
-    }
   }
   /* (v1.18) la tarjeta del juego, con el monitor 3D en otra (Rodolfo: «haz una opcion de offload con el monitor conectado a
      otra tarjeta tambien»; ver integ::tarjetasParaJuego): con dos o mas dedicadas */
@@ -1641,13 +1616,6 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
     g_pestanaPedida = 2;
     return true;
   }
-  /* (v1.18) instalar MAKO FG: `odysseyvk mako instalar`, aparte (la pestana ensena lo que lleva cada dos segundos) */
-  if (que == "mako_fg") {
-    std::string err;
-    const bool bien = mako::lanzarInstalacion(&err);
-    if (aviso) *aviso = bien ? idioma::tr("instalando MAKO FG…") : idioma::trf("No se pudo instalar MAKO FG: {}", {err});
-    return true;
-  }
   integ::Estado e = integ::cargar();
   std::map<std::string, std::string> steam;
   if (integ::leerSteam(steam, nullptr)) integ::sincronizar(e, ids, steam);
@@ -1821,6 +1789,159 @@ void probarEdicion(const std::string &clave, const std::string &texto) {
   g_edit.id = "integ:" + clave, g_edit.texto = texto, g_edit.cursor = texto.size();
 }
 
+/* ---- (v1.18) la pestana FG: la generacion de cuadros de MAKO ----
+   Rodolfo: «quiero una pestaña de framegen aqui arriba», «que diga FG y en base a la activa cambie a X2 X3 y X4», «que dentro
+   de su menu se instalen» y «puedes poner solo mako?». La tesela dice el multiplicador del juego que corre; dentro, MAKO, su
+   generador (MAKO FG, con su boton de instalar) y el perfil del juego, como el menu del clic derecho en el cuadrito de los
+   FPS. El juego sale del `estado` del visor (fg_exe) */
+namespace {
+struct JuegoFg {
+  std::string exe;
+  bool enJuego = false;
+};
+JuegoFg juegoFg() {
+  JuegoFg j;
+  const auto e = ajuste::leerEstado();
+  if (const auto it = e.find("fg_exe"); it != e.end() && it->second != "-") j.exe = it->second;
+  if (const auto it = e.find("fg_en_juego"); it != e.end()) j.enJuego = it->second == "si";
+  return j;
+}
+}  // namespace
+
+std::string notaFg() {
+  if (!mako::instalado()) return idioma::tr("No instalada");
+  const JuegoFg j = juegoFg();
+  if (j.exe.empty()) return idioma::tr("Sin juego");
+  const mako::Perfil p = mako::leer(j.exe);
+  if (!p.existe || !p.puesta) return idioma::tr("Apagada");
+  return "X" + std::to_string(p.multiplicador);
+}
+
+static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
+  auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    st.items.push_back(std::move(it));
+    ids.push_back(id);
+  };
+  Hud::ItemPanel sec;
+  sec.tipo = Hud::ItemPanel::Seccion, sec.rotulo = "MAKO";
+  pon(sec, "");
+  if (!mako::instalado()) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota;
+    n.rotulo = idioma::tr("MAKO no está instalado: la generación de cuadros es su capa de Vulkan (mako-render).");
+    pon(n, "");
+    return;
+  }
+  /* su generador propio: el de MAKO, el de OdysseyVK, bajando, o su boton */
+  {
+    const mako::Instalacion in = mako::leerInstalacion();
+    const std::string sis = mako::hostSistema(), propio = mako::hostPropio();
+    const long megas = (mako::bytesGenerador() + 999999) / 1000000;
+    Hud::ItemPanel b;
+    if (in.enMarcha) {
+      b.tipo = Hud::ItemPanel::Nota;
+      b.rotulo = idioma::trf("Bajando MAKO FG… {} de {} MB", {std::to_string(in.hecho / 1000000), std::to_string(megas)});
+      pon(b, "");
+    } else if (!sis.empty() || !propio.empty()) {
+      b.tipo = Hud::ItemPanel::Nota;
+      b.rotulo = !sis.empty() ? std::string(idioma::tr("MAKO FG: el de MAKO, junto a su biblioteca"))
+                              : idioma::trf("MAKO FG {} instalado: los juegos con MAKO lo reciben con MAKO_FG_HOST (uso no comercial, CC BY-NC 4.0)",
+                                            {mako::kVersionGenerador});
+      pon(b, "");
+    } else {
+      b.tipo = Hud::ItemPanel::Boton, b.rotulo = "MAKO FG";
+      b.nota = !in.error.empty() ? idioma::trf("No se pudo instalar MAKO FG: {}", {in.error})
+                                 : idioma::trf("El modelo propio de MAKO ({} MB, no pide root; uso no comercial, CC BY-NC 4.0)", {std::to_string(megas)});
+      b.valorTexto = idioma::tr(in.error.empty() ? "Instalar" : "Reintentar"), b.valor = true;
+      pon(b, "fg:instalar");
+    }
+  }
+  /* el perfil del juego que corre */
+  const JuegoFg j = juegoFg();
+  Hud::ItemPanel sj;
+  sj.tipo = Hud::ItemPanel::Seccion, sj.rotulo = idioma::tr("EL JUEGO");
+  pon(sj, "");
+  if (!j.exe.empty()) {   /* el nombre tal cual: las cabeceras cambian las mayusculas */
+    Hud::ItemPanel ne;
+    ne.tipo = Hud::ItemPanel::Nota, ne.rotulo = j.exe;
+    pon(ne, "");
+  }
+  if (j.exe.empty()) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("Sin un juego debajo: la generación de cuadros va en el juego, no en el vídeo.");
+    pon(n, "");
+    return;
+  }
+  const mako::Perfil p = mako::leer(j.exe);
+  const bool generador = mako::generadorInstalado(), lsfg = !mako::dllLossless().empty();
+  const int modelo = p.existe ? (p.modelo == "lossless-scaling" ? 0 : 1) : (generador || !lsfg ? 1 : 0);
+  static const int kFlujo[4] = {50, 75, 85, 100};
+  int flujo = 0;
+  for (int k = 1; k < 4; k++)
+    if (std::abs((int)std::lround(p.flujo * 100.0) - kFlujo[k]) < std::abs((int)std::lround(p.flujo * 100.0) - kFlujo[flujo])) flujo = k;
+  auto opciones = [&](const std::string &rot, std::vector<std::string> opc, int elegido, const std::string &id) {
+    Hud::ItemPanel o;
+    o.tipo = Hud::ItemPanel::Opciones, o.rotulo = rot, o.opciones = std::move(opc), o.elegido = elegido;
+    pon(o, id);
+  };
+  opciones(idioma::tr("Generación"), {idioma::tr("Apagada"), idioma::tr("Encendida")}, p.existe && p.puesta ? 1 : 0, "fg:puesta");
+  opciones(idioma::tr("Modelo"), {"LSFG", "MAKO FG"}, modelo, "fg:modelo");
+  opciones(idioma::tr("Multiplicador"), {"x2", "x3", "x4"}, std::max(0, std::min(2, p.multiplicador - 2)), "fg:multiplicador");
+  opciones(idioma::tr("Flujo"), {"50 %", "75 %", "85 %", "100 %"}, flujo, "fg:flujo");
+  opciones(idioma::tr("Modo rendimiento"), {idioma::tr("No"), idioma::tr("Sí")}, p.rendimiento ? 1 : 0, "fg:rendimiento");
+  Hud::ItemPanel n;
+  n.tipo = Hud::ItemPanel::Nota;
+  n.rotulo = !j.enJuego ? idioma::tr("MAKO no está cargado en este juego: pon ENABLE_MAKO=1 en Integraciones. Lo que elijas se guarda para cuando lo esté.")
+                        : idioma::tr("Se guarda en el perfil de MAKO de este juego y vale en marcha; cambiar de modelo, al volver a abrir el juego.");
+  pon(n, "");
+}
+
+/* lo que hace cada fila de la pestana FG: lo mismo que el menu del cuadrito (aplicarFg en vkview.cpp) */
+static bool aplicarFg(const std::string &que, int sub, std::string *aviso) {
+  if (que == "instalar") {
+    std::string err;
+    const bool bien = mako::lanzarInstalacion(&err);
+    if (aviso) *aviso = bien ? idioma::tr("instalando MAKO FG…") : idioma::trf("No se pudo instalar MAKO FG: {}", {err});
+    return true;
+  }
+  const JuegoFg j = juegoFg();
+  if (j.exe.empty() || !mako::instalado()) return false;
+  static const int kFlujo[4] = {50, 75, 85, 100};
+  std::map<std::string, std::string> c;
+  if (que == "puesta") c["frame_generation_enabled"] = sub == 1 ? "true" : "false";
+  else if (que == "modelo") {
+    if (sub == 0 ? mako::dllLossless().empty() : !mako::generadorInstalado()) {
+      if (aviso) *aviso = idioma::tr(sub == 0 ? "Lossless Scaling no está en Steam: elige MAKO FG." : "MAKO FG no está instalado: instálalo con el botón (no pide root); mientras, LSFG ya genera.");
+      return true;
+    }
+    c["frame_generation_model"] = sub == 0 ? "'lossless-scaling'" : "'mako-fg'";
+  } else if (que == "multiplicador") c["multiplier"] = std::to_string(std::max(2, std::min(4, sub + 2)));
+  else if (que == "flujo") {
+    char b[16];
+    std::snprintf(b, sizeof b, "%.2f", kFlujo[std::max(0, std::min(3, sub))] / 100.0);
+    c["flow_scale"] = b;
+  } else if (que == "rendimiento") c["performance_mode"] = sub == 1 ? "true" : "false";
+  else return false;
+  /* un perfil nuevo lleva tambien lo demas, como se ve en la pestana */
+  const mako::Perfil p = mako::leer(j.exe);
+  if (!p.existe) {
+    char b[16];
+    std::snprintf(b, sizeof b, "%.2f", p.flujo);
+    c.emplace("frame_generation_enabled", "false");
+    c.emplace("multiplier", std::to_string(p.multiplicador));
+    c.emplace("flow_scale", b);
+    c.emplace("performance_mode", p.rendimiento ? "true" : "false");
+    c.emplace("frame_generation_model", mako::generadorInstalado() || mako::dllLossless().empty() ? "'mako-fg'" : "'lossless-scaling'");
+  }
+  std::string err;
+  if (!mako::fijar(j.exe, c, &err)) {
+    if (aviso) *aviso = idioma::trf("MAKO no lo aceptó: {}", {err});
+    return true;
+  }
+  if (aviso) *aviso = que == "modelo" ? idioma::tr("guardado; vale al volver a abrir el juego") : idioma::trf("guardado en el perfil de MAKO de {}", {j.exe});
+  return true;
+}
+
 static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
   st.pieParametro.clear(), st.pieInterruptor = false;   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
   st.pieCopiado = false;
@@ -1828,7 +1949,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
   /* (v1.15) la 2, la de Rendimiento que ya no se ensenaba, es ahora Integraciones: queda entre Juegos y Ajustes */
-  st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes")};   /* la de Experimental se fue en la 1.12 */
+  st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes"), "FG"};   /* (v1.18) y FG */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
@@ -1853,7 +1974,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
         idioma::trf("Relieve x{}", {conDecimal(v.relieve, 2)}),
         juegos.size() == 1 ? std::string(idioma::tr("1 juego")) : idioma::trf("{} juegos", {std::to_string(juegos.size())}),
         conLoSuyo == 0 ? std::string(idioma::tr("Todos igual")) : idioma::trf("{} con lo suyo", {std::to_string(conLoSuyo)}),
-        st.actualizacion.empty() ? std::string("OdysseyVK ") + ODYSSEYVK_VERSION : idioma::trf("Hay la {}", {st.actualizacion})};
+        st.actualizacion.empty() ? std::string("OdysseyVK ") + ODYSSEYVK_VERSION : idioma::trf("Hay la {}", {st.actualizacion}),
+        notaFg()};   /* (v1.18) la de FG: el multiplicador del juego que corre (X2, X3, X4) o Apagada */
     auto onOff = [](bool b) { return std::string(idioma::tr(b ? "Encendido" : "Apagado")); };
     st.teselas = {
         {"profundidad_dlss", idioma::tr("Profundidad de DLSS"), onOff(v.profDlss), v.profDlss, 1},
@@ -2111,6 +2233,8 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     }
   } else if (st.pestana == 2) {
     filasIntegraciones(st, juegos, ids);   /* (v1.15) las opciones de lanzamiento de Steam */
+  } else if (st.pestana == 4) {
+    filasFg(st, ids);   /* (v1.18) la generacion de cuadros de MAKO */
   } else {
     Hud::ItemPanel s;
     s.tipo = Hud::ItemPanel::Seccion, s.rotulo = "STEAM";
@@ -2273,6 +2397,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     return true;
   }
   if (id.rfind("integ:", 0) == 0) return aplicarIntegracion(id.substr(6), sub, juegos, aviso);
+  if (id.rfind("fg:", 0) == 0) return aplicarFg(id.substr(3), sub, aviso);   /* (v1.18) la pestana FG */
   /* (v1.15) el engranaje de una caratula: las Integraciones de ese juego */
   if (id.rfind("juego:", 0) == 0 && sub == 2) {
     g_integJuego = id.substr(6);

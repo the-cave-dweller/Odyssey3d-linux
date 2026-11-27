@@ -665,6 +665,9 @@ static std::string textoEstado(const VkUi &ui, const VkWeave &wv) {
     const Hud::State::Fg &fgE = ui.hud.state().fg;
     std::snprintf(num, sizeof num, "%.1f %.1f", fgE.reales, fgE.generados);
     s += std::string("fg_reales_generados = ") + (fgE.reales > 0.5f ? num : "-") + "\n";
+    /* (v1.18) el juego de debajo, para la pestana FG del panel: su ejecutable y si MAKO va cargado en el */
+    s += std::string("fg_exe = ") + (fgE.exe.empty() ? "-" : fgE.exe) + "\n";
+    s += std::string("fg_en_juego = ") + (fgE.enJuego ? "si" : "no") + "\n";
   }
 #else
   s += "conversor = no compilado\n";

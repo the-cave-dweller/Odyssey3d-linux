@@ -41,7 +41,9 @@ Lo que tienes:
   x2 a x4, el flujo y el modo rendimiento. Escribe el perfil del juego en el `conf.toml` de MAKO (antes, una copia; y
   comprobado con `mako-cli validate`), que MAKO lee en marcha; con la profundidad de DLSS, el cuadrito dice además lo
   que llega a la pantalla. La capa de MAKO se pone en Integraciones (`ENABLE_MAKO`).
-- **MAKO FG con un botón.** Si falta el generador propio de MAKO (`mako-fg-host`), el menú e Integraciones ofrecen
+- **Una pestaña FG.** Una tesela nueva arriba, FG, dice el multiplicador de MAKO del juego que corre (X2, X3, X4); dentro
+  están el botón para instalar MAKO FG y el perfil de MAKO del juego.
+- **MAKO FG con un botón.** Si falta el generador propio de MAKO (`mako-fg-host`), el menú y la pestaña FG ofrecen
   «Instalar MAKO FG · 19 MB»: MAKO FG V1.24 de Hugging Face, fijado y con el SHA-256 comprobado, en
   `~/.local/share/odysseyvk/mako-fg` sin root; los juegos con MAKO lo reciben con `MAKO_FG_HOST` en su línea de Steam.
   También `odysseyvk mako estado|instalar|quitar`. MAKO FG es de uso no comercial (CC BY-NC 4.0).

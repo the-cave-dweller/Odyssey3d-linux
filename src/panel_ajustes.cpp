@@ -727,7 +727,7 @@ int cmdAjustes(int argc, char **argv) {
       repintar = true;
     }
     /* la pestana de rendimiento se refresca sola, una vez por segundo */
-    if ((st.pestana == 3 || st.depuracion) && reloj() - miradaRend >= 1.0) {   /* Programa lleva el rendimiento; (v1.16) la vista de depuracion, lo de la red */
+    if ((st.pestana == 3 || st.pestana == 4 || st.depuracion) && reloj() - miradaRend >= 1.0) {   /* (v1.18) y FG */   /* Programa lleva el rendimiento; (v1.16) la vista de depuracion, lo de la red */
       miradaRend = reloj();
       rellenar();
       repintar = true;

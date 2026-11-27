@@ -525,6 +525,11 @@ T = {
 # (v1.18) el contador de MAKO en el cuadrito de los FPS
 "Reales": ("Real", "Réelles", "Echt", "真实", "実フレーム"),
 "Generados": ("Generated", "Générées", "Generiert", "生成", "生成"),
+# (v1.18) la pestana FG
+"Sin juego": ("No game", "Aucun jeu", "Kein Spiel", "无游戏", "ゲームなし"),
+"EL JUEGO": ("THE GAME", "LE JEU", "DAS SPIEL", "游戏", "ゲーム"),
+"guardado; vale al volver a abrir el juego": ("saved; applies when the game is reopened", "enregistré ; s'applique à la réouverture du jeu", "gespeichert; gilt nach dem Neustart des Spiels", "已保存；重新打开游戏后生效", "保存しました。ゲームを開き直すと有効になります"),
+"guardado en el perfil de MAKO de {}": ("saved in {}'s MAKO profile", "enregistré dans le profil MAKO de {}", "im MAKO-Profil von {} gespeichert", "已保存到 {} 的 MAKO 配置", "{} の MAKO プロファイルに保存しました"),
 }
 
 from traducciones_ru import RU

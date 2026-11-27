@@ -50,6 +50,20 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## La pestaña FG: la generación de cuadros de MAKO arriba, con su multiplicador (v1.18)
+
+- Rodolfo: «quiero una pestaña de framegen aquí arriba», «que diga FG y en base a la activa cambie a X2 X3 y X4», «que
+  dentro de su menú se instalen» y «puedes poner solo mako?».
+- **La tesela FG**, junto a 3D, Juegos, Integraciones y Ajustes, con su icono (un cuadro de verdad, otro generado a trazos
+  y la flecha): debajo dice el multiplicador del juego que corre (X2, X3, X4), «Apagada», «Sin juego» o «No instalada».
+  El juego sale del `estado` del visor (`fg_exe`, `fg_en_juego`).
+- **Dentro**: MAKO (si no está, lo dice), MAKO FG con su botón de instalar (o lo que lleva, o de dónde sale) y el perfil
+  del juego que corre, con las mismas filas que el menú del cuadrito de los FPS. La fila de MAKO FG sale de Integraciones:
+  se instala aquí. Se refresca cada segundo.
+- **Solo MAKO**: se miraron también lsfg-vk (su paquete 1.0.0: una capa implícita siempre cargada, con la biblioteca por
+  nombre) y ANR FG (reemplaza la generación de cuadros de DLSS con OptiScaler en la carpeta del juego; Raji no la trae);
+  Rodolfo prefirió dejar solo MAKO.
+
 ## Los cuadros generados en el cuadrito de los FPS: un contador debajo de MAKO, como el de vkDaedalus (v1.18)
 
 - Rodolfo: «you can see what are the generating frames, look how vkbasalt_overlay does it».
