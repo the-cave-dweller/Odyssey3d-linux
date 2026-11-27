@@ -69,8 +69,8 @@ CPU. La profundidad de DLSS de los juegos es solo de NVIDIA.
 git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh
 ```
 
-`install.sh` compila, pide tu clave una vez (binario, regla udev y datos de calibración), instala
-la entrada del menú y arranca el servicio de usuario. Luego comprueba que el monitor se ve:
+`install.sh` compila (en silencio: el detalle va a `build/compilacion.log` y sale si algo falla), pide tu clave una
+vez (binario, regla udev y datos de calibración), instala la entrada del menú y arranca el servicio de usuario. Luego comprueba que el monitor se ve:
 
 ```bash
 odysseyvk doctor

@@ -957,7 +957,7 @@ static int cmdTrack(int argc, char **argv) {
     if (!volcar.empty() && (leidos == 1 || leidos == 30)) {
       double brillo = 0, saturados = 0;
       HeadTracker::brilloDeVista(left.data(), vw, vh, &brillo, &saturados);
-      std::printf("cuadro %-4zu %zu bytes, vista %dx%d, mjpeg=%d, brillo %.1f, saturados %.1f%%\n",
+      std::printf("cuadro %-4d %zu bytes, vista %dx%d, mjpeg=%d, brillo %.1f, saturados %.1f%%\n",
                   leidos, size, vw, vh, cam.mjpeg() ? 1 : 0, brillo, saturados);
       std::string d3;
       const std::string png = volcar + "." + std::to_string(leidos) + ".png";
@@ -3307,15 +3307,14 @@ static int cmdHudSelfTest(int argc, char **argv) {
     /* el panel de ajustes: cuantas celdas de raton tiene cada cosa que se pica, y con que senas */
     struct Cuenta { int celdas = 0, subs = 0; float fmin = 9.0f, fmax = -9.0f; };
     std::vector<Cuenta> porFila(hud.state().items.size());
-    int cerrar = 0, pestanas[4] = {0, 0, 0, 0}, vacio = 0, fuera = 0;
+    int cerrar = 0, pestanas[4] = {0, 0, 0, 0};
     for (int y = 0; y < H; y += 2)
       for (int x = 0; x < W; x += 2) {
         int item = -1, sub = 0;
         float fr = 0.0f;
         const Hud::Hit g = hud.hitDetalle((float)x, (float)y, &item, &sub, &fr);
-        if (g == Hud::HitNone) fuera++;
-        else if (g == Hud::HitPanel) vacio++;
-        else if (g == Hud::HitPanelCerrar) cerrar++;
+        if (g == Hud::HitNone || g == Hud::HitPanel) continue;   /* fuera del panel, o en un hueco */
+        if (g == Hud::HitPanelCerrar) cerrar++;
         else if (g == Hud::HitPanelPestana) pestanas[sub & 3]++;
         else if (g == Hud::HitPanelItem && item >= 0 && (size_t)item < porFila.size()) {
           Cuenta &c = porFila[(size_t)item];

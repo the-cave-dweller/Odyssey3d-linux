@@ -24,8 +24,28 @@ if ((${#opt[@]})); then
 fi
 
 # --- compilar ---------------------------------------------------------------
-cmake -S "$here" -B "$here/build" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$here/build" -j"$(nproc)"
+# (v1.17) En silencio: todo el detalle va a build/compilacion.log y de la configuracion solo salen las lineas de
+# OdysseyVK que dicen que trae (el conversor 2D a 3D, la ventana de ajustes) y los avisos; si algo falla, salen los
+# errores. Antes salian cientos de avisos del compilador, que asustaban sin decir nada al que instala.
+# ODYSSEYVK_VERBOSO=1 lo deja todo a la vista, como antes.
+if [ -n "${ODYSSEYVK_VERBOSO:-}" ]; then
+  cmake -S "$here" -B "$here/build" -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$here/build" -j"$(nproc)"
+else
+  mkdir -p "$here/build"
+  log="$here/build/compilacion.log"
+  fallo() {
+    echo "la compilación falló; el registro entero está en $log. Lo último:" >&2
+    { grep -E -i -B2 -A3 'error|no se encontr|not found' "$log" || cat "$log"; } | tail -n 40 >&2
+    exit 1
+  }
+  cmake -S "$here" -B "$here/build" -DCMAKE_BUILD_TYPE=Release > "$log" 2>&1 || fallo
+  { grep -E '^-- (ONNX Runtime|Sin ONNX|Ventana de ajustes|sin xdg-shell|sin fractional)' "$log" | sed 's/^-- /  /'
+    grep -E -A3 '^CMake Warning' "$log"; } || true
+  echo "compilando OdysseyVK (unos minutos; el detalle queda en build/compilacion.log)…"
+  cmake --build "$here/build" -j"$(nproc)" >> "$log" 2>&1 || fallo
+  echo "compilado"
+fi
 
 # --- instalar ---------------------------------------------------------------
 echo

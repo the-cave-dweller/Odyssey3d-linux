@@ -1096,7 +1096,7 @@ std::vector<std::string> carpetasPath() {
   }
   /* el servicio puede arrancar con un PATH corto */
   const char *home = std::getenv("HOME");
-  for (const std::string d : {std::string(home ? home : "") + "/.local/bin", std::string("/usr/local/bin"), std::string("/usr/bin")})
+  for (const std::string &d : {std::string(home ? home : "") + "/.local/bin", std::string("/usr/local/bin"), std::string("/usr/bin")})
     if (std::find(v.begin(), v.end(), d) == v.end()) v.push_back(d);
   return v;
 }

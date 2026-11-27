@@ -109,9 +109,6 @@ void sampleBilinearWH(const uint8_t *src, int w, int h, float *dstPlanar, int ow
     }
   }
 }
-void sampleBilinear(const uint8_t *src, int w, int h, float *dstPlanar, int sz) {
-  sampleBilinearWH(src, w, h, dstPlanar, sz, sz);
-}
 
 /* un plano de floats de ow x oh a dw x dh, bilineal (la salida de la red al tamano del mapa) */
 void remuestrea(const float *src, int ow, int oh, float *dst, int dw, int dh) {
@@ -1841,12 +1838,11 @@ float anclarTexto(const uint8_t *rgba, int w, int h, std::vector<uint8_t> &mapa,
     const int y0 = cy * celda, y1 = std::min(h, y0 + celda);
     for (int cx = 0; cx < cw; cx++) {
       const int x0 = cx * celda, x1 = std::min(w, x0 + celda);
-      float sG = 0.0f, sL = 0.0f, mn = 1e9f, mx = -1e9f;
+      float sL = 0.0f, mn = 1e9f, mx = -1e9f;
       int n = 0;
       for (int y = y0; y < y1; y++)
         for (int x = x0; x < x1; x++) {
           const size_t i = (size_t)y * w + x;
-          sG += std::fabs(gx[i]) + std::fabs(gy[i]);
           sL += lp[i];
           const float c = lum[i];
           if (c < mn) mn = c;

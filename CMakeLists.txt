@@ -12,7 +12,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+# (v1.17) sin -Wmissing-field-initializers: las estructuras de Vulkan y Wayland se escriben a proposito con su primer
+# campo (VkImageCreateInfo ii{VK_STRUCTURE_TYPE_...}) y el resto a cero; ese aviso salia 554 veces en cada compilacion
+add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLFW REQUIRED glfw3)
@@ -257,7 +259,7 @@ endif()
 
 if(OPENCV_FOUND)
   target_sources(odysseyvk PRIVATE src/track.cpp src/trackfeed.cpp)
-  target_include_directories(odysseyvk PRIVATE ${OPENCV_INCLUDE_DIRS})
+  target_include_directories(odysseyvk SYSTEM PRIVATE ${OPENCV_INCLUDE_DIRS})   # (v1.17) sus avisos no son nuestros
   target_link_directories(odysseyvk PRIVATE ${OPENCV_LIBRARY_DIRS})
   target_link_libraries(odysseyvk PRIVATE opencv_objdetect opencv_dnn opencv_geometry opencv_imgcodecs opencv_imgproc opencv_photo opencv_core)
   target_compile_definitions(odysseyvk PRIVATE HAVE_OPENCV=1)

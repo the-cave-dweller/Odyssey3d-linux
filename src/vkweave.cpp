@@ -966,7 +966,7 @@ void VkWeave::fillUbo(uint8_t *dst) {
                                      "tun7",      "tun8",       "tun9", "tun10"};   /* uno por vec4: si falta, un NaN ahi leia fuera */
     const float *fl = (float *)dst;
     int malos = 0, primero = -1;
-    for (int i = 0; i < kUboBytes / 4; i++)
+    for (int i = 0; i < (int)(kUboBytes / 4); i++)
       if (!std::isfinite((double)fl[i])) {
         if (primero < 0) primero = i;
         *(float *)(dst + i * 4) = 0.0f;

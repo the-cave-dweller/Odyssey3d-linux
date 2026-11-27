@@ -27,6 +27,22 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
   (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
 
+## `install.sh` compila en silencio, y sin avisos del compilador (v1.17)
+
+- Rodolfo, con la salida de `./install.sh`: «mis usuarios ven esto?». Sí, quien instala a mano: cientos de avisos del
+  compilador (no errores). Quien actualiza desde la tarjeta o la tesela de la Versión no, porque eso corre como un
+  servicio de systemd y su salida va al registro.
+- **MEDIDO** en una compilación limpia: 561 avisos. 554 eran `-Wmissing-field-initializers` por escribir las estructuras
+  de Vulkan y Wayland con su primer campo (`VkImageCreateInfo ii{VK_STRUCTURE_TYPE_...}`), que es a propósito; ese
+  aviso se apaga en `CMakeLists.txt`. Dos venían de las cabeceras de OpenCV (ahora `SYSTEM`). Los otros cinco se
+  arreglan: un `%zu` con un `int` en `ctl track` (el número de cuadro podía salir mal), dos contadores y una suma sin
+  usar, una función sin usar, una copia en un bucle y una comparación con y sin signo. Ahora: 0 avisos, con ONNX
+  Runtime y sin él.
+- **`install.sh`**: todo el detalle va a `build/compilacion.log`. Se ven las líneas de OdysseyVK que dicen qué trae (el
+  conversor 2D a 3D, la ventana de ajustes) y los avisos de CMake; si falla, salen los errores y dónde está el
+  registro. `ODYSSEYVK_VERBOSO=1` lo enseña todo, como antes. Probado el bloque de compilar: bien (4 líneas) y con un
+  `#error` puesto a propósito (sale el error y el código de salida es 1).
+
 ## La red en la CUDA 1 ya no deja un contexto de 386 MiB en la CUDA 0 (v1.17)
 
 - Cada proceso que abría la red en la 5080 (CUDA 1) se quedaba además con **386 MiB en la 4090** (CUDA 0), por eso

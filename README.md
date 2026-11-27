@@ -68,8 +68,8 @@ network runs on the CPU. The DLSS depth of games is NVIDIA-only.
 git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh
 ```
 
-`install.sh` compiles, asks for your password once (binary, udev rule and calibration data),
-installs the menu entry and starts the user service. Then check that the monitor is seen:
+`install.sh` compiles (quietly: the details go to `build/compilacion.log`, shown if something fails), asks for your
+password once (binary, udev rule and calibration data), installs the menu entry and starts the user service. Then check that the monitor is seen:
 
 ```bash
 odysseyvk doctor
