@@ -34,8 +34,11 @@ public:
   /* Elige la GPU: discreta, con importación de DMA-BUF y (si se pasa) que presente en
      esa superficie. Devuelve el nombre en deviceName(). */
   /* gpuIndex >= 0 fuerza esa GPU (para pruebas); -1 = la mejor. */
+  /* (v1.18) pciPreferida («0000:01:00.0»): la tarjeta que da la salida del monitor 3D. Si no, con el monitor en otra
+     tarjeta el visor dibujaria en la primera discreta y cada cuadro del 3D (4K a 165 Hz) cruzaria el PCIe hasta la del
+     monitor. Manda sobre lo demas salvo gpuIndex */
   bool createDevice(const std::vector<const char *> &extraDevExts, VkSurfaceKHR surface, std::string *err = nullptr,
-                    int gpuIndex = -1);
+                    int gpuIndex = -1, const std::string &pciPreferida = std::string());
   void destroy();
   bool ok() const { return device_ != VK_NULL_HANDLE; }
 

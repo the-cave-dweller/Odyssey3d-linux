@@ -27,6 +27,8 @@ using Ajustes = std::map<std::string, std::string>;
      odysseyvk mangohud vkdaedalus neural_forge vkbasalt   las variables (1 = puesta, 0 = no)
      nf_offload                                           (v1.18) el modelo de Neural Forge en la segunda tarjeta:
                                                           NEURAL_FORGE_OFFLOAD_GPU (ver secundariaNf)
+     juego_tarjeta                                        (v1.18) la tarjeta del juego si no es la del monitor 3D: su
+                                                          direccion PCI, o vacio (ver tarjetasParaJuego)
      otros                                                otras variables, tal cual: «DXVK_HUD=fps PROTON_LOG=1»
      vkdaedalus_run comando                               delante del juego: vkdaedalus-run y uno a mano
      gamescope reescalado filtro render salida escala     gamescope: filtro fsr|nis (-F), render y salida «AxB»
@@ -129,10 +131,32 @@ struct Secundaria {
   int gen = 0;           /* la generacion de PCIe que da el enlace (4 = PCIe 4.0) */
   int ancho = 0;         /* las lineas que da el enlace (x4) */
   int anchoTarjeta = 0;  /* las que podria la tarjeta (x16) */
+  bool delMonitor = false;   /* tambien da el monitor 3D (el juego en otra: «Tarjeta del juego») */
   std::string valor() const { return ids + "@" + pci; }
 };
-/* falso si no hay segunda NVIDIA; se mira una vez por proceso */
-bool secundariaNf(Secundaria &s);
+/* falso si no hay segunda NVIDIA. `pciJuego`: la tarjeta en que va el juego (`juego_tarjeta`); vacio = la del monitor 3D */
+bool secundariaNf(Secundaria &s, const std::string &pciJuego = std::string());
+/* la direccion PCI de la tarjeta que da el monitor 3D */
+std::string pciMonitor3d();
+
+/* (v1.18) La tarjeta del juego, con el monitor 3D en otra (Rodolfo: «haz una opcion de offload con el monitor conectado a
+   otra tarjeta tambien, analiza si debe arrancar ahi o tener un segundo monitor»). De fabrica el juego va donde lo ponga
+   Proton (la del monitor, normalmente). `juego_tarjeta = 0000:01:00.0` lo manda a esa: DXVK_FILTER_DEVICE_NAME y
+   VKD3D_FILTER_DEVICE_NAME (DX9 a DX12, por el nombre que ve el juego) y MESA_VK_DEVICE_SELECT (Vulkan nativo, el orden de
+   las tarjetas; sin _FORCE_DEFAULT_DEVICE, que esconderia las demas tambien a Neural Forge). Cada cuadro del juego cruza
+   entonces el PCIe hasta la del monitor (KWin lo copia): el enlace mas lento de las dos manda */
+struct TarjetaJuego {
+  std::string pci, ids, nombre;   /* «0000:01:00.0», «10de:2684», «RTX 4090» */
+  std::string filtro;             /* lo que buscan DXVK y vkd3d-proton en el nombre de Vulkan; vacio = no hay uno seguro */
+  bool delMonitor = false;
+  /* donde va el juego sin decirle nada: DXVK y vkd3d-proton toman la primera dedicada de la lista de Vulkan, que en
+     NVIDIA va por direccion PCI (la mas baja). No tiene por que ser la del monitor 3D */
+  bool predeterminada = false;
+  int gen = 0, ancho = 0;
+};
+/* las dedicadas (NVIDIA y AMD sin la del procesador), la del monitor 3D primero. `juego_tarjeta` vacio = la predeterminada;
+   las variables solo se escriben para otra */
+const std::vector<TarjetaJuego> &tarjetasParaJuego();
 /* el NEURAL_FORGE_OFFLOAD_GPU propio de un juego (el que traia su linea), o vacio: el de secundariaNf */
 std::string gpuDe(const Estado &e, const std::string &appid);
 

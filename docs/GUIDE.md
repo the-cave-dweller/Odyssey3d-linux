@@ -132,6 +132,15 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
   real PCIe link (the lower of the card and its slot: an RTX 5080 that can do 5.0 x16 in a 4.0 x4 slot shows
   `PCIe 4.0 x4`), warning at x4 or x8. Turning it on turns Neural Forge on; turning Neural Forge off turns it off. A
   value already in the game's line (`=1`, `same`) is kept. `odysseyvk integraciones linea TEXT` shows the card found.
+- Since 1.18, *Game's card* (`juego_tarjeta`, with two or more dedicated cards): sends the game to one card with
+  `DXVK_FILTER_DEVICE_NAME` and `VKD3D_FILTER_DEVICE_NAME` (DX9 to DX12, by the name the game sees) and
+  `MESA_VK_DEVICE_SELECT` (native Vulkan, the card order; not `_FORCE_DEFAULT_DEVICE`, which would also hide the other
+  card from Neural Forge, whose layer sits above Mesa's). Empty means where Proton puts it: the first dedicated card by
+  PCI address, which is not always the 3D monitor's card. When the game's card is not the monitor's, a note says which
+  link every frame crosses (the slower of the two), and Neural Forge's second card is worked out against the game's.
+- The 3D view runs on the card that drives the 3D monitor (the `pantalla` output, by its PCI address); with the
+  monitor on another card than the first, it used to draw on the first and every 3D frame crossed PCIe to the screen.
+  And the depth network avoids the game's card too, read from the game's environment (or the default card).
 - What isn't installed shows greyed out with a "Not installed" pill and can't be turned on: a layer counts as
   installed when some Vulkan implicit-layer manifest is enabled by its variable (`enable_environment`), and
   `vkdaedalus-run` and gamescope when their command is in the `PATH`. `ENABLE_VKDAEDALUS` and `vkdaedalus-run` are

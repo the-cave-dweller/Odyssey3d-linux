@@ -1417,7 +1417,7 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
        (Rodolfo: «remember to consider some users use x8»; ver integ::secundariaNf) */
     if (puesto && std::strcmp(v.clave, "neural_forge") == 0) {
       integ::Secundaria s;
-      const bool hay = integ::secundariaNf(s);
+      const bool hay = integ::secundariaNf(s, val("juego_tarjeta"));
       const bool offload = val("nf_offload") == "1";
       const std::string propia = jid.empty() ? std::string() : integ::gpuDe(e, jid);
       const std::string g = !propia.empty() ? propia : (hay ? s.valor() : std::string());
@@ -1427,11 +1427,43 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
         std::string nota = s.nombre + " · PCIe " + std::to_string(s.gen) + ".0 x" + std::to_string(s.ancho);
         if ((s.ancho > 0 && s.ancho < 16) || (s.gen > 0 && s.gen < 4))
           nota += " · " + std::string(idioma::tr("cada cuadro va y vuelve por ahí: puede ir más lento que en la tarjeta del juego"));
+        /* (v1.18) con el juego en otra tarjeta que la del monitor, la segunda de Neural Forge es la del monitor: por ahi ya
+           cruza cada cuadro del juego (Neural Forge pide el monitor en la tarjeta del juego) */
+        if (s.delMonitor) nota += " · " + std::string(idioma::tr("también da el monitor 3D: cada cuadro del juego ya cruza hasta ella"));
         st.items[ko].nota = nota;
       } else if (integ::instalado("neural_forge")) {
         st.items[ko].pastilla = idioma::tr("Sin segunda tarjeta");
         st.items[ko].ayuda = idioma::tr("No hay una segunda tarjeta NVIDIA: el modelo se queda en la del juego");
       }
+    }
+  }
+  /* (v1.18) la tarjeta del juego, con el monitor 3D en otra (Rodolfo: «haz una opcion de offload con el monitor conectado a
+     otra tarjeta tambien»; ver integ::tarjetasParaJuego): con dos o mas dedicadas */
+  if (const std::vector<integ::TarjetaJuego> &tjs = integ::tarjetasParaJuego(); tjs.size() > 1) {
+    Hud::ItemPanel tj;
+    tj.tipo = Hud::ItemPanel::Opciones, tj.rotulo = idioma::tr("Tarjeta del juego"), tj.elegido = 0, tj.propio = propio("juego_tarjeta");
+    const std::string pj = val("juego_tarjeta");
+    const integ::TarjetaJuego *monitor = nullptr, *elegida = nullptr;
+    auto enlaceDe = [](const integ::TarjetaJuego &x) { return "PCIe " + std::to_string(x.gen) + ".0 x" + std::to_string(x.ancho); };
+    for (const integ::TarjetaJuego &x : tjs)
+      if (x.delMonitor) monitor = &x;
+    for (size_t i = 0; i < tjs.size(); i++) {
+      const integ::TarjetaJuego &x = tjs[i];
+      tj.opciones.push_back(x.nombre);
+      tj.ayudas.push_back(x.delMonitor ? std::string(idioma::tr("La del monitor 3D: el juego y el 3D en la misma tarjeta, sin copias"))
+                                       : idioma::trf("El juego en la {}: cada cuadro cruza el PCIe ({}) hasta la del monitor 3D", {x.nombre, enlaceDe(x)}));
+      if ((pj.empty() && x.predeterminada) || x.pci == pj) tj.elegido = (int)i, elegida = &x;
+    }
+    pon(tj, "integ:juego_tarjeta");
+    /* las filas de opciones no ensenan nota: lo que cuesta va en una nota debajo, solo con el juego en otra tarjeta */
+    if (elegida && !elegida->delMonitor && monitor) {
+      /* lo que manda es el enlace mas lento de las dos */
+      const long a = (long)elegida->ancho << elegida->gen, b = (long)monitor->ancho << monitor->gen;
+      const integ::TarjetaJuego &lento = a <= b ? *elegida : *monitor;
+      Hud::ItemPanel n;
+      n.tipo = Hud::ItemPanel::Nota;
+      n.rotulo = idioma::trf("{} dibuja el juego y {} lo enseña: cada cuadro cruza por {}", {elegida->nombre, monitor->nombre, enlaceDe(lento)});
+      pon(n, "");
     }
   }
   campo("otros", idioma::tr("Otros parámetros"), "DXVK_HUD=fps PROTON_LOG=1",
@@ -1642,6 +1674,10 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
     const auto &rs = integ::resoluciones();
     if (sub < 0 || (size_t)sub >= rs.size()) return false;   /* la que venia en su linea: ya esta puesta */
     nuevo = rs[(size_t)sub].medida;
+  } else if (que == "juego_tarjeta") {   /* (v1.18) la predeterminada (donde lo pone Proton) es vacio */
+    const std::vector<integ::TarjetaJuego> &tjs = integ::tarjetasParaJuego();
+    if (sub < 0 || (size_t)sub >= tjs.size()) return false;
+    nuevo = tjs[(size_t)sub].predeterminada ? std::string() : tjs[(size_t)sub].pci;
   } else if (que == "escala") {
     if (sub == 0) nuevo = "stretch";
     else if (sub == 1) nuevo = "fit";

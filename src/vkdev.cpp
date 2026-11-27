@@ -122,7 +122,7 @@ std::string VkDev::modifierName(uint64_t m) {
 }
 
 bool VkDev::createDevice(const std::vector<const char *> &extraDevExts, VkSurfaceKHR surface, std::string *err,
-                           int gpuIndex) {
+                           int gpuIndex, const std::string &pciPreferida) {
   uint32_t n = 0;
   vkEnumeratePhysicalDevices(inst_, &n, nullptr);
   if (!n) {
@@ -164,13 +164,26 @@ bool VkDev::createDevice(const std::vector<const char *> &extraDevExts, VkSurfac
       }
     }
     int score = 0;
+    /* (v1.18) la del monitor 3D, por su direccion PCI (VK_EXT_pci_bus_info) */
+    std::string pci;
+    if (has(VK_EXT_PCI_BUS_INFO_EXTENSION_NAME)) {
+      VkPhysicalDevicePCIBusInfoPropertiesEXT bus{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT};
+      VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+      p2.pNext = &bus;
+      vkGetPhysicalDeviceProperties2(devs[i], &p2);
+      char b[32];
+      std::snprintf(b, sizeof b, "%04x:%02x:%02x.%x", bus.pciDomain, bus.pciBus, bus.pciDevice, bus.pciFunction);
+      pci = b;
+    }
+    const bool delMonitor = !pciPreferida.empty() && pci == pciPreferida;
+    if (delMonitor) score += 16;
     if (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 4;
     if (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) score += 2;
     if (db) score += 3;
     if (canPresent) score += 2;
-    std::printf("[vulkan] gpu %u: %s · %s · dma-buf %s · presentación %s\n", i, p.deviceName,
+    std::printf("[vulkan] gpu %u: %s · %s · dma-buf %s · presentación %s%s%s\n", i, p.deviceName,
                 p.apiVersion >= VK_API_VERSION_1_3 ? "API >= 1.3" : "API < 1.3", db ? "sí" : "no",
-                canPresent ? "sí" : "no");
+                canPresent ? "sí" : "no", pci.empty() ? "" : (" · " + pci).c_str(), delMonitor ? " · la del monitor 3D" : "");
     if (canPresent && score > bestScore) {
       bestScore = score;
       best = (int)i;

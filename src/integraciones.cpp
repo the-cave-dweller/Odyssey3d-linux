@@ -321,7 +321,7 @@ std::string rutaMarca() { return rutaEstadoOdyssey("integraciones-pendiente"); }
 /* ------------------------------------------------------------------------------------------------ */
 
 const std::vector<std::string> &claves() {
-  static const std::vector<std::string> k = {"odysseyvk", "mangohud",   "vkdaedalus", "neural_forge", "nf_offload", "vkbasalt",
+  static const std::vector<std::string> k = {"odysseyvk", "mangohud",   "vkdaedalus", "neural_forge", "nf_offload", "juego_tarjeta", "vkbasalt",
                                              "otros",     "vkdaedalus_run", "comando", "gamescope",  "reescalado",
                                              "filtro",    "render",     "salida",     "escala",       "pantalla_completa",
                                              "cursor",    "gs_otros",   "opciones"};
@@ -332,7 +332,7 @@ const Ajustes &deFabrica() {
   /* (v1.16) ODYSSEYVK=1 estuvo puesta siempre y luego volvio a ser una opcion (Rodolfo: «stop putting the odyssey
      parameter by yourself, return it as an option»): de fabrica, apagada */
   static const Ajustes a = {{"odysseyvk", "0"},       {"mangohud", "0"},        {"vkdaedalus", "0"},
-                            {"neural_forge", "0"},    {"nf_offload", "0"},      {"vkbasalt", "0"},        {"otros", ""},
+                            {"neural_forge", "0"},    {"nf_offload", "0"},      {"juego_tarjeta", ""},    {"vkbasalt", "0"},        {"otros", ""},
                             {"vkdaedalus_run", "0"},  {"comando", ""},          {"gamescope", "0"},
                             {"reescalado", "0"},      {"filtro", "fsr"},        {"render", "2048x1536"},
                             {"salida", "3840x2160"},  {"escala", "stretch"},    {"pantalla_completa", "1"},
@@ -480,10 +480,20 @@ std::string linea(const Ajustes &a, const std::string &nfExe, const std::string 
     /* (v1.18) el modelo de Neural Forge en la segunda tarjeta: la que trajo su linea o la de secundariaNf */
     if (std::strcmp(v.clave, "neural_forge") == 0 && si("nf_offload")) {
       Secundaria s;
-      const std::string g = !strTrim(nfGpu).empty() ? strTrim(nfGpu) : (secundariaNf(s) ? s.valor() : std::string());
+      const std::string g = !strTrim(nfGpu).empty() ? strTrim(nfGpu) : (secundariaNf(s, val("juego_tarjeta")) ? s.valor() : std::string());
       if (!g.empty()) vars.push_back("NEURAL_FORGE_OFFLOAD_GPU=" + citar(g));
     }
   }
+  /* (v1.18) el juego en otra tarjeta que la del monitor 3D (ver tarjetasParaJuego) */
+  if (const std::string pj = val("juego_tarjeta"); !pj.empty())
+    for (const TarjetaJuego &tj : tarjetasParaJuego())
+      if (tj.pci == pj && !tj.predeterminada) {
+        if (!tj.filtro.empty()) {
+          vars.push_back("DXVK_FILTER_DEVICE_NAME=" + citar(tj.filtro));
+          vars.push_back("VKD3D_FILTER_DEVICE_NAME=" + citar(tj.filtro));
+        }
+        vars.push_back("MESA_VK_DEVICE_SELECT=" + tj.ids);
+      }
   if (!val("otros").empty()) vars.push_back(val("otros"));
   std::vector<std::string> delante;
   if (si("vkdaedalus_run")) delante.push_back("vkdaedalus-run");
@@ -505,7 +515,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
   if (!partir(lin, t)) return false;
   Ajustes &a = l.ajustes;
   for (const Variable &v : kVariables) a[v.clave] = "0";
-  a["nf_offload"] = "0";
+  a["nf_offload"] = "0", a["juego_tarjeta"] = "";
   a["otros"] = "", a["vkdaedalus_run"] = "0", a["comando"] = "", a["gamescope"] = "0", a["opciones"] = "";
   if (t.empty()) return true;
   auto crudoDe = [&](const Pieza &p) { return lin.substr(p.ini, p.fin - p.ini); };
@@ -611,6 +621,15 @@ bool leerLinea(const std::string &lin, Leida &l) {
       gpu = valor;
       nuestra = true;
     }
+    /* (v1.18) la tarjeta del juego: solo si nombra una de las nuestras (y la misma en las tres) */
+    if (!nuestra && (nombre == "DXVK_FILTER_DEVICE_NAME" || nombre == "VKD3D_FILTER_DEVICE_NAME" || nombre == "MESA_VK_DEVICE_SELECT"))
+      for (const TarjetaJuego &tj : tarjetasParaJuego()) {
+        const bool es = nombre == "MESA_VK_DEVICE_SELECT" ? strLower(valor) == tj.ids : (!tj.filtro.empty() && valor == tj.filtro);
+        if (es && (a["juego_tarjeta"].empty() || a["juego_tarjeta"] == tj.pci)) {
+          a["juego_tarjeta"] = tj.pci;
+          nuestra = true;
+        }
+      }
     if (!nuestra) otrosVars.push_back(crudoDe(t[r]));
   }
   /* NEURAL_FORGE_TARGET_EXE sin NEURAL_FORGE_ENABLE=1 no es nuestro: se queda con las demas */
@@ -622,7 +641,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
   if (!gpu.empty()) {
     a["nf_offload"] = "1";
     Secundaria s;
-    if (!(secundariaNf(s) && strLower(gpu) == strLower(s.valor()))) l.nfGpu = gpu;
+    if (!(secundariaNf(s, a["juego_tarjeta"]) && strLower(gpu) == strLower(s.valor()))) l.nfGpu = gpu;
   }
   a["otros"] = unir(otrosVars);
   if (r < c && nombreBase(t[r].texto) == "vkdaedalus-run") {
@@ -981,51 +1000,53 @@ std::string pciPrincipal() {
       if (salida == "-") salida.clear();
     }
   }
+  if (const std::string p = pciDeConector(salida); !p.empty()) return p;
+  if (const std::string p = pciDeConector(conectorConEdid("G90XF")); !p.empty()) return p;
   std::error_code ec;
-  std::string porEdid;
-  for (const fs::directory_entry &c : fs::directory_iterator("/sys/class/drm", ec)) {
-    const std::string n = c.path().filename().string();   /* «card2-DP-4» */
-    const size_t g = n.find('-');
-    if (n.rfind("card", 0) != 0 || g == std::string::npos) continue;
-    const std::string conector = n.substr(g + 1);
-    /* el `device` del conector (card2-DP-4/device) es la tarjeta de DRM, no la PCI: la PCI es la de card2 */
-    const std::string pci = fs::canonical(fs::path("/sys/class/drm") / n.substr(0, g) / "device", ec).filename().string();
-    if (ec) continue;
-    if (!salida.empty() && conector == salida) return pci;
-    if (porEdid.empty() && leeSys(c.path().string() + "/status") == "connected") {
-      std::string edid;
-      if (readSmallFile(c.path().string() + "/edid", edid) && edid.find("G90XF") != std::string::npos) porEdid = pci;
-    }
-  }
-  if (!porEdid.empty()) return porEdid;
   for (const fs::directory_entry &d : fs::directory_iterator("/sys/bus/pci/devices", ec))
     if (leeSys(d.path().string() + "/boot_vga") == "1") return d.path().filename().string();
   return {};
 }
 }  // namespace
 
-bool secundariaNf(Secundaria &fuera) {
-  static bool mirado = false, hay = false;
-  static Secundaria s;
-  if (!mirado) {
-    mirado = true;
+namespace {
+/* (v1.18) las tarjetas graficas del equipo (NVIDIA y AMD), con su nombre, su enlace de verdad y si dan el monitor 3D; se
+   miran una vez por proceso */
+struct Grafica {
+  std::string pci, ids, nombre, filtro;
+  bool nvidia = false, dedicada = true, delMonitor = false;
+  int gen = 0, ancho = 0, anchoTarjeta = 0;
+};
+const std::vector<Grafica> &graficas() {
+  static const std::vector<Grafica> v = [] {
     namespace fs = std::filesystem;
+    std::vector<Grafica> todas;
     const std::string principal = pciPrincipal();
-    std::vector<Secundaria> todas;
+    const std::vector<TarjetaAmd> amd = tarjetasAmd();
+    long amdGrande = 0;
+    for (const TarjetaAmd &a : amd) amdGrande = std::max(amdGrande, a.totalMiB);
     std::error_code ec;
     for (const fs::directory_entry &d : fs::directory_iterator("/sys/bus/pci/devices", ec)) {
       const std::string p = d.path().string(), pci = d.path().filename().string();
-      if (strLower(leeSys(p + "/vendor")) != "0x10de" || leeSys(p + "/class").rfind("0x03", 0) != 0 || pci == principal) continue;
-      Secundaria x;
-      x.pci = pci;
+      const std::string fab = strLower(leeSys(p + "/vendor"));
+      if ((fab != "0x10de" && fab != "0x1002") || leeSys(p + "/class").rfind("0x03", 0) != 0) continue;
+      Grafica x;
+      x.pci = pci, x.nvidia = fab == "0x10de", x.delMonitor = pci == principal;
       std::string modelo = strLower(leeSys(p + "/device"));
       if (modelo.rfind("0x", 0) == 0) modelo = modelo.substr(2);
-      x.ids = "10de:" + modelo;
-      x.nombre = nombrePciIds("10de", modelo);
+      x.ids = fab.substr(2) + ":" + modelo;
+      x.nombre = nombrePciIds(fab.substr(2), modelo);
       for (const char *q : {"GeForce ", "NVIDIA "})
         if (x.nombre.rfind(q, 0) == 0) x.nombre = x.nombre.substr(std::strlen(q));
-      if (x.nombre.empty()) x.nombre = "NVIDIA " + x.ids;
-      /* lo que da de verdad: la menor de la tarjeta y de su ranura (el puerto de arriba); el ancho, el negociado */
+      /* lo que buscan DXVK y vkd3d-proton en el nombre de Vulkan («NVIDIA GeForce RTX 4090»): solo si es un nombre de
+         una tarjeta (pci.ids junta a veces varias con «/»: «Radeon RX 7900 XT/7900 XTX»), si no, solo el orden de Mesa */
+      if (!x.nombre.empty() && x.nombre.find('/') == std::string::npos) x.filtro = x.nombre;
+      if (x.nombre.empty()) x.nombre = (x.nvidia ? "NVIDIA " : "AMD ") + x.ids;
+      if (!x.nvidia)
+        for (const TarjetaAmd &a : amd)
+          if (a.pci == pci && a.totalMiB >= 0 && (a.totalMiB < 4096 || (amdGrande > 0 && a.totalMiB * 4 < amdGrande)))
+            x.dedicada = false;   /* la del procesador: la misma regla que la red */
+      /* el enlace de verdad: la menor de la tarjeta y de su ranura (el puerto de arriba); el ancho, el negociado */
       const fs::path puerto = fs::canonical(d.path(), ec).parent_path();
       int gen = genDe(leeSys(p + "/max_link_speed"));
       const int genPuerto = genDe(leeSys(puerto.string() + "/max_link_speed"));
@@ -1036,15 +1057,58 @@ bool secundariaNf(Secundaria &fuera) {
       x.gen = gen, x.ancho = ancho, x.anchoTarjeta = std::atoi(leeSys(p + "/max_link_width").c_str());
       todas.push_back(x);
     }
-    /* con varias, la de mas enlace (lineas por lo que da cada una: una de PCIe 4.0 da el doble que una de 3.0) */
-    std::sort(todas.begin(), todas.end(), [](const Secundaria &a, const Secundaria &b) {
-      const long ba = (long)a.ancho << std::max(0, a.gen), bb = (long)b.ancho << std::max(0, b.gen);
-      return ba != bb ? ba > bb : a.pci < b.pci;
-    });
-    if (!todas.empty()) s = todas.front(), hay = true;
+    /* un filtro que tambien casa con otra tarjeta («RTX 4090» y «RTX 4090 D») no vale: dos iguales, igual */
+    for (Grafica &x : todas)
+      for (const Grafica &y : todas)
+        if (&x != &y && !x.filtro.empty() && y.nombre.find(x.filtro) != std::string::npos) x.filtro.clear();
+    std::sort(todas.begin(), todas.end(), [](const Grafica &a, const Grafica &b) { return a.pci < b.pci; });
+    return todas;
+  }();
+  return v;
+}
+long enlace(int gen, int ancho) { return (long)ancho << std::max(0, gen); }
+}  // namespace
+
+std::string pciMonitor3d() {
+  for (const Grafica &g : graficas())
+    if (g.delMonitor) return g.pci;
+  return pciPrincipal();
+}
+
+bool secundariaNf(Secundaria &fuera, const std::string &pciJuego) {
+  /* la del juego: la que se eligio para el o, sin elegir, la predeterminada (donde lo pone Proton) */
+  std::string juego = pciJuego;
+  if (juego.empty())
+    for (const TarjetaJuego &tj : tarjetasParaJuego())
+      if (tj.predeterminada) juego = tj.pci;
+  if (juego.empty()) juego = pciMonitor3d();
+  const Grafica *mejor = nullptr;
+  for (const Grafica &g : graficas()) {
+    if (!g.nvidia || g.pci == juego) continue;
+    if (!mejor || enlace(g.gen, g.ancho) > enlace(mejor->gen, mejor->ancho)) mejor = &g;
   }
-  if (hay) fuera = s;
-  return hay;
+  if (!mejor) return false;
+  fuera.pci = mejor->pci, fuera.ids = mejor->ids, fuera.nombre = mejor->nombre;
+  fuera.gen = mejor->gen, fuera.ancho = mejor->ancho, fuera.anchoTarjeta = mejor->anchoTarjeta;
+  fuera.delMonitor = mejor->delMonitor;
+  return true;
+}
+
+const std::vector<TarjetaJuego> &tarjetasParaJuego() {
+  static const std::vector<TarjetaJuego> v = [] {
+    std::vector<TarjetaJuego> r;
+    for (const Grafica &g : graficas()) {   /* graficas() va por direccion PCI: la primera dedicada es la predeterminada */
+      if (!g.dedicada) continue;
+      TarjetaJuego t;
+      t.pci = g.pci, t.ids = g.ids, t.nombre = g.nombre, t.filtro = g.filtro, t.delMonitor = g.delMonitor;
+      t.predeterminada = r.empty();
+      t.gen = g.gen, t.ancho = g.ancho;
+      r.push_back(t);
+    }
+    std::stable_sort(r.begin(), r.end(), [](const TarjetaJuego &a, const TarjetaJuego &b) { return a.delMonitor && !b.delMonitor; });
+    return r;
+  }();
+  return v;
 }
 
 /* ---- poner al dia y escribir ---- */

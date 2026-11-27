@@ -43,9 +43,54 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   - **La profundidad de DLSS**: su interruptor vale al momento y el modo Rendimiento no la usa nunca;
   - **La tarjeta de la red, sola** (`red = auto`): lo pesado, en la secundaria; medida si puede ir a más de una; y una
     prueba de lo que corre en cada cambio de capa;
-  - **El offloading de Neural Forge en Integraciones**: su modelo en la segunda tarjeta, con su enlace PCIe.
+  - **El offloading de Neural Forge en Integraciones**: su modelo en la segunda tarjeta, con su enlace PCIe;
+  - **El monitor 3D en otra tarjeta**: el 3D en la del monitor y la tarjeta del juego en Integraciones.
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
+
+## El monitor 3D en otra tarjeta: el 3D en la suya y la tarjeta del juego en Integraciones (v1.18)
+
+- Rodolfo: «haz una opcion de offload con el monitor conectado a otra tarjeta tambien, analiza si debe arrancar ahi o
+  tener un segundo monitor», y de paso: «remember that if you run neural forge you might be running dlss5».
+- **El 3D, en la tarjeta del monitor 3D**: el visor tomaba la primera discreta que pudiera presentar (la 4090); con el
+  monitor 3D en otra, cada cuadro del 3D (4K a 165 Hz) habría cruzado el PCIe hasta la del monitor. Ahora toma la que da
+  la salida `pantalla` (por su dirección PCI: `VK_EXT_pci_bus_info` y `/sys/class/drm/cardN/device`, en `pciDeConector`).
+  MEDIDO en el compositor aparte con `--output DP-7` (la salida de la 5080): «gpu 1: NVIDIA GeForce RTX 5080 · ... · la
+  del monitor 3D», y la red a la 4090, la secundaria para ese visor.
+- **Lo que cuesta que los cuadros 4K crucen**, MEDIDO con el visor en el compositor aparte, donde sus cuadros pasan por la
+  memoria del sistema: en la 4090 (PCIe 4.0 x16) 2,1 a 2,8 ms por cuadro; en la 5080 (4.0 x4, a 2887 MHz y 133 W, P0)
+  10,4 ms; con el compositor en la otra tarjeta, el peor «presentar» pasa de 31-37 a 66-68 ms. Son unos 33 MB por cuadro
+  a 4K: ~4,7 ms por sentido en x4, la cuarta parte en x16. Es lo que paga cada cuadro del juego cuando el juego dibuja
+  en una tarjeta y el monitor está en otra (KWin lo copia). De paso: en reposo el enlace de la 5080 baja a PCIe 1.0
+  (225 MHz), por eso el enlace que se enseña es el máximo de la tarjeta y su ranura y no el de ahora.
+- **Sin decirle nada, el juego no va a la del monitor**: DXVK y vkd3d-proton toman la primera dedicada de la lista de
+  Vulkan, que en NVIDIA va por dirección PCI (aquí la 4090, en `0000:01:00.0`). Con el monitor 3D en la 5080, el juego
+  seguiría en la 4090 y cada cuadro cruzaría la x4.
+- **La tarjeta del juego** (`juego_tarjeta`, en Integraciones con dos o más dedicadas): manda el juego a una con
+  `DXVK_FILTER_DEVICE_NAME` y `VKD3D_FILTER_DEVICE_NAME` (por el nombre que ve el juego: «RTX 5080»; solo si casa con una
+  sola tarjeta, y nunca la integrada, cuyo nombre de Vulkan no es el de pci.ids: un filtro que no casa deja a DXVK sin
+  tarjeta y el juego no arranca) y `MESA_VK_DEVICE_SELECT` (Vulkan nativo). Sin `_FORCE_DEFAULT_DEVICE`: la capa de Mesa
+  va debajo de la de Neural Forge y esconderia la otra tarjeta tambien a su offloading. Vacío = la predeterminada, y
+  las variables solo se escriben para otra. Si la elegida no es la del monitor, una nota: «RTX 5080 dibuja el juego y
+  RTX 4090 lo enseña: cada cuadro cruza por PCIe 4.0 x4» (el enlace más lento de las dos).
+- **Neural Forge con el juego en otra tarjeta**: su segunda tarjeta se cuenta contra la del juego, no contra la del
+  monitor; si es la del monitor, la nota lo dice («también da el monitor 3D: cada cuadro del juego ya cruza hasta ella»;
+  Neural Forge pide el monitor en la tarjeta del juego). Y la red de profundidad evita también la del juego: el visor la
+  lee del entorno del proceso de su ventana (esas variables) o, sin ellas, toma la predeterminada.
+- **Lo que pesa de Neural Forge es su DLSS 5** (el modelo de Neural Rendering): en Raji, 25-28 FPS con él y 60-76 sin
+  él (MEDIDO esta mañana). Es lo que gana yendo a la segunda tarjeta, y lo que más tráfico manda por el PCIe. La
+  profundidad de DLSS que lee la capa no cambia con él (MEDIDO: 19,6 lanzamientos por copia con y sin Neural Forge).
+- **El análisis**, para el equipo de Rodolfo (la 4090 en x16 con el monitor 3D, la 5080 en x4 con otro monitor): lo
+  mejor es lo de ahora, el juego y el 3D en la del monitor 3D, y la red y el DLSS 5 de Neural Forge en la 5080. «Arrancar
+  ahí» (el juego en la tarjeta del monitor) evita que cada cuadro cruce; un segundo monitor no hace falta para nada de
+  esto (KWin copia de una tarjeta a otra), y el que ya tiene en la 5080 solo le cuesta lo que KWin dibuje en ella. Con
+  el monitor 3D en la 5080, lo menos malo sería el juego también en la 5080 y el DLSS 5 en la 4090, por su x16. Con x8,
+  cruzar cuesta la mitad que en x4; con x16, poco.
+- **Probado**: `integraciones linea` con el monitor en DP-4 y en DP-7 (la predeterminada, la del monitor, las variables
+  leídas y escritas, la segunda de Neural Forge según la del juego, un nombre que no casa a «otros parámetros»); la
+  pestaña pintada con `ctl hud` (la fila «Tarjeta del juego» con la RTX 5080 elegida y su nota); el visor en el
+  compositor aparte con `--output DP-7` y con gamescope en la 5080. Sin probar: un juego de verdad mandado a otra
+  tarjeta, y la lectura del entorno del juego en el visor (en el compositor aparte no hay ventana de juego).
 
 ## El offloading de Neural Forge en Integraciones, con el enlace PCIe de la segunda tarjeta (v1.18)
 

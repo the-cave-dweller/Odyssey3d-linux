@@ -383,7 +383,10 @@ game; the gear on a cover (Games tab) opens that game's own settings, marked wit
 on, the game's `NEURAL_FORGE_TARGET_EXE` is taken from Neural Forge itself (a game missing from Neural Forge's list
 says so: add it in its Setup tab), and a switch below it puts Neural Forge's model on the second card
 (`NEURAL_FORGE_OFFLOAD_GPU`, written with that card's PCI IDs and address), with the card's PCIe link: at x4 or
-x8 every frame crossing to it and back can make the game slower than keeping the model on the game's card.
+x8 every frame crossing to it and back can make the game slower than keeping the model on the game's card. With
+two dedicated cards, *Game's card* sends the game to one of them (`DXVK_FILTER_DEVICE_NAME`,
+`VKD3D_FILTER_DEVICE_NAME`, `MESA_VK_DEVICE_SELECT`); when that is not the card the 3D monitor is plugged into, it
+says which link every frame crosses. The 3D view always runs on the 3D monitor's card.
 
 ![A game's integrations](docs/img/integrations.png)
 

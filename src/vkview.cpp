@@ -28,6 +28,7 @@
 #include <condition_variable>
 #endif
 #include "idioma.h"
+#include "integraciones.h"   /* (v1.18) donde va el juego sin decirle nada: integ::tarjetasParaJuego */
 #include "rendimiento.h"
 #include "monitor.h"
 #include "vkui.h"
@@ -369,9 +370,13 @@ static bool mismaDireccionPci(const std::string &a, const std::string &b) {
          std::sscanf(b.c_str(), "%x:%x:%x.%x", &d2, &b2, &s2, &f2) == 4 && d1 == d2 && b1 == b2 && s1 == s2 && f1 == f2;
 }
 
-/* la tarjeta del visor: la principal */
+/* la tarjeta del visor: la principal. (v1.18) Y la del juego, si se le mando a otra (las variables de su linea, ver
+   integ::tarjetasParaJuego): con el monitor 3D en una tarjeta y el juego en otra, las dos trabajan y ninguna es la
+   secundaria */
 struct TarjetaVisor {
   std::string uuid, pci;
+  std::string juego;   /* el nombre de la tarjeta del juego («RTX 4090»), o vacio: la del visor */
+  bool esJuego(const DepthNet::Candidata &c) const { return !juego.empty() && c.nombre == juego; }
   bool es(const DepthNet::Candidata &c) const {
     return (!uuid.empty() && strLower(c.id) == uuid) || mismaDireccionPci(c.id, pci);
   }
@@ -397,7 +402,7 @@ static std::vector<DepthNet::Candidata> paraLaRed(const std::vector<DepthNet::Ca
   for (const DepthNet::Candidata &c : ts) {
     if (!c.cabe) continue;
     if (todas) resto.push_back(c);
-    else if (!visor.es(c) && c.dedicada) secundarias.push_back(c);
+    else if (!visor.es(c) && !visor.esJuego(c) && c.dedicada) secundarias.push_back(c);
     else resto.push_back(c);
   }
   return !secundarias.empty() ? secundarias : resto;
@@ -848,6 +853,48 @@ static bool sobreJuego(VkUi &ui) {
   return false;
 #endif
 }
+/* (v1.18) la tarjeta en que va el juego si se le mando a una por su linea de Steam (Integraciones, «Tarjeta del juego»:
+   DXVK_FILTER_DEVICE_NAME, VKD3D_FILTER_DEVICE_NAME o MESA_VK_DEVICE_SELECT), leida del entorno del proceso de su ventana:
+   su nombre («RTX 4090»), o vacio (va donde el monitor 3D) */
+static std::string tarjetaDelJuego(VkUi &ui) {
+#ifdef HAVE_WAYLAND_WM
+  if (!ui.opts || ui.opts->captureUuid.empty() || !monitorVentanas(ui)) return {};
+  WindowInfo w{};
+  if (!ui.wm.find(ui.opts->captureUuid, w) || w.pid == 0) return {};
+  std::string env;
+  if (!readSmallFile("/proc/" + std::to_string(w.pid) + "/environ", env)) return {};
+  std::string porNombre, porIds;
+  size_t a = 0;
+  while (a < env.size()) {
+    size_t b = env.find('\0', a);
+    if (b == std::string::npos) b = env.size();
+    const std::string v = env.substr(a, b - a);
+    a = b + 1;
+    const size_t ig = v.find('=');
+    if (ig == std::string::npos) continue;
+    const std::string n = v.substr(0, ig), x = v.substr(ig + 1);
+    if ((n == "DXVK_FILTER_DEVICE_NAME" || n == "VKD3D_FILTER_DEVICE_NAME") && !x.empty()) porNombre = x;
+    if (n == "MESA_VK_DEVICE_SELECT" && x.size() >= 9 && x[4] == ':') {
+      std::string nom = nombrePciIds(x.substr(0, 4), x.substr(5, 4));
+      for (const char *q : {"GeForce ", "NVIDIA "})
+        if (nom.rfind(q, 0) == 0) nom = nom.substr(std::strlen(q));
+      porIds = nom;
+    }
+  }
+  if (!porNombre.empty()) return porNombre;
+  if (!porIds.empty()) return porIds;
+  /* sin nada en su linea, el juego va donde lo pone Proton: la primera dedicada (integ::tarjetasParaJuego), que no tiene
+     por que ser la del monitor 3D (con el monitor en otra, el juego sigue alli) */
+  if (sobreJuego(ui))
+    for (const integ::TarjetaJuego &tj : integ::tarjetasParaJuego())
+      if (tj.predeterminada) return tj.nombre;
+  return {};
+#else
+  (void)ui;
+  return {};
+#endif
+}
+
 static void robarCursor(VkUi &ui, const char *fuente) {
   if (ui.robando || !sobreJuego(ui)) return;
   ui.robando = true;
@@ -1985,7 +2032,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     glfwTerminate();
     return 1;
   }
-  if (!dev.createDevice({"VK_KHR_swapchain"}, surface, &err)) {
+  /* (v1.18) en la tarjeta que da la salida del monitor 3D (ver VkDev::createDevice) */
+  const std::string pciMonitor = pciDeConector(opts.output.empty() ? rig.output : opts.output);
+  if (!dev.createDevice({"VK_KHR_swapchain"}, surface, &err, -1, pciMonitor)) {
     std::fprintf(stderr, "[error] dispositivo Vulkan: %s\n", err.c_str());
     vkDestroySurfaceKHR(dev.instance(), surface, nullptr);
     glfwDestroyWindow(win);
@@ -2402,6 +2451,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   };
   auto tarjetaDeSalida = [&](const std::string &modelo, int porDefecto) {
     ev.modeloVisto = modelo, ev.pendiente = false, ev.cand.clear();
+    visor.juego = tarjetaDelJuego(ui);   /* (v1.18) si el juego va en otra tarjeta que el visor */
     tarjetasVistas = DepthNet::candidatas(modelo, red.ready() && red.enTarjeta() ? red.tarjeta() : -1);
     if (tarjetasVistas.empty()) return porDefecto;
     ev.clave = claveCapa(modelo, tarjetasVistas);
@@ -2423,9 +2473,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     std::string principal;
     for (const DepthNet::Candidata &t : tarjetasVistas)
       if (visor.es(t)) principal = t.nombre;
-    if (visor.es(c))
-      std::printf("[tarjeta] lo pesado de la red (%s), en la %s: es la del visor, pero no hay otra con sitio%s\n", base.c_str(),
-                  c.nombre.c_str(), cand.size() > 1 ? " (se medira contra las demas)" : "");
+    if (!visor.juego.empty())
+      std::printf("[tarjeta] el juego va en la %s (su linea de Steam) y el visor en la del monitor 3D: ninguna de las dos es la "
+                  "secundaria\n", visor.juego.c_str());
+    if (visor.es(c) || visor.esJuego(c))
+      std::printf("[tarjeta] lo pesado de la red (%s), en la %s: es la %s, pero no hay otra con sitio%s\n", base.c_str(),
+                  c.nombre.c_str(), visor.es(c) ? "del visor" : "del juego", cand.size() > 1 ? " (se medira contra las demas)" : "");
     else
       std::printf("[tarjeta] lo pesado de la red (%s), en la %s, la secundaria%s%s%s\n", base.c_str(), c.nombre.c_str(),
                   principal.empty() ? "" : "; la ", principal.c_str(),

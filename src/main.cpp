@@ -3069,10 +3069,14 @@ static int cmdIntegraciones(int argc, char **argv) {
     }
     if (!l.nfExe.empty()) std::printf("  %-18s %s\n", "(nf_exe)", l.nfExe.c_str());
     if (!l.nfGpu.empty()) std::printf("  %-18s %s\n", "(nf_gpu)", l.nfGpu.c_str());
+    for (const integ::TarjetaJuego &tj : integ::tarjetasParaJuego())
+      std::printf("  %-18s %s · %s · %s · PCIe %d.0 x%d%s\n", "(una tarjeta)", tj.pci.c_str(), tj.ids.c_str(), tj.nombre.c_str(),
+                  tj.gen, tj.ancho, (std::string(tj.delMonitor ? " · la del monitor 3D" : "") + (tj.predeterminada ? " · la predeterminada" : "") +
+                   (tj.filtro.empty() ? " · sin un nombre seguro" : "")).c_str());
     integ::Secundaria s;
-    if (integ::secundariaNf(s))
-      std::printf("  %-18s %s · %s · PCIe %d.0 x%d (la tarjeta puede x%d)\n", "(la segunda)", s.valor().c_str(), s.nombre.c_str(),
-                  s.gen, s.ancho, s.anchoTarjeta);
+    if (integ::secundariaNf(s, a.count("juego_tarjeta") ? a.at("juego_tarjeta") : std::string()))
+      std::printf("  %-18s %s · %s · PCIe %d.0 x%d (la tarjeta puede x%d)%s\n", "(la segunda)", s.valor().c_str(), s.nombre.c_str(),
+                  s.gen, s.ancho, s.anchoTarjeta, s.delMonitor ? " · da tambien el monitor 3D" : "");
     std::printf("OdysseyVK: %s\n", integ::linea(a, l.nfExe, l.nfGpu).c_str());
     return 0;
   }

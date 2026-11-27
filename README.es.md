@@ -397,7 +397,9 @@ lo propio de ese juego, marcado con un punto. Con Neural Forge puesto, el `NEURA
 se toma del propio Neural Forge (si el juego no está en su lista, lo dice: se añade en su pestaña Setup), y un
 interruptor debajo pone el modelo de Neural Forge en la segunda tarjeta (`NEURAL_FORGE_OFFLOAD_GPU`, con los
 números PCI y la dirección de esa tarjeta), con su enlace PCIe: con x4 o x8, cada cuadro que va y vuelve puede
-hacer el juego más lento que con el modelo en la tarjeta del juego.
+hacer el juego más lento que con el modelo en la tarjeta del juego. Con dos tarjetas dedicadas, *Tarjeta del
+juego* manda el juego a una (`DXVK_FILTER_DEVICE_NAME`, `VKD3D_FILTER_DEVICE_NAME`, `MESA_VK_DEVICE_SELECT`);
+si no es la del monitor 3D, dice por qué enlace cruza cada cuadro. El 3D va siempre en la tarjeta del monitor 3D.
 
 ![Las integraciones de un juego](docs/img/es/integrations.png)
 

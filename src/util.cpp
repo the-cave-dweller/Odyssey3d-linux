@@ -287,6 +287,35 @@ std::vector<TarjetaAmd> tarjetasAmd() {
   return v;
 }
 
+std::string pciDeConector(const std::string &conector) {
+  namespace fs = std::filesystem;
+  if (conector.empty()) return {};
+  std::error_code ec;
+  for (const fs::directory_entry &c : fs::directory_iterator("/sys/class/drm", ec)) {
+    const std::string n = c.path().filename().string();   /* «card2-DP-4» */
+    const size_t g = n.find('-');
+    if (n.rfind("card", 0) != 0 || g == std::string::npos || n.substr(g + 1) != conector) continue;
+    std::error_code e2;
+    const std::string pci = fs::canonical(fs::path("/sys/class/drm") / n.substr(0, g) / "device", e2).filename().string();
+    if (!e2) return pci;
+  }
+  return {};
+}
+
+std::string conectorConEdid(const std::string &texto) {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  for (const fs::directory_entry &c : fs::directory_iterator("/sys/class/drm", ec)) {
+    const std::string n = c.path().filename().string();
+    const size_t g = n.find('-');
+    if (n.rfind("card", 0) != 0 || g == std::string::npos) continue;
+    std::string st, edid;
+    if (!readSmallFile(c.path().string() + "/status", st) || strTrim(st) != "connected") continue;
+    if (readSmallFile(c.path().string() + "/edid", edid) && edid.find(texto) != std::string::npos) return n.substr(g + 1);
+  }
+  return {};
+}
+
 std::string nombrePciIds(const std::string &fabricante, const std::string &modelo) {
   auto limpio = [](std::string s) {
     s = strLower(strTrim(s));
