@@ -961,7 +961,10 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   char nj[16], nc[16];
   std::snprintf(nj, sizeof nj, "%d", (int)std::lround(st_.fpsJuego));
   std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
-  if (st_.fpsModo != 0) {
+  /* (v1.18) con el contador de MAKO, sus tres filas en lugar de Juego y Capa, que son los mismos reales (Rodolfo: «pon reales
+     generados y en pantalla») */
+  const bool cuenta = st_.fg.reales > 0.5f;
+  if (st_.fpsModo != 0 && !cuenta) {
     filas.push_back({idioma::tr("Juego"), {{nj, "fps"}}});
     if (dlss) filas.push_back({idioma::tr("Capa"), {{nc, "fps"}}});
     /* (v1.18) con la generacion de cuadros de MAKO en el juego: lo que llega a la pantalla. MEDIDO con el cargador de
@@ -975,7 +978,6 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   }
   /* (v1.18) con el contador de MAKO (la capa encima de MAKO y el contador debajo, como el de vkDaedalus): los cuadros del
      juego y los que MAKO genera, cada segundo */
-  const bool cuenta = st_.fg.reales > 0.5f;
   if (cuenta) {
     char nr[16], ng[16];
     std::snprintf(nr, sizeof nr, "%d", (int)std::lround(st_.fg.reales));
