@@ -1854,7 +1854,6 @@ void Hud::dibujaPanel(int vw, int vh) {
         text(rotuloVolver, rr.x + 12.0f, rr.y + 7.0f, 12.5f, ink[0], ink[1], ink[2], 0.95f);
       }
     }
-    const Rect &antesDe = st_.desdePastilla ? panelVolver_ : panelCerrar_;
     {
       const bool hc = panelCerrar_.inside(mx_, my_);
       if (hc) relleno(panelCerrar_, 4.0f * s, pal_.control, 1.0f);

@@ -21,9 +21,9 @@
 #include "atajos.h"
 #include "util.h"
 #include "capasajenas.h"
+#include "profjuego.h"   /* (v1.16) la capa de DLSS no depende de la red: tambien sin ONNX Runtime */
 #ifdef HAVE_ORT
 #include "depth.h"
-#include "profjuego.h"
 #include "hoyos.h"
 #include <condition_variable>
 #endif
@@ -215,7 +215,7 @@ static double g_fpsVisto = 0.0, g_mapaMs = 0.0;   /* para el `estado`: lo ensena
 static std::string g_modeloEnUso;   /* el .onnx que tiene abierto el conversor, para los avisos */
 /* (v1.13) la profundidad de DLSS, para el `estado` (la ventana de ajustes) y el cuadrito junto a la pastilla: los
    FPS del juego y de la capa (0 = no llega), lo que se lee y la parte del mapa del HUD del juego (< 0 = sin el) */
-static float g_fpsJuego = 0.0f, g_fpsCapa = 0.0f, g_hudJuego = -1.0f;
+[[maybe_unused]] static float g_fpsJuego = 0.0f, g_fpsCapa = 0.0f, g_hudJuego = -1.0f;   /* (v1.16) sin la red no se usan */
 /* (v1.15) lo que dibujan otras capas encima del juego (capasajenas.h: el menu y el HUD de vkDaedalus, MangoHud).
    El hilo principal lo mira; sus trozos los aplana el hilo del mapa, y con el menu abierto la pastilla se aparta */
 static std::mutex g_ajenasMx;
@@ -224,7 +224,7 @@ static ajenas::Estado g_ajenas;
 
 /* esos trozos (de 0 a 1) al plano de apoyo en el mapa (n x n, el cuadro aplastado a cuadrado), con un borde suave
    de dos puntos del mapa; el lado que toca el canto de la imagen, sin borde */
-static void aplanarZonas(std::vector<uint8_t> &m, int n, float plano, const std::vector<ajenas::Zona> &zs) {
+[[maybe_unused]] static void aplanarZonas(std::vector<uint8_t> &m, int n, float plano, const std::vector<ajenas::Zona> &zs) {
   if (n < 2 || m.size() != (size_t)n * n) return;
   const float destino = plano * 255.0f, borde = 2.0f, lejos = 1e9f;
   for (int y = 0; y < n; y++)
@@ -486,7 +486,7 @@ std::string infoLine(const Hud::State &st, const std::string &extra) {
 }
 
 /* slotRed() vive en util.h: es la misma regla para el hub y para el visor. */
-const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativa"; }
+[[maybe_unused]] const char *nombreRed(int slot) { return slot == 1 ? "la de Samsung" : "la nativa"; }
 
 /* ocultar o mostrar la pastilla. Mandan ahi la tecla Ctrl+Shift+F1, el `odysseyvk ctl capa` (que
    llega por fichero) y el rincon pinchable del que habla Hud::huecoDeLaPastilla. Lo unico que se quita
@@ -1173,12 +1173,12 @@ void onKeyVK(GLFWwindow *win, int key, int, int action, int mods) {
    +12,67 px por ojo hacia afuera y 9,98 px hacia adentro (fraccion del ancho), o sea
    ~22,6 px de separacion entre ojos con el deslizador a 50 y a 3840 px de ancho. El
    recorrido viejo llegaba a ~65 px, 2,9 veces mas; ODYSSEYVK_RELIEVE=2.9 lo devuelve. */
-bool topesPorOjoActivos() {
+[[maybe_unused]] bool topesPorOjoActivos() {
   const char *e = entornoOdyssey("ODYSSEYVK_TOPE");
   return !e || e[0] != '0';
 }
 
-float gananciaRelieve(int popout) {
+[[maybe_unused]] float gananciaRelieve(int popout) {
   static const float escala = [] {
     const char *e = entornoOdyssey("ODYSSEYVK_RELIEVE");
     return e ? (float)std::atof(e) : 1.0f;
@@ -1795,6 +1795,27 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   /* conversor de video normal a 3D: la red de profundidad corre en este mismo hilo, pero sólo
      cada varios cuadros. Medido: unos 7 milisegundos con la tarjeta NVIDIA, y el presupuesto por
      cuadro en el modo 3D es de 8, así que hacerla en cada cuadro hundiría la tasa de imagen. */
+  /* (v1.16) lo que se cuenta y se ve tambien sin ONNX Runtime (el registro [fps], los tirones, el cuadrito de FPS, la
+     Profundidad y el plano de apoyo): antes vivia dentro del bloque de la red y sin ella no compilaba */
+  long long convHechas = 0;
+  [[maybe_unused]] long long convFallos = 0;
+  [[maybe_unused]] double convMs = 0.0, ultimaEstim = 0.0;
+  /* medicion del bucle (ODYSSEYVK_MEDIR): tiempos de leer la copia pequena y de subir el mapa, y
+     cuadros que pierden un refresco */
+  double medLeeMs = 0.0, medSubeMs = 0.0, medUltimo = 0.0;
+  long long medLeeN = 0, medSubeN = 0, medLentos = 0;
+  /* Los tirones (v1.11), cada 5 s en la linea [fps]: si el que se atasca es el
+     juego (huecos entre sus cuadros) o el visor (vueltas cuyo trabajo no cabe en un refresco,
+     presentaciones que esperan a la tarjeta, leer la copia chica o subir el mapa). */
+  double medLeeMax = 0.0, medSubeMax = 0.0;
+  double tirFuenteUlt = 0.0, tirFuenteMax = 0.0, tirTrabajoMax = 0.0, tirPresentaMax = 0.0, tirPresentaUlt = 0.0,
+         tirPresentaHueco = 0.0, tirTrabajo0 = 0.0, tirRedMs = 0.0;
+  long long tirFuenteN = 0, tirFuenteHuecos = 0, tirTrabajoLargos = 0, tirPresentaLargas = 0, tirRedN = 0;
+  /* (v1.13) para el cuadrito de FPS con el modelo de serie (sin DLSS): los cuadros nuevos del juego que llegan,
+     contados sin parar (los de arriba se ponen a 0 en cada renglon del registro) */
+  [[maybe_unused]] long long cuentaFuente = 0;   /* sin la red no se lee */
+  bool apoyoAuto = true;      /* el plano de apoyo lo sigue la red; Ctrl+Shift+3/4 lo vuelve manual */
+  [[maybe_unused]] int profundidadVista = ui.hud.state().depth;   /* sin la red no se lee */
 #ifdef HAVE_ORT
   DepthNet red;
   /* el modo rendimiento (rama experimental): cuanto se exageran, sin red, la ganancia del relieve, los
@@ -1867,25 +1888,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   empArranque("ODYSSEYVK_EMP_FONDO", ui.tune.empFondo);
   empArranque("ODYSSEYVK_EMP_FRENTE", ui.tune.empFrente);
   int convSalto = 0;
-  long long convHechas = 0, convFallos = 0;
-  double convMs = 0.0, ultimaEstim = 0.0;
-  /* medicion del bucle (ODYSSEYVK_MEDIR): tiempos de leer la copia pequena y de subir el mapa, y
-     cuadros que pierden un refresco */
-  double medLeeMs = 0.0, medSubeMs = 0.0, medUltimo = 0.0;
-  long long medLeeN = 0, medSubeN = 0, medLentos = 0;
-  /* Los tirones (v1.11), cada 5 s en la linea [fps]: si el que se atasca es el
-     juego (huecos entre sus cuadros) o el visor (vueltas cuyo trabajo no cabe en un refresco,
-     presentaciones que esperan a la tarjeta, leer la copia chica o subir el mapa). */
-  double medLeeMax = 0.0, medSubeMax = 0.0;
-  double tirFuenteUlt = 0.0, tirFuenteMax = 0.0, tirTrabajoMax = 0.0, tirPresentaMax = 0.0, tirPresentaUlt = 0.0,
-         tirPresentaHueco = 0.0, tirTrabajo0 = 0.0, tirRedMs = 0.0;
-  long long tirFuenteN = 0, tirFuenteHuecos = 0, tirTrabajoLargos = 0, tirPresentaLargas = 0, tirRedN = 0;
-  /* (v1.13) para el cuadrito de FPS con el modelo de serie (sin DLSS): los cuadros nuevos del juego que llegan,
-     contados sin parar (los de arriba se ponen a 0 en cada renglon del registro) */
-  long long cuentaFuente = 0;
   int cadaConv = opts.convEach;
-  bool apoyoAuto = true;      /* el plano de apoyo lo sigue la red; Ctrl+Shift+3/4 lo vuelve manual */
-  int profundidadVista = ui.hud.state().depth;
    /* La red puede tardar cientos de ms si le toca la CPU (cuando las dos tarjetas estan llenas).
       Para no congelar el cuadro, la estimacion corre en su propio hilo: aqui solo se reduce la
       imagen en la tarjeta y se le manda la copia; el mapa vuelve cuando esta terminado y se sube
@@ -2198,6 +2201,16 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   if (opts.conver)
     std::fprintf(stderr, "[conversor] este programa se compiló sin ONNX Runtime: no puede convertir "
                          "video normal a 3D (paquete onnxruntime-cuda)\n");
+  /* (v1.16) sin ONNX Runtime no hay conversor: lo poco que se le pregunta fuera de su bloque, con lo que valdria
+     apagado (el bucle del cuadro lo mira para la pastilla, el plano de apoyo y el paralaje) */
+  constexpr bool convActivo = false;
+  struct {
+    bool sinRed() const { return false; }
+    bool saliencia() const { return false; }
+    void setSaliencia(bool) {}
+    float focusPlane() const { return 0.5f; }
+  } red;
+  constexpr double exParalaje = 1.0;
 #endif
 
   /* rastreo de cabeza: un hilo mira la camara IR y aqui se lee lo ultimo que vio */
@@ -2673,6 +2686,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             }
             std::fflush(stdout);
           }
+#ifdef HAVE_ORT   /* (v1.16, como en la PR #2 de Noa3) cargar la red solo tiene sentido con la red */
           const auto ordenRed = palabras.find("cargar_red");
           if (ordenRed != palabras.end()) {
             if (ui.rutaRed[2].empty() && fileExists(rutaRedNuestra())) ui.rutaRed[2] = rutaRedNuestra();
@@ -2690,6 +2704,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
               ui.convWant = true;
             }
           }
+#endif
           /* `dividido_suavizado = si|no`: lo mandan los ajustes del programa. Cambia lo que hace el
              boton de video dividido y, si ahora mismo se esta viendo un dividido, lo cambia al momento. */
           const auto ordenSuave = palabras.find("dividido_suavizado");
@@ -4145,7 +4160,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     ui.hud.state().modoVisible = (kind == SourceKind::Capture) && !ui.hud.state().legado;
     ui.hud.state().modo3d = ui.convInfo ? (wv.mediaFuente() ? 3 : 1) : 2;
     /* la pastilla de rendimiento: con el conversor puesto y sin red */
+#ifdef HAVE_ORT
     ui.hud.state().rendimiento = convActivo && red.sinRed();
+#else
+    ui.hud.state().rendimiento = false;   /* sin ONNX Runtime no hay conversor */
+#endif
     if (!ui.hud.state().rendimiento) ui.hud.state().menuRendimiento = false;
     /* el cursor de los juegos (rama experimental): el gestor de ventanas se lee cada cuadro (si no, sus
        mensajes se amontonan en el enchufe); al entrar al 3D de un juego la pastilla se ensena unos
@@ -4189,7 +4208,9 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       }
 #endif
     }
+#ifdef HAVE_ORT
     ui.hud.state().preajuste = rendimiento::cual(red.mezcla(), exGanancia, exTopes, (float)exParalaje);
+#endif
     /* Profundidad y Salida por modo (v1.10). De fabrica: el conversor y el dividido suavizado
        arrancan en Profundidad 75 (plano fijo en 0,75, lo que se ve al moverla a 75) y Salida 50; el
        dividido con su propio relieve, neutro (50 y 0). En cuanto se mueve uno de los dos y se deja

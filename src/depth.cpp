@@ -22,9 +22,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#ifdef HAVE_ORT
+/* (v1.16) util.h tambien sin ONNX Runtime (entornoOdyssey, rutaRedNuestra): sin el, sin la red no compilaba */
 #include "util.h"
+#ifdef HAVE_ORT
 #include <onnxruntime_cxx_api.h>
+#else
+/* (v1.16) sin ONNX Runtime, los ayudantes de la red (la piramide, el filtro guiado, la memoria) quedan sin usar */
+#pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 
 namespace {

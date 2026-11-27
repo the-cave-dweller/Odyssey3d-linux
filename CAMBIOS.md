@@ -3,6 +3,28 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## OdysseyVK compila otra vez sin ONNX Runtime (v1.16)
+
+- Rodolfo: «Haz esta tarea aquí: “Make OdysseyVK build without ONNX Runtime”». CMake dice que sin
+  `onnxruntime-cuda` el programa se compila sin el conversor de 2D a 3D, pero no compilaba: se había ido rompiendo
+  versión a versión (lo notó Noa3 en la PR #2). Con los pasos del README no se notaba, porque instalan
+  `onnxruntime-cuda`.
+- **Lo que fallaba y cómo quedó**:
+  - `depth.cpp`: `util.h` solo se incluía con la red (`entornoOdyssey`, `rutaRedNuestra`); ahora siempre. Sus
+    ayudantes de la red, sin usar sin ella, ya no avisan en esa compilación;
+  - `vkview.cpp`: `profjuego.h` (la capa de DLSS, que no depende de la red) se incluye siempre; los contadores del
+    registro `[fps]`, de los tirones y del cuadrito de FPS, y la Profundidad y el plano de apoyo de la vista, salen
+    del bloque de la red (se usaban fuera); la orden `cargar_red` va dentro de él (como en la PR #2); la pastilla de
+    rendimiento y su preajuste, solo con la red; y sin ella, un `red` y un `convActivo` de mentira con lo que
+    valdría apagado (`sinRed`, `saliencia`, `focusPlane`, `exParalaje`), para lo poco que se le pregunta fuera,
+    que sin conversor no se alcanza;
+  - de paso, `vkui.cpp`: `antesDe` se quedó sin usar al quitar la flecha de actualizar (avisaba en las dos).
+- **Probado**: las dos compilaciones desde cero en carpetas aparte, todos los objetivos (`odysseyvk`,
+  `odysseyvk-panel`, `odysseyvk-ajustes`, la capa de Vulkan): sin errores, y con la red los mismos avisos de antes
+  (los de siempre, ninguno nuevo); sin la red, ninguno más que con ella. Sin la red, `ctl hud` pinta el panel,
+  `mapa` dice que falta la red y el ejecutable no enlaza nada de ONNX. Sin probar: el visor sin red con un vídeo de
+  verdad.
+
 ## Lo que faltaba de la PR #2: `ctl red descargar` con algo raro, y la FP16 por la CPU (v1.16)
 
 - Rodolfo: «nothing else was missing?». Repasada la PR #2 entera contra lo pasado a mano, quedaban dos cosas chicas:
