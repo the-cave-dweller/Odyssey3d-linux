@@ -15,7 +15,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     (medida en Cyberpunk), reducida en la tarjeta del juego; los menús también.
   - **DLSS a la vista**: Ajustes → Visor 3D dice de dónde viene la profundidad (y los FPS del juego y de la capa,
     y cuánto tapa el HUD); un cuadrito junto a la pastilla con los FPS («DLSS»: juego y capa; «Modelo de serie»:
-    el juego); y Ajustes → Juegos con DLSS apaga cada cosa.
+    el juego); Ajustes → Juegos con DLSS apaga cada cosa; y al final de la pestaña Juegos, el parámetro de Steam
+    (`ODYSSEYVK=1 %command%`) con un botón Copiar.
   - **Arreglos**: el visor ya no se cae con una profundidad del juego a medio escribir; Cyberpunk ya no se cae al
     entrar y salir del menú (lo que la tarjeta del juego lee por la capa ya no se suelta antes de leerlo); /dev/shm
     ya no se llena (7,8 GB de lienzos); el actualizador, probado de punta a punta.
@@ -26,6 +27,22 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - README: la sección de DLSS dice «desde la 1.14», y sus capturas se rehicieron (`tools/capturas-readme.py`: la de
   Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
   las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
+
+## El parámetro de Steam, al final de la pestaña Juegos, con un botón Copiar (v1.14)
+
+- Rodolfo: «On the bottom of games tab let user know to add the steam parameter, offer a copy button for it».
+  Debajo de la lista de juegos, la sección «Juegos con DLSS» con una fila: `ODYSSEYVK=1 %command%` en grande, debajo
+  dónde va («Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones,
+  ODYSSEYVK=1 va delante.»), en la ayuda para qué sirve, y el botón **Copiar**.
+- Copiar en Wayland: el portapapeles de una ventana se va con ella (y el panel se cierra al picar fuera), así que
+  en KDE se le da a **Klipper**, el portapapeles de Plasma, por el bus de sesión (`org.kde.klipper /klipper
+  setClipboardContents`, con el `sd-bus` que ya usa la bandeja): se lo queda él. Sin Klipper, `wl-copy` si está;
+  si no hay ninguno, el pie lo dice y el texto está a la vista para escribirlo. El pie, al copiar: «Copiado:
+  pégalo en las opciones de lanzamiento del juego en Steam». Seis textos nuevos en los siete idiomas.
+- Probado: la fila pintada con `ctl hud` en español, inglés, francés, alemán, ruso y japonés (la segunda línea cabe
+  en todos: el panel la achica). **Sin probar el botón de verdad**: copiar escribe en el portapapeles de Rodolfo y
+  no se tocó sin preguntar; Klipper está en su sesión (lo da plasmashell) con ese método.
+- La captura de Juegos del README se rehízo (solo cambia la barra de desplazamiento: la sección queda más abajo).
 
 ## Lo que la tarjeta lee por nosotros ya no se suelta antes de leerlo; el ajuste del HUD apaga también la copia en el juego (v1.14)
 

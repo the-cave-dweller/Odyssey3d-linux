@@ -16,9 +16,14 @@
 
 #include <fcntl.h>
 #include <signal.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include "bususuario.h"
+
+extern char **environ;
 
 #include "ajuste.h"
 #include "atajos.h"
@@ -161,6 +166,35 @@ const char *nombreModo(const std::string &m) {
 void avisarVisor(const std::map<std::string, double> &numeros, const std::map<std::string, std::string> &palabras) {
   std::string e;
   ajuste::escribir(numeros, std::string(), palabras, &e);
+}
+
+/* (v1.14) lo que hay que poner en las opciones de lanzamiento de un juego de Steam para la profundidad de DLSS */
+const char *const kParametroSteam = "ODYSSEYVK=1 %command%";
+
+/* (v1.14) un texto al portapapeles del escritorio. En Wayland el portapapeles de una ventana se va con ella (y el
+   panel se cierra al picar fuera), asi que en KDE se le da a Klipper, el portapapeles de Plasma, por el bus de
+   sesion (org.kde.klipper /klipper setClipboardContents): se lo queda el. Sin Klipper (otro escritorio), wl-copy si
+   esta instalado (se queda en segundo plano sirviendolo). */
+bool copiarAlPortapapeles(const std::string &texto, std::string *err) {
+#ifdef HAVE_SDBUS
+  sd_bus *bus = nullptr;
+  if (abrirBusUsuario(&bus) >= 0) {
+    sd_bus_error e = SD_BUS_ERROR_NULL;
+    const int r = sd_bus_call_method(bus, "org.kde.klipper", "/klipper", "org.kde.klipper.klipper", "setClipboardContents",
+                                     &e, nullptr, "s", texto.c_str());
+    sd_bus_error_free(&e);
+    sd_bus_flush_close_unref(bus);
+    if (r >= 0) return true;
+  }
+#endif
+  pid_t pid = 0;
+  const char *argv[] = {"wl-copy", "--", texto.c_str(), nullptr};
+  if (posix_spawnp(&pid, "wl-copy", nullptr, nullptr, (char *const *)argv, environ) == 0) {
+    int st = 0;
+    if (waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0) return true;
+  }
+  if (err) *err = idioma::tr("no hay portapapeles de KDE ni wl-copy");
+  return false;
 }
 
 }  // namespace
@@ -950,6 +984,19 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     n.tipo = Hud::ItemPanel::Nota;
     n.rotulo = idioma::tr("3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.");
     pon(n, "");
+    /* (v1.14) la profundidad de DLSS se pide juego a juego, en Steam (Rodolfo: «On the bottom of games tab let user
+       know to add the steam parameter, offer a copy button for it») */
+    Hud::ItemPanel sd;
+    sd.tipo = Hud::ItemPanel::Seccion, sd.rotulo = idioma::tr("JUEGOS CON DLSS");
+    pon(sd, "");
+    Hud::ItemPanel cp;
+    cp.tipo = Hud::ItemPanel::Boton;
+    cp.rotulo = kParametroSteam;
+    cp.nota = idioma::tr("Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.");
+    cp.ayuda = idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.");
+    cp.valorTexto = idioma::tr("Copiar");
+    cp.valor = true;
+    pon(cp, "copiar_steam");
   }
 }
 
@@ -1088,6 +1135,15 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     static const char *kVal[] = {"no", "si"};
     if (sub < 0 || sub > 1 || !fija("exp_sin_red", kVal[sub])) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
+    return true;
+  }
+  /* (v1.14) el boton Copiar de la pestana Juegos: el parametro de Steam, al portapapeles */
+  if (id == "copiar_steam") {
+    std::string e;
+    const bool ok = copiarAlPortapapeles(kParametroSteam, &e);
+    if (aviso)
+      *aviso = ok ? std::string(idioma::tr("Copiado: pégalo en las opciones de lanzamiento del juego en Steam"))
+                  : idioma::trf("no se pudo copiar ({}): escríbelo a mano", {e});
     return true;
   }
   /* (v1.13) los juegos con DLSS */
