@@ -171,6 +171,11 @@ public:
     float fpsJuego = 0.0f, fpsCapa = 0.0f;
     int fpsModo = 0;
     bool fpsCuadro = true;
+    /* (v1.14) en la pestana Juegos, en medio del pie del panel: el parametro de Steam para la profundidad de DLSS y
+       su boton Copiar (Rodolfo: «el parametro ahi, por el centro»). `pieParametro` vacio = no sale. Recien copiado
+       (`pieCopiado`), el boton dice `pieCopiadoTexto` un momento; `pieAyuda`, al pasar el raton */
+    std::string pieParametro, pieCopiar, pieCopiadoTexto, pieAyuda;
+    bool pieCopiado = false;
   };
 
   enum Hit {
@@ -217,7 +222,8 @@ public:
     HitModoRed,           /* (v1.12) el mismo interruptor, en la pastilla del video: pasa al otro extremo en marcha */
     HitPanelPestana,   /* `sub` = cual */
     HitPanelTitulo,    /* la cabecera: arrastrandola se mueve el panel (v0.86) */
-    HitPanelItem       /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
+    HitPanelItem,      /* `item` = que fila; `sub` = que opcion (o 1 = el aspa de quitar); `frac` = deslizador */
+    HitPanelCopiar     /* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -410,6 +416,7 @@ private:
     Rect pista;               /* la pista de un deslizador */
   };
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
+  Rect panelCopiar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.14) el boton Copiar del pie (pestana Juegos) */
   Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
   Rect panelEsquina_; /* la esquina para cambiar el tamano */
   Rect panelModo_;    /* el interruptor AI | Rendimiento */

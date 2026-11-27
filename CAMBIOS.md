@@ -15,8 +15,8 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     (medida en Cyberpunk), reducida en la tarjeta del juego; los menús también.
   - **DLSS a la vista**: Ajustes → Visor 3D dice de dónde viene la profundidad (y los FPS del juego y de la capa,
     y cuánto tapa el HUD); un cuadrito junto a la pastilla con los FPS («DLSS»: juego y capa; «Modelo de serie»:
-    el juego); Ajustes → Juegos con DLSS apaga cada cosa; y al final de la pestaña Juegos, el parámetro de Steam
-    (`ODYSSEYVK=1 %command%`) con un botón Copiar.
+    el juego); Ajustes → Juegos con DLSS apaga cada cosa; y en medio del pie de la pestaña Juegos, el parámetro de
+    Steam (`ODYSSEYVK=1 %command%`) con un botón Copiar.
   - **Arreglos**: el visor ya no se cae con una profundidad del juego a medio escribir; Cyberpunk ya no se cae al
     entrar y salir del menú (lo que la tarjeta del juego lee por la capa ya no se suelta antes de leerlo); /dev/shm
     ya no se llena (7,8 GB de lienzos); el actualizador, probado de punta a punta.
@@ -28,21 +28,25 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   Ajustes ya lleva la sección Juegos con DLSS; en las demás solo cambia el número de versión del pie). La guía lleva
   las tres claves nuevas de `serve.conf` (`profundidad_dlss`, `hud_plano`, `fps_juego`).
 
-## El parámetro de Steam, al final de la pestaña Juegos, con un botón Copiar (v1.14)
+## El parámetro de Steam en el pie de la pestaña Juegos, con un botón Copiar (v1.14)
 
-- Rodolfo: «On the bottom of games tab let user know to add the steam parameter, offer a copy button for it».
-  Debajo de la lista de juegos, la sección «Juegos con DLSS» con una fila: `ODYSSEYVK=1 %command%` en grande, debajo
-  dónde va («Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones,
-  ODYSSEYVK=1 va delante.»), en la ayuda para qué sirve, y el botón **Copiar**.
+- Rodolfo: «On the bottom of games tab let user know to add the steam parameter, offer a copy button for it», y al
+  ver la primera vuelta (una fila al final de la lista, que con muchos juegos queda abajo del todo): «podrías
+  ponerlo aquí, solo que en la pestaña de juegos nada más» y «el parámetro ahí, por el centro», señalando el pie
+  del panel. Ahora, **en medio del pie y solo en la pestaña Juegos**: `ODYSSEYVK=1 %command%` y el botón
+  **Copiar**; la frase del pie se queda a su izquierda y la versión a la derecha. Al pasar el ratón por el botón,
+  la ayuda dice dónde va («Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene
+  opciones, ODYSSEYVK=1 va delante.») y para qué sirve. Al picarlo, el botón se pone verde y dice **«Copiado»**
+  2,5 s (en el pie no cabía una frase larga); si no se pudo, lo dice el pie.
 - Copiar en Wayland: el portapapeles de una ventana se va con ella (y el panel se cierra al picar fuera), así que
   en KDE se le da a **Klipper**, el portapapeles de Plasma, por el bus de sesión (`org.kde.klipper /klipper
   setClipboardContents`, con el `sd-bus` que ya usa la bandeja): se lo queda él. Sin Klipper, `wl-copy` si está;
-  si no hay ninguno, el pie lo dice y el texto está a la vista para escribirlo. El pie, al copiar: «Copiado:
-  pégalo en las opciones de lanzamiento del juego en Steam». Seis textos nuevos en los siete idiomas.
-- Probado: la fila pintada con `ctl hud` en español, inglés, francés, alemán, ruso y japonés (la segunda línea cabe
-  en todos: el panel la achica). **Sin probar el botón de verdad**: copiar escribe en el portapapeles de Rodolfo y
-  no se tocó sin preguntar; Klipper está en su sesión (lo da plasmashell) con ese método.
-- La captura de Juegos del README se rehízo (solo cambia la barra de desplazamiento: la sección queda más abajo).
+  si no hay ninguno, el pie lo dice y el texto está a la vista para escribirlo. Textos nuevos («Copiar»,
+  «Copiado», la ayuda, los dos avisos de fallo) en los siete idiomas.
+- Probado: el pie pintado con `ctl hud` en español, inglés y alemán, el estado «Copiado» (`ODYSSEYVK_HUD_COPIADO=1`,
+  de taller) y que en Ajustes no sale; la captura de Juegos del README ya lo enseña. **Sin probar el botón de
+  verdad**: copiar escribe en el portapapeles de Rodolfo y no se tocó sin preguntar; Klipper está en su sesión
+  (lo da plasmashell) con ese método.
 
 ## Lo que la tarjeta lee por nosotros ya no se suelta antes de leerlo; el ajuste del HUD apaga también la copia en el juego (v1.14)
 

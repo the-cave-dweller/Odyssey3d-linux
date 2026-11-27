@@ -110,6 +110,9 @@ Actualizacion estadoActualizacion();
    servicio, que se va a reiniciar o a quitar) */
 bool lanzarActualizacion(std::string *err);
 bool lanzarDesinstalacion(std::string *err);
+/* (v1.14) el parametro de Steam para la profundidad de DLSS (`ODYSSEYVK=1 %command%`) al portapapeles: el boton Copiar
+   del pie de la pestana Juegos. Falso con el motivo si no hay portapapeles de KDE ni wl-copy */
+bool copiarParametroSteam(std::string *err);
 
 /* Lo que ensena el panel: rellena pestanas y filas a partir de los valores y de la biblioteca.
    `ids` sale alineado con las filas y dice que es cada una ("modo", "rastreo", "auto:zen",

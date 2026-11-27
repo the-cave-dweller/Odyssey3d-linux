@@ -3115,6 +3115,7 @@ static int cmdAjustes(int argc, char **argv) {
     return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
   };
   double cerrarEn = -1.0, miradaHub = 0.0, miradaRend = 0.0;
+  double copiadoHasta = -1.0;   /* (v1.14) hasta cuando el boton Copiar del pie dice «Copiado» */
   int idiomaDelAtlas = idioma::actual();
   while (!g_cierraPanel && !ov.conexionCaida() && !ov.entradaCerrada()) {
     ov.waitAndDispatch(100);
@@ -3190,6 +3191,16 @@ static int cmdAjustes(int argc, char **argv) {
         std::string aviso;
         bool cerrar = false;
         if (prefs::aplicar("idioma", g.sub, 0.0f, true, juegos, &aviso, &cerrar)) st.pie = aviso;
+        repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelCopiar) {
+        /* (v1.14) el parametro de Steam al portapapeles: el boton dice «Copiado» un momento; si no se puede, el pie */
+        std::string e;
+        if (prefs::copiarParametroSteam(&e)) {
+          st.pieCopiado = true;
+          copiadoHasta = reloj() + 2.5;
+        } else {
+          st.pie = idioma::trf("no se pudo copiar ({}): escríbelo a mano", {e});
+        }
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelActualizar) {
         /* el boton junto al aspa (v0.95): con una version nueva, se instala; si no, se vuelve a mirar */
@@ -3289,6 +3300,13 @@ static int cmdAjustes(int argc, char **argv) {
           st.pie = idioma::tr("red descargada: el 3D de vídeo normal ya puede calcular la profundidad");
           cerrarEn = reloj() + 2.5;
         }
+      }
+    }
+    if (copiadoHasta > 0.0 && reloj() >= copiadoHasta) {
+      copiadoHasta = -1.0;
+      if (st.pieCopiado) {
+        st.pieCopiado = false;
+        repintar = true;
       }
     }
     if (repintar) ov.repaint();
@@ -3413,6 +3431,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
     hud.state().pie = pieCaptura.empty() ? std::string(idioma::tr("se aplica desde el siguiente vídeo")) : pieCaptura;
     hud.state().version = std::string("OdysseyVK ") + ODYSSEYVK_VERSION;
     if (const char *co = std::getenv("ODYSSEYVK_HUD_CORRIDA")) hud.state().corrida = (float)std::atof(co);
+    /* ODYSSEYVK_HUD_COPIADO=1 (v1.14): el boton Copiar del pie de Juegos recien picado («Copiado») */
+    if (std::getenv("ODYSSEYVK_HUD_COPIADO")) hud.state().pieCopiado = true;
     /* ODYSSEYVK_HUD_MENU_IDIOMA=1 (v1.07): con la lista de idiomas abierta */
     if (std::getenv("ODYSSEYVK_HUD_MENU_IDIOMA")) hud.state().menuIdioma = true;
   }

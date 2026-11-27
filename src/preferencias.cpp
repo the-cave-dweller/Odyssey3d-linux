@@ -730,6 +730,8 @@ void filasRendimiento(Hud::State &st, const Valores &v, std::vector<std::string>
 }  // namespace
 
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
+  st.pieParametro.clear();   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
+  st.pieCopiado = false;
   /* rama experimental: la primera (0) no es una pildora, la abre el logo y el nombre del programa; la de
      Rendimiento (2) ya no se ensena (sus filas van en la 3); la 3, la de antes «Programa», se llama
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
@@ -984,19 +986,14 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
     n.tipo = Hud::ItemPanel::Nota;
     n.rotulo = idioma::tr("3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.");
     pon(n, "");
-    /* (v1.14) la profundidad de DLSS se pide juego a juego, en Steam (Rodolfo: «On the bottom of games tab let user
-       know to add the steam parameter, offer a copy button for it») */
-    Hud::ItemPanel sd;
-    sd.tipo = Hud::ItemPanel::Seccion, sd.rotulo = idioma::tr("JUEGOS CON DLSS");
-    pon(sd, "");
-    Hud::ItemPanel cp;
-    cp.tipo = Hud::ItemPanel::Boton;
-    cp.rotulo = kParametroSteam;
-    cp.nota = idioma::tr("Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.");
-    cp.ayuda = idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.");
-    cp.valorTexto = idioma::tr("Copiar");
-    cp.valor = true;
-    pon(cp, "copiar_steam");
+    /* (v1.14) la profundidad de DLSS se pide juego a juego, en Steam: el parametro va en medio del pie del panel,
+       a la vista sin bajar por la lista (Rodolfo: «On the bottom of games tab let user know to add the steam
+       parameter, offer a copy button for it» y «el parametro ahi, por el centro») */
+    st.pieParametro = kParametroSteam;
+    st.pieCopiar = idioma::tr("Copiar");
+    st.pieCopiadoTexto = idioma::tr("Copiado");
+    st.pieAyuda = std::string(idioma::tr("Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.")) +
+                  " " + idioma::tr("Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.");
   }
 }
 
@@ -1135,15 +1132,6 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     static const char *kVal[] = {"no", "si"};
     if (sub < 0 || sub > 1 || !fija("exp_sin_red", kVal[sub])) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
-    return true;
-  }
-  /* (v1.14) el boton Copiar de la pestana Juegos: el parametro de Steam, al portapapeles */
-  if (id == "copiar_steam") {
-    std::string e;
-    const bool ok = copiarAlPortapapeles(kParametroSteam, &e);
-    if (aviso)
-      *aviso = ok ? std::string(idioma::tr("Copiado: pégalo en las opciones de lanzamiento del juego en Steam"))
-                  : idioma::trf("no se pudo copiar ({}): escríbelo a mano", {e});
     return true;
   }
   /* (v1.13) los juegos con DLSS */
@@ -1288,5 +1276,8 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   }
   return false;
 }
+
+/* (v1.14) el boton Copiar del pie de la pestana Juegos: el parametro de Steam al portapapeles del escritorio */
+bool copiarParametroSteam(std::string *err) { return copiarAlPortapapeles(kParametroSteam, err); }
 
 }  /* namespace prefs */

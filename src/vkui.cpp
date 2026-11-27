@@ -1851,9 +1851,29 @@ void Hud::dibujaPanel(int vw, int vh) {
   }
   /* el pie */
   solid(px + 20.0f, py + ph - 42.0f, pw - 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.08f);
-  if (!st_.pie.empty())
-    textoCabe(st_.pie, px + 28.0f, py + ph - 30.0f, 12.5f, pw - 56.0f - textWidth(st_.version, 12.0f) - 20.0f, ink[0], ink[1],
-              ink[2], 0.88f);
+  float pieMax = pw - 56.0f - textWidth(st_.version, 12.0f) - 20.0f;
+  /* (v1.14) en la pestana Juegos, en medio: el parametro de Steam y su boton Copiar (recien copiado, en verde y
+     diciendo «Copiado» un momento); la frase del pie se queda a su izquierda */
+  panelCopiar_ = {-10.0f, -10.0f, 0.0f, 0.0f};
+  if (!st_.pieParametro.empty()) {
+    const float tamP = 13.0f, tamB = 12.5f, ty = py + ph - 30.0f;
+    const std::string &etq = st_.pieCopiado ? st_.pieCopiadoTexto : st_.pieCopiar;
+    const float wP = textWidth(st_.pieParametro, tamP);
+    const float wB = std::max(textWidth(st_.pieCopiar, tamB), textWidth(st_.pieCopiadoTexto, tamB)) + 28.0f;
+    const float grupo = wP + 12.0f + wB;
+    const float gx = px + (pw - grupo) * 0.5f;
+    text(st_.pieParametro, gx, ty - 0.5f, tamP, ink[0], ink[1], ink[2], 0.95f);
+    panelCopiar_ = {gx + wP + 12.0f, ty - 5.5f, wB, 26.0f};
+    const bool hb = panelCopiar_.inside(mx_, my_);
+    if (st_.pieCopiado) mask9(panelCopiar_, 0, 13.0f, 0.27f, 0.68f, 0.42f, 0.95f);
+    else mask9(panelCopiar_, 0, 13.0f, accent[0], accent[1], accent[2], hb ? 1.0f : 0.92f);
+    text(etq, panelCopiar_.x + wB * 0.5f, ty, tamB, st_.pieCopiado ? 1.0f : tinta[0], st_.pieCopiado ? 1.0f : tinta[1],
+         st_.pieCopiado ? 1.0f : tinta[2], 1.0f, true);
+    if (hb && !st_.pieAyuda.empty()) ayudaRaton = st_.pieAyuda;
+    pieMax = std::min(pieMax, gx - (px + 28.0f) - 16.0f);
+  }
+  if (!st_.pie.empty() && pieMax > 40.0f)
+    textoCabe(st_.pie, px + 28.0f, py + ph - 30.0f, 12.5f, pieMax, ink[0], ink[1], ink[2], 0.88f);
   if (!st_.version.empty())
     text(st_.version, px + pw - 28.0f - textWidth(st_.version, 12.0f), py + ph - 30.0f, 12.0f, dim[0], dim[1], dim[2],
          0.75f);
@@ -1961,6 +1981,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   }
   if (panelIdioma_.inside(mx, my)) return HitPanelIdioma;
   if (panelActualizar_.inside(mx, my)) return HitPanelActualizar;
+  if (panelCopiar_.inside(mx, my)) return HitPanelCopiar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)
     if (panelPestanas_[i].inside(mx, my)) {
       if (sub) *sub = (int)i;

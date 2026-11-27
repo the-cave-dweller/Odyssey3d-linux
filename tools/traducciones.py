@@ -271,9 +271,9 @@ T = {
 "Pégalo en Steam: Propiedades del juego → General → Opciones de lanzamiento. Si ya tiene opciones, ODYSSEYVK=1 va delante.": ("Paste it in Steam: game Properties → General → Launch Options. If it already has options, ODYSSEYVK=1 goes first.", "Collez-le dans Steam : Propriétés du jeu → Général → Options de lancement. S'il y a déjà des options, ODYSSEYVK=1 se met devant.", "In Steam einfügen: Eigenschaften des Spiels → Allgemein → Startoptionen. Gibt es schon Optionen, kommt ODYSSEYVK=1 davor.", "粘贴到 Steam：游戏属性 → 通用 → 启动选项。若已有选项，ODYSSEYVK=1 放在最前面。", "Steam に貼り付け：ゲームのプロパティ → 一般 → 起動オプション。すでにオプションがあれば ODYSSEYVK=1 を先頭に。"),
 "Con esto, en los juegos con DLSS el 3D usa la profundidad exacta del juego en vez de la red.": ("With this, in games with DLSS the 3D uses the game's exact depth instead of the network.", "Avec cela, dans les jeux avec DLSS, la 3D utilise la profondeur exacte du jeu au lieu du réseau.", "Damit nutzt das 3D in Spielen mit DLSS die exakte Tiefe des Spiels statt des Netzes.", "这样，在支持 DLSS 的游戏中，3D 会使用游戏的精确深度，而不是神经网络。", "これで DLSS 対応ゲームでは、3D がネットワークの代わりにゲームの正確な奥行きを使います。"),
 "Copiar": ("Copy", "Copier", "Kopieren", "复制", "コピー"),
-"Copiado: pégalo en las opciones de lanzamiento del juego en Steam": ("Copied: paste it in the game's launch options in Steam", "Copié : collez-le dans les options de lancement du jeu dans Steam", "Kopiert: in Steam in die Startoptionen des Spiels einfügen", "已复制：粘贴到 Steam 中该游戏的启动选项", "コピーしました：Steam でゲームの起動オプションに貼り付けてください"),
 "no se pudo copiar ({}): escríbelo a mano": ("couldn't copy ({}): type it by hand", "copie impossible ({}) : tapez-le à la main", "Kopieren nicht möglich ({}): bitte von Hand eintippen", "无法复制（{}）：请手动输入", "コピーできません（{}）：手で入力してください"),
 "no hay portapapeles de KDE ni wl-copy": ("no KDE clipboard nor wl-copy", "ni presse-papiers KDE ni wl-copy", "weder KDE-Zwischenablage noch wl-copy", "没有 KDE 剪贴板，也没有 wl-copy", "KDE のクリップボードも wl-copy もありません"),
+"Copiado": ("Copied", "Copié", "Kopiert", "已复制", "コピーしました"),
 }
 
 from traducciones_ru import RU
