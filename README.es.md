@@ -57,8 +57,9 @@ Lo que tienes:
   carátula: los `.fx` de ReShade de `~/.config/vkdaedalus/reshade` corren sobre cada cuadro del juego antes del 3D, con
   la profundidad del 3D como bufer de profundidad de ReShade (así los de profundidad valen en cualquier juego). Cada
   efecto con su pastilla y sus deslizadores; todos los juegos comparten unos y cualquiera puede tener los suyos
-  (`~/.config/odysseyvk/effects/`). La pestaña enseña junto a la lista una vista fija del juego,
-  la mitad izquierda sin efectos y la derecha con ellos. *Añadir un efecto* abre un selector a lo ancho de la pantalla con los que usan
+  (`~/.config/odysseyvk/effects/`). La pestaña enseña arriba una vista fija del juego,
+  la mitad izquierda sin efectos y la derecha con ellos, que pinta el visor en la tarjeta gráfica a cada cuadro; debajo,
+  la lista en dos columnas. *Añadir un efecto* abre un selector a lo ancho de la pantalla con los que usan
   la profundidad y los que no, que corre solo con el ratón sobre sus botones. Las *fuentes públicas* (ReShade, SweetFX,
   qUINT, prod80, AstrayFX...) bajan solo los archivos que no tienes, comparados por contenido con GitHub: lo que ya tienes con ese nombre
   se queda y nunca se reemplaza, y lo bajado que quede duplicado se borra; la que no tiene nada nuevo sale en gris. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.

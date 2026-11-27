@@ -49,12 +49,12 @@ public:
   CadenaEfectos &efectos() { return efectos_; }
   /* (v1.18) los efectos en la trama, o solo en la vista de los efectos (la pestana Efectos abierta con ellos apagados) */
   void efectosEnPantalla(bool si) { efectosEnPantalla_ = si; }
-  /* (v1.18) la vista de los efectos para el panel (Rodolfo: «on the effects tab, show a preview square for the game with
-     the effect applied on the half of the screen shown»): mientras se pida, unas 4 veces por segundo, una copia chica del
-     cuadro del juego con la mitad izquierda sin efectos y la derecha con ellos. Se copia en el buffer de mando del cuadro y
-     se lee cuando ese hueco vuelve (su valla ya esperada): sin esperas. tomarVista da la ultima nueva */
-  void pedirVista(bool si) { vistaPedida_ = si; }
-  bool tomarVista(std::vector<uint8_t> &rgba, int &w, int &h);
+  /* (v1.18) la vista de los efectos (Rodolfo: «on the effects tab, show a preview square for the game with the effect
+     applied on the half of the screen shown», y luego «can you find a way to make the preview fast?, maybe not cpu
+     based»): el panel deja un hueco transparente en su pestana Efectos y el visor, que esta debajo, pinta ahi en cada cuadro
+     el juego con la mitad izquierda sin efectos y la derecha con ellos: dos copias en la tarjeta, sin pasar por la CPU.
+     x, y, ancho y alto en fracciones de la pantalla; ancho 0 = ninguna */
+  void ponerVista(float x, float y, float w, float h) { vista_[0] = x, vista_[1] = y, vista_[2] = w, vista_[3] = h; }
   /* la fuente real mas nueva (la que llego y aun no paso por frame(), o la ultima que paso) */
   const VkImg *fuenteReal() const;
 
@@ -246,18 +246,11 @@ private:
   CadenaEfectos efectos_;                          /* (v1.18) */
   int efectosGen_ = -1;                            /* la fuente que ya paso por los efectos */
   bool efectosEnPantalla_ = true;                  /* (v1.18) */
-  /* (v1.18) la vista de los efectos: su imagen chica, el buffer donde se lee, el hueco que la lleva en vuelo y la ultima */
-  bool vistaPedida_ = false;
-  VkImg vista_{};
-  VkBuffer vistaBuf_ = VK_NULL_HANDLE;
-  VkDeviceMemory vistaMem_ = VK_NULL_HANDLE;
-  void *vistaMapa_ = nullptr;
-  int vistaHueco_ = -1;
-  bool vistaNueva_ = false, vistaPuesta_ = false;
-  std::vector<uint8_t> vistaLista_;
-  int vistaW_ = 0, vistaH_ = 0;
-  double vistaUltima_ = 0.0;
-  bool copiarVista(VkCommandBuffer cb, const VkImg &fuente, VkImage conEfectos);
+  /* (v1.18) la vista de los efectos: el hueco del panel, si el intercambio deja copiar en sus imagenes, y el blanco de la raya */
+  float vista_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  bool swapCopiable_ = false;
+  VkImg blanco_{};
+  void pintarVista(VkCommandBuffer cb, VkImage destino, VkExtent2D lienzo, const VkImg &fuente, VkImage conEfectos);
   VkImg black_{};          /* reserva por si aún no hay fuente */
   VkImg corrA_{};          /* neutros si no hay ficheros */
   VkImg corrB_{};

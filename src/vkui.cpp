@@ -866,6 +866,14 @@ void Hud::pintarCpu(float ox, float oy, int ancho, int alto, std::vector<float> 
       pintaImagen(im, banda0, banda1);
     }
     pintaCuadros(hecho, v_.size(), banda0, banda1);
+    /* (v1.18) el hueco de la vista de los efectos, transparente: ahi se ve lo que pinta el visor, debajo */
+    if (huecoVista_.w > 0.0f && huecoVista_.h > 0.0f) {
+      const int hx0 = std::max(0, (int)std::lround(huecoVista_.x * sc_ - ox)), hx1 = std::min(ancho, (int)std::lround((huecoVista_.x + huecoVista_.w) * sc_ - ox));
+      const int hy0 = std::max(banda0, (int)std::lround(huecoVista_.y * sc_ - oy)), hy1 = std::min(banda1, (int)std::lround((huecoVista_.y + huecoVista_.h) * sc_ - oy));
+      for (int y = hy0; y < hy1; y++)
+        if (hx1 > hx0) std::fill(acum.begin() + (ptrdiff_t)(((size_t)y * (size_t)ancho + (size_t)hx0) * 4u),
+                                 acum.begin() + (ptrdiff_t)(((size_t)y * (size_t)ancho + (size_t)hx1) * 4u), 0.0f);
+    }
   };
   static const bool unHilo = std::getenv("ODYSSEYVK_PINTA_HILOS") && std::getenv("ODYSSEYVK_PINTA_HILOS")[0] == '1';   /* pruebas */
   const unsigned hilos = unHilo ? 1u : (size_t)ancho * (size_t)alto >= 1000000u ? std::max(1u, std::min(8u, std::thread::hardware_concurrency())) : 1u;
@@ -1977,6 +1985,8 @@ void Hud::cajaAyuda(const std::vector<std::string> &lineas, float x, float y, fl
    cambio. Los colores son los de la tarjeta de la orilla y la pastilla.
    --------------------------------------------------------------------------------------------- */
 void Hud::dibujaPanel(int vw, int vh) {
+  huecoVista_ = {0.0f, 0.0f, 0.0f, 0.0f};   /* (v1.18) lo pone la pestana Efectos con el visor debajo */
+  lienzoW_ = (float)vw, lienzoH_ = (float)vh;
   /* (v1.16) al estilo de vkDaedalus (State::marco): su paleta «soft» (la que tiene puesta Rodolfo en vkDaedalus), su
      letra (Barlow) y sus medidas (overlay/frame_layout.hpp: un lienzo de diseno de 1280 x 720, la barra de 56, el
      contenido de 980 en el centro, las teselas desde 88 y la tarjeta desde 304) */
@@ -2183,36 +2193,27 @@ void Hud::dibujaPanel(int vw, int vh) {
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
     fuente_ = hayBarlow_ ? 1 : 0;
     panelCuerpo_ = {tarjeta.x + 6.0f * s, tarjeta.y + 52.0f * s, tarjeta.w - 12.0f * s, tarjeta.h - 52.0f * s - 44.0f};
-    /* (v1.18) la vista de los efectos: las filas a la izquierda (sus controles, mas cerca de sus nombres) y el cuadro a la
-       derecha, fijo */
+    /* (v1.18) la vista de los efectos: arriba en medio, quieta, y la lista debajo (en dos columnas: lo pone preferencias) */
     if (st_.vistaEfectosCaja) {
-      const float wFilas = std::floor(panelCuerpo_.w * 0.52f);
-      const Rect zona{panelCuerpo_.x + wFilas + 18.0f * s, panelCuerpo_.y + 6.0f * s, panelCuerpo_.w - wFilas - 26.0f * s, 0.0f};
-      panelCuerpo_.w = wFilas;
-      const bool hay = st_.vistaEfectos && st_.vistaEfectosW > 0 && st_.vistaEfectosH > 0;
-      const float aspecto = hay ? (float)st_.vistaEfectosH / (float)st_.vistaEfectosW : 9.0f / 16.0f;
-      const Rect cuadro{zona.x, zona.y, zona.w, std::floor(zona.w * aspecto)};
-      relleno({cuadro.x - 1.0f, cuadro.y - 1.0f, cuadro.w + 2.0f, cuadro.h + 2.0f}, 6.0f * s, pal_.filo, 1.0f);
-      relleno(cuadro, 6.0f * s, pal_.ventana, 1.0f);
-      if (hay) {
-        imagenes_.push_back({Rect{cuadro.x, cuadro.y + desplazY_, cuadro.w, cuadro.h}, Rect{cuadro.x, cuadro.y + desplazY_, cuadro.w, cuadro.h},
-                             st_.vistaEfectos->data(), st_.vistaEfectosW, st_.vistaEfectosH, 6.0f * s, v_.size(), alfaGlobal_, false});
-        /* la raya del medio y lo que es cada mitad */
-        solid(cuadro.x + cuadro.w * 0.5f - 1.0f, cuadro.y, 2.0f, cuadro.h, 1.0f, 1.0f, 1.0f, 0.85f);
-        auto rotulo = [&](const std::string &t, float x, bool derecha) {
-          const float w = textWidth(t, 12.0f * s) + 16.0f * s;
-          const Rect r{derecha ? x - w : x, cuadro.y + cuadro.h - 30.0f * s, w, 22.0f * s};
-          mask9(r, 0, 11.0f * s, 0.0f, 0.0f, 0.0f, 0.70f);
-          text(t, r.x + r.w * 0.5f, r.y + 4.5f * s, 12.0f * s, 1.0f, 1.0f, 1.0f, 0.95f, true);
-        };
-        rotulo(idioma::tr("Sin efectos"), cuadro.x + 8.0f * s, false);
-        rotulo(idioma::tr("Con efectos"), cuadro.x + cuadro.w - 8.0f * s, true);
+      const float hVista = std::floor(std::min(panelCuerpo_.h * 0.42f, (panelCuerpo_.w - 24.0f * s) * 9.0f / 16.0f));
+      const float wVista = std::floor(hVista * 16.0f / 9.0f);
+      const Rect cuadro{std::floor(panelCuerpo_.x + (panelCuerpo_.w - wVista) * 0.5f), panelCuerpo_.y + 4.0f * s, wVista, hVista};
+      relleno({cuadro.x - 1.0f, cuadro.y - 1.0f, cuadro.w + 2.0f, cuadro.h + 2.0f}, 4.0f * s, pal_.filo, 1.0f);
+      relleno(cuadro, 4.0f * s, pal_.ventana, 1.0f);
+      /* lo que es cada mitad, debajo del cuadro (dentro no se pinta: es del visor) */
+      text(idioma::tr("Sin efectos"), cuadro.x + cuadro.w * 0.25f, cuadro.y + cuadro.h + 7.0f * s, 12.0f * s, dim[0], dim[1], dim[2], 0.95f, true);
+      text(idioma::tr("Con efectos"), cuadro.x + cuadro.w * 0.75f, cuadro.y + cuadro.h + 7.0f * s, 12.0f * s, dim[0], dim[1], dim[2], 0.95f, true);
+      /* el hueco, si el visor esta debajo y nada se pinta encima (el desplegable por grupos, los menus) */
+      if (st_.vistaEnVivo && st_.desplegado < 0 && !st_.menuIdioma && st_.teselaMenu < 0) {
+        huecoVista_ = {cuadro.x, cuadro.y + desplazY_, cuadro.w, cuadro.h};
       } else {
         textoCabe(idioma::tr("Con un juego en 3D, aquí se ve con sus efectos"), cuadro.x + 16.0f * s, cuadro.y + cuadro.h * 0.5f - 20.0f * s,
                   14.0f * s, cuadro.w - 32.0f * s, ink[0], ink[1], ink[2], 0.85f);
         textoCabe(idioma::tr("A la izquierda sin ellos, a la derecha con ellos"), cuadro.x + 16.0f * s, cuadro.y + cuadro.h * 0.5f + 4.0f * s,
                   12.5f * s, cuadro.w - 32.0f * s, dim[0], dim[1], dim[2], 0.85f);
       }
+      const float bajo = hVista + 30.0f * s;
+      panelCuerpo_.y += bajo, panelCuerpo_.h -= bajo;
     }
     pieCaja = {tarjeta.x, tarjeta.y + tarjeta.h - 44.0f, tarjeta.w, 44.0f};
     }   /* (v1.16) fin de lo que no sale con la vista de depuracion */
@@ -3244,6 +3245,12 @@ float Hud::fracDeslizador(int item, float mxa) const {
   if ((size_t)item >= zonas_.size() || zonas_[(size_t)item].pista.w <= 0.0f) return st_.items[(size_t)item].frac;
   const Rect &p = zonas_[(size_t)item].pista;
   return std::max(0.0f, std::min(1.0f, (mxa / sc_ - p.x) / std::max(1.0f, p.w)));
+}
+
+bool Hud::huecoVista(float *x, float *y, float *w, float *h) const {
+  if (huecoVista_.w <= 0.0f || huecoVista_.h <= 0.0f || lienzoW_ <= 0.0f || lienzoH_ <= 0.0f) return false;
+  *x = huecoVista_.x / lienzoW_, *y = huecoVista_.y / lienzoH_, *w = huecoVista_.w / lienzoW_, *h = huecoVista_.h / lienzoH_;
+  return true;
 }
 
 bool Hud::autodesplazar(float dt) {

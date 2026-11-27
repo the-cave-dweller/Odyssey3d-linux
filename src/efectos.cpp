@@ -534,40 +534,28 @@ long long horaNs(const std::string &ruta) {
 }
 }  // namespace
 
-void pedirVista() {
-  if (FILE *f = std::fopen(rutaRun("odysseyvk-efectos-vista-pide").c_str(), "we")) {
-    std::fprintf(f, "%ld\n", (long)std::time(nullptr));
+void pedirVista(float x, float y, float w, float h) {
+  const std::string r = rutaRun("odysseyvk-efectos-vista-pide");
+  if (FILE *f = std::fopen((r + ".nuevo").c_str(), "we")) {
+    std::fprintf(f, "%.5f %.5f %.5f %.5f\n", x, y, w, h);
     std::fclose(f);
+    std::rename((r + ".nuevo").c_str(), r.c_str());
   }
 }
-bool vistaPedida() {
-  const long long h = horaNs(rutaRun("odysseyvk-efectos-vista-pide"));
+void soltarVista() { ::unlink(rutaRun("odysseyvk-efectos-vista-pide").c_str()); }
+bool vistaPedida(float *x, float *y, float *w, float *h) {
+  const std::string r = rutaRun("odysseyvk-efectos-vista-pide");
+  const long long hora = horaNs(r);
   struct timespec ahora{};
   clock_gettime(CLOCK_REALTIME, &ahora);
-  return h > 0 && (long long)ahora.tv_sec * 1000000000LL + ahora.tv_nsec - h < 2500000000LL;
-}
-bool escribirVista(const std::vector<uint8_t> &rgba, int w, int h) {
-  if (w <= 0 || h <= 0 || rgba.size() < (size_t)w * h * 4) return false;
-  const std::string r = rutaRun("odysseyvk-efectos-vista"), tmp = r + ".nueva";
-  FILE *f = std::fopen(tmp.c_str(), "we");
+  if (hora <= 0 || (long long)ahora.tv_sec * 1000000000LL + ahora.tv_nsec - hora >= 2500000000LL) return false;
+  float v[4] = {0, 0, 0, 0};
+  FILE *f = std::fopen(r.c_str(), "re");
   if (!f) return false;
-  const uint32_t cab[3] = {0x56564b4fu /* «OKVV» */, (uint32_t)w, (uint32_t)h};
-  const bool ok = std::fwrite(cab, sizeof cab, 1, f) == 1 && std::fwrite(rgba.data(), (size_t)w * h * 4, 1, f) == 1;
+  const int n = std::fscanf(f, "%f %f %f %f", &v[0], &v[1], &v[2], &v[3]);
   std::fclose(f);
-  return ok && std::rename(tmp.c_str(), r.c_str()) == 0;
-}
-bool leerVista(std::vector<uint8_t> &rgba, int &w, int &h, long long *firma) {
-  const std::string r = rutaRun("odysseyvk-efectos-vista");
-  const long long hora = horaNs(r);
-  if (hora == 0 || (firma && hora == *firma)) return false;
-  std::ifstream f(r, std::ios::binary);
-  uint32_t cab[3] = {0, 0, 0};
-  if (!f.read((char *)cab, sizeof cab) || cab[0] != 0x56564b4fu || cab[1] == 0 || cab[2] == 0 || cab[1] > 4096 || cab[2] > 4096) return false;
-  std::vector<uint8_t> px((size_t)cab[1] * cab[2] * 4);
-  if (!f.read((char *)px.data(), (std::streamsize)px.size())) return false;
-  for (size_t k = 3; k < px.size(); k += 4) px[k] = 255;   /* la captura (XR24) no trae alfa */
-  rgba.swap(px), w = (int)cab[1], h = (int)cab[2];
-  if (firma) *firma = hora;
+  if (n != 4 || v[2] <= 0.0f || v[3] <= 0.0f) return false;
+  *x = v[0], *y = v[1], *w = v[2], *h = v[3];
   return true;
 }
 

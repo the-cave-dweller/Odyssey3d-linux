@@ -108,14 +108,13 @@ std::shared_ptr<Compilado> compilar(const std::string &ruta, int ancho, int alto
 /* una textura de un .fx (su anotacion `source`): busca en las carpetas de texturas */
 std::string rutaTextura(const std::string &nombre);
 
-/* ---- (v1.18) la vista de los efectos en el panel: el panel la pide (pedirVista, cada segundo con la pestana abierta) y el
-   visor, con un juego, deja en $XDG_RUNTIME_DIR/odysseyvk-efectos-vista una copia chica del cuadro con la mitad
-   izquierda sin efectos y la derecha con ellos (RGBA, tras «OKVV» y su ancho y alto) ---- */
-void pedirVista();
-bool vistaPedida();   /* pedida hace menos de 2,5 s */
-bool escribirVista(const std::vector<uint8_t> &rgba, int w, int h);
-/* la ultima, si cambio desde `*firma` (la hora del archivo); falso si no hay o no cambio */
-bool leerVista(std::vector<uint8_t> &rgba, int &w, int &h, long long *firma);
+/* ---- (v1.18) la vista de los efectos: el panel deja un hueco transparente en su pestana Efectos y lo apunta en
+   $XDG_RUNTIME_DIR/odysseyvk-efectos-vista-pide (x, y, ancho y alto en fracciones de la pantalla; cada segundo y al
+   cambiar); el visor, debajo, pinta ahi el juego, la mitad izquierda sin efectos y la derecha con ellos (VkWeave::ponerVista) ---- */
+void pedirVista(float x, float y, float w, float h);
+void soltarVista();   /* al salir de la pestana o cerrar el panel */
+/* el hueco pedido hace menos de 2,5 s; falso si no hay */
+bool vistaPedida(float *x, float *y, float *w, float *h);
 
 /* ---- (v1.18) fuentes publicas de efectos: los repositorios de ReShade mas conocidos, con su boton de bajar ----
    Rodolfo: «add some public shader sources to the list with their download button» y «gray out already downloaded one

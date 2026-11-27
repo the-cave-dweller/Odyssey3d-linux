@@ -164,12 +164,13 @@ public:
     std::vector<bool> pestanaGris;
     std::vector<int> ordenPestanas;   /* (v1.18) en que orden se ven (vacio: el de sus numeros) */
     /* (v1.18) la vista de los efectos (Rodolfo: «on the effects tab, show a preview square for the game with the effect
-       applied on the half of the screen shown, make the rectangle not movable», «meant here, make the options more to the
-       left»): con `vistaEfectosCaja`, la tarjeta deja las filas en su mitad izquierda y a la derecha, quieto (no corre con
-       la lista), el cuadro del juego que manda el visor: la mitad izquierda sin efectos y la derecha con ellos */
+       applied on the half of the screen shown, make the rectangle not movable», «can you find a way to make the preview
+       fast?, maybe not cpu based», «move it to the top middle, and divide the effect space at the bottom half into two
+       parts, in half»): con `vistaEfectosCaja`, arriba en medio de la tarjeta un cuadro quieto (no corre con la lista) y
+       las filas debajo, en dos columnas. Con `vistaEnVivo` (el panel sobre el 3D de un juego) el cuadro es un hueco
+       transparente y el visor, debajo, pinta ahi el juego: la mitad izquierda sin efectos y la derecha con ellos */
     bool vistaEfectosCaja = false;
-    std::shared_ptr<const std::vector<uint8_t>> vistaEfectos;
-    int vistaEfectosW = 0, vistaEfectosH = 0;
+    bool vistaEnVivo = false;
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;
@@ -438,6 +439,8 @@ public:
   float fracDeslizador(int item, float mx) const;
   /* la rueda del raton sobre la lista del panel (positivo = bajar) */
   void correr(float cuanto);
+  /* (v1.18) el hueco de la vista de los efectos del ultimo dibujo, en fracciones del lienzo; falso si no hay */
+  bool huecoVista(float *x, float *y, float *w, float *h) const;
   /* (v1.18) con el raton encima de un boton de correr de un desplegable por grupos: lo corre `dt` segundos (empieza
      despacio y acelera un poco: de ~140 a ~320 puntos por segundo en 1,5 s). Verdadero si se movio: hay que repintar */
   bool autodesplazar(float dt);
@@ -629,6 +632,8 @@ private:
   Rect despGrupo_[2] = {{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}};
   Rect despBoton_[2][2] = {{{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}}, {{-10.0f, -10.0f, 0.0f, 0.0f}, {-10.0f, -10.0f, 0.0f, 0.0f}}};
   float despTope_[2] = {0.0f, 0.0f};
+  Rect huecoVista_{0.0f, 0.0f, 0.0f, 0.0f};   /* (v1.18) el de la vista de los efectos (transparente en el pintado de CPU) */
+  float lienzoW_ = 0.0f, lienzoH_ = 0.0f;
   Rect despCerrar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* su aspa (el sub 51: lo cierra) */
   int autoGrupo_ = -1, autoDir_ = 0;
   double autoDesde_ = 0.0;

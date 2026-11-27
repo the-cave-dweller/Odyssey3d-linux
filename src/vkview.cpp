@@ -3291,7 +3291,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         tEf = tAhora;
         if (ui.esJuego < 0) sobreJuego(ui);
         /* (v1.18) la pestana Efectos del panel abierta: la vista de los efectos (mitad sin, mitad con) */
-        const bool vista = efectos::vistaPedida();
+        float vx = 0, vy = 0, vw = 0, vh = 0;
+        const bool vista = efectos::vistaPedida(&vx, &vy, &vw, &vh);
         /* ODYSSEYVK_EFECTOS_JUEGO=APPID (o «todos»): para las pruebas, como si la fuente fuera ese juego */
         static const char *forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO");
         const bool esJuego = forzado || ui.esJuego == 1;
@@ -3304,7 +3305,6 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           efectos::Ajustes paraCadena = aj;
           if (vista && esJuego) paraCadena.puestos = true;
           wv.efectosEnPantalla(aj.puestos);
-          wv.pedirVista(vista && esJuego);
           wv.efectos().ajustar(paraCadena);
           if (esJuego) {
             std::string lista;
@@ -3317,11 +3317,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         }
       }
     }
-    /* (v1.18) la vista de los efectos que acabe de salir, al panel */
+    /* (v1.18) el hueco de la vista de los efectos que deja el panel, cada decima de segundo (sigue al panel al abrirse y al
+       cerrarse; los efectos se ajustan arriba, cada medio segundo) */
     {
-      std::vector<uint8_t> px;
-      int vw = 0, vh = 0;
-      if (wv.tomarVista(px, vw, vh)) efectos::escribirVista(px, vw, vh);
+      static double tVista = -1.0;
+      if (glfwGetTime() - tVista >= 0.1) {
+        tVista = glfwGetTime();
+        float vx = 0, vy = 0, vw = 0, vh = 0;
+        static const bool forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO") != nullptr;
+        if ((ui.esJuego == 1 || forzado) && efectos::vistaPedida(&vx, &vy, &vw, &vh)) wv.ponerVista(vx, vy, vw, vh);
+        else wv.ponerVista(0.0f, 0.0f, 0.0f, 0.0f);
+      }
     }
 #ifdef HAVE_ORT
     if (ui.alternarModelo) {

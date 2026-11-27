@@ -253,6 +253,7 @@ int cmdAjustes(int argc, char **argv) {
         if (w.uuid == ven->second) juegoActual = appDe(w.appId);
     if (!juegoActual.empty()) std::printf("[ajustes] dentro del juego %s: Integraciones en gris y en Juegos solo el suyo\n", juegoActual.c_str());
     prefs::juegoDelPanel(juegoActual);   /* (v1.18) la pestana de efectos ofrece los suyos */
+    st.vistaEnVivo = haySesion && !juegoActual.empty();   /* (v1.18) el visor, debajo, pinta la vista de los efectos */
   }
   if (!juegoUuid.empty() || haySesion) {
     sinIntegraciones = true;   /* (v1.16) la ventana activa es un juego, o hay una sesion 3D */
@@ -753,20 +754,19 @@ int cmdAjustes(int argc, char **argv) {
       rellenar();
       repintar = true;
     }
-    /* (v1.18) Efectos: la vista del juego con sus efectos (se pide cada segundo y se lee en cuanto el visor deja una nueva) */
-    if (st.pestana == 5) {
-      static double pedida = -10.0, mirada = -10.0;
-      static long long firmaVista = 0;
-      if (reloj() - pedida >= 1.0) pedida = reloj(), efectos::pedirVista();
-      if (reloj() - mirada >= 0.2) {
-        mirada = reloj();
-        std::vector<uint8_t> px;
-        int w = 0, h = 0;
-        if (efectos::leerVista(px, w, h, &firmaVista)) {
-          st.vistaEfectos = std::make_shared<const std::vector<uint8_t>>(std::move(px));
-          st.vistaEfectosW = w, st.vistaEfectosH = h;
-          repintar = true;
-        }
+    /* (v1.18) la vista de los efectos: el hueco que dejo el ultimo dibujo, al visor (al cambiar y cada segundo); sin el, se
+       suelta (otra pestana, el desplegable encima) */
+    {
+      static std::string publicado;
+      static double cuando = -10.0;
+      float x = 0, y = 0, w = 0, h = 0;
+      const bool hay = st.pestana == 5 && ov.hud().huecoVista(&x, &y, &w, &h);
+      char b[96] = "";
+      if (hay) std::snprintf(b, sizeof b, "%.4f %.4f %.4f %.4f", x, y, w, h);
+      if (b != publicado || (hay && reloj() - cuando >= 1.0)) {
+        if (hay) efectos::pedirVista(x, y, w, h);
+        else if (!publicado.empty()) efectos::soltarVista();
+        publicado = b, cuando = reloj();
       }
     }
     /* (v1.18) Efectos, cada segundo: lo de las fuentes publicas que se comprueban o se bajan aparte */
@@ -886,6 +886,7 @@ int cmdAjustes(int argc, char **argv) {
   }
   ::unlink(rutaPid.c_str());
   /* (v1.16) lo que tarda en cerrarse, como lo de abrirse */
+  efectos::soltarVista();   /* (v1.18) el visor deja de pintar la vista de los efectos */
   std::printf("[ajustes] cerrado en %.0f ms: animacion %.0f ms (%d cuadros), lo demas %.0f ms\n", (reloj() - t0Cierre) * 1000.0,
               (tFinAnim - t0Cierre) * 1000.0, cuadrosCierre, (reloj() - tFinAnim) * 1000.0);
   std::fflush(stdout);

@@ -2160,7 +2160,11 @@ std::string nombreDeJuego(const std::vector<Juego> &juegos, const std::string &a
 }  // namespace
 
 static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const std::vector<Juego> &juegos) {
+  /* (v1.18) debajo de la vista, en dos columnas (Rodolfo: «divide the effect space at the bottom half into two parts, in
+     half»): a la izquierda los efectos de la lista con sus ajustes; a la derecha, añadir y las fuentes publicas */
+  int lado = 0;
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    if (st.vistaEfectosCaja) it.lado = lado;
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
@@ -2206,6 +2210,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     in.nota = idioma::tr("Se busca en ~/.config/vkdaedalus/reshade (Shaders/ y Textures/); otra, con efectos_carpeta en serve.conf.");
     pon(in, "");
   }
+  lado = 1;
   Hud::ItemPanel m;
   m.tipo = Hud::ItemPanel::Interruptor, m.rotulo = idioma::tr("Efectos"), m.valor = a.puestos;
   m.nota = idioma::tr("Corren en el visor 3D sobre cada cuadro del juego, antes del 3D, con su profundidad");
@@ -2285,6 +2290,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     pon(q, "efx:quitar:" + e.nombre);
   }
   /* añadir uno de la carpeta */
+  lado = 2;
   Hud::ItemPanel sa;
   sa.tipo = Hud::ItemPanel::Seccion, sa.rotulo = idioma::tr("AÑADIR UN EFECTO");
   pon(sa, "");

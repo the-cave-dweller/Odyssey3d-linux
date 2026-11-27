@@ -122,6 +122,29 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
     mueven los deslizadores.
   - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
+## La vista de los efectos en la tarjeta gráfica, arriba en medio, y la lista en dos columnas (v1.18)
+
+- Rodolfo: «stray fixed, can you find a way to make the preview fast?, maybe not cpu based» y «also, move it to the top
+  middle, and divide the effect space at the bottom half into two parts, in half».
+- **Sin la CPU**: la vista de antes copiaba una imagen de 640 de ancho a la memoria, la escribía en un archivo y el panel
+  la pintaba en la CPU, unas 4 veces por segundo. Ahora el panel deja ese cuadro transparente (alfa 0) y manda solo dónde
+  está (`$XDG_RUNTIME_DIR/odysseyvk-efectos-vista-pide`: «x y w h», de 0 a 1 en la pantalla); el visor, debajo, pinta
+  ahí en cada cuadro, con copias de la propia tarjeta (`vkCmdBlitImage`) en la imagen de la pantalla, la mitad
+  izquierda de la fuente y la mitad derecha de la salida de los efectos, con una raya blanca en medio, después de la
+  trama y antes de la interfaz. Va a los cuadros del visor, sin copias a la memoria ni archivos. Para eso la cadena de
+  la pantalla pide `TRANSFER_DST` (si la superficie no lo da, no hay vista). Con los efectos apagados la cadena corre igual,
+  solo para la vista. Fuera `odysseyvk-efectos-vista` y su lectura.
+- **Dónde**: la vista arriba en medio de la pestaña (16:9, hasta el 42 % del alto), con «Sin efectos» y «Con efectos»
+  debajo; debajo de eso, la tarjeta partida en dos: a la izquierda el interruptor y las filas de los efectos, a la
+  derecha «Añadir un efecto», las notas y las fuentes públicas. El cuadro solo se abre sin nada encima (un desplegable,
+  el menú del idioma o el de una tesela); sin juego dice que no hay.
+- **Los volcados del visor** (`--dump`) llevan la vista igual que la pantalla (la «trama cruda» no).
+- **Probado** en un gamescope sin salida, con un rectángulo pedido (0.30 0.10 0.40 0.40) y sin él: fuera del rectángulo
+  la salida es idéntica (diferencia 0); dentro, la mitad izquierda como la fuente del visor (0.9/255, el escalado) y la
+  derecha con los efectos (13/255), la raya blanca en medio. Con la capa de validación de Vulkan, ningún aviso nuevo (los
+  dos que salen, `swapchain_maintenance1` y 18 objetos sin liberar al cerrar, salen igual sin la vista). El panel,
+  pintado en la CPU: el cuadro transparente arriba en medio y las dos columnas. Sin probar con un juego delante.
+
 ## Stray y la ventana del visor: el foco vuelve al juego, y la vista de los efectos en su pestaña (v1.18)
 
 - Rodolfo: «remove vista previa button, fix stray layer issues», «it sent stray to the bottom and it recovered by
