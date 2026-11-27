@@ -2208,12 +2208,10 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     efectos::Descripcion d;
     if (it != disp.end()) d = efectos::describir(it->second);
     const bool abierta = abiertas.count("efx:" + e.nombre) > 0;
-    Hud::ItemPanel sp;
-    sp.tipo = Hud::ItemPanel::Seccion, sp.rotulo = e.nombre, sp.plegable = true, sp.valor = abierta, sp.talCual = true;
-    pon(sp, "plegar:efx:" + e.nombre);
-    /* su pastilla */
+    /* (v1.18) un renglon por efecto: la flechita y su nombre a la izquierda (pliegan), su pastilla a la derecha */
     Hud::ItemPanel p;
     p.tipo = Hud::ItemPanel::Interruptor, p.rotulo = e.nombre, p.valor = e.activo, p.pildora = true;
+    p.plegable = true, p.desplegada = abierta;
     if (it == disp.end()) {
       p.apagado = true, p.pastilla = idioma::tr("No está"), p.nota = idioma::tr("No está en la carpeta de ReShade");
     } else if (!d.ok) {
@@ -2327,6 +2325,16 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
   if (que == "puestos") {
     a.puestos = !a.puestos;
     dicho = idioma::tr(a.puestos ? "efectos encendidos" : "efectos apagados");
+  } else if (que.rfind("on:", 0) == 0 && sub == 1) {
+    /* la flechita o el nombre: se pliega o se despliega (no cambia los ajustes) */
+    std::set<std::string> &ab = seccionesAbiertas();
+    const std::string clave = "efx:" + que.substr(3);
+    if (!ab.erase(clave)) ab.insert(clave);
+    if (FILE *f = std::fopen(rutaEstadoOdyssey("panel-secciones").c_str(), "we")) {
+      for (const std::string &c : ab) std::fprintf(f, "%s\n", c.c_str());
+      std::fclose(f);
+    }
+    return true;
   } else if (que.rfind("on:", 0) == 0) {
     efectos::Efecto *e = a.buscar(que.substr(3));
     if (!e) return false;
@@ -2418,6 +2426,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
   /* (v1.15) la 2, la de Rendimiento que ya no se ensenaba, es ahora Integraciones: queda entre Juegos y Ajustes */
   st.pestanas = {"", idioma::tr("Juegos"), idioma::tr("Integraciones"), idioma::tr("Ajustes"), "FG", idioma::tr("Efectos")};   /* (v1.18) y FG, y los efectos */
   st.ordenPestanas = {0, 1, 5, 2, 3, 4};   /* (v1.18) Efectos junto a Juegos (Rodolfo: «beside games, call it effects») */
+  st.botonTitulo = st.pestana == 5 ? std::string(idioma::tr("Vista previa")) : std::string();
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
   st.items.clear();
   ids.clear();
@@ -2467,6 +2476,17 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
         const size_t n = monitorElegido().size();
         if (v.fpsJuego && n > 0) t.valor = idioma::trf("{} · {} más", {t.valor, std::to_string(n)});
       }
+  }
+  /* (v1.18) la vista previa de los efectos: solo su lista, en la columna de la izquierda, con el renglon de salir */
+  if (st.vistaPrevia && st.marco) {
+    Hud::ItemPanel vp;
+    vp.tipo = Hud::ItemPanel::Boton, vp.rotulo = idioma::tr("Vista previa");
+    vp.nota = idioma::tr("Pruébalos con el juego a la vista");
+    vp.valorTexto = idioma::tr("Salir"), vp.valor = true;
+    st.items.push_back(vp);
+    ids.push_back("vista_previa");
+    filasEfectos(st, ids, juegos);
+    return;
   }
   /* (v1.16) la vista de depuracion: solo las dos listas de redes, en la columna de la izquierda (vkui.cpp) */
   if (st.depuracion && st.marco) {

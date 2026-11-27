@@ -57,7 +57,8 @@ Lo que tienes:
   carátula: los `.fx` de ReShade de `~/.config/vkdaedalus/reshade` corren sobre cada cuadro del juego antes del 3D, con
   la profundidad del 3D como bufer de profundidad de ReShade (así los de profundidad valen en cualquier juego). Cada
   efecto con su pastilla y sus deslizadores; todos los juegos comparten unos y cualquiera puede tener los suyos
-  (`~/.config/odysseyvk/effects/`). El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
+  (`~/.config/odysseyvk/effects/`). *Vista previa*, junto al nombre
+  de la pestaña, deja la lista en una columna a la izquierda y quita lo demás, para ajustarlos con el juego a la vista. El compilador es el de ReShade FX (crosire, BSD-3) con los arreglos de vkDaedalus.
 - **Teclas de juego.** Solo sobre un juego: `Insert` oculta o muestra la pastilla, `Supr` cambia la profundidad entre
   DLSS y el modelo elegido, `Fin` enciende o apaga la generación de cuadros de MAKO, `RePág` / `AvPág` dan x2 → x3 → x4 y
   al revés (todas se cambian en Atajos de teclado). `Fin` es también la tecla del menú de vkDaedalus: KDE se la queda

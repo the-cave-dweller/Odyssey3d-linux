@@ -3666,6 +3666,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
        el panel abierto sobre ese juego */
     if (const char *ef = std::getenv("ODYSSEYVK_HUD_EFECTOS")) prefs::efectosDe(ef);
     if (const char *jp = std::getenv("ODYSSEYVK_HUD_JUEGO_PANEL")) prefs::juegoDelPanel(jp);
+    /* (v1.18) ODYSSEYVK_HUD_VISTA_PREVIA=1: la vista previa de los efectos (la columna, sin velo) */
+    hud.state().vistaPrevia = std::getenv("ODYSSEYVK_HUD_VISTA_PREVIA") != nullptr;
     /* (v1.18) ODYSSEYVK_HUD_APLICAR=id|sub|frac;...: esos golpes en el panel antes de pintarlo (lo que haria un clic) */
     if (const char *ap = std::getenv("ODYSSEYVK_HUD_APLICAR")) {
       std::string todo = ap, uno;

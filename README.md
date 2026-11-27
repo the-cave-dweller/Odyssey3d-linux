@@ -63,7 +63,8 @@ What you get:
 - **ReShade effects, in the 3D viewer.** An **Effects** tab next to Games and an effects icon on each game's cover:
   ReShade `.fx` effects from `~/.config/vkdaedalus/reshade` run on every game frame before the 3D, with the 3D's depth
   as ReShade's depth buffer (so depth effects work in any game). Each effect has its toggle pill and its sliders; all
-  games share one set and any game can have its own (`~/.config/odysseyvk/effects/`). The compiler is ReShade FX
+  games share one set and any game can have its own (`~/.config/odysseyvk/effects/`). *Preview*, next to the tab's
+  name, moves the list to a column on the left and clears the rest, to tune them with the game in view. The compiler is ReShade FX
   (crosire, BSD-3) as patched by vkDaedalus.
 - **A test on every layer change**: another network, DLSS depth coming or going, or another DLSS preset in the game
   gets a 3-second measurement of what runs (game FPS, maps per second, lost refreshes, how busy each card is) in the

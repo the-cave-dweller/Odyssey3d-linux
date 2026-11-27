@@ -610,6 +610,12 @@ T = {
 "{} sube en la lista": ("{} moves up the list", "{} monte dans la liste", "{} rückt nach oben", "{} 在列表中上移", "{} をリストの上へ"),
 "{} añadido": ("{} added", "{} ajouté", "{} hinzugefügt", "已添加 {}", "{} を追加しました"),
 "Efectos de este juego (ReShade)": ("This game's effects (ReShade)", "Effets de ce jeu (ReShade)", "Effekte dieses Spiels (ReShade)", "此游戏的效果（ReShade）", "このゲームのエフェクト（ReShade）"),
+# (v1.18) la vista previa de los efectos
+"vista previa: prueba los efectos con el juego a la vista": ("preview: try the effects with the game in view", "aperçu : essayez les effets avec le jeu visible", "Vorschau: Effekte mit sichtbarem Spiel ausprobieren", "预览：在能看到游戏的情况下试用效果", "プレビュー：ゲームを見ながらエフェクトを試せます"),
+"vista previa quitada": ("preview off", "aperçu désactivé", "Vorschau aus", "已退出预览", "プレビューを終了"),
+"Vista previa": ("Preview", "Aperçu", "Vorschau", "预览", "プレビュー"),
+"Pruébalos con el juego a la vista": ("Try them with the game in view", "Essayez-les avec le jeu visible", "Mit sichtbarem Spiel ausprobieren", "在能看到游戏的情况下试用", "ゲームを見ながら試せます"),
+"Salir": ("Exit", "Quitter", "Beenden", "退出", "終了"),
 }
 
 from traducciones_ru import RU

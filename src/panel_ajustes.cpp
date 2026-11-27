@@ -266,7 +266,7 @@ int cmdAjustes(int argc, char **argv) {
   const bool quiereVelo = !juegoUuid.empty() || entornoOdyssey("ODYSSEYVK_VELO") != nullptr;
   /* ODYSSEYVK_VELO=1 lo pone sin juego: para probarlo en un KWin aparte */
   paso("ventanas");
-  ov.showPanel(grande, quiereVelo && !st.fijado && !st.depuracion);
+  ov.showPanel(grande, quiereVelo && !st.fijado && !st.depuracion && !st.vistaPrevia);
   paso("puesto");
   {
     std::string t;
@@ -607,6 +607,20 @@ int cmdAjustes(int argc, char **argv) {
         st.pie.clear();
         rellenar();
         repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelBotonTitulo ||
+                 (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "vista_previa")) {
+        /* (v1.18) la vista previa de los efectos (Rodolfo: «que esto haga algo parecido a la vista de depuracion, desaparezca
+           todo y mueva a un lado la lista para probar cosas»): sin velo, sin teselas, la lista en la columna */
+        st.vistaPrevia = !st.vistaPrevia;
+        st.desplegado = -1;
+        st.corrida = 0.0f;
+        if (st.vistaPrevia) ov.quitarVelo();
+        else if (quiereVelo && !st.fijado) ov.showPanel(grande, true);
+        st.pie = idioma::tr(st.vistaPrevia ? "vista previa: prueba los efectos con el juego a la vista" : "vista previa quitada");
+        std::printf("[ajustes] vista previa de los efectos %s\n", st.vistaPrevia ? "puesta" : "quitada");
+        std::fflush(stdout);
+        rellenar();
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelItem && g.item >= 0 && (size_t)g.item < ids.size() && ids[(size_t)g.item] == "depuracion") {
         /* (v1.16) la vista de depuracion: el visor ensena su mapa de profundidad (la orden `ver_profundidad`, lo de
            Ctrl+Mayus+9) y el panel deja solo las dos listas de redes en una columna a la izquierda, sin velo y con el
@@ -673,7 +687,7 @@ int cmdAjustes(int argc, char **argv) {
       }
     }
     /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
-    ov.modoTeclado(!(st.fijado || st.depuracion) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
+    ov.modoTeclado(!(st.fijado || st.depuracion || st.vistaPrevia) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
     {

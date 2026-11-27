@@ -599,3 +599,8 @@
 {"{} sube en la lista", {"{} moves up the list", "{} monte dans la liste", "{} rückt nach oben", "{} 在列表中上移", "{} をリストの上へ", "{} выше в списке"}},
 {"{} añadido", {"{} added", "{} ajouté", "{} hinzugefügt", "已添加 {}", "{} を追加しました", "{} добавлен"}},
 {"Efectos de este juego (ReShade)", {"This game's effects (ReShade)", "Effets de ce jeu (ReShade)", "Effekte dieses Spiels (ReShade)", "此游戏的效果（ReShade）", "このゲームのエフェクト（ReShade）", "Эффекты этой игры (ReShade)"}},
+{"vista previa: prueba los efectos con el juego a la vista", {"preview: try the effects with the game in view", "aperçu : essayez les effets avec le jeu visible", "Vorschau: Effekte mit sichtbarem Spiel ausprobieren", "预览：在能看到游戏的情况下试用效果", "プレビュー：ゲームを見ながらエフェクトを試せます", "предпросмотр: пробуйте эффекты, видя игру"}},
+{"vista previa quitada", {"preview off", "aperçu désactivé", "Vorschau aus", "已退出预览", "プレビューを終了", "предпросмотр выключен"}},
+{"Vista previa", {"Preview", "Aperçu", "Vorschau", "预览", "プレビュー", "Предпросмотр"}},
+{"Pruébalos con el juego a la vista", {"Try them with the game in view", "Essayez-les avec le jeu visible", "Mit sichtbarem Spiel ausprobieren", "在能看到游戏的情况下试用", "ゲームを見ながら試せます", "Пробуйте их, видя игру"}},
+{"Salir", {"Exit", "Quitter", "Beenden", "退出", "終了", "Выйти"}},

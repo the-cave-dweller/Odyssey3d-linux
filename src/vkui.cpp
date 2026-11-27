@@ -2026,7 +2026,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       panelCaja_ = F;
     }
     /* el velo: no se mueve, solo se oscurece al abrirse (el de vkDaedalus es 5,7,10); en la ventana, su fondo y su filo */
-    if (!ventana && !st_.depuracion) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
+    if (!ventana && !st_.depuracion && !st_.vistaPrevia) solid(0.0f, 0.0f, (float)vw, (float)vh, 5.0f / 255.0f, 7.0f / 255.0f, 10.0f / 255.0f, 0.62f * a);
     /* lo demas sale de la pastilla (Rodolfo: «la herramienta desplace el resto de la interfaz hacia la pantalla»; y con
        la pastilla otra vez arriba, «quiero que presionar la herramientita saque el menu»): baja desde arriba y se hace
        opaco */
@@ -2041,7 +2041,8 @@ void Hud::dibujaPanel(int vw, int vh) {
        sin teselas ni tarjeta; una columna a la izquierda con sus filas (la casilla de la vista y lo que rinde la red
        arriba, las redes de siempre en la mitad de arriba y las de video en la de abajo) y el pie. Lo demas deja ver el
        video, y la region de entrada (panelCaja_) se queda en la columna: fuera de ella el raton va a lo de debajo */
-    if (st_.depuracion && !ventana) {
+    panelBotonTitulo_ = fuera;
+    if ((st_.depuracion || st_.vistaPrevia) && !ventana) {   /* (v1.18) y la vista previa de los efectos */
       const float m = 16.0f * s, cw = std::min(500.0f * s, (float)vw * 0.42f);
       const Rect col{m, m, cw, (float)vh - 2.0f * m};
       panelCaja_ = col;
@@ -2181,6 +2182,17 @@ void Hud::dibujaPanel(int vw, int vh) {
     fuente_ = hayBarlow_ ? 2 : 0;
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
     fuente_ = hayBarlow_ ? 1 : 0;
+    /* (v1.18) el boton junto al nombre (Rodolfo: «junto al nombre del menu efectos pon un boton llamado vista previa») */
+    if (!st_.botonTitulo.empty()) {
+      fuente_ = hayBarlow_ ? 2 : 0;
+      const float xb = tarjeta.x + 18.0f * s + textWidth(nombrePest(st_.pestana), 20.0f * s) + 16.0f * s;
+      fuente_ = hayBarlow_ ? 1 : 0;
+      const float wb = textWidth(st_.botonTitulo, 13.5f * s) + 28.0f * s;
+      panelBotonTitulo_ = {xb, tarjeta.y + 12.0f * s, wb, 28.0f * s};
+      const bool hb = panelBotonTitulo_.inside(mx_, my_) && !st_.menuIdioma;
+      relleno(panelBotonTitulo_, 14.0f * s, hb ? pal_.fuerteHov : pal_.fuerte, 1.0f);
+      text(st_.botonTitulo, xb + wb * 0.5f, panelBotonTitulo_.y + 6.0f * s, 13.5f * s, 1.0f, 1.0f, 1.0f, 1.0f, true);
+    }
     panelCuerpo_ = {tarjeta.x + 6.0f * s, tarjeta.y + 52.0f * s, tarjeta.w - 12.0f * s, tarjeta.h - 52.0f * s - 44.0f};
     pieCaja = {tarjeta.x, tarjeta.y + tarjeta.h - 44.0f, tarjeta.w, 44.0f};
     }   /* (v1.16) fin de lo que no sale con la vista de depuracion */
@@ -2424,7 +2436,7 @@ void Hud::dibujaPanel(int vw, int vh) {
         /* (v1.16) al estilo de vkDaedalus, una casilla a la izquierda del rotulo en vez del interruptor */
         /* (v1.16) `centrado`: la casilla y su rotulo, juntos en medio de la fila */
         const float izqI = it.centrado ? std::floor(sitio[i].x + (sitio[i].w - 30.0f - textWidth(it.rotulo, 15.0f)) * 0.5f) : izq;
-        const float izqT = casilla ? izqI + 30.0f : izqI;
+        const float izqT = casilla ? izqI + 30.0f : (it.plegable ? izqI + 24.0f : izqI);
         float derTexto = casilla ? der : der - 46.0f - 16.0f;
         if (!it.pastilla.empty()) {
           const float wp = textWidth(it.pastilla, 11.5f) + 20.0f;
@@ -2438,6 +2450,14 @@ void Hud::dibujaPanel(int vw, int vh) {
             text(it.pastilla, pa.x + pa.w * 0.5f, pa.y + 4.5f, 11.5f, ink[0], ink[1], ink[2], 0.80f, true);
           }
           derTexto = pa.x - 12.0f;
+        }
+        /* (v1.18) plegable: la flechita delante del rotulo; la flechita y el rotulo pliegan (el sub 1), la pastilla enciende */
+        if (it.plegable) {
+          const Rect zona{izqI - 4.0f, y, derTexto - izqI + 4.0f, h};
+          z.subs.push_back(zona);
+          const bool hz = dentro && zona.inside(mx_, my_);
+          icono({izqI, yr + 2.0f, 14.0f, 14.0f}, it.desplegada ? icoBajar_ : icoDerecha_, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f,
+                hz ? 1.0f : 0.80f);
         }
         textoCabe(it.rotulo, izqT, yr, 15.0f, derTexto - izqT, ink[0], ink[1], ink[2], ap);
         if (!it.nota.empty()) textoCabe(it.nota, izqT, y + 34.0f, 11.5f, derTexto - izqT, dim[0], dim[1], dim[2], 0.85f * (it.apagado ? 0.8f : 1.0f));
@@ -2996,6 +3016,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (st_.marco && panelVolver_.inside(mx, my)) return HitPanelVolver;   /* (v1.16) */
+  if (st_.marco && panelBotonTitulo_.inside(mx, my)) return HitPanelBotonTitulo;   /* (v1.18) */
   if (panelFijar_.inside(mx, my)) return HitPanelFijar;
   if (panelEsquina_.inside(mx, my)) return HitPanelRedimensionar;
   if (panelLogo_.inside(mx, my)) {   /* el logo: la primera pestana */
@@ -3029,6 +3050,11 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     if (item) *item = (int)i;
     switch (it.tipo) {
       case ItemPanel::Interruptor:   /* en gris no se enciende (si ya estaba puesto, si se puede apagar) */
+        /* (v1.18) la flechita y el rotulo de uno plegable: pliegan, aunque este en gris */
+        if (it.plegable && !z.subs.empty() && z.subs[0].inside(mx, my)) {
+          if (sub) *sub = 1;
+          return HitPanelItem;
+        }
         return it.apagado && !it.valor && !it.descargable ? HitPanel : HitPanelItem;
       case ItemPanel::Seccion:
         return it.plegable ? HitPanelItem : HitPanel;

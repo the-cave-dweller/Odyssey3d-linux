@@ -91,6 +91,15 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   «Como todos». Sin probar: un juego de verdad con la pestaña abierta encima.
 - `odysseyvk efectos [lista|describir|compilar|ajustes]` y `odysseyvk ctl efectos ENTRADA.png SALIDA.png [--prof P.png]`.
   `install.sh` pide `spirv-headers`.
+- Despues (Rodolfo, con una foto de la lista: «que el dropdown este a la izquierda de cada nombre» y «junto al nombre del
+  menu efectos pon un boton llamado vista previa, que esto haga algo parecido a la vista de depuracion, desaparezca todo y
+  mueva a un lado la lista para probar cosas»):
+  - **Un renglon por efecto**: la flechita y el nombre a la izquierda (pliegan y despliegan sus ajustes) y la pastilla a la
+    derecha; antes salia el nombre dos veces, en una cabecera y en el renglon de la pastilla.
+  - **Vista previa**, un boton junto al nombre de la pestaña: como la vista de depuracion, sin velo, sin teselas ni tarjeta,
+    y la lista de efectos en una columna a la izquierda con «Salir» arriba; el juego (y el 3D) se ven al lado mientras se
+    mueven los deslizadores.
+  - Los efectos siguen solo con el 3D (Rodolfo, tras pedirlos sin el 3D: «no, keep it dependent»).
 
 ## Teclas de juego, la generación de cada juego en Integraciones y Neural Forge fuera tras un fallo (v1.18)
 

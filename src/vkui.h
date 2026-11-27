@@ -96,6 +96,9 @@ public:
        interruptor de pastilla a la derecha en vez de la casilla; `talCual`, una Seccion con su rotulo como viene (CRT, no Crt) */
     bool pildora = false;
     bool talCual = false;
+    /* (v1.18) un Interruptor `plegable`: la flechita a la izquierda del rotulo (Rodolfo: «que el dropdown este a la
+       izquierda de cada nombre»); `desplegada` = abierta. Picar la flechita o el rotulo es el sub 1 */
+    bool desplegada = false;
   };
 
   struct State {
@@ -153,6 +156,10 @@ public:
     /* (v1.16) las pestanas que se ven pero no se pueden abrir (Integraciones dentro de un juego): en gris */
     std::vector<bool> pestanaGris;
     std::vector<int> ordenPestanas;   /* (v1.18) en que orden se ven (vacio: el de sus numeros) */
+    /* (v1.18) un boton junto al nombre de la tarjeta (vacio = ninguno): «Vista previa» en Efectos. Y la vista previa: como
+       la de depuracion, sin velo ni teselas y la lista en una columna a la izquierda, con el juego a la vista */
+    std::string botonTitulo;
+    bool vistaPrevia = false;
     std::vector<std::string> pestanasNota;
     struct Tesela {
       std::string id, titulo, valor;
@@ -347,7 +354,8 @@ public:
     HitFgCuadro,
     HitFgFondo,
     HitFgOpcion0,
-    HitFgOpcionFin = HitFgOpcion0 + 47
+    HitFgOpcionFin = HitFgOpcion0 + 47,
+    HitPanelBotonTitulo   /* (v1.18) el boton junto al nombre de la tarjeta (State::botonTitulo) */
   };
 
   /* ---- atlas (se construye una vez en CPU y se sube como R8) ---- */
@@ -605,6 +613,7 @@ private:
   std::vector<Rect> panelPestanas_;
   std::vector<Rect> panelTeselas_;   /* (v1.16) las teselas chicas, en el orden de State::teselas */
   Rect panelVolver_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) la flecha de volver a la pastilla */
+  Rect panelBotonTitulo_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) el boton junto al nombre de la tarjeta */
   std::vector<ZonaItem> zonas_;
   float contenidoAlto_ = 0.0f;
 };
