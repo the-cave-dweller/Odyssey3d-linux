@@ -3,6 +3,20 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## La ayuda de la pastilla debajo del aviso, y su rincón para hacerla volver, una franja fina (v1.16)
+
+- Rodolfo, con una foto del renglón de las teclas montado sobre «vídeo normal»: «correct this overlap, also, make
+  the space for showing the hud with the mouse much lower».
+- **El encime**: el aviso del momento (el que sale al picar un botón del tipo de vídeo) y la ayuda que sale al pasar
+  el ratón por la pastilla colgaban los dos justo debajo de ella. Con un aviso a la vista, la ayuda (las teclas, o
+  la de Neural | Rendimiento) va debajo de él.
+- **El rincón**: con la pastilla oculta, el hueco que la hace volver al pasar el ratón era de 170 de ancho y todo
+  el alto de la pastilla (56; 112 píxeles en el 4K), y saltaba al pasar por la esquina. Ahora es una franja de 6 de
+  alto (12 píxeles) pegada a la orilla de arriba, del mismo ancho: el puntero se para en la orilla, así que se
+  alcanza igual.
+- **Probado**: pintado con `ctl hud`, con «vídeo normal» puesto y el ratón sobre la pastilla. La franja, sin
+  probar en una sesión 3D de verdad.
+
 ## Las redes de profundidad con su casilla (FP16 y FP32), la carpeta `models` y la Versión sin flecha arriba (v1.16)
 
 - Rodolfo: «ofrece descargar la red FP32 tambien, sugiere por defecto la fp16, activalas con un toggle, en gris la no

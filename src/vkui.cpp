@@ -1281,11 +1281,14 @@ void Hud::begin(int w, int h, float altoLogico) {
     const float tamTeclas = std::min(10.5f, 10.5f * cabe / std::max(1.0f, textWidth(teclas, 10.5f)));
     if (!compacta) text(teclas, x0 + aire, y0 + 58.0f, tamTeclas, dim[0], dim[1], dim[2], 0.72f);
     /* (v1.16) en la pastilla de 56 las teclas salen al pasar el raton por ella (sin un menu abierto) */
+    /* (v1.16) con el aviso del momento colgado debajo de la pastilla («vídeo normal» al picar su boton), la ayuda va
+       debajo de el y no encima (Rodolfo, con una foto de las dos montadas: «correct this overlap») */
+    const float bajoAviso = !info_.empty() && st_.overlayOn ? 30.0f : 0.0f;
     if (compacta && pillPanel_.inside(mx_, my_) && !st_.menuNormal && !st_.menuRendimiento &&
         !(pillModo_.w > 0.0f && pillModo_.inside(mx_, my_))) {
       const std::vector<std::string> lineas = {teclas};
       const float wT = textWidth(teclas, 12.5f) + 24.0f;
-      cajaAyuda(lineas, std::max(8.0f, x0 + pw - 8.0f - wT), y0 + ph + 8.0f, 12.5f);
+      cajaAyuda(lineas, std::max(8.0f, x0 + pw - 8.0f - wT), y0 + ph + 8.0f + bajoAviso, 12.5f);
     }
     /* (v1.12) la ayuda del interruptor Neural | Rendimiento de la pastilla, como la del panel */
     if (pillModo_.w > 0.0f && pillModo_.inside(mx_, my_) && !st_.menuNormal && !st_.menuRendimiento) {
@@ -1293,7 +1296,7 @@ void Hud::begin(int w, int h, float altoLogico) {
           idioma::tr(st_.rendimiento ? "La profundidad sale de la propia imagen en el procesador (~9 ms por mapa), sin tocar la tarjeta: más basta, pero más estable. La pastilla lleva un rayo con su menú (los preajustes y los ajustes finos), y la frecuencia variable queda como en el escritorio."
                                      : "La red Depth Anything: la forma de verdad de cada objeto. Ocupa la tarjeta: ~1,1 GB y 14-18 ms por mapa."),
           12.5f, 420.0f);
-      cajaAyuda(lineas, std::min(pillModo_.x, (float)vw - 24.0f - 440.0f), pillPanel_.y + pillPanel_.h + 8.0f, 12.5f);
+      cajaAyuda(lineas, std::min(pillModo_.x, (float)vw - 24.0f - 440.0f), pillPanel_.y + pillPanel_.h + 8.0f + bajoAviso, 12.5f);
     }
 
     /* ---- el menu del rayo (rama experimental) ----
@@ -2756,7 +2759,10 @@ bool Hud::huecoDeLaPastilla(float *x, float *y, float *w, float *h) const {
   if (x) *x = der - ancho;
   if (y) *y = pillPanel_.y * sc_;
   if (w) *w = ancho;
-  if (h) *h = pillPanel_.h * sc_;
+  /* (v1.16) una franja fina pegada a la orilla de arriba, no el alto entero de la pastilla (Rodolfo: «make the space
+     for showing the hud with the mouse much lower»): el puntero se para en la orilla, asi que sigue siendo facil de
+     alcanzar, y ya no salta al pasar por la esquina */
+  if (h) *h = 6.0f * sc_;
   return true;
 }
 
