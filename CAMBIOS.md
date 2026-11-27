@@ -92,6 +92,18 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   subiría ningún FPS (Raji iba limitado por la 4090, no por la CPU), así que va la primera opción: la prueba de lo que
   corre. Si algún día el mapa de DLSS se hace en cada cuadro del juego (a 60 por segundo serían ~80 % de un núcleo),
   eso cambia.
+- **Probado** en el compositor aparte (gamescope sin salida, el visor en la 4090 como en casa, una casa y una carpeta
+  de estado de mentira), al acabar la partida de Raji:
+
+  | Prueba | Lo que salió |
+  |---|---|
+  | `red = auto` | la red a la 5080 sin medir («la secundaria; la RTX 4090 dibuja el 3D») y su `[prueba]`: 61 fps, 6 mapas/s, red 5 ms |
+  | las dos medidas (`ODYSSEYVK_TARJETA_MEDIR=todas`, A B A) | 4090: red 6,7 ms y 0,3 refrescos perdidos/s; 5080: red 5,0 ms y 0; gana la 5080 («lo que tarda la red»); pasar la red de una a otra, 145 a 325 ms; guardado en `tarjeta_red` |
+  | otra vez, con lo guardado | arranca en la 5080 («la que ganó al medir esta capa») y solo la prueba de lo que corre |
+  | DLSS de mentira, Calidad y después Equilibrado | una prueba por preset: 2564x1444 (mapa de 9,0 ms en la CPU) y 2228x1256 (8,0 ms); al irse, la de la red |
+  | a mano (`red = 1`) | ni regla ni medida de tarjetas; el estado dice `tarjeta = NVIDIA · RTX 5080`, `tarjeta_por = a mano` y la prueba |
+
+  El UUID de Vulkan y el de CUDA de cada tarjeta, mirados con vulkaninfo y nvidia-smi: los mismos.
 
 ## La profundidad de DLSS: el interruptor vale al momento, y el modo Rendimiento sin ella (v1.18)
 
