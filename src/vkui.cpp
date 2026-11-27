@@ -946,6 +946,41 @@ void Hud::toggleOverlay() { st_.overlayOn = !st_.overlayOn; }
 void Hud::nudgeDepth(int d) { st_.depth = std::max(0, std::min(100, st_.depth + d)); }
 void Hud::nudgePopout(int d) { st_.popout = std::max(-50, std::min(50, st_.popout + d)); }
 
+/* (v1.13) el cuadrito de los FPS del juego, con su orilla derecha en `xDer`. (v1.17) Tambien con la pastilla oculta,
+   en la esquina de arriba a la derecha y pegado a las dos orillas (`orilla`), hasta que se apague en los ajustes
+   (Rodolfo: «no quiero que se esconda, sino que se quede al frente y se mueva a la orilla de la pantalla») */
+void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, const float accent[3], const float ink[4],
+                          const float dim[4]) {
+  const float y0 = 0.0f;
+    const bool dlss = st_.fpsModo == 1;
+    const int nFilas = dlss ? 2 : 1;
+    char nj[16], nc[16];
+    std::snprintf(nj, sizeof nj, "%d", (int)std::lround(st_.fpsJuego));
+    std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
+    const char *rJ = idioma::tr("Juego"), *rC = idioma::tr("Capa");
+    const std::string titulo = dlss ? std::string("DLSS") : std::string(idioma::tr("Modelo de serie"));
+    const float tamR = 12.0f, tamN = 14.0f, tamF = 10.5f, borde = 14.0f;
+    const float wRot = dlss ? std::max(textWidth(rJ, tamR), textWidth(rC, tamR)) : textWidth(rJ, tamR);
+    const float wNum = textWidth("000", tamN), wFps = textWidth("fps", tamF);
+    const float bw = std::max(borde + wRot + 14.0f + wNum + 4.0f + wFps + borde, borde + textWidth(titulo, 10.0f) + borde);
+    const float bx = xDer - bw;
+    if (bx >= 8.0f) {
+      /* (v1.16) del mismo alto y color que la pastilla, pegado arriba */
+      mask9({bx, y0 - 8.0f, bw + (orilla ? 8.0f : 0.0f), ph + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.94f);
+      text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
+      const float colFps = bx + bw - borde - wFps;
+      float filas[2] = {y0 + (compacta ? 20.0f : 28.0f), y0 + (compacta ? 36.0f : 50.0f)};
+      if (!dlss) filas[0] = y0 + (compacta ? 27.0f : 39.0f);
+      const char *rot[2] = {rJ, rC};
+      const char *num[2] = {nj, nc};
+      for (int k = 0; k < nFilas; k++) {
+        text(rot[k], bx + borde, filas[k] + 1.5f, tamR, dim[0], dim[1], dim[2], dim[3]);
+        text(num[k], colFps - 4.0f - textWidth(num[k], tamN), filas[k], tamN, ink[0], ink[1], ink[2], ink[3]);
+        text("fps", colFps, filas[k] + 3.0f, tamF, dim[0], dim[1], dim[2], dim[3]);
+      }
+    }
+}
+
 void Hud::begin(int w, int h, float altoLogico) {
   v_.clear();
   imagenes_.clear();
@@ -961,7 +996,7 @@ void Hud::begin(int w, int h, float altoLogico) {
         : relacion > 0.25f ? std::max(1.0f, std::min(2.0f, relacion))
                            : std::max(1.0f, std::min(2.0f, (float)h / 1080.0f));
   const int vw = (int)std::lround((float)w / sc_), vh = (int)std::lround((float)h / sc_);
-  if (!st_.overlayOn && !st_.ask && !st_.panel) return;
+  if (!st_.overlayOn && !st_.ask && !st_.panel && !cuadroFps()) return;
   pal_ = paleta();   /* (v1.16) la del modo, para todo lo de este cuadro */
 
   /* v0.79: el acento es el morado del paisaje de la tarjeta (antes verde) y el fondo de la pastilla
@@ -991,6 +1026,11 @@ void Hud::begin(int w, int h, float altoLogico) {
   btnRayo_ = menuRend_ = btnFoco_ = btnAM_[0] = btnAM_[1] = {-10.0f, -10.0f, 0.0f, 0.0f};
   for (int k = 0; k < 4; k++) rendTrack_[k] = rendFila_[k] = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
+  /* (v1.17) la pastilla oculta: el cuadrito de los FPS se queda, en la esquina */
+  if (!st_.overlayOn && !st_.panel && cuadroFps()) {
+    fuente_ = hayBarlow_ ? 1 : 0;
+    dibujaCuadroFps((float)vw, st_.legado ? 76.0f : 56.0f, !st_.legado, true, accent, ink, dim);
+  }
   if (st_.overlayOn) {
     const bool leg = st_.legado;
     fuente_ = hayBarlow_ ? 1 : 0;   /* (v1.16) la letra del resto de la aplicacion */
@@ -1077,35 +1117,7 @@ void Hud::begin(int w, int h, float altoLogico) {
     /* (v1.13) sin DLSS, con la red sobre un juego, el mismo cuadrito dice «Modelo de serie» y solo los FPS del juego
        (los cuadros nuevos que llegan; Rodolfo: «en los fps que no son de dlss solo deja los del juego»), en un
        renglon a media altura */
-    if (st_.fpsCuadro && st_.fpsModo != 0) {
-      const bool dlss = st_.fpsModo == 1;
-      const int nFilas = dlss ? 2 : 1;
-      char nj[16], nc[16];
-      std::snprintf(nj, sizeof nj, "%d", (int)std::lround(st_.fpsJuego));
-      std::snprintf(nc, sizeof nc, "%d", (int)std::lround(st_.fpsCapa));
-      const char *rJ = idioma::tr("Juego"), *rC = idioma::tr("Capa");
-      const std::string titulo = dlss ? std::string("DLSS") : std::string(idioma::tr("Modelo de serie"));
-      const float tamR = 12.0f, tamN = 14.0f, tamF = 10.5f, borde = 14.0f;
-      const float wRot = dlss ? std::max(textWidth(rJ, tamR), textWidth(rC, tamR)) : textWidth(rJ, tamR);
-      const float wNum = textWidth("000", tamN), wFps = textWidth("fps", tamF);
-      const float bw = std::max(borde + wRot + 14.0f + wNum + 4.0f + wFps + borde, borde + textWidth(titulo, 10.0f) + borde);
-      const float bx = x0 - 10.0f - bw;
-      if (bx >= 8.0f) {
-        /* (v1.16) del mismo alto y color que la pastilla, pegado arriba */
-        mask9({bx, y0 - 8.0f, bw, ph + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.94f);
-        text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
-        const float colFps = bx + bw - borde - wFps;
-        float filas[2] = {y0 + (compacta ? 20.0f : 28.0f), y0 + (compacta ? 36.0f : 50.0f)};
-        if (!dlss) filas[0] = y0 + (compacta ? 27.0f : 39.0f);
-        const char *rot[2] = {rJ, rC};
-        const char *num[2] = {nj, nc};
-        for (int k = 0; k < nFilas; k++) {
-          text(rot[k], bx + borde, filas[k] + 1.5f, tamR, dim[0], dim[1], dim[2], dim[3]);
-          text(num[k], colFps - 4.0f - textWidth(num[k], tamN), filas[k], tamN, ink[0], ink[1], ink[2], ink[3]);
-          text("fps", colFps, filas[k] + 3.0f, tamF, dim[0], dim[1], dim[2], dim[3]);
-        }
-      }
-    }
+    if (cuadroFps()) dibujaCuadroFps(x0 - 10.0f, ph, compacta, false, accent, ink, dim);
 
     /* ---- el encendido del 3D (v1.12) ----
        Un boton redondo (antes el interruptor ON/OFF, «en vez de on y off un boton redondo de apagado»,

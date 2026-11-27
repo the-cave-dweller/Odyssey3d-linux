@@ -332,7 +332,8 @@ The layer also finds the image the game draws its HUD into (in Cyberpunk, a 4K l
 transparent every frame) and hands its alpha to the viewer: the minimap, ammo, mission text and menus
 stay flat on the screen instead of taking the depth of whatever is behind them. If a game draws its HUD
 some other way nothing changes. Next to the pill a small box shows the game's FPS (frames it presents)
-and the layer's (depths it sends; with DLSS frame generation the game's are double). Settings → Games
+and the layer's (depths it sends; with DLSS frame generation the game's are double); when the pill hides, the box
+stays in the top-right corner. Settings → Games
 with DLSS turns each of the three things off: the DLSS depth, the flat HUD and the FPS box.
 Settings → Smoothness → *Layer FPS cap* limits how many depths and HUD masks per second the layer copies
 inside the game (the viewer makes 6 depth maps a second by default), so the game spends less on copies

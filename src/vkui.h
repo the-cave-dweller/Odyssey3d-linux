@@ -344,6 +344,8 @@ public:
 
   /* Área útil de la ventana: lo que hay debajo de la pastilla sigue dibujando vídeo. */
   bool overlayVisible() const { return st_.overlayOn; }
+  /* (v1.17) el cuadrito de los FPS del juego a la vista (sale aunque la pastilla este oculta) */
+  bool cuadroFps() const { return st_.fpsCuadro && st_.fpsModo != 0; }
 
   /* Cuadro ocupado por el aviso / la pastilla en la disposicion actual, en pixeles
      reales de la ventana (los mismos que llevan los vertices). Lo usa la superposicion
@@ -531,6 +533,8 @@ public:
   float panelAnchoVisto() const { return panelCaja_.w; }
   float panelAltoVisto() const { return panelCaja_.h; }
 private:
+  void dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, const float accent[3], const float ink[4],
+                       const float dim[4]);
   std::vector<Rect> panelIdiomaOpc_;   /* las filas de la lista de idiomas, si esta abierta */
   std::vector<Rect> panelDespOpc_;   /* (v1.16) las opciones del desplegable abierto */
   Rect panelDespCaja_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.16) y su caja entera */

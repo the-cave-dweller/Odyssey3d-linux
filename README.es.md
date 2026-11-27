@@ -344,7 +344,8 @@ limpia a transparente en cada cuadro) y le pasa su alfa al visor: el minimapa, l
 de misión y los menús se quedan planos en la pantalla en vez de tomar la profundidad de lo que tienen
 detrás. Si un juego dibuja su HUD de otra forma, no cambia nada. Junto a la pastilla, un cuadro pequeño
 dice los FPS del juego (los cuadros que presenta) y los de la capa (las profundidades que manda; con la
-generación de cuadros de DLSS, los del juego son el doble). En Ajustes → Juegos con DLSS se apaga cada
+generación de cuadros de DLSS, los del juego son el doble); cuando la pastilla se oculta, el cuadro se queda en la
+esquina de arriba a la derecha. En Ajustes → Juegos con DLSS se apaga cada
 una de las tres cosas: la profundidad de DLSS, el HUD plano y el cuadro de FPS. Ajustes →
 Fluidez → *Tope de FPS de la capa* limita cuántas profundidades y máscaras del HUD copia la capa por segundo
 dentro del juego (el visor hace 6 mapas de profundidad por segundo de fábrica): el juego gasta menos en

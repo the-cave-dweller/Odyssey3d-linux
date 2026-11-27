@@ -3136,6 +3136,9 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().ask = !(std::getenv("ODYSSEYVK_HUD_ASK") && std::getenv("ODYSSEYVK_HUD_ASK")[0] == '0');
   /* (v1.16) ODYSSEYVK_HUD_PASTILLA=0: sin la pastilla (como en el servicio, que solo pone la tarjeta) */
   if (const char *pa = std::getenv("ODYSSEYVK_HUD_PASTILLA")) hud.state().overlayOn = pa[0] != '0';
+  /* (v1.17) ODYSSEYVK_HUD_FPS=1|2: el cuadrito de los FPS (1 = con DLSS, 2 = con la red sobre un juego) */
+  if (const char *fp = std::getenv("ODYSSEYVK_HUD_FPS"))
+    hud.state().fpsModo = std::atoi(fp), hud.state().fpsJuego = 118.0f, hud.state().fpsCapa = 59.0f;
   hud.state().controlOjo = true;
   hud.state().rastreoVivo = true;
   hud.state().hud = 3;

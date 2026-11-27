@@ -4411,7 +4411,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     /* la pastilla cambio de sitio o se oculto: la caja que deja pasar el raton se actualiza aqui */
     /* quitandole el cursor a un juego, el visor se queda con todo el raton */
     aplicarRegionEntrada(win, &ui.region, &ui, !opts.noPassthrough && !ui.robando);
-    wv.setHud(ui.hud.overlayVisible() ? ui.hud.vertices() : std::vector<HudVertex>{});
+    /* (v1.17) con la pastilla oculta tambien, si esta el cuadrito de los FPS (se queda en la esquina) */
+    wv.setHud(ui.hud.overlayVisible() || ui.hud.cuadroFps() ? ui.hud.vertices() : std::vector<HudVertex>{});
     wv.setHudState(rig.hud());
 
     /* ---- la pose del ojo que ve la trama --------------------------------------

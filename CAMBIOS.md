@@ -27,6 +27,18 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   capturas, otra vez (`tools/capturas-readme.py`, con lo de en medio de 1160 de ancho), y dos nuevas: `networks.png`
   (las dos listas) y `debug-view.png` (la vista de depuración sobre la de la nave).
 
+## El cuadrito de los FPS se queda aunque se oculte la pastilla (v1.17)
+
+- Rodolfo: «cuando está prendido el counter de fps y se esconde el hub de 3d, el counter también se esconde, no quiero
+  que lo haga, sino que se quede al frente y se mueva a la orilla de la pantalla salvo que lo apague». Se iba con la
+  pastilla por dos lados: se pintaba dentro de ella (`Hud::begin` no pintaba nada con la pastilla oculta) y el visor
+  no mandaba la interfaz a la pantalla con la pastilla oculta.
+- Ahora es su propio trazo (`Hud::dibujaCuadroFps`): con la pastilla a la vista, a su izquierda como antes; oculta, en
+  la esquina de arriba a la derecha, pegado a las dos orillas. Solo se va si se apaga (la tesela «Cuadrito de FPS» o
+  Ajustes → Juegos con DLSS). Sigue sin tocarse con el ratón. `ctl hud` tiene `ODYSSEYVK_HUD_FPS=1|2` para pintarlo.
+- Probado con `ctl hud` en los dos estados (con la pastilla, 684 vértices; sin ella, 198: el cuadrito solo). Sin
+  probar aún en un juego de verdad.
+
 ## Sin la flecha de volver a la pastilla, la nota de la carpeta en cada lista, y lo que se recargaba (v1.17)
 
 - Rodolfo: «quita la flecha y mira porque presionar el boton luego hace que el pill recargue la imagen». La flecha (a
