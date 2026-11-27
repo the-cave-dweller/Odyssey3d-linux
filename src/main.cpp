@@ -6450,11 +6450,16 @@ int main(int argc, char **argv) {
         if (!prefs::redLigeraPresente())
           std::printf("  odysseyvk ctl red descargar   deja ahi la ligera (fp16, 50 MB)\n");
         if (!prefs::redFp32Presente())
-          std::printf("  odysseyvk ctl red descargar fp32   y la de precision completa (99 MB)\n");
+          std::printf("  odysseyvk ctl red descargar fp32   y la de precision completa (99 MB, la que va por la CPU)\n");
         return hay ? 0 : 1;
       }
-      /* (v1.16) `ctl red descargar fp32`: la de precision completa (99 MB) */
-      const bool fp32 = argc > 4 && strLower(argv[4]) == "fp32";
+      /* (v1.16) `ctl red descargar fp32`: la de precision completa (99 MB); otra cosa, el uso (de la PR #2 de Noa3) */
+      const std::string precision = argc > 4 ? strLower(argv[4]) : std::string("fp16");
+      if (argc > 5 || (precision != "fp16" && precision != "fp32")) {
+        std::fprintf(stderr, "uso: odysseyvk ctl red descargar [fp16|fp32]\n");
+        return 2;
+      }
+      const bool fp32 = precision == "fp32";
       if (fp32 ? prefs::redFp32Presente() : prefs::redLigeraPresente()) {
         std::printf("ya esta: %s\n", (fp32 ? rutaRedVieja() : rutaRedLigera()).c_str());
         return 0;

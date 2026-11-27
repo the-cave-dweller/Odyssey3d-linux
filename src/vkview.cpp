@@ -2679,7 +2679,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             /* bajo la ligera (fp16) con la de siempre puesta: se cambia a ella en marcha (rama experimental) */
             if (ui.rutaRed[2] == rutaRedVieja() && rutaRedNuestra() == rutaRedLigera()) {
               ui.rutaRed[2] = rutaRedLigera();
-              if (modeloActivo == rutaRedVieja() && convActivo) ui.redRutaPedida = rutaRedLigera();
+              /* (v1.16, de la PR #2 de Noa3) por la CPU no: alli se queda la FP32 (DepthNet::init la volveria a poner) */
+              if (modeloActivo == rutaRedVieja() && convActivo && red.device() != "CPU") ui.redRutaPedida = rutaRedLigera();
               else if (modeloActivo == rutaRedVieja()) modeloActivo = rutaRedLigera();
             }
             if (modeloActivo.empty() || !fileExists(modeloActivo)) modeloActivo = ui.rutaRed[2];

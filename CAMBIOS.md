@@ -3,6 +3,18 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Lo que faltaba de la PR #2: `ctl red descargar` con algo raro, y la FP16 por la CPU (v1.16)
+
+- Rodolfo: «nothing else was missing?». Repasada la PR #2 entera contra lo pasado a mano, quedaban dos cosas chicas:
+  - `odysseyvk ctl red descargar fp64` (o con algo de más) bajaba la FP16 sin decir nada; ahora da el uso,
+    `[fp16|fp32]`, como en la PR;
+  - con la red en la CPU, al llegar la FP16 (la orden `cargar_red`) el visor se cambiaba a ella y `DepthNet::init` la
+    volvía a cambiar por la FP32: una recarga de la misma red para nada. Por la CPU ya no se cambia.
+- Y una de antes que la PR mencionaba: sin ONNX Runtime el programa no compila (en `depth.cpp` y, sobre todo, en
+  `vkview.cpp`, variables que solo existen con la red y se usan fuera). El README instala `onnxruntime-cuda`, así que
+  con sus pasos no se nota; queda aparte.
+- No hay más PR ni issues en el repositorio: las tres de Noa3, cerradas.
+
 ## La primera vez de cada aplicación de vídeo, una ventanita pregunta 3D o 2D (v1.16)
 
 - Rodolfo, sobre la PR #2 de Noa3 (lo de no pasar a 3D lo no apuntado): «he is right, it must be a popup first so that
