@@ -172,9 +172,6 @@ struct Overlay::Impl {
   bool atlasListo = false;
   bool tarjetaPuesta = false;
   int golpeVisto = Hud::HitNone;
-  /* el panel de ajustes: el deslizador que se esta arrastrando, lo que habia bajo el raton la
-     ultima vez (para no repintar de mas) y los golpes que esperan a quien lo ensena */
-  int arrastrando = -1;
   /* mover el panel: se agarra por la cabecera y la capa sigue al raton cambiando sus margenes */
   bool moviendo = false, panelMontado = false;
   /* cambiar el tamano del panel con su esquina (rama experimental): el tamano del que se partio, en
@@ -1004,7 +1001,7 @@ struct Overlay::Impl {
     s->ratonDentro = false;
     s->ratonX = s->ratonY = -1.0;
     s->hud.setMouse(-1.0f, -1.0f);
-    if (s->tarjetaPuesta && s->hud.state().panel && s->arrastrando < 0) {
+    if (s->tarjetaPuesta && s->hud.state().panel && s->hud.state().arrastrando < 0) {
       s->firmaVista = -1;
       s->pintar();   /* se apaga el realce de lo que habia bajo el raton */
       return;
@@ -1054,6 +1051,7 @@ struct Overlay::Impl {
       wl_surface_commit(surf);
       return;
     }
+    const int arrastrando = hud.state().arrastrando;
     if (arrastrando >= 0) {
       const float f = hud.fracDeslizador(arrastrando, (float)ratonX);
       if ((size_t)arrastrando < hud.state().items.size()) hud.state().items[(size_t)arrastrando].frac = f;
@@ -1071,19 +1069,21 @@ struct Overlay::Impl {
     }
   }
   void panelBoton(bool apretado) {
+    int &arrastrando = hud.state().arrastrando;
     if (!apretado) {
       if (moviendo || redimensionando) guardaVentana();
       moviendo = redimensionando = false;
       if (arrastrando >= 0) {
-        golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.fracDeslizador(arrastrando, (float)ratonX), true});
+        golpes.push_back({(int)Hud::HitPanelItem, arrastrando, 0, hud.state().items[(size_t)arrastrando].frac, true});
         arrastrando = -1;
+        sucio = true;
       }
       return;
     }
     int item = -1, sub = 0;
     float fr = 0.0f;
     const Hud::Hit h = hud.hitDetalle((float)ratonX, (float)ratonY, &item, &sub, &fr);
-    if (h == Hud::HitPanelItem && item >= 0 && (size_t)item < hud.state().items.size() &&
+    if (h == Hud::HitPanelItem && sub == 0 && item >= 0 && (size_t)item < hud.state().items.size() &&
         hud.state().items[(size_t)item].tipo == Hud::ItemPanel::Deslizador) {
       arrastrando = item;
       hud.state().items[(size_t)item].frac = fr;

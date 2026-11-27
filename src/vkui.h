@@ -46,6 +46,8 @@ public:
     int elegido = 0;                 /* opciones */
     std::vector<std::string> opciones;
     float frac = 0.0f;               /* deslizador, 0..1 */
+    std::string (*textoFraccion)(float) = nullptr;  /* valor que se ve mientras se arrastra */
+    float fracDefecto = -1.0f;       /* >= 0: boton para volver a esa fraccion */
     bool quitar = false;             /* fila con aspa para quitarla */
     bool peligro = false;            /* boton en rojo suave: desinstalar (v1.06) */
     /* una seccion que se pliega (rama experimental): la cabecera lleva una flechita y se pica entera;
@@ -100,6 +102,7 @@ public:
     int pestana = 0;
     std::vector<std::string> pestanas;
     std::vector<ItemPanel> items;
+    int arrastrando = -1;            /* fila del deslizador mientras se mantiene pulsado */
     float corrida = 0.0f;            /* cuanto se ha corrido la lista hacia arriba, en puntos del lienzo */
     std::string pie;                 /* la frase del pie: lo ultimo que se cambio */
     std::string version;             /* "OdysseyVK 0.84", abajo a la derecha */

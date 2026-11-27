@@ -152,6 +152,9 @@ std::string conDecimal(double v, int decimales) {
     if (c == ',') c = idioma::decimal();
   return s;
 }
+int anticipacionMs(float frac) {
+  return (int)std::lround(std::clamp(frac, 0.0f, 1.0f) * 60.0f);
+}
 }  // namespace
 
 const char *nombreModo(const std::string &m) {
@@ -737,9 +740,22 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
      «Ajustes». Con el nombre vacio las demas conservan su numero. */
   st.pestanas = {"", idioma::tr("Juegos"), "", idioma::tr("Ajustes")};   /* la de Experimental se fue en la 1.12 */
   st.sinRedPanel = v.expSinRed == "si" || v.expSinRed == "suelo" || v.expSinRed == "imagen";
+  /* La lista se rehace cada segundo. Conservar solo el deslizador pulsado, por id:
+     si aparecen filas de rendimiento por encima, tambien cambia su indice. */
+  std::string idArrastre;
+  float fracArrastre = 0.0f;
+  if (st.arrastrando >= 0 && (size_t)st.arrastrando < ids.size()) {
+    idArrastre = ids[(size_t)st.arrastrando];
+    fracArrastre = st.items[(size_t)st.arrastrando].frac;
+  }
+  st.arrastrando = -1;
   st.items.clear();
   ids.clear();
   auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    if (it.tipo == Hud::ItemPanel::Deslizador && !idArrastre.empty() && id == idArrastre) {
+      st.arrastrando = (int)st.items.size();
+      it.frac = fracArrastre;
+    }
     st.items.push_back(std::move(it));
     ids.push_back(id);
   };
@@ -815,7 +831,8 @@ void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, 
       a.tipo = Hud::ItemPanel::Deslizador, a.rotulo = idioma::tr("Anticipar la cabeza");
       a.ayuda = idioma::tr("La trama apunta a donde estarán los ojos dentro de estos milisegundos · 0 = apagado") + std::string(". ") + idioma::tr("Al mover la cabeza, la cámara y la trama llegan tarde unos milisegundos; con esto la trama se calcula para donde estarán los ojos, siguiendo su velocidad. Any2Odyssey usa 25 ms; de más, la trama se pasa al frenar.");
       a.frac = (float)v.expAnticipacion / 60.0f;
-      a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
+      a.textoFraccion = [](float f) { return std::to_string(anticipacionMs(f)) + " ms"; };
+      a.fracDefecto = 0.0f;
       pon(a, "exp_anticipacion");
     }
     Hud::ItemPanel s;
@@ -1062,6 +1079,13 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     }
     return true;
   }
+  if (id == "exp_anticipacion") {
+    if (!soltado) return false;
+    const int ms = anticipacionMs(frac);
+    if (!fija(id, std::to_string(ms))) return false;
+    if (aviso) *aviso = idioma::trf("anticipación {} ms · desde el siguiente vídeo", {std::to_string(ms)});
+    return true;
+  }
   const Valores v = leer();
   if (id == "modo") {
     static const char *kModo[] = {"ask", "conv", "sbs"};
@@ -1160,13 +1184,6 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
   if (id == "exp_tope_arrastre") {
     if (!fija("exp_tope_arrastre", v.expTope ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr("se aplica desde el siguiente vídeo");
-    return true;
-  }
-  if (id == "exp_anticipacion") {
-    if (!soltado) return false;
-    const int ms = (int)std::lround(std::max(0.0f, std::min(1.0f, frac)) * 60.0f);
-    if (!fija("exp_anticipacion", std::to_string(ms))) return false;
-    if (aviso) *aviso = idioma::trf("anticipación {} ms · desde el siguiente vídeo", {std::to_string(ms)});
     return true;
   }
   if (id == "idioma") {
