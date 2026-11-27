@@ -3,6 +3,29 @@
 Las copias de cada versión están en `../Versiones/` (guardadas con `tools/versionar.sh ETIQUETA`).
 Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son historia.
 
+## Versión 1.16: la interfaz al estilo de vkDaedalus, las redes con su casilla y la carpeta `models` (v1.16)
+
+- Rodolfo: «program says 1.15 is up to date». Lo estaba diciendo bien: `VERSION` seguía en 1.15 aquí y en GitHub,
+  aunque todo lo de la 1.16 ya estaba subido; con 1.16 el actualizador lo ofrece.
+- **Lo que trae** (cada cosa en su entrada, abajo):
+  - **La interfaz nueva**: el panel a pantalla completa como el menú de vkDaedalus (barra de título, una tesela grande
+    por pestaña y seis chicas a los lados, la tarjeta debajo), del mismo tamaño en el escritorio y sobre un juego, con
+    la flecha para volver a la pastilla; la paleta de cada modo (azul con la red, ámbar en Rendimiento); la pastilla
+    arriba a la derecha del alto de la barra, con los dos botones del tipo de vídeo, que se oculta sola y vuelve al
+    llevar el ratón a la orilla de arriba;
+  - **Dentro de un juego o con un vídeo**: Integraciones en gris; en Juegos solo el juego de ahora en color (con un
+    vídeo, Juegos también en gris); las aplicaciones de captura de pantalla no pasan al 3D;
+  - **Las redes de profundidad**: la FP16 (recomendada) y la FP32 de Hugging Face, y cualquier `.onnx` de la carpeta,
+    cada una con su casilla; la carpeta pasa de `modelos` a `models` para todos;
+  - **ODYSSEYVK=1 para todos** desde el pie de Juegos, con su recordatorio al pasar el ratón y las exclusiones de
+    cada juego;
+  - **Más rápido**: el panel en su propio ejecutable ligero (`odysseyvk-panel`), que se abre en milisegundos y se
+    cierra al momento; cada cuadro del panel en 4K, de ~72 ms a ~13;
+  - **MAKO y vkDaedalus** sin chocar con la capa de OdysseyVK; la Versión sin flecha arriba (lo hace su tesela).
+- **Las capturas del README**, otra vez (`tools/capturas-readme.py`): ahora se recorta lo de en medio del panel a
+  pantalla completa, y la carpeta de las redes lleva una FP16 de mentira (un archivo disperso de su tamaño). La nota
+  de la carpeta en la lista dice `~/.local/share/odysseyvk/models` (entera no cabía con una casa de ruta larga).
+
 ## La ayuda de la pastilla debajo del aviso, y su rincón para hacerla volver, una franja fina (v1.16)
 
 - Rodolfo, con una foto del renglón de las teclas montado sobre «vídeo normal»: «correct this overlap, also, make

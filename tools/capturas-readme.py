@@ -14,6 +14,7 @@ RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BIN = os.path.join(RAIZ, "build", "odysseyvk")
 FUENTE = "/usr/share/fonts/TTF/DejaVuSans.ttf"
 W, H = 3840, 2160   # el panel del Odyssey: todo sale al doble, nitido
+CORRIDA_ATAJOS = int(os.environ.get("CORRIDA_ATAJOS", "470"))   # (v1.16) la red va antes de los atajos
 
 def fondo(w, h):
     """un escritorio de mentira: degradado morado y azul"""
@@ -77,26 +78,27 @@ def interfaz(lengua, destino):
         im = pinta(casa, estado, lengua, "pastilla", ODYSSEYVK_HUD_RECORDAR=0, ODYSSEYVK_HUD_FOCO=1,
                    ODYSSEYVK_HUD_MENU_NORMAL=1)
         guarda(sobre(im, caja_alfa(im, (W // 2, 0, W, 1300))), os.path.join(destino, "pill.png"), 1000)
-        # el panel: primera vez (sin red), juegos, ajustes
-        centro = (W // 2 - 900, H // 2 - 700, W // 2 + 900, H // 2 + 700)
+        # el panel: primera vez (sin red), juegos, ajustes. (v1.16) A pantalla completa, con el velo en todo el lienzo:
+        # se recorta lo de en medio (las teselas y la tarjeta, 980 de ancho a escala 2), con la barra de arriba
+        contenido = (W // 2 - 1028, 136, W // 2 + 1028, 1860)
         im = pinta(casa, estado, lengua, "primera", ODYSSEYVK_HUD_PANEL=0)
-        guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "first-run.png"), 1400)
+        guarda(sobre(im, contenido, 0), os.path.join(destino, "first-run.png"), 1400)
         # (v1.12) de aqui en adelante, como con la red en su sitio: `modelo` apunta a un archivo vacio
         # del HOME aparte y el panel no pone el aviso de que falta (la carpeta real ni se mira)
-        red = os.path.join(tmp, "red.onnx")
-        open(red, "w").close()
-        with open(os.path.join(casa, ".config", "odysseyvk", "serve.conf"), "a") as f:
-            f.write("modelo = %s\n" % red)
+        # (v1.16) la FP16 en la carpeta: un archivo disperso de su tamano (no ocupa disco), asi sale marcada y descargada
+        modelos = os.path.join(casa, ".local", "share", "odysseyvk", "models")
+        os.makedirs(modelos, exist_ok=True)
+        with open(os.path.join(modelos, "depth_anything_v2_small_fp16.onnx"), "wb") as f:
+            f.truncate(49642442)
         im = pinta(casa, estado, lengua, "juegos", ODYSSEYVK_HUD_PANEL=1)
-        guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "games.png"), 1400)
+        guarda(sobre(im, contenido, 0), os.path.join(destino, "games.png"), 1400)
         # (v1.15) las integraciones de un juego (Cyberpunk, con lo suyo marcado con un punto), con el panel alto: sus
         # opciones de lanzamiento se leen, sin tocarlas, del localconfig.vdf de Steam por el enlace (nada se escribe)
-        im = pinta(casa, estado, lengua, "integraciones", ODYSSEYVK_HUD_PANEL=2, ODYSSEYVK_HUD_INTEG=1091500,
-                   ODYSSEYVK_HUD_TAMANO="820x1070")
-        guarda(sobre(im, caja_alfa(im, (W // 2 - 1000, 0, W // 2 + 1000, H))), os.path.join(destino, "integrations.png"), 1400)
+        im = pinta(casa, estado, lengua, "integraciones", ODYSSEYVK_HUD_PANEL=2, ODYSSEYVK_HUD_INTEG=1091500)
+        guarda(sobre(im, contenido, 0), os.path.join(destino, "integrations.png"), 1400)
         # (v1.12) la pestana Ajustes entera, con el panel alto: rendimiento, fluidez, cabeza y programa
-        im = pinta(casa, estado, lengua, "programa", ODYSSEYVK_HUD_PANEL=3, ODYSSEYVK_HUD_TAMANO="820x1070")
-        programa = sobre(im, caja_alfa(im, (W // 2 - 1000, 0, W // 2 + 1000, H)))
+        im = pinta(casa, estado, lengua, "programa", ODYSSEYVK_HUD_PANEL=3)
+        programa = sobre(im, contenido, 0)
         im = pinta(casa, estado, lengua, "act", ODYSSEYVK_HUD_ACTUALIZACION=siguiente)
         act = sobre(im, caja_alfa(im, (W // 2, H // 2, W, H)))
         hoja = fondo(programa.width + act.width, max(programa.height, act.height))
@@ -104,9 +106,9 @@ def interfaz(lengua, destino):
         hoja.paste(act, (programa.width, hoja.height - act.height))
         guarda(hoja, os.path.join(destino, "settings-program.png"), 1800)
         # (v1.12) sin language.png: el idioma es una fila mas de Ajustes, se ve en settings-program.png
-        im = pinta(casa, estado, lengua, "atajos", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_CORRIDA=255,
+        im = pinta(casa, estado, lengua, "atajos", ODYSSEYVK_HUD_PANEL=0, ODYSSEYVK_HUD_CORRIDA=CORRIDA_ATAJOS,
                    ODYSSEYVK_HUD_CAPTURA="prof+")
-        guarda(sobre(im, caja_alfa(im, centro)), os.path.join(destino, "shortcuts.png"), 1400)
+        guarda(sobre(im, contenido, 0), os.path.join(destino, "shortcuts.png"), 1400)
         im = pinta(casa, estado, lengua, "aviso", ODYSSEYVK_HUD_AVISO=1)
         guarda(sobre(im, caja_alfa(im, (W // 2, H // 2, W, H))), os.path.join(destino, "card.png"), 1100)
     finally:

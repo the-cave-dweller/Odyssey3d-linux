@@ -43,16 +43,19 @@ cámara (`04e8:20d7`) y el panel en 4K. Si no los ve, **desenchufa y vuelve a en
 del monitor** una vez (la regla udev se aplica al reconectar). Nunca hagas `udevadm trigger` sobre
 el monitor: reinicia su hub interno y la lente, el scaler y la cámara desaparecen hasta reconectar.
 
-La primera vez que el servicio arranca sin red de profundidad, el panel de ajustes se abre solo y
-ofrece bajarla (50 MB, Depth Anything V2 pequeña a media precisión, de
-[huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)).
-Desde la 1.12 esta versión fp16, más ligera, es la de fábrica: el mismo mapa con un 35 %
-menos de tiempo de red y 260 MB menos en la tarjeta; si ya tienes el archivo de 95 MB de antes, el
-panel ofrece la ligera con un botón.
-Al acabar la descarga el panel se cierra y la red se carga. Desde la terminal es:
+La primera vez que el servicio arranca sin red de profundidad, el panel de ajustes se abre solo en su pestaña 3D,
+que lista las redes con su casilla: Depth Anything V2 pequeña, de
+[huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small),
+en **FP16** (50 MB, la recomendada: el mismo mapa que la FP32 con un 35 % menos de tiempo de red y 260 MB menos en la
+tarjeta) o **FP32** (99 MB, a precisión completa). La que aún no está bajada sale en gris: al picarla se baja y queda
+puesta; las bajadas llevan una etiqueta azul, y la marcada es la que se usa. Cualquier otra red de profundidad
+`.onnx` que pongas en `~/.local/share/odysseyvk/models` sale en la misma lista (la carpeta se llamaba `modelos`
+hasta la 1.15; la 1.16 le cambia el nombre al arrancar). Al acabar la primera descarga el panel se cierra y la red se
+carga. Desde la terminal es:
 
 ```bash
-odysseyvk ctl red descargar
+odysseyvk ctl red descargar        # FP16
+odysseyvk ctl red descargar fp32   # FP32
 ```
 
 ![Primer arranque: el panel pide la red de profundidad](docs/img/es/first-run.png)
@@ -66,12 +69,13 @@ midió con tres vídeos 3D lado a lado y tres normales (18 de 18 ventanas de 3 s
 aplicaciones marcadas como 2D y los juegos siguen su camino. (Hasta la 1.11 una tarjeta en la esquina
 preguntaba qué vídeo era.)
 
-La pastilla de arriba a la derecha se queda mientras dura el 3D: un botón redondo de encendido (el 3D
-sí o no), el interruptor **Neural | Rendimiento** (la profundidad con la red o sacada de la imagen en
-el procesador, y se cambia ahí mismo, en marcha), el botón del relieve (**Auto** o **Manual**, ver
-abajo; su menú trae también Profundidad y Salida en Manual y los dos botones del tipo de vídeo para
-cambiarlo a mano) y el engranaje que abre el panel de ajustes. Sin conversor (un vídeo dividido tal
-cual, o sin red de profundidad) el botón del relieve es solo Manual.
+La pastilla de arriba a la derecha, del alto de la barra de título del panel, se queda mientras dura el 3D: un botón
+redondo de encendido (el 3D sí o no), el interruptor **Neural | Rendimiento** (la profundidad con la red o sacada de
+la imagen en el procesador, y se cambia ahí mismo, en marcha), el botón del relieve (**Auto** o **Manual**, ver abajo;
+en Manual su menú trae también Profundidad y Salida), los dos botones del tipo de vídeo (normal y dividido, para
+cambiarlo a mano) y el engranaje que abre el panel de ajustes. Al dejar el ratón encima enseña los atajos. Se oculta
+sola a los 5 segundos sin el ratón cerca; llevar el ratón a la orilla de arriba de la pantalla, donde estaba, la trae
+de vuelta. Sin conversor (un vídeo dividido tal cual, o sin red de profundidad) el botón del relieve es solo Manual.
 
 Teclas (valen aunque el teclado lo tenga el vídeo o el juego):
 
@@ -97,28 +101,22 @@ teclas; Esc lo cierra.
 ![Los atajos de teclado en el panel de ajustes](docs/img/es/shortcuts.png)
 
 El panel de ajustes se abre con el engranaje de la pastilla, la entrada OdysseyVK del menú, su
-icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos).
-La cabecera tiene dos filas. En la primera, el logo y el nombre de OdysseyVK
-abren la página principal (vídeo, pantalla, atajos de teclado, aplicaciones que no preguntan); el
-interruptor **Neural | Rendimiento** vive en la pastilla (en la 1.12
-también estaba aquí). En la segunda, centradas: **Juegos**, **Integraciones** (las opciones de
-lanzamiento de Steam de cada juego, desde la 1.15; ver más abajo) y **Ajustes** (arriba los
-datos de rendimiento —visor 3D, red de profundidad, tarjetas gráficas—; luego *Fluidez*: la frecuencia
-variable durante el 3D, el tope de arrastre, la prioridad del visor en la tarjeta y, desde la 1.15, el tope de
-FPS de la capa de DLSS; *Seguimiento de la
-cabeza*: seguir la cabeza con la cámara y la anticipación en milisegundos; *Programa*: la versión
-instalada, lo que hay en GitHub y el botón de buscar o actualizar en una fila, actualizaciones, idioma,
-barra de tareas y bandeja; y **Desinstalar** plegado bajo su flechita). Cada opción ocupa una fila: su
-explicación sale al dejar el ratón encima. Sobre un vídeo o un juego en 3D no sale
-la de Juegos. El panel toma el color de resaltado de KDE
-sobre un fondo negro un poco transparente (como la pastilla y sus menús), se redimensiona desde su esquina de abajo a la derecha y vuelve a abrirse donde y del tamaño que lo
-dejaste. Todo está también en
-`~/.config/odysseyvk/serve.conf`; el servicio toma los cambios
-sin reiniciarse.
+icono en la barra de tareas o el de la bandeja del sistema (clic: ajustes, clic central: juegos). Desde la 1.16 ocupa
+la pantalla entera al estilo del menú de vkDaedalus, del mismo tamaño en el escritorio y sobre un juego: una barra de
+título con el aspa (y, si se abrió desde la pastilla, una flecha para volver a ella); en medio una tesela grande por
+pestaña —**3D** (vídeo, pantalla, la red de profundidad, atajos de teclado, aplicaciones que no preguntan),
+**Juegos**, **Integraciones** (las opciones de lanzamiento de Steam de cada juego, desde la 1.15; ver más abajo) y
+**Ajustes** (los datos de rendimiento —visor 3D, tarjetas gráficas— y lo demás: fluidez, la anticipación de la
+cabeza, actualizaciones, barra de tareas y bandeja, y **Desinstalar** plegado bajo su flechita)—; y a cada lado tres
+teselas chicas que se cambian de un clic: la profundidad de DLSS, el HUD del juego, seguir la cabeza, el cuadrito de
+FPS, la versión (buscar una actualización o instalarla) y el idioma. Cada opción ocupa una fila: su explicación sale
+al dejar el ratón encima. Dentro de un juego Integraciones va en gris y en Juegos solo ese juego va en color; sobre
+un vídeo Juegos también va en gris. Los colores siguen al modo: azul con la red, ámbar en Rendimiento. Todo está
+también en `~/.config/odysseyvk/serve.conf`; el servicio toma los cambios sin reiniciarse.
 
 ### Idioma
 
-**Ajustes → Programa → Idioma** (Otros en la 1.12, la pestaña Programa hasta la 1.11) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
+La tesela del **Idioma** (Ajustes → Programa → Idioma hasta la 1.15) cambia el idioma al momento: el panel, la pastilla, las tarjetas y el
 rótulo de la bandeja. De fábrica va en inglés. El chino y el japonés usan el tipo Noto Sans CJK
 (`noto-fonts-cjk` en Arch). (Hasta la 1.11 había también un globo en la cabecera del panel.)
 
@@ -190,8 +188,9 @@ ratón por una carátula sale un engranaje arriba a la derecha: abre las
 ## Mantenerlo al día
 
 El servicio mira este repositorio cada seis horas. Con una versión nueva sale una tarjeta en la
-esquina con **Actualizar**, **Luego** y un pequeño «No avisar de actualizaciones»; la flecha junto
-al aspa del panel se pone amarilla (verde = al día). Actualizar baja, compila, instala (una ventana
+esquina con **Actualizar**, **Luego** y un pequeño «No avisar de actualizaciones»; en el panel, la tesela de la
+**Versión** pone su flecha en ámbar y dice qué versión hay (hasta la 1.15 lo hacía una flecha junto al aspa). Al
+picarla se instala, o se vuelve a mirar si no hay nada nuevo. Actualizar baja, compila, instala (una ventana
 pide tu clave), reinicia el servicio y reabre el vídeo o juego que estaba en 3D. La pestaña
 **Ajustes** (Programa hasta la 1.11) tiene además «Actualizar automáticamente» (apagado de fábrica) y **Desinstalar**.
 

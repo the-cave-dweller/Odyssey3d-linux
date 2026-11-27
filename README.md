@@ -43,16 +43,19 @@ camera (`04e8:20d7`) and the panel in 4K. If it doesn't see them, **unplug and p
 USB-B cable** once (the udev rule applies on reconnect). Never run `udevadm trigger` on the
 monitor: it resets its internal hub and the lens, scaler and camera disappear until you replug.
 
-The first time the service starts without a depth network, the settings panel opens by itself
-and offers to download it (50 MB, Depth Anything V2 Small at half precision, from
-[huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)).
-Since 1.12 this lighter fp16 version is the default: the same map with 35 % less
-network time and 260 MB less GPU memory; if you already have the older 95 MB file, the panel offers
-the lighter one with a button.
-When the download finishes the panel closes and the network loads. From a terminal it is:
+The first time the service starts without a depth network, the settings panel opens by itself on its 3D tab, which
+lists the networks with a checkbox each: Depth Anything V2 Small from
+[huggingface.co/onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)
+in **FP16** (50 MB, the recommended one: the same map as the FP32 with 35 % less network time and 260 MB less GPU
+memory) or **FP32** (99 MB, full precision). One that isn't downloaded yet is grey: clicking it downloads it and sets
+it; downloaded ones carry a blue tag, and the ticked one is the one in use. Any other `.onnx` depth network you put in
+`~/.local/share/odysseyvk/models` shows up in the same list (the folder was called `modelos` up to 1.15; 1.16
+renames it on its first start). When the first download finishes the panel closes and the network loads. From a
+terminal it is:
 
 ```bash
-odysseyvk ctl red descargar
+odysseyvk ctl red descargar        # FP16
+odysseyvk ctl red descargar fp32   # FP32
 ```
 
 ![First run: the panel asks for the depth network](docs/img/first-run.png)
@@ -66,12 +69,13 @@ fine detail — and was measured on three side-by-side 3D videos and three norma
 three-second windows right on each). Apps marked as 2D and games keep their own way. (Up to 1.11 a
 card in the corner asked which kind of video it was.)
 
-The pill in the top-right corner stays while the 3D is on: a round power button (3D on/off), the
-**Neural | Performance** switch (depth with the network or from the image on the CPU, switched on the
-spot), the relief button (**Auto** or **Manual**, see below; its menu also has Depth and Pop-out in
-Manual and the two video-type buttons to switch by hand) and the gear that opens the settings panel.
-Without the converter (a split video shown as it is, or no depth network) the relief button is
-Manual only.
+The pill in the top-right corner, as tall as the panel's title bar, stays while the 3D is on: a round power button
+(3D on/off), the **Neural | Performance** switch (depth with the network or from the image on the CPU, switched on
+the spot), the relief button (**Auto** or **Manual**, see below; in Manual its menu also has Depth and Pop-out), the
+two video-type buttons (normal and split, to switch by hand) and the gear that opens the settings panel. Resting the
+mouse on it shows the shortcuts. It hides by itself after 5 seconds without the mouse near it; moving the mouse to
+the top edge of the screen, where it was, brings it back. Without the converter (a split video shown as it is, or no
+depth network) the relief button is Manual only.
 
 Keys (they also work while the video or game has the keyboard):
 
@@ -96,23 +100,21 @@ no keys; Esc closes it.
 ![Keyboard shortcuts in the settings panel](docs/img/shortcuts.png)
 
 The settings panel opens from the gear on the pill, the OdysseyVK entry in the app menu, its
-taskbar icon or the system-tray icon (click: settings, middle click: games). The header has two
-rows. On the first, the OdysseyVK logo and name open the
-main page (video, screen, keyboard shortcuts, apps that don't ask); the **Neural | Performance** switch
-lives on the pill (in 1.12 it was here too). On the second, centred: **Games**, **Integrations** (each game's Steam
-launch options, since 1.15; see below) and **Settings** (the
-performance figures — 3D viewer, depth network, GPUs —, then *Smoothness*: variable refresh during 3D,
-the drag cap, the viewer's GPU priority and, since 1.15, the DLSS layer's FPS cap; *Head tracking*: following your head with the camera and
-head anticipation in milliseconds; *App*: the installed version, what GitHub has and the check/update
-button in one row, updates, language, taskbar and tray; and **Uninstall** folded under its arrow).
-Each option takes one row: its explanation shows when the mouse rests on it. Over a video
-or a game in 3D the Games tab is left out. The panel takes KDE's highlight colour on a slightly transparent black background (like the pill
-and its menus), resizes from its bottom-right corner and reopens where and how big you left it. Everything is also in
+taskbar icon or the system-tray icon (click: settings, middle click: games). Since 1.16 it fills the screen in the
+style of vkDaedalus's menu, at the same size on the desktop and over a game: a title bar with the close cross (and,
+when it was opened from the pill, an arrow back to the pill); in the middle a large tile per tab — **3D** (video,
+screen, the depth network, keyboard shortcuts, apps that don't ask), **Games**, **Integrations** (each game's Steam
+launch options, since 1.15; see below) and **Settings** (the performance figures — 3D viewer, GPUs — and the rest:
+smoothness, head-tracking anticipation, updates, taskbar and tray, and **Uninstall** folded under its arrow) —; and
+on each side three small tiles that work at a click: DLSS depth, the game's HUD, head tracking, the FPS box, the
+version (check for an update or install it) and the language. Each option takes one row: its explanation shows when
+the mouse rests on it. Inside a game Integrations is grey and in Games only that game is in colour; over a video
+Games is grey too. The colours follow the mode: blue with the network, amber in Performance. Everything is also in
 `~/.config/odysseyvk/serve.conf`; the service picks up changes without restarting.
 
 ### Language
 
-**Settings → App → Language** (Other in 1.12, the Program tab up to 1.11) switches the language at once: the panel, the pill, the cards and
+The **Language** tile (Settings → App → Language up to 1.15) switches the language at once: the panel, the pill, the cards and
 the tray tooltip. English is the default. Chinese and Japanese use the Noto Sans CJK font
 (`noto-fonts-cjk` on Arch). (Up to 1.11 there was also a globe in the panel header.)
 
@@ -181,8 +183,9 @@ opens that game's [integrations](#integrations-steam-launch-options).
 ## Keeping it up to date
 
 The service checks this repository every six hours. With a new version, a card appears in the
-corner with **Update**, **Later** and a small "Don't notify about updates"; the arrow next to the
-close cross in the panel turns yellow (green = up to date). Update downloads, builds, installs
+corner with **Update**, **Later** and a small "Don't notify about updates"; in the panel, the **Version** tile
+turns its arrow amber and says which version is out (up to 1.15 an arrow next to the close cross did this).
+Clicking the tile installs it, or checks again when there is nothing new. Update downloads, builds, installs
 (a window asks for your password), restarts the service and reopens the video or game that was
 in 3D. The **Settings** tab (Program up to 1.11) also has "Update automatically" (off by default) and **Uninstall**.
 

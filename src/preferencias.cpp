@@ -834,8 +834,12 @@ void filasDeLaRed(Hud::State &st, const Valores &v, std::vector<std::string> &id
   }
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
-  n.rotulo = idioma::trf("Cualquier red de profundidad .onnx que pongas en {} empieza a salir en esta lista.",
-                         {carpetaRedes().substr(0, carpetaRedes().size() - 1)});
+  /* la carpeta con ~ (la de cada usuario; en la de Rodolfo, /home/rodolfo/.local/share/odysseyvk/models): entera no
+     cabia en el renglon con una casa de ruta larga */
+  std::string carpeta = carpetaRedes().substr(0, carpetaRedes().size() - 1);
+  if (const char *home = std::getenv("HOME"); home && *home && carpeta.rfind(std::string(home) + "/", 0) == 0)
+    carpeta = "~" + carpeta.substr(std::strlen(home));
+  n.rotulo = idioma::trf("Cualquier red de profundidad .onnx que pongas en {} empieza a salir en esta lista.", {carpeta});
   pon(n, "");
 }
 /* Rendimiento (v0.86): lo que el visor cuenta en su `estado` (dos veces por segundo) y lo que dice
