@@ -64,7 +64,22 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   el plano de apoyo, y la red de vídeo empieza su ventana. MEDIDO al probar: sin esto, al volver a la de DLSS el mapa
   tardaba 14 mapas en ser el del juego; con esto, el primero ya es idéntico.
 - **La capa apuntaba cada cuadro**: Raji turna dos profundidades, una por cuadro, y cada cambio iba al registro (16 000
-  líneas, 3 MB en 8 minutos). Ahora cada imagen se apunta una vez.
+  líneas, 3 MB en 8 minutos; 10 MB a los 20, en `/tmp`, que es memoria). Ahora cada imagen se apunta una vez.
+- **Ningún juego puede escribir una línea por cuadro** (Rodolfo: «asegurate de que ningun juego pueda escribir una
+  linea por cuadro»). Repasadas las 52 llamadas al registro de la capa: la mayoría ya tenían tope (los 300 primeros
+  números, los 60 primeros lanzamientos, los 40 primeros aplazados), pero otras saldrían en cada cuadro con un juego que
+  crease imágenes nuevas en cada cuadro o turnase dos profundidades. El tope va ahora en `anota`, la única salida del
+  registro, así que vale también para las líneas de mañana: cada línea del código (su formato) puede salir 60 veces
+  seguidas y después una cada 10 s, con cuántas se callaron entretanto («· (y 538 como esta calladas)»); la primera
+  vez que se calla una se dice cuál. Y el archivo, 4 MB como mucho («[registro] lleno»). Con la sonda del taller
+  (`ODYSSEYVK_CAPA_SONDA=1`) solo cuenta el tope del archivo.
+- **Y lo que había detrás de esas líneas**: si un juego turnase dos profundidades de medidas distintas, la capa
+  rehacía su memoria compartida en cada cuadro y apartaba la vieja hasta cerrar el juego (decenas de MB de `/dev/shm`
+  por cuadro). Ahora una medida nueva tiene que aguantar 0,5 s; mientras, se copian los cuadros de la medida de ahora.
+- **Probado** con el código de la capa entero en un programa de prueba (sin Vulkan): dos líneas en cada cuadro a 60 fps
+  durante 25 s (1494 cuadros) dejan 62 de cada una más el aviso, y la de cada 10 s (como el resumen) sale entera; sin
+  cupo (con la sonda), 6000 líneas de 1 KB paran en 4 194 961 bytes con «lleno»; dos medidas turnándose 10 s a 60 fps:
+  0 veces rehecha (antes 600), y un cambio de verdad se rehace a los 30 cuadros (0,50 s).
 - **Probado** sin ventana ni tarjeta, con la partida de Raji abierta: la red en la CPU (`ODYSSEYVK_GPU=-1`) y
   `tools/simula-capa.py` con su propia memoria compartida. Apagar: la red en el mapa siguiente (84,9 niveles de
   diferencia), sin máscara del HUD, y simula-capa ve «el visor dejó de leer» a los ~1,9 s; encender: el mapa del juego

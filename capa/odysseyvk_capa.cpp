@@ -61,6 +61,7 @@
 
 #include <cstddef>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -90,19 +91,73 @@ std::string carpeta() {
 /* los volcados de la sonda (fase 3) pesan cientos de MB: van al disco, no a /tmp (que es RAM) */
 std::string carpetaVolcados();
 FILE *g_log = nullptr;
+bool sonda();
+/* (v1.18) Ningun juego puede escribir una linea por cuadro (Rodolfo: «asegurate de que ningun juego pueda escribir una
+   linea por cuadro»). MEDIDO en Raji, 27-nov: una linea que salia en cada cuadro dio 16 000 lineas (3 MB) en 8 minutos
+   y 10 MB a los 20, en /tmp (que es memoria) y con una escritura por cuadro en el hilo del juego. El tope va aqui, en la
+   unica salida del registro, y no en cada llamada: vale tambien para las lineas que se anadan despues. Cada linea del
+   codigo (su formato) tiene su cupo: kRafaga seguidas y despues una cada kCada segundos, con cuantas se callaron
+   entretanto; la primera vez que se calla una, se dice. Y el archivo entero, kTopeArchivo como mucho. Con la sonda
+   (ODYSSEYVK_CAPA_SONDA=1, el taller, que vuelca a proposito cientos de lineas) solo cuenta el tope del archivo */
+constexpr double kRafaga = 60.0, kCada = 10.0;
+constexpr long kTopeArchivo = 4L << 20;
+struct Cupo {
+  double fichas = kRafaga, t = -1.0;
+  long calladas = 0;
+  bool avisada = false;
+};
 void anota(const char *fmt, ...) {
+  static std::mutex mx;   /* solo para el registro: no se llama a nada que tome otro candado */
+  static std::unordered_map<const char *, Cupo> cupos;
+  static long escrito = 0;
+  static bool lleno = false;
+  std::lock_guard<std::mutex> g(mx);
+  if (lleno) return;
+  long calladas = 0;
+  bool avisar = false;
+  if (!sonda()) {
+    const double t = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    Cupo &c = cupos[fmt];
+    if (c.t >= 0.0) c.fichas = std::min(kRafaga, c.fichas + (t - c.t) / kCada);
+    c.t = t;
+    if (c.fichas < 1.0) {
+      if (c.calladas++ == 0 && !c.avisada) c.avisada = avisar = true;
+      if (!avisar) return;
+    } else {
+      c.fichas -= 1.0;
+      calladas = c.calladas;
+      c.calladas = 0;
+    }
+  }
   if (!g_log) {
     mkdir(carpeta().c_str(), 0700);
     const std::string r = carpeta() + "/capa-" + std::to_string((long)getpid()) + ".log";
     g_log = std::fopen(r.c_str(), "a");
     if (!g_log) return;
     setvbuf(g_log, nullptr, _IOLBF, 0);
+    const long ya = std::ftell(g_log);   /* en «a» el archivo de un pid repetido ya trae lo suyo */
+    escrito = ya > 0 ? ya : 0;
   }
-  va_list ap;
-  va_start(ap, fmt);
-  std::vfprintf(g_log, fmt, ap);
-  va_end(ap);
-  std::fputc('\n', g_log);
+  int n = 0;
+  if (avisar) {
+    /* la primera que se calla: cual es, para saber que linea se repite tanto */
+    std::string cual(fmt);
+    if (cual.size() > 70) cual = cual.substr(0, 70) + "...";
+    n = std::fprintf(g_log, "[registro] esta linea se repite demasiado: desde ahora una cada %.0f s, con cuantas se "
+                            "callaron: %s\n", kCada, cual.c_str());
+  } else {
+    va_list ap;
+    va_start(ap, fmt);
+    n = std::vfprintf(g_log, fmt, ap);
+    va_end(ap);
+    if (calladas > 0) n += std::fprintf(g_log, " · (y %ld como esta calladas)", calladas);
+    n += std::fputc('\n', g_log) == EOF ? 0 : 1;
+  }
+  escrito += n > 0 ? n : 0;
+  if (escrito >= kTopeArchivo) {
+    std::fprintf(g_log, "[registro] lleno (%ld MB): no se apunta nada mas en este juego\n", kTopeArchivo >> 20);
+    lleno = true;
+  }
 }
 
 double ahora() {
@@ -202,6 +257,10 @@ struct Dispositivo {
   VkDeviceMemory shmMem = VK_NULL_HANDLE;
   uint32_t shmW = 0, shmH = 0;
   VkFormat shmFmt = VK_FORMAT_UNDEFINED;
+  /* (v1.18) una medida nueva de la profundidad, mientras aguanta (ver medidaNueva) */
+  uint32_t nuevaW = 0, nuevaH = 0;
+  VkFormat nuevaFmt = VK_FORMAT_UNDEFINED;
+  double nuevaDesde = -1.0;
   uint64_t seq = 0;
   double ultimaCopia = 0.0;
   long copias = 0;
@@ -916,6 +975,18 @@ bool tocaPorTope(double &siguiente, double t, uint32_t tope) {
   return true;
 }
 
+/* (v1.18) La memoria compartida se rehace con otra medida de profundidad solo si la nueva aguanta medio segundo. Si un
+   juego turnara dos profundidades de medidas distintas (Raji turna dos, pero de la misma), rehacerla en cada cuadro
+   apartaria una region por cuadro (decenas de MB de /dev/shm, que es memoria, hasta cerrar el juego: ver
+   retirarCompartida) y apuntaria dos lineas por cuadro. Mientras, se copian los cuadros de la medida de ahora. Un
+   cambio de verdad (otro modo de DLSS en el menu) se queda: a los 0,5 s se rehace */
+bool medidaAguanta(Dispositivo *d, const Imagen &im, double t) {
+  if (!d->shm) return true;   /* la primera, sin esperar */
+  if (d->nuevaDesde < 0.0 || d->nuevaW != im.w || d->nuevaH != im.h || d->nuevaFmt != im.formato)
+    d->nuevaW = im.w, d->nuevaH = im.h, d->nuevaFmt = im.formato, d->nuevaDesde = t;
+  return t - d->nuevaDesde >= 0.5;
+}
+
 /* en cada lanzamiento de DLSS: como mucho una copia cada 4 ms (una por cuadro hasta 250 por segundo) */
 void compartir(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im,
                VkImageLayout desde = VK_IMAGE_LAYOUT_UNDEFINED) {
@@ -925,7 +996,11 @@ void compartir(Dispositivo *d, VkCommandBuffer cb, VkImage img, const Imagen &im
   }();
   if (kApagado || d->shmFallo || !d->hostPtrProps || !d->updateBuf) return;
   if (im.muestras != VK_SAMPLE_COUNT_1_BIT) return;
-  if (!d->shm || d->shmW != im.w || d->shmH != im.h || d->shmFmt != im.formato) {
+  if (d->shm && d->shmW == im.w && d->shmH == im.h && d->shmFmt == im.formato) {
+    d->nuevaDesde = -1.0;   /* vuelve la de ahora: la nueva tiene que empezar a contar otra vez */
+  } else {
+    if (!medidaAguanta(d, im, ahora())) return;
+    d->nuevaDesde = -1.0;
     if (!crearCompartida(d, im)) {
       d->shmFallo = true;
       return;
