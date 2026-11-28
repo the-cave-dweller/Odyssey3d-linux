@@ -50,6 +50,24 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## ShaderHub: la red de profundidad solo si hace falta, y el panel en su pantalla (v1.18)
+
+- Rodolfo: «sigue con lo pendiente». De lo que quedó apuntado de ShaderHub:
+  - **La red de profundidad** ya no corre si ningún efecto puesto la lee (`VkWeave::efectosConProfundidad`): sin dos
+    vistas que sacar, la profundidad solo sirve a los efectos. Con Clarity: «la red de profundidad se queda parada»; con
+    MXAO: «corre: un efecto puesto la usa», y el efecto recibe su profundidad.
+  - **La pastilla no se oculta sola con el panel de ajustes abierto** (el panel es otro proceso: se mira si sigue vivo).
+  - **El panel abierto desde la pastilla sale en la pantalla del visor** y con su cara. MEDIDO: con la sesión de
+    ShaderHub en DP-7 el panel salía en DP-4. Ahora el visor le pasa su pantalla (`--pantalla`), su ficha sale elegida y
+    el panel es ShaderHub, en rojo, a la medida de esa pantalla (volcado a 2048x1536).
+  - En la pestaña Juegos de ShaderHub ya no sale la nota de cómo entra el 3D.
+- **Probado** en DP-7 con el juego de prueba, el servicio y el visor de esta compilación y el ratón virtual: los dos
+  renglones de la red, un clic de verdad en el engranaje abre el panel en DP-7 y la pastilla sigue ahí los 10 s
+  siguientes.
+- **Lo que sigue pendiente**: importar bien el DMA-BUF en NVIDIA para no pasar por memoria (ni se intentó: pide negociar
+  con el compositor un orden de memoria que Vulkan entienda, o importar por OpenGL); un juego de verdad en la segunda
+  pantalla; ver la generación de cuadros cambiar dentro del juego desde la pastilla.
+
 ## ShaderHub: los cuadros por memoria, de 39 a 120-131 por segundo a 4K (v1.18)
 
 - Rodolfo: «mejora shaderhub». Lo que más pesaba, medido en las pruebas: cuando la tarjeta no sabe importar los cuadros

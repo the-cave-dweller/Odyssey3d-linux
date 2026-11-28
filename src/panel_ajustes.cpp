@@ -127,6 +127,7 @@ int cmdAjustes(int argc, char **argv) {
   std::vector<std::pair<const char *, double>> pasos;
   auto paso = [&](const char *que) { pasos.push_back({que, relojA()}); };
   Overlay ov;
+  if (!pista.empty()) prefs::pantallaDeAhora(pista);   /* (v1.18) la del visor: su ficha sale elegida, con su cara */
   if (pista.empty()) {
     const auto conf = ajuste::leerServeConf();
     if (const auto it = conf.find("pantalla"); it != conf.end()) pista = it->second;

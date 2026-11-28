@@ -194,6 +194,8 @@ void integracionesDe(const std::string &appid);
 void juegoDelPanel(const std::string &appid);
 /* (v1.18) las pantallas de la barra de arriba (pantallas.h): elegir una, y lo que dice de ella el pie */
 void elegirPantalla(int cual);
+/* la pantalla en la que se abre el panel esta vez (por su conector), sin guardarla: la que le dice el visor */
+void pantallaDeAhora(const std::string &conector);
 std::string notaDePantalla(int clase);
 /* (v1.18) abrir la pagina de efectos: "*" = los de todos los juegos, o un appid (la prueba del HUD) */
 void efectosDe(const std::string &que);

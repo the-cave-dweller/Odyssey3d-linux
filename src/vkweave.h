@@ -47,6 +47,8 @@ public:
      en la CPU (la imagen se crea en su formato) y por un buffer de paso que se queda puesto de un cuadro a otro. Es el
      camino de ShaderHub cuando la tarjeta no sabe importar el DMA-BUF del compositor */
   bool sourceFromMemoria(const uint8_t *px, int w, int h, int stride, bool rgb, std::string *err);
+  /* (v1.18) algun efecto puesto lee la profundidad: sin ninguno, ShaderHub no corre la red */
+  bool efectosConProfundidad() const { return efectos_.conProfundidad(); }
   bool hasSource() const { return gen_ > 0; }
   /* (v1.18) la generacion de cuadros de los videos (fgvideo.h): mientras haya una vista aqui, la trama dibuja esa (un
      cuadro generado, en GENERAL) en lugar de la fuente real; VK_NULL_HANDLE = la real. La vista es de quien la pone */

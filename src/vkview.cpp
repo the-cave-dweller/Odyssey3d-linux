@@ -215,6 +215,7 @@ void printTuning(const VkUi &ui, const char *what) {
    la orilla); se suelta del todo para que viva por su cuenta, y pulsar el engranaje otra vez lo
    cierra. Lo abre el engranaje de la pastilla y, desde v0.94, el propio visor cuando se le pide el
    conversor y no hay red de profundidad que cargar. */
+static std::string g_pantallaVisor;   /* (v1.18) la salida del visor: el velo de la pastilla y el panel van en la misma */
 static void abrirPanelDeAjustes() {
   char propio[512] = {0};
   const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
@@ -224,6 +225,9 @@ static void abrirPanelDeAjustes() {
     ::setsid();
     if (::fork() != 0) ::_exit(0);
     /* (v1.16) desde la pastilla: el panel lleva la flecha de volver a ella, junto al aspa; y el ligero si esta */
+    /* (v1.18) y en la pantalla del visor: con la sesion de ShaderHub en otra pantalla, el panel salia en la del 3D
+       (MEDIDO el 28-nov: la sesion en DP-7 y «panel puesto en DP-4») */
+    if (!g_pantallaVisor.empty()) execPanelDeAjustes({"--desde-pastilla", "--pantalla", g_pantallaVisor});
     execPanelDeAjustes({"--desde-pastilla"});
     (void)exe;
     ::_exit(127);
@@ -947,7 +951,6 @@ static std::string tarjetaDelJuego(VkUi &ui) {
    era a proposito, cerraba el 3D a los 6 s de verlo minimizado (con el panel de ajustes abierto encima: 09:11:23 y
    09:11:44). Con la marca fresca el servicio espera: el visor sigue con el ultimo cuadro y al devolver el cursor saca al
    juego de minimizado */
-static std::string g_pantallaVisor;   /* (v1.18) la salida del visor: el velo de la pastilla va en la misma */
 static void marcaCursor(bool puesta) {
   const std::string ruta = rutaEstadoOdyssey("cursor-visor");
   if (!puesta) {
@@ -5146,7 +5149,20 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
        red y volver a subir el mapa. Se hace cada opts.convEach cuadros y solo cuando el
        compositor mando un cuadro nuevo: la red tarda ~7 ms y el presupuesto por cuadro en el
        modo 3D anda por los 8 ms. */
-    if (convActivo && red.ready() && wv.converterReady()) {
+    /* (v1.18) En ShaderHub la profundidad solo sirve a los efectos: sin ninguno puesto que la lea, la red no corre (no
+       hay dos vistas que sacar) y la tarjeta se queda para el juego. Se dice al parar y al volver */
+    bool redHaceFalta = true;
+    if (ui.hud.state().pastilla2D) {
+      redHaceFalta = wv.efectosConProfundidad();
+      static int dicha = -1;
+      if (convActivo && dicha != (redHaceFalta ? 1 : 0)) {
+        dicha = redHaceFalta ? 1 : 0;
+        std::printf("[conversor] ShaderHub: la red de profundidad %s\n",
+                    redHaceFalta ? "corre: un efecto puesto la usa" : "se queda parada: ningun efecto puesto la usa");
+        std::fflush(stdout);
+      }
+    }
+    if (convActivo && redHaceFalta && red.ready() && wv.converterReady()) {
       if (std::getenv("ODYSSEY_CONV")) {
         static long long dep = 0;
         if (++dep % 200 == 0)
@@ -5768,7 +5784,28 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         const float holgura = 24.0f * ui.hud.scale();
         const bool cerca = ui.mx >= 0.0 && ui.hud.pillBounds(&px, &py, &pw, &ph) && ui.mx >= px - holgura &&
                            ui.mx <= px + pw + holgura && ui.my >= py - holgura && ui.my <= py + ph + holgura;
-        if (fija || !ui.hud.overlayVisible() || cerca || hsP.menuRendimiento || hsP.menuNormal || hsP.panel) usada = now;
+        /* (v1.18) y con el panel de ajustes abierto tampoco se va (MEDIDO el 28-nov con el raton de verdad: se oculto
+           sola a los 5 s de abrirlo desde su engranaje, con el panel a la vista): el panel es otro proceso, se mira si
+           sigue vivo dos veces por segundo */
+        static double panelMirado = -1.0;
+        static bool panelVivo = false;
+        if (now - panelMirado >= 0.5) {
+          panelMirado = now;
+          panelVivo = false;
+          if (FILE *fp = std::fopen(ajuste::rutaPanel().c_str(), "re")) {
+            long pidP = 0;
+            if (std::fscanf(fp, "%ld", &pidP) != 1) pidP = 0;
+            std::fclose(fp);
+            char comm[64] = {0};
+            if (pidP > 1)
+              if (FILE *c = std::fopen(("/proc/" + std::to_string(pidP) + "/comm").c_str(), "re")) {
+                if (!std::fgets(comm, sizeof comm, c)) comm[0] = 0;
+                std::fclose(c);
+              }
+            panelVivo = std::strncmp(comm, "odysseyvk", 9) == 0;
+          }
+        }
+        if (fija || !ui.hud.overlayVisible() || cerca || hsP.menuRendimiento || hsP.menuNormal || hsP.panel || panelVivo) usada = now;
         else if (now - usada >= 5.0) cambioCapa(ui, false, "se oculto sola a los 5 s sin usarla");
       }
       (void)desde;

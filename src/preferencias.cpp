@@ -2983,6 +2983,8 @@ std::string notaDePantalla(int clase) {
          std::string(" · ") + idioma::tr("el hub se abre en ella desde la próxima vez");
 }
 static bool g_pantallasViejas = false;   /* releerlas ya (se cambio `sin_3d`) */
+static std::string g_pantallaDeAhora;    /* el conector que pidio quien abrio el panel (el visor) */
+void pantallaDeAhora(const std::string &conector) { g_pantallaDeAhora = conector; }
 static time_t g_puertoHasta = 0;         /* «Portar el 3D» armado hasta entonces */
 static void pantallasAlPanel(Hud::State &st) {
   static std::vector<pantallas::Pantalla> v;
@@ -2996,6 +2998,9 @@ static void pantallasAlPanel(Hud::State &st) {
   g_pantallasVistas = v;
   if (g_pantallaElegida < 0)
     if (const char *e = std::getenv("ODYSSEYVK_HUD_PANTALLA")) g_pantallaElegida = std::atoi(e);
+  if (g_pantallaElegida < 0 && !g_pantallaDeAhora.empty())   /* la del visor que abrio el panel */
+    for (size_t k = 0; k < v.size(); k++)
+      if (v[k].conector == g_pantallaDeAhora) g_pantallaElegida = (int)k;
   if (g_pantallaElegida < 0) {   /* la del hub, si se eligio una y sigue conectada */
     const auto conf = ajuste::leerServeConf();
     if (const auto it = conf.find("pantalla_hub"); it != conf.end())
@@ -3511,7 +3516,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     Hud::ItemPanel n;
     n.tipo = Hud::ItemPanel::Nota;
     n.rotulo = idioma::tr("3D: el juego entra solo en 3D al ponerse a pantalla completa. 2D: se deja como está.");
-    pon(n, "");
+    if (!st.sin3D) pon(n, "");   /* (v1.18) en ShaderHub no hay 3D que explicar */
     /* (v1.14) la profundidad de DLSS se pide juego a juego, en Steam: el parametro va en medio del pie del panel,
        a la vista sin bajar por la lista (Rodolfo: «On the bottom of games tab let user know to add the steam
        parameter, offer a copy button for it» y «el parametro ahi, por el centro») */
