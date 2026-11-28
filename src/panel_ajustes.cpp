@@ -486,7 +486,8 @@ int cmdAjustes(int argc, char **argv) {
         const size_t k = (size_t)(g.sub - 2000);
         if (k < menuClaves.size()) {
           std::string aviso;
-          if (prefs::alternarMonitor(menuClaves[k], &aviso) && k < st.menuMarcadas.size()) st.menuMarcadas[k] = !st.menuMarcadas[k];
+          /* (v1.18) las marcas se rehacen enteras: el estilo es uno de cinco, y al elegir uno se desmarca el de antes */
+          if (prefs::alternarMonitor(menuClaves[k], &aviso)) prefs::opcionesMonitor(st.menuOpciones, st.menuMarcadas, menuClaves);
           st.pie = aviso;
           std::printf("[ajustes] monitor %s · %s\n", menuClaves[k].c_str(), aviso.c_str());
           std::fflush(stdout);
@@ -559,6 +560,16 @@ int cmdAjustes(int argc, char **argv) {
           std::printf("[ajustes] %s\n", g.sub == 1 ? "modo rendimiento (sin red)" : "AI (con la red)");
           std::fflush(stdout);
         }
+        repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelError) {
+        /* (v1.18) «Informar de un error»: la pagina del informe, en Ajustes */
+        std::string aviso;
+        bool cerrarP = false;
+        prefs::aplicar("informe:abrir", 0, 0.0f, true, juegos, &aviso, &cerrarP);
+        if (const int p = prefs::tomarPestana(); p >= 0) st.pestana = p, st.corrida = 0.0f;
+        st.pie = aviso;
+        std::printf("[ajustes] informe de un error: abierto\n");
+        std::fflush(stdout);
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelFijar) {
         /* el pin: fijado, el velo se va y el teclado pasa a pedido (un clic en el juego se lo lleva y

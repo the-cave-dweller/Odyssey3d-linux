@@ -994,9 +994,86 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
     const int m = st_.fg.enJuego && st_.fg.puesta ? std::max(1, st_.fg.multiplicador) : 1;
     cReales = st_.fpsJuego / (float)m, cGenerados = st_.fpsJuego - cReales;
   }
-  if (st_.fpsModo != 0 && !cuenta) {
+  /* (v1.18) los estilos (State::fpsEstilo). La pastilla, el cuadrado y el compacto son solo de los FPS: una cifra principal
+     (lo que llega a la pantalla) y, al lado, de donde sale (reales + generados, o los de la capa con DLSS) */
+  const int estilo = st_.fpsEstilo;
+  const bool generando = cuenta && cGenerados > 0.5f;
+  if (estilo >= 1 && estilo <= 3) {
+    if (st_.fpsModo == 0 && !cuenta) return;
+    char nP[16], nR[16], nG[16];
+    std::snprintf(nP, sizeof nP, "%d", (int)std::lround(cuenta ? cReales + cGenerados : st_.fpsJuego));
+    std::snprintf(nR, sizeof nR, "%d", (int)std::lround(cReales));
+    std::snprintf(nG, sizeof nG, "%d", (int)std::lround(cGenerados));
+    const float fr = Hud::canal(pal_.barra, 0), fg = Hud::canal(pal_.barra, 1), fb = Hud::canal(pal_.barra, 2);
+    const float extra = orilla ? 8.0f : 0.0f;
+    if (estilo == 3) {   /* compacto: un renglon pegado arriba */
+      const std::string det = generando ? std::string(nR) + " + " + nG : (dlss ? std::string(idioma::tr("Capa")) + " " + nc : std::string());
+      const float tam = 13.0f, chico = 10.5f, alto = 26.0f;
+      const float w = 10.0f + textWidth(nP, tam) + 4.0f + textWidth("fps", chico) + (det.empty() ? 0.0f : 10.0f + textWidth(det, chico)) + 10.0f;
+      const float bx = xDer - w;
+      if (bx < 8.0f) return;
+      mask9({bx, y0 - 8.0f, w + extra, alto + 8.0f}, 1, 8.0f, fr, fg, fb, 0.94f);
+      cuadroFps_ = {bx, y0, w + extra, alto};
+      float x = bx + 10.0f;
+      text(nP, x, y0 + 6.0f, tam, ink[0], ink[1], ink[2], ink[3]);
+      x += textWidth(nP, tam) + 4.0f;
+      text("fps", x, y0 + 8.5f, chico, dim[0], dim[1], dim[2], dim[3]);
+      x += textWidth("fps", chico) + 10.0f;
+      if (!det.empty()) text(det, x, y0 + 8.5f, chico, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f);
+      return;
+    }
+    if (estilo == 2) {   /* cuadrado: la cifra grande, «fps» debajo y, si se generan cuadros, de donde salen */
+      const std::string det = generando ? std::string(nR) + " + " + nG : std::string();
+      const float lado = 80.0f, bx = xDer - lado, cx = bx + lado * 0.5f;
+      if (bx < 8.0f) return;
+      mask9({bx, y0 - 8.0f, lado + extra, lado + 8.0f}, 1, 8.0f, fr, fg, fb, 0.94f);
+      cuadroFps_ = {bx, y0, lado + extra, lado};
+      text(nP, cx, y0 + (det.empty() ? 16.0f : 9.0f), 28.0f, ink[0], ink[1], ink[2], ink[3], true);
+      text("fps", cx, y0 + (det.empty() ? 50.0f : 42.0f), 11.0f, dim[0], dim[1], dim[2], dim[3], true);
+      if (!det.empty()) text(det, cx, y0 + 59.0f, 10.5f, accent[0] + 0.22f, accent[1] + 0.25f, 1.0f, 0.95f, true);
+      return;
+    }
+    /* como la pastilla: una barra de su alto, la cifra principal en una tesela del azul del acento (como la del modo) y
+       las demas en teselas oscuras (como la del desplegable) */
+    struct Tesela { std::string num, rot; bool acento; };
+    std::vector<Tesela> ts;
+    ts.push_back({nP, "fps", true});
+    if (generando) ts.push_back({nR, idioma::tr("Reales"), false}), ts.push_back({nG, idioma::tr("Generados"), false});
+    else if (dlss) ts.push_back({nc, idioma::tr("Capa"), false});
+    const float tamN2 = 15.0f, tamR2 = 11.0f, tAlto = 32.0f, margen = 12.0f, entre = 8.0f;
+    std::vector<float> anchos;
+    float w = margen;
+    for (const Tesela &t : ts) {
+      anchos.push_back(12.0f + textWidth(t.num, tamN2) + 6.0f + textWidth(t.rot, tamR2) + 12.0f);
+      w += anchos.back() + entre;
+    }
+    w += margen - entre;
+    const float bx = xDer - w, ty = y0 + (ph - tAlto) * 0.5f;
+    if (bx < 8.0f) return;
+    mask9({bx, y0 - 8.0f, w + extra, ph + 8.0f}, 1, 8.0f, fr, fg, fb, 0.94f);
+    cuadroFps_ = {bx, y0, w + extra, ph};
+    float x = bx + margen;
+    for (size_t k = 0; k < ts.size(); k++) {
+      const Tesela &t = ts[k];
+      if (t.acento) mask9({x, ty, anchos[k], tAlto}, 0, 6.0f, std::min(1.0f, accent[0] + 0.10f), std::min(1.0f, accent[1] + 0.12f), 1.0f, 0.95f);
+      else mask9({x, ty, anchos[k], tAlto}, 0, 6.0f, std::min(1.0f, fr + 0.07f), std::min(1.0f, fg + 0.08f), std::min(1.0f, fb + 0.11f), 1.0f);
+      const float tr_ = t.acento ? 0.04f : ink[0], tg_ = t.acento ? 0.07f : ink[1], tb_ = t.acento ? 0.12f : ink[2];
+      text(t.num, x + 12.0f, ty + 8.0f, tamN2, tr_, tg_, tb_, 1.0f);
+      text(t.rot, x + 12.0f + textWidth(t.num, tamN2) + 6.0f, ty + 11.0f, tamR2, t.acento ? 0.04f : dim[0], t.acento ? 0.07f : dim[1],
+           t.acento ? 0.12f : dim[2], t.acento ? 0.85f : dim[3]);
+      x += anchos[k] + entre;
+    }
+    return;
+  }
+  const bool basico = estilo == 4;
+  /* (v1.18) el basico: con cuadros generados, las tres cifras; sin ellos, solo los del juego */
+  if (basico && cuenta && !generando) {
+    char nb[16];
+    std::snprintf(nb, sizeof nb, "%d", (int)std::lround(cReales));
+    filas.push_back({idioma::tr("Juego"), {{nb, "fps"}}});
+  } else if (st_.fpsModo != 0 && !cuenta) {
     filas.push_back({idioma::tr("Juego"), {{nj, "fps"}}});
-    if (dlss) filas.push_back({idioma::tr("Capa"), {{nc, "fps"}}});
+    if (dlss && !basico) filas.push_back({idioma::tr("Capa"), {{nc, "fps"}}});
     /* (v1.18) con la generacion de cuadros de MAKO en el juego: lo que llega a la pantalla. MEDIDO con el cargador de
        Vulkan: MAKO va por debajo de la capa de OdysseyVK, asi que «Juego» (los cuadros que ve la capa) son los de verdad y
        los generados solo se ven aqui, en los que llegan al visor por la captura */
@@ -1008,7 +1085,7 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   }
   /* (v1.18) con el contador de MAKO (la capa encima de MAKO y el contador debajo, como el de vkDaedalus): los cuadros del
      juego y los que MAKO genera, cada segundo */
-  if (cuenta) {
+  if (cuenta && !(basico && !generando)) {
     char nr[16], ng[16];
     std::snprintf(nr, sizeof nr, "%d", (int)std::lround(cReales));
     std::snprintf(ng, sizeof ng, "%d", (int)std::lround(cGenerados));
@@ -1020,11 +1097,12 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
     std::snprintf(nt, sizeof nt, "%d", (int)std::lround(cReales + cGenerados));
     filas.push_back({idioma::tr("En pantalla"), {{nt, "fps"}}});
   }
-  for (const State::FilaMonitor &m : st_.monitor) {
-    Fila f{m.rotulo, {}};
-    for (const auto &v : m.valores) f.segs.push_back({v.first, v.second});
-    filas.push_back(f);
-  }
+  if (!basico)
+    for (const State::FilaMonitor &m : st_.monitor) {
+      Fila f{m.rotulo, {}};
+      for (const auto &v : m.valores) f.segs.push_back({v.first, v.second});
+      filas.push_back(f);
+    }
   if (filas.empty()) return;
   const std::string titulo = dlss ? std::string("DLSS")
                              : (st_.fpsModo == 0 && cuenta ? std::string("MAKO")
@@ -1039,8 +1117,10 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
       wNum[j] = std::max(wNum[j], textWidth(f.segs[j].num, tamN)), wUni[j] = std::max(wUni[j], textWidth(f.segs[j].uni, tamF));
   float wCols = 0.0f;
   for (size_t j = 0; j < nCol; j++) wCols += wNum[j] + 4.0f + wUni[j] + (j + 1 < nCol ? hueco : 0.0f);
-  const float bw = std::max(borde + wRot + 14.0f + wCols + borde, borde + textWidth(titulo, 10.0f) + borde);
-  const float paso = compacta ? 16.0f : 22.0f, y1 = compacta ? 20.0f : 28.0f;
+  const float bw = std::max(borde + wRot + 14.0f + wCols + borde, basico ? 0.0f : borde + textWidth(titulo, 10.0f) + borde);
+  /* (v1.18) el basico, sin titulo: las filas empiezan arriba y el alto es el suyo, no el de la pastilla */
+  const float paso = compacta ? 16.0f : 22.0f, y1 = basico ? 7.0f : (compacta ? 20.0f : 28.0f);
+  if (basico) ph = 0.0f;
   const float alto = std::max(ph, y1 + paso * (float)filas.size() + (compacta ? 4.0f : 6.0f));
   const float bx = xDer - bw;
   if (bx < 8.0f) return;
@@ -1048,10 +1128,10 @@ void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, cons
   mask9({bx, y0 - 8.0f, bw + (orilla ? 8.0f : 0.0f), alto + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1),
         Hud::canal(pal_.barra, 2), 0.94f);
   cuadroFps_ = {bx, y0, bw + (orilla ? 8.0f : 0.0f), alto};   /* (v1.18) su clic derecho: la generacion de cuadros */
-  text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
+  if (!basico) text(titulo, bx + borde, y0 + (compacta ? 5.0f : 9.0f), 10.0f, accent[0], accent[1], accent[2], 1.0f);
   for (size_t i = 0; i < filas.size(); i++) {
     /* una sola fila (los FPS sin DLSS), a media altura como antes */
-    const float y = filas.size() == 1 ? y0 + (compacta ? 27.0f : 39.0f) : y0 + y1 + paso * (float)i;
+    const float y = filas.size() == 1 && !basico ? y0 + (compacta ? 27.0f : 39.0f) : y0 + y1 + paso * (float)i;
     text(filas[i].rot, bx + borde, y + 1.5f, tamR, dim[0], dim[1], dim[2], dim[3]);
     float x = bx + bw - borde - wCols;
     for (size_t j = 0; j < nCol; j++) {
@@ -2050,7 +2130,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const float m = 16.0f * s, cw = std::min(500.0f * s, (float)vw * 0.42f);
       const Rect col{m, m, cw, (float)vh - 2.0f * m};
       panelCaja_ = col;
-      panelCerrar_ = panelVolver_ = panelActualizar_ = fuera;
+      panelCerrar_ = panelVolver_ = panelActualizar_ = panelError_ = fuera;
       panelPestanas_.assign(st_.pestanas.size(), fuera);
       panelTeselas_.assign(st_.teselas.size(), fuera);
       panelTeselaFlecha_.assign(st_.teselas.size(), fuera);
@@ -2104,6 +2184,19 @@ void Hud::dibujaPanel(int vw, int vh) {
        comportamiento pero recuerda que ya lo movimos, ahora esta en la interfaz, pon la funcion a su boton»): lo hace
        la tesela de la Version, con su rotulo al pasar el raton y la flecha en ambar si hay una version nueva */
     panelActualizar_ = fuera;
+    /* (v1.18) abajo a la izquierda del marco: informar de un error (Rodolfo: «añade un boton de bug al fondo a la izquierda
+       de la pantalla»). Abre la pagina del informe (preferencias.cpp, informe.h) */
+    {
+      const std::string rot = idioma::tr("Informar de un error");
+      const float tam = 12.5f * s, alto = 30.0f * s, ancho = 14.0f * s + 16.0f * s + 8.0f * s + textWidth(rot, tam) + 14.0f * s;
+      panelError_ = {F.x + 16.0f * s, F.y + F.h - 16.0f * s - alto, ancho, alto};
+      const bool he = panelError_.inside(mx_, my_);
+      relleno(panelError_, 6.0f * s, pal_.control, he ? 1.0f : 0.55f);
+      const Rect an{panelError_.x + 14.0f * s, panelError_.y + (alto - 16.0f * s) * 0.5f, 16.0f * s, 16.0f * s};
+      icono(an, icoAnillo_, 0.95f, 0.62f, 0.30f, 0.95f);
+      text("!", an.x + an.w * 0.5f, an.y + 2.0f * s, 11.0f * s, 0.95f, 0.62f, 0.30f, 0.95f, true);
+      text(rot, an.x + an.w + 8.0f * s, panelError_.y + (alto - tam) * 0.5f - s, tam, ink[0], ink[1], ink[2], he ? 1.0f : 0.80f);
+    }
     rotuloActualizar = !st_.actualizacion.empty()
                            ? idioma::trf("Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.", {st_.actualizacion})
                            : std::string(idioma::tr(st_.alDia ? "OdysseyVK está al día. Pica para volver a comprobarlo."
@@ -2406,6 +2499,9 @@ void Hud::dibujaPanel(int vw, int vh) {
         if (it.plegable)
           icono({der - 14.0f, y + 16.0f, 14.0f, 14.0f}, it.valor ? icoBajar_ : icoDerecha_, accent[0] + 0.22f,
                 accent[1] + 0.25f, 1.0f, hov ? 1.0f : 0.80f);
+        /* (v1.18) y su `nota`, junto a la flechita (lo de vkDaedalus y vkBasalt en Integraciones) */
+        if (it.plegable && !it.nota.empty())
+          text(it.nota, der - 26.0f - textWidth(it.nota, 12.5f), y + 15.0f, 12.5f, dim[0], dim[1], dim[2], 0.90f);
         break;
       case ItemPanel::Nota:
         textoCabe(it.rotulo, izq, y + 8.0f, 12.5f, der - izq, dim[0], dim[1], dim[2], 0.85f);
@@ -2457,8 +2553,9 @@ void Hud::dibujaPanel(int vw, int vh) {
         const float derSw = it.borrable || it.sitioAspa ? der - 30.0f : der;
         if (it.borrable) {
           z.aspa = {der - 24.0f, y + (h - 24.0f) * 0.5f, 24.0f, 24.0f};
-          const bool hx = dentro && z.aspa.inside(mx_, my_);
-          if (hx) mask9(z.aspa, 0, R(12.0f), 0.86f, 0.33f, 0.33f, 0.22f);
+          /* (v1.18) `peligro`: el aspa ya armada (la segunda picada borra el archivo del efecto), en rojo sin pasar el raton */
+          const bool hx = (dentro && z.aspa.inside(mx_, my_)) || it.peligro;
+          if (hx) mask9(z.aspa, 0, R(12.0f), 0.86f, 0.33f, 0.33f, it.peligro ? 0.45f : 0.22f);
           icono({z.aspa.x + 6.0f, z.aspa.y + 6.0f, 12.0f, 12.0f}, icoCerrar_, hx ? 1.0f : ink[0], hx ? 0.55f : ink[1], hx ? 0.55f : ink[2],
                 hx ? 1.0f : 0.55f);
         }
@@ -3172,6 +3269,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     if (sub) *sub = s;
     return HitPanelItem;
   }
+  if (st_.marco && panelError_.inside(mx, my)) return HitPanelError;   /* (v1.18) en el marco, fuera de la tarjeta */
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (st_.marco && panelVolver_.inside(mx, my)) return HitPanelVolver;   /* (v1.16) */

@@ -52,6 +52,7 @@ set(SP_FILES
   "weave.frag|weaveFragSpv"
   "hud.vert|hudVertSpv"
   "hud.frag|hudFragSpv"
+  "efx_prof.frag|efxProfFragSpv"
 )
 set(SP_GEN "")
 foreach(entry ${SP_FILES})

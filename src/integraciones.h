@@ -192,6 +192,17 @@ bool hayMarca();
 void ponerMarca();
 void quitarMarca();
 
+/* (v1.18) Los parametros que ponen otros programas y que la pestana no lleva como interruptor propio (paramspropios.h):
+   las variables con las que se enciende cada capa implicita de Vulkan instalada (su `enable_environment`, con el nombre
+   de la capa) y las piezas VARIABLE=valor que haya en «Otros parametros» de todos o de algun juego (lo que alguien
+   escribio en su linea de Steam). Sin las de OdysseyVK, MangoHud, vkDaedalus, Neural Forge, vkBasalt y MAKO, que ya
+   tienen su interruptor, ni las que Steam y gamescope ponen solos */
+struct Detectado {
+  std::string pieza;    /* «ENABLE_LSFG=1» */
+  std::string origen;   /* «VK_LAYER_LS_frame_generation» o «de una línea de Steam» */
+};
+std::vector<Detectado> detectarParametros(const Estado &e);
+
 }  // namespace integ
 
 #endif

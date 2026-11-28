@@ -3467,6 +3467,12 @@ static int cmdIntegraciones(int argc, char **argv) {
   std::vector<std::string> ids;
   std::map<std::string, std::string> nombres;
   for (const prefs::Juego &j : prefs::juegosSteam(false)) ids.push_back(j.id), nombres[j.id] = j.nombre;
+  if (que == "detectar") {   /* (v1.18) lo que encuentra el boton «Detectar» de la pestana (integ::detectarParametros) */
+    const std::vector<integ::Detectado> v = integ::detectarParametros(integ::cargar());
+    for (const integ::Detectado &d : v) std::printf("  %-40s %s\n", d.pieza.c_str(), d.origen.c_str());
+    std::printf("%zu parametros de otros programas\n", v.size());
+    return 0;
+  }
   if (que == "escribir") {
     const integ::Resultado r = integ::aplicar(ids, true);
     if (!r.ok) {
@@ -3611,6 +3617,8 @@ static int cmdHudSelfTest(int argc, char **argv) {
   /* (v1.17) ODYSSEYVK_HUD_FPS=1|2: el cuadrito de los FPS (1 = con DLSS, 2 = con la red sobre un juego) */
   if (const char *fp = std::getenv("ODYSSEYVK_HUD_FPS"))
     hud.state().fpsModo = std::atoi(fp), hud.state().fpsJuego = 118.0f, hud.state().fpsCapa = 59.0f;
+  /* (v1.18) ODYSSEYVK_HUD_FPS_ESTILO=0..4: el estilo del FPS monitor (Hud::State::fpsEstilo) */
+  if (const char *fe = std::getenv("ODYSSEYVK_HUD_FPS_ESTILO")) hud.state().fpsEstilo = std::max(0, std::min(4, std::atoi(fe)));
   /* (v1.17) ODYSSEYVK_HUD_MONITOR=1: el cuadrito con filas vigiladas de ejemplo (lo medido aqui el 27-nov) */
   if (std::getenv("ODYSSEYVK_HUD_MONITOR"))
     hud.state().monitor = {{"RTX 4090", {{"95", "%"}, {"73", "°C"}, {"8,3", "GB"}, {"366", "W"}}},
@@ -3883,13 +3891,14 @@ static int cmdHudSelfTest(int argc, char **argv) {
     /* el panel de ajustes: cuantas celdas de raton tiene cada cosa que se pica, y con que senas */
     struct Cuenta { int celdas = 0, subs = 0; float fmin = 9.0f, fmax = -9.0f; };
     std::vector<Cuenta> porFila(hud.state().items.size());
-    int cerrar = 0, pestanas[8] = {0, 0, 0, 0, 0, 0, 0, 0};   /* (v1.18) cinco con FG */
+    int cerrar = 0, errorCeldas = 0, pestanas[8] = {0, 0, 0, 0, 0, 0, 0, 0};   /* (v1.18) cinco con FG */
     for (int y = 0; y < H; y += 2)
       for (int x = 0; x < W; x += 2) {
         int item = -1, sub = 0;
         float fr = 0.0f;
         const Hud::Hit g = hud.hitDetalle((float)x, (float)y, &item, &sub, &fr);
         if (g == Hud::HitNone || g == Hud::HitPanel) continue;   /* fuera del panel, o en un hueco */
+        if (g == Hud::HitPanelError) errorCeldas++;   /* (v1.18) «Informar de un error», abajo a la izquierda */
         if (g == Hud::HitPanelCerrar) cerrar++;
         else if (g == Hud::HitPanelPestana) pestanas[sub & 7]++;
         else if (g == Hud::HitPanelItem && item >= 0 && (size_t)item < porFila.size()) {
@@ -3899,6 +3908,7 @@ static int cmdHudSelfTest(int argc, char **argv) {
           c.fmin = std::min(c.fmin, fr), c.fmax = std::max(c.fmax, fr);
         }
       }
+    std::printf("  informar de un error: %d celdas\n", errorCeldas);
     float bx = 0, by = 0, bw = 0, bh = 0;
     hud.panelBounds(&bx, &by, &bw, &bh);
     std::printf("  panel de ajustes: %.0f x %.0f px en %.0f,%.0f (escala %.2f) · aspa %d celdas · pestanas %d / %d / %d / %d / %d\n",

@@ -562,6 +562,7 @@ void VkWeave::destroy() {
   fino_ = VkImg{};
   finoW_ = finoH_ = 0;
   finoFirma_.clear();
+  finoPintado_ = false;
   dev_->destroyImg(sal_);
   sal_ = VkImg{};
   salLado_ = 0;
@@ -608,6 +609,7 @@ bool VkWeave::resize(int w, int h) {
   fino_ = VkImg{};
   finoW_ = finoH_ = 0;
   finoFirma_.clear();
+  finoPintado_ = false;
   destroySwapchain();
   if (weavePipe_) vkDestroyPipeline(dev_->device(), weavePipe_, nullptr), weavePipe_ = VK_NULL_HANDLE;
   if (hudPipe_) vkDestroyPipeline(dev_->device(), hudPipe_, nullptr), hudPipe_ = VK_NULL_HANDLE;
@@ -1137,7 +1139,10 @@ bool VkWeave::frame(std::string *err) {
   if (!fuenteGenerada_ && fuenteImg && fuenteImg->valid()) {
     VkImageView salidaEf = VK_NULL_HANDLE;
     if (efectos_.preparar(fuenteImg->w, fuenteImg->h, &salidaEf)) {
-      correrEfectos = useGen != efectosGen_ || efectos_.sucia();
+      /* (v1.18) y con un mapa nuevo si algun efecto lee la profundidad: MEDIDO el 28-nov con una foto de fuente, la cadena
+         corria una vez, antes del primer mapa, y DisplayDepth se quedaba «sin profundidad del 3D» para siempre (lo mismo
+         un juego en pausa) */
+      correrEfectos = useGen != efectosGen_ || efectos_.sucia() || (efectos_.conProfundidad() && depthUsable_ && mapaGen_ != efectosMapaGen_);
       if (efectosEnPantalla_) srcView = salidaEf;   /* (v1.18) si no, solo para la vista de los efectos */
     } else {
       efectosGen_ = -1;
@@ -1208,13 +1213,22 @@ bool VkWeave::frame(std::string *err) {
 
   /* (v1.18) los efectos, antes que nada que lea la fuente */
   if (correrEfectos) {
-    efectos_.grabar(cb, fuenteImg->img, fuenteImg->w, fuenteImg->h, depthUsable_ && depth_.valid() ? depth_.img : VK_NULL_HANDLE,
-                    depthW_, depthH_);
+    /* (v1.18) la profundidad de los efectos: la afinada del cuadro anterior si la hay (con el canto del mapa en el canto de
+       la imagen y en dos bytes; la de este cuadro se pinta despues, abajo) y la fuente llena la pantalla (el afinado va a
+       tamano de pantalla); si no, el mapa. MEDIDO el 28-nov con el mapa solo: alrededor del arma de Cyberpunk la oclusion
+       (qUINT_mxao) dejaba manchas en la calle, porque el canto del mapa no cae en el del arma */
+    const bool conFino = finoEnUso_ && finoPintado_ && fino_.valid() && depthUsable_ && fuenteImg->w == finoW_ && fuenteImg->h == finoH_;
+    if (conFino)
+      efectos_.grabar(cb, fuenteImg->img, fuenteImg->w, fuenteImg->h, fino_.img, finoW_, finoH_, true);
+    else
+      efectos_.grabar(cb, fuenteImg->img, fuenteImg->w, fuenteImg->h, depthUsable_ && depth_.valid() ? depth_.img : VK_NULL_HANDLE,
+                      depthW_, depthH_);
     efectosGen_ = useGen;
+    efectosMapaGen_ = mapaGen_;
   }
 
   /* pasada 0: la profundidad de la fuente con el canto en su sitio (solo con los cantos finos) */
-  if (pintarFino) pasoFino(cb, s.weavePre);
+  if (pintarFino) pasoFino(cb, s.weavePre), finoPintado_ = true;
 
   VkRenderingAttachmentInfo att{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
   att.imageView = views_[idx];
@@ -1333,6 +1347,7 @@ bool VkWeave::asegurarFino(int w, int h) {
   fino_ = VkImg{};
   finoW_ = finoH_ = 0;
   finoFirma_.clear();
+  finoPintado_ = false;
   std::string e;
   bool ok = dev_->createImage(w, h, fmt_, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, fino_, &e);
   if (ok) {

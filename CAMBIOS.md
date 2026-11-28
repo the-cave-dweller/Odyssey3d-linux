@@ -50,6 +50,85 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Informar de un error: un botón abajo a la izquierda que deja el informe escrito en GitHub (v1.18)
+
+- Rodolfo: «añade un boton de bug al fondo a la izquierda de la pantalla, que al presionarlo abra y mande los errores a
+  nuestro github para arreglar si algo salio mal, que pida lo que deba pedir en descripcion, recuerda solo recolectar y
+  guardar logs basicos e importantes».
+- **El botón**: «Informar de un error», abajo a la izquierda del marco del panel (`Hud::HitPanelError`). Abre una página en
+  Ajustes con tres campos (qué pasó, qué esperabas, cómo repetirlo), lo que se adjunta a la vista, renglón a renglón, y
+  dos botones: *Abrir el informe en GitHub* y *Solo copiarlo*.
+- **Cómo se manda**: se abre el navegador en «New issue» del repositorio con el título y el cuerpo ya escritos; lo envía
+  el usuario con su cuenta después de leerlo. OdysseyVK no manda nada solo ni guarda claves de GitHub. El informe va
+  también al portapapeles y queda una copia en `~/.local/state/odysseyvk/informes` (las cinco últimas).
+- **Lo que se adjunta** (`src/informe.h`), y nada más: la versión, el sistema (distribución, núcleo, escritorio, sesión),
+  las tarjetas y el controlador de NVIDIA, si están la lente, el scaler y la cámara, lo que dice el vigilante (`hub`), del
+  registro del servicio los 30 últimos renglones que cuentan algo (cortados a 200 letras, los repetidos seguidos en uno
+  con «(xN)») y las caídas de OdysseyVK o gamescope de dos días (cuándo y qué programa). Sin la carpeta personal (queda
+  en «~»), el usuario ni el nombre del equipo. No van serve.conf, las líneas de Steam, capturas ni volcados.
+  - MEDIDO con el registro de Rodolfo al probarlo: «[serve] lanzando 3D por zen | <título del vídeo> — Zen Browser» sacaba
+    lo que estaba viendo. El título de la ventana se corta en la barra («(título quitado)»). Y los renglones de cada
+    sesión que no son fallos (la prioridad sin permiso, el cierre normal) ya no entran.
+  - La dirección de GitHub no pasa de 7000 letras: si no cabe se recorta el final del registro y se dice (aquí, 5762).
+- **Probado**: `tools/prueba_informe.cpp` (13 comprobaciones: la limpieza, el filtro del registro, el cuerpo y la
+  dirección); el panel pintado en la CPU con el botón (1264 celdas que responden) y la página; abrir el informe con
+  `ODYSSEYVK_PRUEBA_SIN_NAVEGADOR` (no abre el navegador ni toca el portapapeles): la copia guardada no trae el usuario.
+- **Lo que no está probado**: el clic de verdad en el panel, escribir en los campos con el teclado, y que el navegador
+  abra GitHub con el informe (no se abrió ninguno).
+
+## Los efectos de profundidad, bien; Efectos en dos páginas, Integraciones con lo de otros programas y el FPS monitor (v1.18)
+
+- Rodolfo: «separa las opciones de shader de otros efectos, de paso prueba el motor de shaders que escribio opus, algunos
+  efectos de profundidad se ven pero mal», «busca tambien cosas que puedas simplificar, u opciones que dependan una de otra
+  y se deban mostrar solo si la otra esta activa», «que la lista de shaders deje borrarlos con un tachesito y confirme luego
+  del mismo tache si desea borrar el archivo», «esconde los parametros de vksaedalus y vkbasalt en un dropdown…»,
+  «añade tambien un boton de deteccion de integraciones…» y «haz que el visor de fps se vea mas acorde a nuestro estilo…
+  renombra el cuadrito por FPS monitor».
+- **El motor de los efectos, medido** (un cuadro de Cyberpunk a 3840x2160, su mapa de la red, `odysseyvk ctl efectos`):
+  - DisplayDepth: las normales en curvas de nivel por todo el cuadro (cada salto de 1/255 del mapa, un escalón);
+    GloomAO tocaba el 62 % del cuadro y dibujaba esas curvas en la calle; MXAO y qUINT_mxao tocaban el 1,3 % (solo la
+    mano): con el plano lejano de ReShade en 1, sus posiciones caben en un mundo de 0 a 1 y su radio lo abarca todo.
+  - Con una foto de fuente (o un juego en pausa) la cadena corría una vez, antes del primer mapa, y se quedaba «sin
+    profundidad del 3D».
+  - PPFX_SSDO y StageDepth no corren: sus texturas (`ssdonoise.png`, `Stage.png`) no están en la carpeta.
+- **El cambio en el motor** (`shaders/efx_prof.frag`, `efectos_vk.cpp`): la profundidad de los efectos ya no es el mapa
+  estirado. Dos pasadas le quitan los escalones sin mover los cantos (no cambian el valor más de un nivel) y la dejan como
+  la de un juego con Z invertida y el plano lejano en 1000, los de fábrica de ReShade: lo más cercano a 2 unidades y el
+  cielo en el plano lejano. Con los cantos finos y la fuente a tamaño de pantalla, la entrada es la profundidad afinada
+  del visor (el canto del mapa en el canto de la imagen, en dos bytes), la del cuadro anterior. Y la cadena vuelve a
+  pasar con cada mapa nuevo si algún efecto lee la profundidad.
+  - Después: MXAO y qUINT_mxao tocan el 20,7 % del cuadro; GloomAO el 29,7 %, sin curvas; la calle sale lisa en las
+    normales de DisplayDepth; AdaptiveFog deja de cubrir el 98,9 % y se queda en el fondo (8,4 %). En el visor de prueba
+    (gamescope sin salida) el registro dice «con la profundidad del 3D (518x518, el mapa)» y luego «(3840x2160, la
+    afinada: los cantos en su sitio)».
+  - Queda: alrededor del arma la oclusión deja alguna mancha (la profundidad de la red no es la del juego).
+- **Efectos, en dos páginas** (el selector «Tipo de efecto»): *Shaders de ReShade* (la lista, añadir y las fuentes) y
+  *Otros efectos* (ShaderBeam, que antes iba entre «Añadir un efecto» y las fuentes y no se encontraba). Fuera la nota
+  larga que repetía la del interruptor.
+- **Borrar un shader**: su aspa lo quita de la lista como antes y deja en su sitio un renglón gris con el aspa en rojo;
+  picarla otra vez manda su `.fx` a `Papelera/` dentro de la carpeta de los efectos (no se destruye). Un doble clic no
+  borra (0,6 s) y el renglón dura 20 s. Las fuentes públicas cuentan lo de la papelera como «ya lo tienes».
+- **Integraciones**:
+  - `ENABLE_VKDAEDALUS`, `ENABLE_VKBASALT` y `vkdaedalus-run`, en una sección plegada «vkDaedalus · vkBasalt» con la nota
+    «OdysseyVK ya trae sus sombreadores y efectos: pestaña Efectos» junto a la flechita; con alguna puesta sale abierta.
+  - **Parámetros de otros programas** (`src/paramspropios.h`): «Detectar» busca las variables con las que se enciende
+    cada capa de Vulkan instalada y las piezas escritas en las líneas de Steam; se añaden de una lista, cada una con su
+    casilla y su aspa (solo se quitan las añadidas), y hay un campo para una escrita a mano (`VARIABLE=valor`).
+    Encendida, la pieza va en «Otros parámetros». La lista, en `~/.config/odysseyvk/integraciones-propias`;
+    `odysseyvk integraciones detectar` dice lo que encuentra (aquí: `__NV_PRIME_RENDER_OFFLOAD=1` y
+    `NVPRESENT_ENABLE_SMOOTH_MOTION=1`).
+- **Lo que depende de otra cosa, solo con ella puesta**: el multiplicador de los vídeos con «Activar en vídeos»; modelo,
+  multiplicador, flujo y modo rendimiento de MAKO con la generación encendida; «Anticipar la cabeza» con el seguimiento.
+- **FPS monitor** (el cuadrito, con su nombre nuevo): cinco estilos en el menú de su tesela (`fps_estilo` en serve.conf):
+  completo (el de siempre), como la pastilla (una barra de su alto con las cifras en teselas, la principal en el azul del
+  acento), cuadrado, compacto (un renglón) y básico (reales, generados y en pantalla; sin generación de cuadros, solo los
+  del juego). Lo vigilado (tarjetas, procesador…) solo sale en el completo.
+- **Probado**: los efectos, con `ctl efectos` y con el visor en un gamescope sin salida; el panel, pintado en la CPU con
+  golpes simulados y una casa de prueba con una copia de la carpeta de los efectos (la de verdad no se tocó);
+  `tools/prueba_params.cpp`; compila con 0 avisos; `traducciones.py revisar`, 0 sin traducir (32 textos nuevos).
+- **Lo que no está probado**: nada en el monitor ni sobre un juego de verdad; la detección, sin Steam (en la casa de
+  prueba no hay); las fuentes públicas con algo en la papelera (sin red).
+
 ## ShaderBeam en el visor: el haz de un CRT a cada refresco del panel, para ver nítido lo que se mueve (v1.18)
 
 - Rodolfo, señalando https://github.com/mausimus/ShaderBeam: «create this one too», y luego «tambien analiza como puede

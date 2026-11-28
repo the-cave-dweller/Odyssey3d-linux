@@ -1,5 +1,6 @@
 /* integraciones.cpp — ver integraciones.h */
 #include "integraciones.h"
+#include "paramspropios.h"
 #include "mako.h"   /* (v1.18) MAKO_FG_HOST, el generador de MAKO que instala OdysseyVK */
 
 #include <algorithm>
@@ -1390,6 +1391,69 @@ const char *excluyente(const std::string &clave) {
 std::string firma() {
   return sello(rutaLocalconfig()) + "|" + sello(rutaConf()) + "|" + sello(rutaMarca()) + "|" + (steamAbierto() ? "A" : "C") +
          "|" + sellosCarpetas();
+}
+
+/* (v1.18) ver integraciones.h */
+std::vector<Detectado> detectarParametros(const Estado &e) {
+  std::vector<Detectado> v;
+  /* las que ya llevan su interruptor o las pone otro solo */
+  auto conocida = [](const std::string &var) {
+    for (const char *k : {"ODYSSEYVK", "MANGOHUD", "ENABLE_VKDAEDALUS", "NEURAL_FORGE_", "ENABLE_VKBASALT", "ENABLE_MAKO", "MAKO_FG_HOST",
+                          "ENABLE_VK_LAYER_VALVE_", "ENABLE_GAMESCOPE_WSI", "SteamAppId", "STEAM_"})
+      if (var.rfind(k, 0) == 0) return true;
+    return false;
+  };
+  auto pon = [&](const std::string &pieza, const std::string &origen) {
+    if (!paramspropios::valida(pieza) || conocida(paramspropios::variableDe(pieza))) return;
+    for (const Detectado &d : v)
+      if (d.pieza == pieza) return;
+    v.push_back({pieza, origen});
+  };
+  /* las capas: cada "enable_environment": { "VAR": "valor" }, con el "name" del manifiesto */
+  for (const std::string &d : carpetasCapas()) {
+    std::error_code ec;
+    for (const auto &f : std::filesystem::directory_iterator(d, ec)) {
+      if (f.path().extension() != ".json") continue;
+      std::string t;
+      if (!readSmallFile(f.path().string(), t)) continue;
+      for (size_t i = t.find("\"enable_environment\""); i != std::string::npos; i = t.find("\"enable_environment\"", i + 1)) {
+        const size_t a = t.find('{', i), b = a == std::string::npos ? a : t.find('}', a);
+        if (b == std::string::npos) break;
+        /* el nombre de su capa: el "name" de mas cerca por delante (un manifiesto puede traer varias) */
+        std::string nombre = f.path().stem().string();
+        if (const size_t n = t.rfind("\"name\"", i); n != std::string::npos) {
+          const size_t dp = t.find(':', n);
+          const size_t c1 = dp == std::string::npos ? dp : t.find('"', dp);
+          const size_t c2 = c1 == std::string::npos ? c1 : t.find('"', c1 + 1);
+          if (c2 != std::string::npos && c2 < i) nombre = t.substr(c1 + 1, c2 - c1 - 1);
+        }
+        size_t k = a;
+        while ((k = t.find('"', k + 1)) != std::string::npos && k < b) {
+          const size_t fin = t.find('"', k + 1);
+          if (fin == std::string::npos || fin > b) break;
+          size_t m = fin + 1;
+          while (m < b && std::isspace((unsigned char)t[m])) m++;
+          if (m >= b || t[m] != ':') {
+            k = fin;
+            continue;
+          }
+          const size_t v1 = t.find('"', m), v2 = v1 == std::string::npos ? v1 : t.find('"', v1 + 1);
+          if (v2 == std::string::npos || v2 > b) break;
+          pon(t.substr(k + 1, fin - k - 1) + "=" + t.substr(v1 + 1, v2 - v1 - 1), nombre);
+          k = v2;
+        }
+      }
+    }
+  }
+  /* y lo que haya escrito en «Otros parametros» */
+  auto deOtros = [&](const Ajustes &a) {
+    const auto it = a.find("otros");
+    if (it == a.end()) return;
+    for (const std::string &p : paramspropios::piezas(it->second)) pon(p, "Steam");
+  };
+  deOtros(e.todos);
+  for (const auto &j : e.juegos) deOtros(j.second.propios);
+  return v;
 }
 
 }  // namespace integ

@@ -31,7 +31,9 @@ extern char **environ;
 
 #include "ajuste.h"
 #include "atajos.h"
+#include "informe.h"   /* (v1.18) el informe de un error para GitHub */
 #include "integraciones.h"
+#include "paramspropios.h"   /* (v1.18) los parametros que añade el usuario en Integraciones */
 #include "mako.h"   /* (v1.18) MAKO FG: su boton de instalar, junto a ENABLE_MAKO */
 #include "efectos.h"   /* (v1.18) los efectos de ReShade: General y el icono de cada caratula */
 #include "util.h"
@@ -728,6 +730,19 @@ void opcionesMonitor(std::vector<std::string> &rotulos, std::vector<bool> &marca
   auto pon = [&](const std::string &rot, const std::string &clave) {
     rotulos.push_back(rot), claves.push_back(clave), marcadas.push_back(el.count(clave) > 0);
   };
+  /* (v1.18) arriba, el estilo (uno de los cinco: Hud::State::fpsEstilo); debajo, lo que vigila */
+  {
+    const auto conf = ajuste::leerServeConf();
+    const auto ie = conf.find("fps_estilo");
+    const std::string ahora = ie == conf.end() || ie->second.empty() ? std::string("completo") : strLower(ie->second);
+    const std::pair<const char *, const char *> estilos[] = {{"completo", "Estilo: completo"},
+                                                             {"pastilla", "Estilo: como la pastilla"},
+                                                             {"cuadrado", "Estilo: cuadrado"},
+                                                             {"compacto", "Estilo: compacto"},
+                                                             {"basico", "Estilo: básico (solo los FPS)"}};
+    for (const auto &es : estilos)
+      rotulos.push_back(idioma::tr(es.second)), claves.push_back(std::string("estilo:") + es.first), marcadas.push_back(ahora == es.first);
+  }
   for (const monitor::Tarjeta &t : monitor::leer().tarjetas) pon(idioma::trf("Tarjeta {}", {t.nombre}), t.clave);
   pon(idioma::tr("Temperatura de las tarjetas"), monitor::kTemp);
   pon(idioma::tr("Memoria de las tarjetas"), monitor::kVram);
@@ -739,6 +754,17 @@ void opcionesMonitor(std::vector<std::string> &rotulos, std::vector<bool> &marca
 }
 
 bool alternarMonitor(const std::string &clave, std::string *aviso) {
+  if (clave.rfind("estilo:", 0) == 0) {   /* (v1.18) el estilo del FPS monitor: se guarda y el visor abierto lo toma al momento */
+    const std::string es = clave.substr(7);
+    std::string e;
+    if (!ajuste::fijarEnServeConf("fps_estilo", es, &e)) {
+      if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
+      return false;
+    }
+    ajuste::escribir(std::map<std::string, double>(), std::string(), {{"fps_estilo", es}}, &e);
+    if (aviso) *aviso = idioma::trf("FPS monitor: estilo {}", {es});
+    return true;
+  }
   std::set<std::string> el = monitorElegido();
   const bool quitar = el.erase(clave) > 0;
   if (!quitar) el.insert(clave);
@@ -750,8 +776,8 @@ bool alternarMonitor(const std::string &clave, std::string *aviso) {
   }
   ajuste::escribir(std::map<std::string, double>(), std::string(), {{"monitor", texto.empty() ? std::string("no") : texto}}, &e);
   if (aviso)
-    *aviso = el.empty() ? std::string(idioma::tr("el cuadrito ya no vigila nada más"))
-                        : idioma::trf("el cuadrito vigila {} cosas", {std::to_string(el.size())});
+    *aviso = el.empty() ? std::string(idioma::tr("el FPS monitor ya no vigila nada más"))
+                        : idioma::trf("el FPS monitor vigila {} cosas", {std::to_string(el.size())});
   return true;
 }
 
@@ -1284,6 +1310,27 @@ std::string dichoDe(const integ::Resultado &r) {
 }
 
 /* cambia una clave (en todos o en el juego puesto) y lo lleva a Steam */
+/* (v1.18) la lista de parametros del usuario (paramspropios.h) y lo detectado al picar «Detectar» */
+std::vector<std::string> leerPropios() {
+  std::string t;
+  readSmallFile(rutaAjusteOdyssey("integraciones-propias"), t);
+  return paramspropios::deTexto(t);
+}
+bool guardarPropios(const std::vector<std::string> &v) {
+  const std::string r = rutaAjusteOdyssey("integraciones-propias");
+  FILE *f = std::fopen((r + ".nuevo").c_str(), "we");
+  if (!f) return false;
+  const std::string t = paramspropios::aTexto(v);
+  const bool ok = std::fwrite(t.data(), 1, t.size(), f) == t.size();
+  return std::fclose(f) == 0 && ok && std::rename((r + ".nuevo").c_str(), r.c_str()) == 0;
+}
+bool g_integDetectado = false;   /* ya se pico «Detectar»: sale la lista de lo encontrado */
+/* (v1.18) la pagina del informe de un error (informe.h): abierta ocupa la pestana Ajustes. Lo recogido se lee una vez al
+   abrirla (y con «Volver a leer»): el registro no se consulta en cada repintado */
+bool g_informe = false;
+informe::Datos g_informeDatos;
+std::string g_informeDiag;
+
 bool cambiarIntegracion(const std::string &clave, const std::string &valor, const std::vector<Juego> &juegos,
                         std::string *aviso) {
   const std::vector<std::string> ids = idsDe(juegos);
@@ -1406,8 +1453,13 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
                       {"vkdaedalus", "ENABLE_VKDAEDALUS", "La capa de vkDaedalus"},
                       {"neural_forge", "NEURAL_FORGE_ENABLE", "La capa de Neural Forge; su ejecutable (NEURAL_FORGE_TARGET_EXE) se toma de Neural Forge"},
                       {"vkbasalt", "ENABLE_VKBASALT", "Los filtros de vkBasalt"},
-                      {"mako", "ENABLE_MAKO", "La generación de cuadros de MAKO: se ajusta con clic derecho en el cuadrito de los FPS"}};
+                      {"mako", "ENABLE_MAKO", "La generación de cuadros de MAKO: se ajusta con clic derecho en el FPS monitor"}};
+  /* (v1.18) las de vkDaedalus y vkBasalt, aparte y plegadas (Rodolfo: «esconde los parametros de vksaedalus y vkbasalt en
+     un dropdown si estan o no instalados, en el menu de activacion, recordando al usuario junto al boton de dropdown que
+     OdysseyVK tiene su propio sistema de sombreadores y efectos»): van despues de las demas, con su nota en la cabecera */
+  auto esAjena = [](const char *clave) { return std::strcmp(clave, "vkdaedalus") == 0 || std::strcmp(clave, "vkbasalt") == 0; };
   for (const Var &v : vars) {
+    if (esAjena(v.clave)) continue;
     const bool puesto = val(v.clave) == "1";
     const size_t k = interruptor(v.clave, std::string(v.nombre) + (puesto ? "=1" : ""), idioma::tr(v.ayuda));
     /* (v1.18) apagado aqui porque el juego se cayo con el (odysseyvk juego): sale apagado, con la hora */
@@ -1508,10 +1560,69 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
   campo("otros", idioma::tr("Otros parámetros"), "DXVK_HUD=fps PROTON_LOG=1",
         idioma::tr("Más variables, separadas por espacios: van con las de arriba"));
 
+  /* (v1.18) los parametros del usuario (paramspropios.h): cada uno con su casilla y su aspa (solo estos se quitan), el
+     boton que detecta los de otros programas con su lista para añadirlos, y el campo para uno escrito a mano */
+  {
+    const std::vector<std::string> propios = leerPropios();
+    const std::string otros = val("otros");
+    for (const std::string &pz : propios) {
+      Hud::ItemPanel it;
+      it.tipo = Hud::ItemPanel::Interruptor, it.rotulo = pz, it.valor = paramspropios::puesta(otros, pz);
+      it.ayuda = idioma::tr("Lo añadiste tú: su aspa lo quita de la lista y de todos los juegos");
+      it.borrable = true;
+      pon(it, "integ:px:" + pz);
+    }
+    Hud::ItemPanel bd;
+    bd.tipo = Hud::ItemPanel::Boton, bd.rotulo = idioma::tr("Parámetros de otros programas");
+    bd.nota = idioma::tr("Busca los de las capas de Vulkan instaladas y los escritos en tus líneas de Steam");
+    bd.valorTexto = idioma::tr("Detectar"), bd.valor = true;
+    pon(bd, "integ:detectar");
+    if (g_integDetectado) {
+      std::vector<integ::Detectado> hay;
+      for (const integ::Detectado &d : integ::detectarParametros(e))
+        if (std::find(propios.begin(), propios.end(), d.pieza) == propios.end()) hay.push_back(d);
+      if (hay.empty()) {
+        Hud::ItemPanel n;
+        n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("No encontré ninguno que no esté ya en la lista");
+        pon(n, "");
+      } else {
+        Hud::ItemPanel dsp;
+        dsp.tipo = Hud::ItemPanel::Desplegable, dsp.elegido = -1;
+        dsp.valorTexto = idioma::trf("Añadir uno de los {} encontrados…", {std::to_string(hay.size())});
+        std::string idd = "lista:integ-detectados";
+        for (const integ::Detectado &d : hay) {
+          dsp.opciones.push_back(d.pieza), dsp.ayudas.push_back(d.origen == "Steam" ? std::string(idioma::tr("de una línea de Steam")) : d.origen);
+          dsp.estadosOpc.push_back(0);
+          idd += '\x1f' + std::string("integ:padd:") + d.pieza;
+        }
+        pon(dsp, idd);
+      }
+    }
+    Hud::ItemPanel tx;
+    tx.tipo = Hud::ItemPanel::Texto, tx.rotulo = idioma::tr("Parámetro personalizado"), tx.nota = "VARIABLE=valor";
+    tx.ayuda = idioma::tr("Escríbelo y pulsa Intro: pasa a la lista de arriba, con su casilla");
+    if (g_edit.id == "integ:pnuevo") tx.valorTexto = g_edit.texto, tx.cursor = (int)g_edit.cursor, tx.seleccion = g_edit.todo;
+    pon(tx, "integ:pnuevo");
+  }
+
+  /* (v1.18) vkDaedalus y vkBasalt, plegadas. Con alguna puesta la seccion sale abierta: lo que esta encendido no se esconde */
+  {
+    const bool algunaPuesta = val("vkdaedalus") == "1" || val("vkbasalt") == "1" || val("vkdaedalus_run") == "1";
+    Hud::ItemPanel sp;
+    sp.tipo = Hud::ItemPanel::Seccion, sp.rotulo = "vkDaedalus · vkBasalt", sp.talCual = true, sp.plegable = true;
+    sp.nota = idioma::tr("OdysseyVK ya trae sus sombreadores y efectos: pestaña Efectos");
+    sp.valor = algunaPuesta || seccionesAbiertas().count("integ-ajenas") > 0;
+    pon(sp, "plegar:integ-ajenas");
+    if (sp.valor) {
+      for (const Var &v : vars)
+        if (esAjena(v.clave)) interruptor(v.clave, std::string(v.nombre) + (val(v.clave) == "1" ? "=1" : ""), idioma::tr(v.ayuda));
+      interruptor("vkdaedalus_run", "vkdaedalus-run", idioma::tr("Arranca el juego a través de vkdaedalus-run"));
+    }
+  }
+
   /* COMANDO: lo de delante del juego y lo de detras */
   sec.rotulo = idioma::tr("COMANDO");
   pon(sec, "");
-  interruptor("vkdaedalus_run", "vkdaedalus-run", idioma::tr("Arranca el juego a través de vkdaedalus-run"));
   campo("comando", idioma::tr("Comando personalizado"), "gamemoderun",
         idioma::tr("Lo que quieras correr delante del juego (va justo antes de %command%)"));
   campo("opciones", idioma::tr("Opciones del juego"), "--launcher-skip", idioma::tr("Van detrás de %command%: se le pasan al juego"));
@@ -1642,6 +1753,13 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
 
 /* un golpe en una fila de Integraciones ("integ:<que>") */
 bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego> &juegos, std::string *aviso) {
+  if (que.rfind("bug_", 0) == 0) {   /* (v1.18) un campo del informe de un error: a escribir */
+    const std::string &ahora = que == "bug_que" ? g_informeDatos.que : que == "bug_esperaba" ? g_informeDatos.esperaba : g_informeDatos.pasos;
+    g_edit = Edicion{};
+    g_edit.id = "integ:" + que, g_edit.texto = ahora, g_edit.cursor = ahora.size();
+    if (aviso) *aviso = idioma::tr("escribe y pulsa Intro para guardarlo (Esc lo deja como estaba)");
+    return true;
+  }
   const std::vector<std::string> ids = idsDe(juegos);
   if (que == "volver") {
     g_integJuego.clear();
@@ -1689,6 +1807,60 @@ bool aplicarIntegracion(const std::string &que, int sub, const std::vector<Juego
       return true;
     }
     if (aviso) *aviso = dichoDe(integ::aplicar(ids, true));
+    return true;
+  }
+  /* (v1.18) los parametros del usuario (paramspropios.h) */
+  if (que == "detectar") {
+    g_integDetectado = true;
+    const std::vector<std::string> propios = leerPropios();
+    int n = 0;
+    for (const integ::Detectado &d : integ::detectarParametros(e))
+      if (std::find(propios.begin(), propios.end(), d.pieza) == propios.end()) n++;
+    if (aviso) *aviso = n ? idioma::trf("{} parámetros encontrados: elige en la lista los que quieras añadir", {std::to_string(n)})
+                          : std::string(idioma::tr("No encontré ninguno que no esté ya en la lista"));
+    return true;
+  }
+  if (que == "pnuevo") {
+    g_edit = Edicion{};
+    g_edit.id = "integ:pnuevo";
+    if (aviso) *aviso = idioma::tr("escribe y pulsa Intro para guardarlo (Esc lo deja como estaba)");
+    return true;
+  }
+  if (que.rfind("padd:", 0) == 0) {
+    const std::string pz = que.substr(5);
+    std::vector<std::string> propios = leerPropios();
+    if (!paramspropios::valida(pz) || std::find(propios.begin(), propios.end(), pz) != propios.end()) return false;
+    propios.push_back(pz);
+    if (!guardarPropios(propios)) return false;
+    if (aviso) *aviso = idioma::trf("{} añadido: enciéndelo con su casilla", {pz});
+    return true;
+  }
+  if (que.rfind("px:", 0) == 0) {
+    const std::string pz = que.substr(3);
+    std::vector<std::string> propios = leerPropios();
+    if (std::find(propios.begin(), propios.end(), pz) == propios.end()) return false;
+    const std::string otros = ef.count("otros") ? ef.at("otros") : std::string();
+    if (sub != 3)   /* su casilla: la pieza entra o sale de «Otros parametros» de lo que se esta mirando */
+      return cambiarIntegracion("otros", paramspropios::con(otros, pz, !paramspropios::puesta(otros, pz)), juegos, aviso);
+    /* su aspa: fuera de la lista, y de «Otros parametros» de todos y de cada juego que la lleve */
+    propios.erase(std::remove(propios.begin(), propios.end(), pz), propios.end());
+    if (!guardarPropios(propios)) return false;
+    bool cambio = false;
+    if (paramspropios::puesta(e.todos["otros"], pz)) integ::fijar(e, "", "otros", paramspropios::con(e.todos["otros"], pz, false)), cambio = true;
+    std::vector<std::string> conElla;
+    for (const auto &j : e.juegos)
+      if (const auto o = j.second.propios.find("otros"); o != j.second.propios.end() && paramspropios::puesta(o->second, pz)) conElla.push_back(j.first);
+    for (const std::string &id : conElla)
+      integ::fijar(e, id, "otros", paramspropios::con(integ::efectivo(e, id)["otros"], pz, false)), cambio = true;
+    if (cambio) {
+      std::string err;
+      if (!integ::guardar(e, &err)) {
+        if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {err});
+        return true;
+      }
+      integ::aplicar(ids, true);
+    }
+    if (aviso) *aviso = idioma::trf("{} quitado de la lista", {pz});
     return true;
   }
   const auto fab = integ::deFabrica().find(que);
@@ -1746,6 +1918,26 @@ bool terminarTexto(const std::vector<Juego> &juegos, std::string *aviso) {
   const Edicion ed = g_edit;
   g_edit = Edicion{};
   const std::string clave = ed.id.substr(6);
+  if (clave.rfind("bug_", 0) == 0) {   /* (v1.18) un campo del informe de un error */
+    std::string &dst = clave == "bug_que" ? g_informeDatos.que : clave == "bug_esperaba" ? g_informeDatos.esperaba : g_informeDatos.pasos;
+    dst = strTrim(ed.texto);
+    return true;
+  }
+  if (clave == "pnuevo") {   /* (v1.18) un parametro escrito a mano: a la lista del usuario, si vale */
+    const std::string pz = strTrim(ed.texto);
+    if (pz.empty()) return true;
+    std::vector<std::string> propios = leerPropios();
+    if (!paramspropios::valida(pz)) {
+      if (aviso) *aviso = idioma::tr("no vale: ha de ser VARIABLE=valor, sin espacios ni ; | & < > $");
+      return true;
+    }
+    if (std::find(propios.begin(), propios.end(), pz) == propios.end()) {
+      propios.push_back(pz);
+      if (!guardarPropios(propios)) return true;
+    }
+    if (aviso) *aviso = idioma::trf("{} añadido: enciéndelo con su casilla", {pz});
+    return true;
+  }
   integ::Estado e = integ::cargar();
   const integ::Ajustes ef = integ::efectivo(e, g_integJuego);
   std::string t = strTrim(ed.texto);
@@ -1914,6 +2106,8 @@ void filasPerfilMako(Hud::State &st, std::vector<std::string> &ids, const std::s
     pon(o, idDe(que));
   };
   opciones(idioma::tr("Generación"), {idioma::tr("Apagada"), idioma::tr("Encendida")}, p.existe && p.puesta ? 1 : 0, "puesta");
+  /* (v1.18) lo demas es de la generacion: apagada, no se ve (el perfil lo conserva y vuelve al encenderla) */
+  if (!(p.existe && p.puesta)) return;
   opciones(idioma::tr("Modelo"), {"LSFG", "MAKO FG"}, modelo, "modelo");
   opciones(idioma::tr("Multiplicador"), {"x2", "x3", "x4"}, std::max(0, std::min(2, p.multiplicador - 2)), "multiplicador");
   opciones(idioma::tr("Flujo"), {"50 %", "75 %", "85 %", "100 %"}, flujo, "flujo");
@@ -1993,7 +2187,9 @@ static void filasFg(Hud::State &st, std::vector<std::string> &ids) {
     o.opciones = {"x2", "x3", "x4"};
     o.elegido = fgVideoMultiplicador() - 2;
     if (!hay) o.apagado = true;
-    pon(o, "fg:video");
+    /* (v1.18) solo con «Activar en vídeos» puesto (Rodolfo: «opciones que dependan una de otra y se deban mostrar solo si
+       la otra esta activa») */
+    if (sw.valor) pon(o, "fg:video");
     Hud::ItemPanel n;
     n.tipo = Hud::ItemPanel::Nota;
     n.rotulo = hay ? idioma::tr("Vale en un par de segundos con el 3D abierto sobre un vídeo; con un juego debajo no hace nada.")
@@ -2125,6 +2321,27 @@ static bool aplicarPerfilMako(const std::string &exe, const std::string &que, in
 namespace {
 std::string g_efectosDe;               /* los efectos que ensena la pestana: vacio o "*" = los de todos los juegos, o un appid */
 bool g_efectosDesdeJuegos = false;     /* se abrio desde una caratula: Volver lleva a Juegos */
+/* (v1.18) la pestana en dos paginas (Rodolfo: «separa las opciones de shader de otros efectos»): 0 = los shaders de
+   ReShade (la lista, añadir y las fuentes publicas) · 1 = los otros efectos, que no son shaders (ShaderBeam). Antes
+   ShaderBeam iba entre «Añadir un efecto» y las fuentes, y no se encontraba */
+int g_efectosPagina = 0;
+/* (v1.18) el efecto recien quitado de la lista con su aspa (Rodolfo: «que la lista de shaders deje borrarlos con un
+   tachesito y confirme luego del mismo tache si desea borrar el archivo»): en su sitio queda un renglon con el aspa en
+   rojo, y picarla otra vez manda su archivo a la papelera de los efectos. Dura 20 s y no vale antes de 0,6 (un doble
+   clic no borra nada) */
+struct EfxQuitado {
+  std::string app, nombre, ruta;
+  size_t puesto = 0;
+  double cuando = 0.0;
+} g_efxQuitado;
+double relojEfx() {
+  struct timespec ts{};
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+}
+bool hayQuitado(const std::string &app) {
+  return !g_efxQuitado.nombre.empty() && g_efxQuitado.app == app && relojEfx() - g_efxQuitado.cuando < 20.0;
+}
 std::string g_juegoDelPanel;           /* el juego sobre el que se abrio el panel (un boton a sus efectos) */
 bool g_fuentesSolas = false;           /* (v1.18) el panel de verdad mira las fuentes solo (la prueba del HUD, no: sin red) */
 
@@ -2331,6 +2548,27 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
     in.nota = idioma::tr("Van en ~/.config/odysseyvk/reshade (Shaders/ y Textures/); otra, con efectos_carpeta en serve.conf.");
     pon(in, "");
   }
+  /* (v1.18) las dos paginas */
+  {
+    Hud::ItemPanel pg;
+    pg.tipo = Hud::ItemPanel::Opciones, pg.rotulo = idioma::tr("Tipo de efecto");
+    pg.opciones = {idioma::tr("Shaders de ReShade"), idioma::tr("Otros efectos")};
+    pg.elegido = g_efectosPagina == 1 ? 1 : 0;
+    pg.ayudas = {idioma::tr("Los .fx de la carpeta: la lista, añadir y las fuentes públicas."),
+                 idioma::tr("Los que hace el visor y no son shaders: ShaderBeam.")};
+    pon(pg, "efx:pagina");
+  }
+  if (g_efectosPagina == 1) {
+    lado = 1;
+    filasHaz(a.haz, pon);
+    if (previa) return;
+    lado = 2;
+    Hud::ItemPanel in;
+    in.tipo = Hud::ItemPanel::Info, in.rotulo = idioma::tr("Otros efectos");
+    in.nota = idioma::tr("No son shaders de ReShade: los hace el visor al tramar, a cada refresco del panel.");
+    pon(in, "");
+    return;
+  }
   lado = 1;
   Hud::ItemPanel m;
   m.tipo = Hud::ItemPanel::Interruptor, m.rotulo = idioma::tr("Efectos"), m.valor = a.puestos;
@@ -2341,7 +2579,19 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   m.sitioAspa = true;   /* (v1.18) alineado con los de los efectos, que llevan su aspita */
   pon(m, "efx:puestos");
   const std::set<std::string> &abiertas = seccionesAbiertas();
-  for (size_t i = 0; i < a.lista.size(); i++) {
+  /* (v1.18) el recien quitado: su renglon en gris con el aspa armada, donde estaba */
+  const bool quitado = hayQuitado(app) && fileExists(g_efxQuitado.ruta);
+  auto ponQuitado = [&] {
+    Hud::ItemPanel q;
+    q.tipo = Hud::ItemPanel::Interruptor, q.pildora = true, q.valor = false, q.apagado = true;
+    q.rotulo = idioma::trf("{} quitado de la lista", {g_efxQuitado.nombre});
+    q.nota = idioma::tr("Pica otra vez el aspa para borrar también su archivo");
+    q.borrable = true, q.peligro = true;
+    pon(q, "efx:borrar:" + g_efxQuitado.nombre);
+  };
+  for (size_t i = 0; i <= a.lista.size(); i++) {
+    if (quitado && i == std::min(g_efxQuitado.puesto, a.lista.size())) ponQuitado();
+    if (i == a.lista.size()) break;
     const efectos::Efecto &e = a.lista[i];
     const auto it = disp.find(e.nombre);
     efectos::Descripcion d;
@@ -2426,7 +2676,6 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   }
   pon(dsp, idd);
   if (previa) return;   /* en la columna, solo lo que se prueba con el juego a la vista */
-  filasHaz(a.haz, pon);   /* (v1.18) ShaderBeam, en la mitad de la derecha */
   Hud::ItemPanel n;
   n.tipo = Hud::ItemPanel::Nota;
   n.rotulo = carpeta.empty() ? std::string() : idioma::trf("{} efectos en {}", {std::to_string(disp.size()), carpeta});
@@ -2434,7 +2683,8 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   if (app.empty()) {
     Hud::ItemPanel n2;
     n2.tipo = Hud::ItemPanel::Nota;
-    n2.rotulo = idioma::tr("Los efectos (.fx) de ReShade corren en el visor 3D sobre cada cuadro del juego, con la profundidad del 3D. Cada juego puede tener los suyos: el icono de efectos de su carátula, en Juegos.");
+    /* (v1.18) sin la primera frase, que repetia la nota del interruptor y no cabia en el renglon */
+    n2.rotulo = idioma::tr("Cada juego puede tener los suyos: el icono de efectos de su carátula, en Juegos.");
     pon(n2, "");
   }
   /* (v1.18) las fuentes publicas (efectos.h): en la de todos los juegos, con su boton de bajar solo lo que falta. Se mira
@@ -2535,6 +2785,23 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
     if (aviso) *aviso = idioma::tr(remirar ? "mirándola otra vez…" : "bajando solo lo que falta…");
     return true;
   }
+  if (que == "pagina") {   /* (v1.18) shaders de ReShade u otros efectos */
+    g_efectosPagina = sub == 1 ? 1 : 0;
+    return true;
+  }
+  if (que.rfind("borrar:", 0) == 0) {
+    /* (v1.18) la segunda picada del aspa: el archivo del efecto recien quitado, a la papelera de los efectos */
+    const std::string appB = g_efectosDe == "*" ? std::string() : g_efectosDe;
+    if (sub != 3 || !hayQuitado(appB) || g_efxQuitado.nombre != que.substr(7)) return false;
+    /* un doble clic no borra (ODYSSEYVK_PRUEBA_SIN_ESPERA: las pruebas, que dan los dos golpes seguidos) */
+    static const bool sinEspera = std::getenv("ODYSSEYVK_PRUEBA_SIN_ESPERA") != nullptr;
+    if (!sinEspera && relojEfx() - g_efxQuitado.cuando < 0.6) return false;
+    std::string donde, err;
+    const bool hecho = efectos::aLaPapelera(g_efxQuitado.ruta, &donde, &err);
+    if (aviso) *aviso = hecho ? idioma::trf("{} a la papelera de los efectos", {donde.substr(donde.rfind('/') + 1)}) : idioma::trf("no se pudo: {}", {err});
+    g_efxQuitado = EfxQuitado{};
+    return hecho;
+  }
   if (que == "volver") {   /* a los de todos, o a Juegos si se vino de una caratula */
     const bool aJuegos = g_efectosDesdeJuegos;
     g_efectosDe.clear(), g_efectosDesdeJuegos = false;
@@ -2578,8 +2845,19 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
     a.lista.insert(a.lista.begin() + (ptrdiff_t)hasta, std::move(e));
     dicho = idioma::trf("{} pasa al puesto {}", {n, std::to_string(hasta + 1)});
   } else if (que.rfind("on:", 0) == 0 && sub == 3) {
-    /* (v1.18) su aspita: fuera de la lista */
+    /* (v1.18) su aspita: fuera de la lista. Y queda apuntado: picarla otra vez borra su archivo (g_efxQuitado) */
     if (!a.buscar(que.substr(3))) return false;
+    {
+      const std::string n = que.substr(3);
+      const auto dispQ = efectos::disponibles();
+      const auto itQ = dispQ.find(n);
+      g_efxQuitado = EfxQuitado{};
+      if (itQ != dispQ.end()) {
+        g_efxQuitado.app = app, g_efxQuitado.nombre = n, g_efxQuitado.ruta = itQ->second, g_efxQuitado.cuando = relojEfx();
+        for (size_t k = 0; k < a.lista.size(); k++)
+          if (a.lista[k].nombre == n) g_efxQuitado.puesto = k;
+      }
+    }
     quitar(que.substr(3));
     dicho = idioma::trf("{} quitado de la lista", {que.substr(3)});
   } else if (que.rfind("on:", 0) == 0 && sub == 2) {
@@ -2602,6 +2880,7 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
   } else if (que.rfind("anadir:", 0) == 0) {
     const std::string n = que.substr(7);
     if (a.buscar(n)) return false;
+    g_efxQuitado = EfxQuitado{};   /* (v1.18) lo de borrar el archivo del quitado ya no vale */
     a.lista.push_back(efectos::Efecto{n, true, {}, {}});
     /* su cabecera, abierta: se ven sus deslizadores */
     seccionesAbiertas().insert("efx:" + n);
@@ -2667,6 +2946,124 @@ void juegoDelPanel(const std::string &appid) { g_juegoDelPanel = appid; }
 void fuentesSolas(bool si) { g_fuentesSolas = si; }
 void efectosDe(const std::string &que) { g_efectosDe = que; }
 
+/* (v1.18) la pagina del informe de un error: las tres preguntas, lo que se adjunta (a la vista, renglon a renglon) y los
+   botones. Nada sale del equipo hasta que el usuario lo manda en GitHub */
+static void filasInforme(Hud::State &st, std::vector<std::string> &ids) {
+  auto pon = [&](Hud::ItemPanel it, const std::string &id) {
+    st.items.push_back(std::move(it));
+    ids.push_back(id);
+  };
+  Hud::ItemPanel s;
+  s.tipo = Hud::ItemPanel::Seccion, s.rotulo = idioma::tr("INFORMAR DE UN ERROR");
+  pon(s, "");
+  Hud::ItemPanel b;
+  b.tipo = Hud::ItemPanel::Boton, b.rotulo = idioma::tr("Se abre GitHub con el informe ya escrito");
+  b.nota = idioma::tr("Lo lees y lo envías tú con tu cuenta: OdysseyVK no manda nada solo");
+  b.valorTexto = idioma::tr("Atrás"), b.valor = true;
+  pon(b, "informe:volver");
+  auto campo = [&](const char *clave, const char *rotulo, const char *ejemplo, const std::string &valor) {
+    Hud::ItemPanel it;
+    it.tipo = Hud::ItemPanel::Texto, it.rotulo = idioma::tr(rotulo), it.nota = idioma::tr(ejemplo);
+    const std::string id = std::string("integ:") + clave;
+    if (g_edit.id == id) it.valorTexto = g_edit.texto, it.cursor = (int)g_edit.cursor, it.seleccion = g_edit.todo;
+    else it.valorTexto = valor;
+    pon(it, id);
+  };
+  campo("bug_que", "Qué pasó", "El juego se cerró al entrar el 3D", g_informeDatos.que);
+  campo("bug_esperaba", "Qué esperabas", "Que el 3D se quedara sobre el juego", g_informeDatos.esperaba);
+  campo("bug_pasos", "Cómo repetirlo", "Abrir el juego a pantalla completa y esperar al 3D", g_informeDatos.pasos);
+  Hud::ItemPanel a;
+  a.tipo = Hud::ItemPanel::Boton, a.rotulo = idioma::tr("Abrir el informe en GitHub");
+  a.nota = idioma::tr("También lo copia al portapapeles y guarda una copia en ~/.local/state/odysseyvk/informes");
+  a.valorTexto = idioma::tr("Abrir"), a.valor = !g_informeDatos.que.empty();
+  pon(a, "informe:enviar");
+  Hud::ItemPanel c;
+  c.tipo = Hud::ItemPanel::Boton, c.rotulo = idioma::tr("Solo copiarlo");
+  c.nota = idioma::tr("Para pegarlo donde quieras");
+  c.valorTexto = idioma::tr("Copiar"), c.valor = true;
+  pon(c, "informe:copiar");
+  Hud::ItemPanel s2;
+  s2.tipo = Hud::ItemPanel::Seccion, s2.rotulo = idioma::tr("LO QUE SE ADJUNTA");
+  pon(s2, "");
+  Hud::ItemPanel in;
+  in.tipo = Hud::ItemPanel::Info, in.rotulo = idioma::tr("Solo esto: la versión, el sistema, las tarjetas, el monitor y lo importante del registro");
+  in.nota = idioma::tr("Sin tu usuario, tu carpeta ni el nombre del equipo. No van ajustes, líneas de Steam ni capturas.");
+  pon(in, "");
+  size_t i = 0;
+  while (i < g_informeDiag.size()) {
+    const size_t f = std::min(g_informeDiag.find('\n', i), g_informeDiag.size());
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota, n.rotulo = g_informeDiag.substr(i, f - i);
+    if (!n.rotulo.empty()) pon(n, "");
+    i = f + 1;
+  }
+  Hud::ItemPanel r;
+  r.tipo = Hud::ItemPanel::Boton, r.rotulo = idioma::tr("Leer otra vez el registro");
+  r.valorTexto = idioma::tr("Volver a leer"), r.valor = true;
+  pon(r, "informe:leer");
+}
+
+static bool aplicarInforme(const std::string &que, std::string *aviso) {
+  if (que == "abrir") {
+    g_informe = true;
+    g_informeDiag = informe::diagnostico();
+    g_pestanaPedida = 3;
+    if (aviso) *aviso = idioma::tr("escribe qué pasó y abre el informe en GitHub");
+    return true;
+  }
+  if (que == "volver") {
+    g_informe = false;
+    g_pestanaPedida = 3;
+    return true;
+  }
+  if (que == "leer") {
+    g_informeDiag = informe::diagnostico();
+    return true;
+  }
+  /* las pruebas (ODYSSEYVK_PRUEBA_SIN_NAVEGADOR): no abren el navegador ni tocan el portapapeles, y escriben «que paso»
+     con un golpe, que el teclado no llega */
+  const bool prueba = std::getenv("ODYSSEYVK_PRUEBA_SIN_NAVEGADOR") != nullptr;
+  if (prueba && que.rfind("que:", 0) == 0) {
+    g_informeDatos.que = que.substr(4);
+    return true;
+  }
+  if (que != "enviar" && que != "copiar") return false;
+  if (que == "enviar" && g_informeDatos.que.empty()) {
+    if (aviso) *aviso = idioma::tr("escribe primero qué pasó");
+    return false;
+  }
+  const std::string texto = informe::cuerpo(g_informeDatos, g_informeDiag);
+  std::string err;
+  const bool copiado = prueba || copiarAlPortapapeles(texto, &err);
+  if (que == "copiar") {
+    if (aviso) *aviso = copiado ? std::string(idioma::tr("informe copiado")) : idioma::trf("no se pudo copiar ({}): escríbelo a mano", {err});
+    return copiado;
+  }
+  informe::guardar(texto);
+  /* ODYSSEYVK_PRUEBA_SIN_NAVEGADOR: las pruebas, que no abren nada (la direccion queda en el registro) */
+  const std::string u = informe::url(kRepoGitHub, g_informeDatos, g_informeDiag);
+  if (prueba) {
+    std::printf("[informe] %zu letras de direccion: %.90s...\n", u.size(), u.c_str());
+    return true;
+  }
+  const pid_t pid = ::fork();
+  if (pid == 0) {
+    ::setsid();
+    if (::fork() != 0) ::_exit(0);
+    const int nulo = ::open("/dev/null", O_RDWR);
+    if (nulo >= 0) ::dup2(nulo, 0), ::dup2(nulo, 1), ::dup2(nulo, 2);
+    ::execlp("xdg-open", "xdg-open", u.c_str(), (char *)nullptr);
+    ::_exit(127);
+  }
+  if (pid > 0) {
+    int stt = 0;
+    ::waitpid(pid, &stt, 0);
+  }
+  if (aviso) *aviso = pid > 0 ? std::string(idioma::tr("abierto en el navegador: revísalo y pulsa «Submit new issue»"))
+                              : std::string(idioma::tr("no se pudo abrir el navegador: el informe está en el portapapeles"));
+  return pid > 0;
+}
+
 static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
   st.pieParametro.clear(), st.pieInterruptor = false;   /* (v1.14) el parametro de Steam del pie: solo en la pestana Juegos */
   st.pieCopiado = false;
@@ -2709,7 +3106,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
         {"profundidad_dlss", idioma::tr("Profundidad de DLSS"), onOff(v.profDlss), v.profDlss, 1},
         {"hud_plano", idioma::tr("HUD del juego"), idioma::tr(v.hudPlano ? "En el plano" : "Con relieve"), v.hudPlano, 2},
         {"rastreo", idioma::tr("Seguir la cabeza"), onOff(v.rastreo), v.rastreo, 3},
-        {"fps_juego", idioma::tr("Cuadrito de FPS"), onOff(v.fpsJuego), v.fpsJuego, 4},
+        {"fps_juego", idioma::tr("FPS monitor"), onOff(v.fpsJuego), v.fpsJuego, 4},
         /* (v1.16) con una version nueva, como el boton que habia junto al aspa (Rodolfo, con una foto de el y de la
            tesela: «haz que esto ocurra aqui»): «Actualizar a 1.17», y la version de ahora en el titulo */
         {"buscar_actualizacion",
@@ -2729,6 +3126,10 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
   /* (v1.16) la vista de depuracion: solo las dos listas de redes, en la columna de la izquierda (vkui.cpp) */
   if (st.depuracion && st.marco) {
     filasDeLaRed(st, v, ids);
+    return;
+  }
+  if (st.pestana == 3 && g_informe) {   /* (v1.18) la pagina del informe de un error, en lugar de Ajustes */
+    filasInforme(st, ids);
     return;
   }
   if (st.pestana == 3) {
@@ -2811,7 +3212,7 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
       a.valorTexto = std::to_string(v.expAnticipacion) + " ms";
       a.textoFraccion = textoAnticipacion;
       a.fracDefecto = 0.0f;   /* (v1.16, PR #1) su flechita: a 0 ms, apagado */
-      pon(a, "exp_anticipacion");
+      if (v.rastreo) pon(a, "exp_anticipacion");   /* (v1.18) sin seguir la cabeza no hay nada que anticipar */
     }
     Hud::ItemPanel s;
     /* PROGRAMA (v1.12): la version y lo de GitHub en UNA fila con su boton (antes «Instalada», «En
@@ -3116,6 +3517,7 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (aviso) *aviso = idioma::trf("no se pudo guardar: {}", {e});
     return false;
   };
+  if (id.rfind("informe:", 0) == 0) return aplicarInforme(id.substr(8), aviso);   /* (v1.18) el informe de un error */
   /* plegar o desplegar una seccion de Ajustes: se apunta y el panel se vuelve a llenar */
   if (id.rfind("plegar:", 0) == 0) {
     std::set<std::string> &ab = seccionesAbiertas();

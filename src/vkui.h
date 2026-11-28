@@ -278,6 +278,13 @@ public:
     float fpsJuego = 0.0f, fpsCapa = 0.0f;
     int fpsModo = 0;
     bool fpsCuadro = true;
+    /* (v1.18) el estilo del FPS monitor (Rodolfo: «haz que el visor de fps se vea mas acorde a nuestro estilo, al hub del
+       pill, o que se vea cuadrado, modo compacto, o el modo basico, con solo los 3 fps», «si no hay generacion de cuadros
+       solo muestra los cuadros del juego en el basico»; `fps_estilo` en serve.conf): 0 = completo (la lista de siempre, con
+       lo vigilado) · 1 = como la pastilla (una barra de su alto con las cifras en teselas, la principal en el azul del
+       acento) · 2 = cuadrado (la cifra grande) · 3 = compacto (un renglon) · 4 = basico (sin titulo ni lo vigilado: reales,
+       generados y en pantalla, o solo los del juego si no se generan cuadros) */
+    int fpsEstilo = 0;
     /* (v1.17) lo que se eligio vigilar en el menu de la tesela del cuadrito: una fila por cosa, con sus valores (el
        numero y su unidad). Con alguna, el cuadrito sale tambien sin juego (sobre un video), como «Monitor» */
     struct FilaMonitor {
@@ -366,6 +373,7 @@ public:
     HitPanelIdioma,       /* el boton del idioma (v1.07): abre y cierra la lista */
     HitPanelIdiomaOpcion, /* un idioma de la lista: `sub` = cual (idioma::Lengua) */
     HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
+    HitPanelError,        /* (v1.18) el boton de abajo a la izquierda del marco: informar de un error (informe.h) */
     HitPanelRedimensionar, /* la esquina de abajo a la derecha: cambiar el tamano del panel (rama experimental) */
     HitPanelModoRed,      /* el interruptor AI | Rendimiento: `sub` 0 = AI (con la red), 1 = Rendimiento (sin red) */
     HitModoRed,           /* (v1.12) el mismo interruptor, en la pastilla del video: pasa al otro extremo en marcha */
@@ -630,6 +638,7 @@ private:
     float yCentro = 0.0f;     /* (v1.18) la mitad de su alto en la pantalla, aunque este fuera de la vista */
   };
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
+  Rect panelError_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) «Informar de un error», abajo a la izquierda del marco */
   Rect panelCopiar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.14) el boton Copiar del pie (pestana Juegos) */
   Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
   Rect panelEsquina_; /* la esquina para cambiar el tamano */

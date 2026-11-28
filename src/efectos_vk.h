@@ -7,9 +7,10 @@
      - la fuente (la captura del juego, la imagen de cada cuadro) se copia a una imagen propia RGBA8, A; el «back buffer»
        de ReShade son A y B a turnos: cada pase que dibuja en el back buffer lee la una (la textura COLOR) y escribe la
        otra, y la salida es la ultima escrita. Todas en VK_IMAGE_LAYOUT_GENERAL, como las del visor;
-     - la profundidad (la textura DEPTH de ReShade.fxh) es el mapa del 3D (R8G8, 255 = cerca) copiado a una imagen propia
-       de tamano fijo y 16 bits; efectos.cpp define RESHADE_DEPTH_INPUT_IS_REVERSED y el plano lejano en 1 para que
-       ReShade::GetLinearizedDepth de 0 cerca y 1 lejos;
+     - la profundidad (la textura DEPTH de ReShade.fxh) sale del mapa del 3D (R8G8, 255 = cerca): se estira a una imagen
+       propia de tamano fijo y dos pasadas (shaders/efx_prof.frag) le quitan los escalones de 8 bits sin mover los cantos
+       y la dejan como la de un juego con Z invertida y el plano lejano en 1000, los de fabrica de ReShade:
+       ReShade::GetLinearizedDepth da z / 1000, con lo mas cercano a 1 unidad y el cielo en el plano lejano;
      - los uniformes van en el bufer del comando (vkCmdUpdateBuffer): cambian en cada cuadro sin pisar uno en vuelo;
      - se compila en otro hilo: mientras tanto el visor sigue con la cadena de antes (o sin efectos).
    Lo que no hay: pases de computo, texturas 3D y la plantilla (stencil, que en SMAA solo ahorra trabajo). Un efecto con
@@ -43,12 +44,16 @@ public:
   bool preparar(int w, int h, VkImageView *salida);
   /* hay que volver a pasarla aunque la fuente no haya cambiado (un ajuste nuevo, o un efecto con tiempo) */
   bool sucia() const { return sucia_; }
-  /* graba la cadena en cb: de `fuente` (en GENERAL) a la salida. `prof` (R8G8, GENERAL) puede ser nula */
-  void grabar(VkCommandBuffer cb, VkImage fuente, int w, int h, VkImage prof, int pw, int ph);
+  /* graba la cadena en cb: de `fuente` (en GENERAL) a la salida. `prof` (GENERAL) puede ser nula: el mapa del 3D (R8G8,
+     la cercania en .r) o, con `dosBytes`, la profundidad afinada del visor (r + g/255) */
+  void grabar(VkCommandBuffer cb, VkImage fuente, int w, int h, VkImage prof, int pw, int ph, bool dosBytes = false);
   /* la vista de la salida de la ultima pasada (vacia sin cadena): las capturas del visor la usan, como la pantalla */
   VkImageView vistaSalida() const { return cadena_.empty() ? VK_NULL_HANDLE : (salidaEnB_ ? b_.todo[0] : a_.todo[0]); }
   /* la imagen de la salida (para la prueba, que la lee) */
   VkImage imagenSalida() const { return salidaEnB_ ? b_.img : a_.img; }
+  /* (v1.18) algun efecto de la cadena lee la profundidad: con un mapa nuevo hay que volver a pasarla aunque la fuente sea
+     la misma (un juego en pausa, una foto) */
+  bool conProfundidad() const { return conProf_; }
   /* para el registro: lo que corre y lo que no */
   std::string resumen() const;
 
@@ -105,12 +110,25 @@ private:
   bool subirTextura(Img &i, const std::string &ruta, std::string *err);
   void mipmaps(VkCommandBuffer cb, Img &i);
   std::string claveDe(int w, int h) const;
+  bool armarProf(std::string *err);
+  void borrarProf();
+  void pasadaProf(VkCommandBuffer cb, int modo, Img &destino, bool dosBytes);
 
   VkDev *dev_ = nullptr;
   efectos::Ajustes ajustes_;
   std::vector<Efecto> cadena_;
   std::vector<efectos::Efecto> ajustesCadena_;   /* los de cada efecto de la cadena, en su orden */
   Img a_, b_, prof_;
+  /* (v1.18) la profundidad de los efectos (shaders/efx_prof.frag): el mapa estirado, la pasada horizontal y, en prof_, la
+     vertical ya como profundidad de juego */
+  Img profCruda_, profTmp_;
+  VkSampler muestraProf_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout dslProf_ = VK_NULL_HANDLE;
+  VkPipelineLayout layProf_ = VK_NULL_HANDLE;
+  VkDescriptorPool poolProf_ = VK_NULL_HANDLE;
+  VkDescriptorSet setProf_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};   /* lee profCruda_ · lee profTmp_ */
+  VkPipeline pipeProf_ = VK_NULL_HANDLE;
+  VkShaderModule modProf_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
   int w_ = 0, h_ = 0;
   std::string claveHecha_;
   std::shared_ptr<Pedido> pedido_;
@@ -118,6 +136,8 @@ private:
   bool sucia_ = false;
   bool salidaEnB_ = false;
   bool profPuesta_ = false;
+  bool conProf_ = false;
+  bool profDos_ = false;   /* la ultima vino afinada (para decirlo en el registro cuando cambia) */
   uint64_t cuadros_ = 0;
   double t0_ = -1.0, tAnterior_ = -1.0;
   VkPhysicalDeviceMemoryProperties memProps_{};

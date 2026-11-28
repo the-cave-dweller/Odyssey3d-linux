@@ -265,6 +265,17 @@ static bool g_fpsCuadro = [] {
   const char *e = std::getenv("ODYSSEYVK_FPS_JUEGO");
   return !(e && e[0] == '0');
 }();
+/* (v1.18) el estilo del FPS monitor (Hud::State::fpsEstilo): `fps_estilo = completo|pastilla|cuadrado|compacto|basico` en
+   serve.conf y la orden `fps_estilo` del panel */
+static int estiloFpsDe(const std::string &t) {
+  const std::string v = strLower(t);
+  return v == "pastilla" ? 1 : v == "cuadrado" ? 2 : v == "compacto" ? 3 : v == "basico" ? 4 : 0;
+}
+static int g_fpsEstilo = [] {
+  const auto conf = ajuste::leerServeConf();
+  const auto it = conf.find("fps_estilo");
+  return it == conf.end() ? 0 : estiloFpsDe(it->second);
+}();
 /* (v1.17) lo que vigila el cuadrito ademas de los FPS: `monitor = ...` en serve.conf y la orden `monitor` del panel */
 static std::set<std::string> g_monitor = [] {
   const auto conf = ajuste::leerServeConf();
@@ -3596,6 +3607,11 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             g_fpsCuadro = !(v == "no" || v == "0" || v == "apagar");
             ui.inputChanged = true;
           }
+          /* (v1.18) `fps_estilo`: el estilo del FPS monitor, elegido en el menu de su tesela */
+          if (const auto oe = palabras.find("fps_estilo"); oe != palabras.end()) {
+            g_fpsEstilo = estiloFpsDe(oe->second);
+            ui.inputChanged = true;
+          }
           /* (v1.17) `monitor = a,b,...|no`: lo que vigila el cuadrito, elegido en el menu de su tesela */
           if (const auto om = palabras.find("monitor"); om != palabras.end()) {
             g_monitor = monitor::deTexto(om->second);
@@ -5436,6 +5452,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           hs.fpsCuadro != g_fpsCuadro || hs.fpsModo != modo)
         ui.inputChanged = true;
       hs.fpsJuego = vj, hs.fpsCapa = vs, hs.fpsModo = modo, hs.fpsCuadro = g_fpsCuadro;
+      if (hs.fpsEstilo != g_fpsEstilo) hs.fpsEstilo = g_fpsEstilo, ui.inputChanged = true;
       hs.fg.enPantalla = fuenteFps;   /* (v1.18) con la generacion de cuadros, los que llegan (los generados tambien) */
       g_fpsJuego = fj, g_fpsCapa = fc, g_hudJuego = red.hudFrac();
       g_profJuego = red.descJuego();

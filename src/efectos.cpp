@@ -110,6 +110,30 @@ std::map<std::string, std::string> disponibles() {
   return m;
 }
 
+bool aLaPapelera(const std::string &ruta, std::string *destino, std::string *err) {
+  const std::string c = carpeta();
+  std::error_code ec;
+  const fs::path origen(ruta);
+  /* solo lo que esta dentro de Shaders/ de la carpeta de los efectos, y solo archivos */
+  const std::string dentro = c + "/Shaders/";
+  if (c.empty() || ruta.compare(0, dentro.size(), dentro) != 0 || ruta.find("/../") != std::string::npos || !fs::is_regular_file(origen, ec)) {
+    if (err) *err = "no es un efecto de la carpeta";
+    return false;
+  }
+  const fs::path pap = fs::path(c) / "Papelera";
+  fs::create_directories(pap, ec);
+  fs::path dst = pap / origen.filename();
+  for (int k = 2; fs::exists(dst, ec) && k < 1000; k++)
+    dst = pap / (origen.stem().string() + "-" + std::to_string(k) + origen.extension().string());
+  fs::rename(origen, dst, ec);
+  if (ec) {
+    if (err) *err = ec.message();
+    return false;
+  }
+  if (destino) *destino = dst.string();
+  return true;
+}
+
 std::string rutaTextura(const std::string &nombre) {
   if (!nombre.empty() && nombre[0] == '/') return fileExists(nombre) ? nombre : std::string();
   for (const std::string &d : carpetasTexturas())
@@ -315,7 +339,7 @@ static void macrosBase(reshadefx::preprocessor &pp, int ancho, int alto) {
   pp.add_macro_definition("RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN", "0");
   pp.add_macro_definition("RESHADE_DEPTH_INPUT_IS_MIRRORED", "0");
   pp.add_macro_definition("RESHADE_DEPTH_INPUT_IS_LOGARITHMIC", "0");
-  pp.add_macro_definition("RESHADE_DEPTH_LINEARIZATION_FAR_PLANE", "1.0");
+  pp.add_macro_definition("RESHADE_DEPTH_LINEARIZATION_FAR_PLANE", "1000.0");   /* el de fabrica de ReShade: ver shaders/efx_prof.frag */
   pp.add_macro_definition("RESHADE_DEPTH_MULTIPLIER", "1");
   pp.append_string("#define tex2Doffset(s, coords, offset) tex2D(s, coords, offset)\n"
                    "#define tex2Dlodoffset(s, coords, offset) tex2Dlod(s, coords, offset)\n"

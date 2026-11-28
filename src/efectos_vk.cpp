@@ -9,6 +9,9 @@
 
 #include "effect_module.hpp"
 
+#include "efx_prof_frag_sp.h"   /* generados por CMake desde shaders/ */
+#include "fs_vert_sp.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -24,6 +27,17 @@ using reshadefx::effect_module;
 
 constexpr VkFormat kFondo = VK_FORMAT_R8G8B8A8_UNORM;   /* el back buffer */
 constexpr uint32_t kProfW = 960, kProfH = 540;          /* la profundidad de los efectos (el mapa del 3D es mas pequeno) */
+constexpr VkFormat kProfFmt = VK_FORMAT_R16G16_SFLOAT;  /* de las que Vulkan obliga a dejar dibujar y filtrar */
+/* lo que va a shaders/efx_prof.frag */
+struct PushProf {
+  float paso[2];
+  float modo, nivel, cerca, lejos, dos;
+};
+/* lo mas cercano del mapa, a dos unidades (metros, en la cuenta de los efectos): el mapa es cercania relativa, de 1 a
+   1/255, asi que el cuadro queda entre 2 y 510 y el cielo en el plano lejano. Con 1, los edificios del fondo de una calle
+   quedaban a 10-20 y la niebla y el desenfoque de fabrica (que empiezan a 50) no los alcanzaban */
+constexpr float kProfCerca = 2.0f;
+constexpr float kProfLejos = 1000.0f;  /* RESHADE_DEPTH_LINEARIZATION_FAR_PLANE (efectos.cpp) */
 
 VkFormat formatoDe(reshadefx::texture_format f) {
   using F = reshadefx::texture_format;
@@ -244,6 +258,9 @@ void CadenaEfectos::destruir() {
   borrarImg(a_);
   borrarImg(b_);
   borrarImg(prof_);
+  borrarImg(profCruda_);
+  borrarImg(profTmp_);
+  borrarProf();
   claveHecha_.clear();
   w_ = h_ = 0;
 }
@@ -343,10 +360,12 @@ bool CadenaEfectos::construir(Pedido &p, std::string *err) {
         !crearImg(b_, p.w, p.h, kFondo, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, err))
       return false;
   }
-  /* en 16 bits, para que el estirado lineal no pierda nada. Pero el mapa del 3D es de 8 bits: MEDIDO con DisplayDepth, las
-     normales salen en terrazas igual (los escalones estan en el mapa). Niebla, desenfoque por profundidad y Depth_Cues van
-     bien; la oclusion (MXAO), que mira normales, queda tosca */
-  if (!prof_.img && !crearImg(prof_, kProfW, kProfH, VK_FORMAT_R16G16_SFLOAT, 1, 0, err)) return false;
+  /* la profundidad: el mapa estirado, la pasada horizontal y la que leen los efectos (shaders/efx_prof.frag) */
+  if (!prof_.img && (!crearImg(prof_, kProfW, kProfH, kProfFmt, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, err) ||
+                     !crearImg(profTmp_, kProfW, kProfH, kProfFmt, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, err) ||
+                     !crearImg(profCruda_, kProfW, kProfH, kProfFmt, 1, 0, err)))
+    return false;
+  if (!pipeProf_ && !armarProf(err)) return false;
   w_ = p.w, h_ = p.h;
   for (size_t k = 0; k < p.lista.size(); k++) {
     if (!p.hechos[k]) continue;
@@ -379,7 +398,7 @@ bool CadenaEfectos::construir(Pedido &p, std::string *err) {
       vkCmdClearColorImage(cb, i.img, VK_IMAGE_LAYOUT_GENERAL, &c, 1, &b.subresourceRange);
     }
   };
-  poner(a_, true), poner(b_, true), poner(prof_, true);
+  poner(a_, true), poner(b_, true), poner(prof_, true), poner(profTmp_, true), poner(profCruda_, true);
   for (Efecto &e : cadena_)
     for (size_t t = 0; t < e.texs.size(); t++)
       if (e.texs[t].img) {
@@ -397,6 +416,9 @@ bool CadenaEfectos::construir(Pedido &p, std::string *err) {
     for (const Pase &ps : e.pases)
       if (ps.destinos.empty()) escrituras++;
   salidaEnB_ = escrituras % 2 == 1;
+  conProf_ = false;
+  for (const Efecto &e : cadena_)
+    for (int t : e.texDe) conProf_ = conProf_ || t == -2;
   profPuesta_ = false;
   claveHecha_ = p.clave;
   sucia_ = true;
@@ -475,6 +497,127 @@ void CadenaEfectos::mipmaps(VkCommandBuffer cb, Img &i) {
     vkCmdBlitImage(cb, i.img, VK_IMAGE_LAYOUT_GENERAL, i.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bl, VK_FILTER_LINEAR);
     barreraTodo(cb);
   }
+}
+
+/* (v1.18) lo de la tarjeta para preparar la profundidad (shaders/efx_prof.frag): un muestreador lineal, un conjunto por
+   entrada (el mapa estirado y la pasada horizontal) y una tuberia que dibuja en kProfFmt */
+bool CadenaEfectos::armarProf(std::string *err) {
+  VkDevice d = dev_->device();
+  auto falla = [&](const char *que) {
+    if (err) *err = std::string("la profundidad de los efectos: ") + que;
+    borrarProf();
+    return false;
+  };
+  VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+  si.magFilter = si.minFilter = VK_FILTER_LINEAR;
+  si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  if (vkCreateSampler(d, &si, nullptr, &muestraProf_) != VK_SUCCESS) return falla("vkCreateSampler");
+  VkDescriptorSetLayoutBinding en{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  VkDescriptorSetLayoutCreateInfo lci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+  lci.bindingCount = 1, lci.pBindings = &en;
+  if (vkCreateDescriptorSetLayout(d, &lci, nullptr, &dslProf_) != VK_SUCCESS) return falla("vkCreateDescriptorSetLayout");
+  VkPushConstantRange pcr{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushProf)};
+  VkPipelineLayoutCreateInfo pli{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  pli.setLayoutCount = 1, pli.pSetLayouts = &dslProf_, pli.pushConstantRangeCount = 1, pli.pPushConstantRanges = &pcr;
+  if (vkCreatePipelineLayout(d, &pli, nullptr, &layProf_) != VK_SUCCESS) return falla("vkCreatePipelineLayout");
+  VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2};
+  VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+  pci.maxSets = 2, pci.poolSizeCount = 1, pci.pPoolSizes = &ps;
+  if (vkCreateDescriptorPool(d, &pci, nullptr, &poolProf_) != VK_SUCCESS) return falla("vkCreateDescriptorPool");
+  VkDescriptorSetLayout dos[2] = {dslProf_, dslProf_};
+  VkDescriptorSetAllocateInfo dai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+  dai.descriptorPool = poolProf_, dai.descriptorSetCount = 2, dai.pSetLayouts = dos;
+  if (vkAllocateDescriptorSets(d, &dai, setProf_) != VK_SUCCESS) return falla("vkAllocateDescriptorSets");
+  VkDescriptorImageInfo ii[2] = {{muestraProf_, profCruda_.todo[0], VK_IMAGE_LAYOUT_GENERAL},
+                                 {muestraProf_, profTmp_.todo[0], VK_IMAGE_LAYOUT_GENERAL}};
+  VkWriteDescriptorSet wr[2]{};
+  for (int k = 0; k < 2; k++) {
+    wr[k] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wr[k].dstSet = setProf_[k], wr[k].dstBinding = 0, wr[k].descriptorCount = 1;
+    wr[k].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, wr[k].pImageInfo = &ii[k];
+  }
+  vkUpdateDescriptorSets(d, 2, wr, 0, nullptr);
+  const unsigned char *codigo[2] = {fsVertSpv, efxProfFragSpv};
+  const size_t largo[2] = {(size_t)fsVertSpv_len, (size_t)efxProfFragSpv_len};
+  for (int k = 0; k < 2; k++) {
+    std::vector<uint32_t> palabras(largo[k] / 4);
+    std::memcpy(palabras.data(), codigo[k], palabras.size() * 4);
+    VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    mi.codeSize = palabras.size() * 4, mi.pCode = palabras.data();
+    if (vkCreateShaderModule(d, &mi, nullptr, &modProf_[k]) != VK_SUCCESS) return falla("vkCreateShaderModule");
+  }
+  VkPipelineShaderStageCreateInfo st[2]{};
+  st[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, modProf_[0], "main", nullptr};
+  st[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, modProf_[1], "main", nullptr};
+  VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+  VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+  ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  VkPipelineViewportStateCreateInfo vp{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+  vp.viewportCount = 1, vp.scissorCount = 1;
+  VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+  rs.polygonMode = VK_POLYGON_MODE_FILL, rs.cullMode = VK_CULL_MODE_NONE, rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE, rs.lineWidth = 1.0f;
+  VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+  ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  VkPipelineColorBlendAttachmentState mz{};
+  mz.colorWriteMask = 0xF;
+  VkPipelineColorBlendStateCreateInfo cbs{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+  cbs.attachmentCount = 1, cbs.pAttachments = &mz;
+  VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+  ds.dynamicStateCount = 2, ds.pDynamicStates = dyn;
+  VkFormat fmt = kProfFmt;
+  VkPipelineRenderingCreateInfo rci{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+  rci.colorAttachmentCount = 1, rci.pColorAttachmentFormats = &fmt;
+  VkGraphicsPipelineCreateInfo gp{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+  gp.pNext = &rci;
+  gp.stageCount = 2, gp.pStages = st;
+  gp.pVertexInputState = &vi, gp.pInputAssemblyState = &ia, gp.pViewportState = &vp, gp.pRasterizationState = &rs;
+  gp.pMultisampleState = &ms, gp.pColorBlendState = &cbs, gp.pDynamicState = &ds, gp.layout = layProf_;
+  if (vkCreateGraphicsPipelines(d, VK_NULL_HANDLE, 1, &gp, nullptr, &pipeProf_) != VK_SUCCESS) return falla("vkCreateGraphicsPipelines");
+  return true;
+}
+
+void CadenaEfectos::borrarProf() {
+  if (!dev_ || !dev_->ok()) return;
+  VkDevice d = dev_->device();
+  if (pipeProf_) vkDestroyPipeline(d, pipeProf_, nullptr);
+  for (VkShaderModule &m : modProf_) {
+    if (m) vkDestroyShaderModule(d, m, nullptr);
+    m = VK_NULL_HANDLE;
+  }
+  if (poolProf_) vkDestroyDescriptorPool(d, poolProf_, nullptr);
+  if (layProf_) vkDestroyPipelineLayout(d, layProf_, nullptr);
+  if (dslProf_) vkDestroyDescriptorSetLayout(d, dslProf_, nullptr);
+  if (muestraProf_) vkDestroySampler(d, muestraProf_, nullptr);
+  pipeProf_ = VK_NULL_HANDLE, poolProf_ = VK_NULL_HANDLE, layProf_ = VK_NULL_HANDLE, dslProf_ = VK_NULL_HANDLE, muestraProf_ = VK_NULL_HANDLE;
+  setProf_[0] = setProf_[1] = VK_NULL_HANDLE;
+}
+
+/* una pasada de shaders/efx_prof.frag: modo 0 lee el mapa estirado, modo 1 la horizontal */
+void CadenaEfectos::pasadaProf(VkCommandBuffer cb, int modo, Img &destino, bool dosBytes) {
+  VkRenderingAttachmentInfo at{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+  at.imageView = destino.base[0];
+  at.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+  at.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO};
+  ri.renderArea = {{0, 0}, {destino.w, destino.h}};
+  ri.layerCount = 1, ri.colorAttachmentCount = 1, ri.pColorAttachments = &at;
+  vkCmdBeginRendering(cb, &ri);
+  VkViewport vp{0.0f, 0.0f, (float)destino.w, (float)destino.h, 0.0f, 1.0f};
+  VkRect2D sc{{0, 0}, {destino.w, destino.h}};
+  vkCmdSetViewport(cb, 0, 1, &vp);
+  vkCmdSetScissor(cb, 0, 1, &sc);
+  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeProf_);
+  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, layProf_, 0, 1, &setProf_[modo], 0, nullptr);
+  PushProf pp{};
+  pp.paso[0] = modo == 0 ? 1.0f / (float)destino.w : 0.0f;
+  pp.paso[1] = modo == 0 ? 0.0f : 1.0f / (float)destino.h;
+  pp.modo = (float)modo, pp.nivel = 1.0f / 255.0f, pp.cerca = kProfCerca, pp.lejos = kProfLejos;
+  pp.dos = dosBytes && modo == 0 ? 1.0f : 0.0f;
+  vkCmdPushConstants(cb, layProf_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pp, &pp);
+  vkCmdDraw(cb, 3, 1, 0, 0);
+  vkCmdEndRendering(cb);
 }
 
 bool CadenaEfectos::construirEfecto(Efecto &e, const efectos::Efecto &aj, std::string *err) {
@@ -770,7 +913,7 @@ void CadenaEfectos::llenarFuentes(Efecto &e) {
   }
 }
 
-void CadenaEfectos::grabar(VkCommandBuffer cb, VkImage fuente, int w, int h, VkImage prof, int pw, int ph) {
+void CadenaEfectos::grabar(VkCommandBuffer cb, VkImage fuente, int w, int h, VkImage prof, int pw, int ph, bool dosBytes) {
   if (cadena_.empty() || w != w_ || h != h_) return;
   cuadros_++;
   const bool conTiempo = std::any_of(cadena_.begin(), cadena_.end(), [](const Efecto &e) { return e.conTiempo; });
@@ -790,18 +933,25 @@ void CadenaEfectos::grabar(VkCommandBuffer cb, VkImage fuente, int w, int h, VkI
   bl.srcSubresource = bl.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
   bl.srcOffsets[1] = bl.dstOffsets[1] = {w, h, 1};
   vkCmdBlitImage(cb, fuente, VK_IMAGE_LAYOUT_GENERAL, a_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bl, VK_FILTER_NEAREST);
-  /* la profundidad del 3D, estirada a la propia; sin ella, en 0 (lejos) */
+  /* la profundidad del 3D, estirada a la propia y preparada; sin ella, en 0 (con la Z invertida, el plano lejano) */
   const VkImageSubresourceRange todoRango{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
   if (prof && pw > 0 && ph > 0) {
     VkImageBlit bp{};
     bp.srcSubresource = bp.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     bp.srcOffsets[1] = {pw, ph, 1};
-    bp.dstOffsets[1] = {(int32_t)prof_.w, (int32_t)prof_.h, 1};
-    vkCmdBlitImage(cb, prof, VK_IMAGE_LAYOUT_GENERAL, prof_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bp, VK_FILTER_LINEAR);
+    bp.dstOffsets[1] = {(int32_t)profCruda_.w, (int32_t)profCruda_.h, 1};
+    vkCmdBlitImage(cb, prof, VK_IMAGE_LAYOUT_GENERAL, profCruda_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &bp, VK_FILTER_LINEAR);
+    /* sin escalones y como la de un juego: en horizontal a profTmp_ y en vertical a prof_ */
+    barreraTodo(cb);
+    pasadaProf(cb, 0, profTmp_, dosBytes);
+    barreraTodo(cb);
+    pasadaProf(cb, 1, prof_, false);
     /* (v1.18) en el registro, cuando empieza o deja de llegar (Rodolfo: «no tiene sentido que ninguno tenga profundidad, les
        diste acceso?»): asi se ve si los efectos que la leen la tienen */
-    if (!profPuesta_) std::printf("[efectos] con la profundidad del 3D (%dx%d)\n", pw, ph), std::fflush(stdout);
-    profPuesta_ = true;
+    if (!profPuesta_ || profDos_ != dosBytes)
+      std::printf("[efectos] con la profundidad del 3D (%dx%d%s)\n", pw, ph, dosBytes ? ", la afinada: los cantos en su sitio" : ", el mapa"),
+          std::fflush(stdout);
+    profPuesta_ = true, profDos_ = dosBytes;
   } else if (profPuesta_ || cuadros_ == 1) {
     VkClearColorValue c{};
     vkCmdClearColorImage(cb, prof_.img, VK_IMAGE_LAYOUT_GENERAL, &c, 1, &todoRango);

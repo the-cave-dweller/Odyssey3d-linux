@@ -225,6 +225,18 @@ struct Local {
 };
 Local indexar(const std::string &carpeta) {
   Local l;
+  /* (v1.18) lo que el usuario borro (efectos::aLaPapelera) cuenta como contenido que ya tiene: no se vuelve a bajar. Solo
+     su contenido: no entra en los duplicados ni en los nombres, que son de lo que esta en uso */
+  {
+    std::error_code ec;
+    const fs::path pap = fs::path(carpeta) / "Papelera";
+    if (fs::is_directory(pap, ec))
+      for (fs::recursive_directory_iterator it(pap, fs::directory_options::skip_permission_denied, ec), fin; it != fin; it.increment(ec)) {
+        if (ec) break;
+        std::string contenido;
+        if (it->is_regular_file(ec) && leer(it->path().string(), contenido)) l.shas.insert(blobDe(contenido));
+      }
+  }
   for (const char *arriba : {"Shaders", "Textures"}) {
     std::error_code ec;
     const fs::path base = fs::path(carpeta) / arriba;

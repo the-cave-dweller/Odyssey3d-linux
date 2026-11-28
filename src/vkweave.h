@@ -262,6 +262,7 @@ private:
   VkImageView fuenteGenerada_ = VK_NULL_HANDLE;   /* (v1.18) */
   CadenaEfectos efectos_;                          /* (v1.18) */
   int efectosGen_ = -1;                            /* la fuente que ya paso por los efectos */
+  uint64_t efectosMapaGen_ = ~0ull;                 /* (v1.18) el mapa con el que corrio la cadena la ultima vez */
   bool efectosEnPantalla_ = true;                  /* (v1.18) */
   /* (v1.18) la vista de los efectos: el hueco del panel, si el intercambio deja copiar en sus imagenes, y el blanco de la raya */
   float vista_[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
@@ -288,6 +289,7 @@ private:
   VkImg fino_{};           /* la profundidad afinada, a tamano de pantalla (v0.89) */
   int finoW_ = 0, finoH_ = 0;
   bool finoEnUso_ = false; /* este cuadro se dibuja con el pase de afinado */
+  bool finoPintado_ = false;   /* (v1.18) fino_ ya tiene un afinado dentro: los efectos leen el del cuadro anterior */
   bool finoAvisado_ = false;
   uint64_t mapaGen_ = 0;   /* sube con cada mapa nuevo */
   std::vector<uint8_t> finoFirma_;   /* de que se dibujo el afinado que hay en la imagen */

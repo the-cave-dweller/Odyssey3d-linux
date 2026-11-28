@@ -36,6 +36,10 @@ namespace efectos {
    de ~/.config/vkdaedalus/reshade, ~/.config/vkBasalt-overlay/reshade o ~/.config/vkBasalt/reshade (la primera que haya;
    sin ninguna, vacia con Shaders/ y Textures/); vacio si no se pudo */
 std::string carpeta();
+/* (v1.18) Borrar un efecto de la carpeta sin perderlo: su archivo pasa a `carpeta()/Papelera` (fuera de Shaders/, asi que
+   deja de salir en la lista; de ahi se recupera a mano). Las fuentes publicas cuentan lo de la papelera como «ya lo
+   tienes» y no lo vuelven a bajar. Deja en *destino donde quedo */
+bool aLaPapelera(const std::string &ruta, std::string *destino, std::string *err);
 std::string carpetaPropia();   /* (v1.18) ~/.config/odysseyvk/reshade */
 /* sus carpetas de sombreadores y de texturas (Shaders/ y Textures/ con todas sus subcarpetas) */
 std::vector<std::string> carpetasSombreadores();
