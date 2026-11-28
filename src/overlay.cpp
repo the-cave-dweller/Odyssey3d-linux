@@ -15,6 +15,8 @@
    que hace falta son cuatro líneas. */
 #include "overlay.h"
 
+#include <deque>
+
 #include <chrono>
 #include <thread>
 
@@ -244,6 +246,10 @@ struct Overlay::Impl {
   wl_surface *veloSurf = nullptr;
   zwlr_layer_surface_v1 *veloLayer = nullptr;
   bool veloConfigurado = false, ratonEnVelo = false;
+  /* (v1.18) el velo solo (Overlay::ponSoloVelo): lo que hace el raton sobre el, crudo */
+  bool veloCrudo = false;
+  double veloX = 0.0, veloY = 0.0;
+  std::deque<Overlay::Raton> ratones;
   int veloAncho = 0, veloAlto = 0;
 #ifdef HAVE_FRACTIONAL_SCALE
   wp_viewport *veloViewport = nullptr;
@@ -456,8 +462,9 @@ struct Overlay::Impl {
     wl_surface_commit(veloSurf);
     for (int intento = 0; intento < 40 && !veloConfigurado && veloSurf; ++intento)
       if (esperar(50) < 0) break;
-    std::printf("[velo] %s\n", veloConfigurado ? "puesto: el raton es del panel mientras este abierto"
-                                                : "el compositor no lo configuro");
+    std::printf("[velo] %s\n", !veloConfigurado ? "el compositor no lo configuro"
+                                : veloCrudo ? "puesto: el raton es de la pastilla y el juego sigue siendo la ventana activa"
+                                            : "puesto: el raton es del panel mientras este abierto");
     std::fflush(stdout);
   }
   void quitaVelo() {
@@ -469,6 +476,8 @@ struct Overlay::Impl {
     if (veloSurf) wl_surface_destroy(veloSurf);
     veloLayer = nullptr, veloSurf = nullptr;
     veloConfigurado = false, ratonEnVelo = false;
+    veloCrudo = false;
+    ratones.clear();
     if (veloBloque) {
       wl_buffer_destroy(veloBloque->buf);
       wl_shm_pool_destroy(veloBloque->pozo);
@@ -1113,6 +1122,10 @@ struct Overlay::Impl {
     s->ponCursor(serial);
     if (sobre && sobre == s->veloSurf) {   /* el velo: fuera del panel, nada se resalta */
       s->ratonEnVelo = true;
+      if (s->veloCrudo) {
+        s->veloX = wl_fixed_to_double(sx), s->veloY = wl_fixed_to_double(sy);
+        s->ratones.push_back({2, 0, s->veloX, s->veloY});
+      }
       return;
     }
     s->ratonEnVelo = false;
@@ -1125,6 +1138,7 @@ struct Overlay::Impl {
     Impl *s = static_cast<Impl *>(data);
     if (sobre && sobre == s->veloSurf) {
       s->ratonEnVelo = false;
+      if (s->veloCrudo) s->ratones.push_back({-2, 0, s->veloX, s->veloY});
       return;
     }
     s->ratonDentro = false;
@@ -1265,6 +1279,12 @@ struct Overlay::Impl {
   }
   static void ptrMotion(void *data, wl_pointer *, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
     Impl *s = static_cast<Impl *>(data);
+    if (s->ratonEnVelo && s->veloCrudo) {   /* (v1.18) el velo solo: el movimiento, crudo (el ultimo pisa al anterior) */
+      s->veloX = wl_fixed_to_double(sx), s->veloY = wl_fixed_to_double(sy);
+      if (!s->ratones.empty() && s->ratones.back().que == 0) s->ratones.back() = {0, 0, s->veloX, s->veloY};
+      else s->ratones.push_back({0, 0, s->veloX, s->veloY});
+      return;
+    }
     if (!s->tarjetaPuesta || s->ratonEnVelo) return;
     s->ratonX = s->ox + wl_fixed_to_double(sx) * s->escala;
     s->ratonY = s->oy + wl_fixed_to_double(sy) * s->escala;
@@ -1288,6 +1308,11 @@ struct Overlay::Impl {
   }
   static void ptrButton(void *data, wl_pointer *, uint32_t, uint32_t, uint32_t boton, uint32_t estado) {
     Impl *s = static_cast<Impl *>(data);
+    if (s->ratonEnVelo && s->veloCrudo) {   /* (v1.18) el velo solo: el boton, crudo */
+      s->ratones.push_back({estado == WL_POINTER_BUTTON_STATE_PRESSED ? 1 : -1, boton == BTN_LEFT ? 0 : boton == BTN_RIGHT ? 1 : 2,
+                            s->veloX, s->veloY});
+      return;
+    }
     if (s->ratonEnVelo) {   /* un clic fuera del panel: quien lo ensena lo cierra */
       if (estado == WL_POINTER_BUTTON_STATE_PRESSED) s->golpes.push_back({Overlay::kClicFuera, -1, 0, 0.0f, true});
       return;
@@ -1855,6 +1880,28 @@ bool Overlay::tecladoAPedido() const { return d && d->capaVersion >= 4; }
 
 void Overlay::quitarVelo() {
   if (d) d->quitaVelo();
+}
+
+/* (v1.18) ver overlay.h */
+bool Overlay::ponSoloVelo() {
+  if (!available()) return false;
+  if (d->veloSurf) return d->veloConfigurado;
+  d->veloCrudo = true;
+  d->ratones.clear();
+  d->ponVelo();
+  if (!d->veloConfigurado) d->quitaVelo();
+  return d->veloConfigurado;
+}
+void Overlay::ratonPruebaVelo(const Raton &r) {
+  if (d && d->veloCrudo) d->ratones.push_back(r);
+}
+bool Overlay::veloPuesto() const { return d && d->veloSurf && d->veloConfigurado; }
+bool Overlay::ratonEnVelo() const { return d && d->ratonEnVelo; }
+bool Overlay::takeRaton(Raton &r) {
+  if (!d || d->ratones.empty()) return false;
+  r = d->ratones.front();
+  d->ratones.pop_front();
+  return true;
 }
 
 bool Overlay::takeTecla(std::string &combo) {

@@ -82,6 +82,21 @@ public:
   bool tecladoAPedido() const;
   /* quita el velo de debajo del panel (al fijarlo encima: los clics fuera llegan al juego) */
   void quitarVelo();
+  /* (v1.18) El velo solo, sin tarjeta ni panel: lo usa el visor para quitarle el raton al juego sin hacerse la ventana
+     activa (Rodolfo: «no puedo usar las settings mientras el juego anda, el juego se pausa y quita foco»). Una capa no
+     toma el foco: el juego sigue siendo la activa, con su teclado, y no se pausa ni se minimiza. Lo que el raton hace
+     sobre el velo sale crudo por `takeRaton`, en puntos logicos de la pantalla */
+  struct Raton {
+    int que = 0;      /* 0 = se mueve · 1 = aprieta · -1 = suelta · 2 = entra · -2 = sale */
+    int boton = 0;    /* 0 = izquierdo · 1 = derecho · 2 = otro */
+    double x = 0.0, y = 0.0;
+  };
+  bool ponSoloVelo();
+  bool veloPuesto() const;
+  bool ratonEnVelo() const;
+  bool takeRaton(Raton &r);
+  /* para probarlo sin mover el raton: lo mete en la misma cola, como si hubiera llegado del compositor */
+  void ratonPruebaVelo(const Raton &r);
   bool takeTecla(std::string &combo);
   /* (v1.15) y lo que escribe esa pulsacion (UTF-8, ya con las teclas muertas; vacio si no escribe): los campos de
      texto. La combinacion sale vacia para una tecla que solo escribe (la ñ, una letra con acento); Retroceso, Intro

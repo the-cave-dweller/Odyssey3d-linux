@@ -493,6 +493,15 @@ std::string linea(const Ajustes &a, const std::string &nfExe, const std::string 
        meta-capa (la 01) trae a MAKO encima de Neural Forge, que entonces pasaria su modelo por cada cuadro generado, el
        doble o el triple de trabajo en la misma tarjeta. Sin el contador, el cuadrito reparte los FPS con el multiplicador */
     if (std::strcmp(v.clave, "mako") == 0 && si("odysseyvk") && !si("neural_forge")) vars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
+    /* (v1.18) MAKO dentro de gamescope va sin la capa WSI de gamescope (Rodolfo: «se rompio stray», «prioriza que se
+       mantenga corriendo gamescope a menos que no haya otra»). MEDIDO el 27 y el 28-nov con Stray (gamescope 3.17.0, MAKO
+       5.0.0): con las dos, al abrir MAKO su generador gamescope dice «timeline: SyncobjFdToHandle failed» y
+       «vkImportSemaphoreFdKHR failed» y se cae en su hilo xwm (gamescope + 0x1462d5), cuatro de cuatro, a los 14 s de
+       lanzar el juego. La misma orden con DISABLE_GAMESCOPE_WSI=1 (MAKO lo anuncia: «gamescope_wsi=isolated»): 50 s
+       dentro de gamescope a 160 fps, con MAKO abierto y el 3D encima. El juego presenta entonces por el Xwayland de
+       gamescope. Si las demas variables ya dicen algo de esa capa, manda eso */
+    if (std::strcmp(v.clave, "mako") == 0 && gs && val("otros").find("GAMESCOPE_WSI=") == std::string::npos)
+      vars.push_back("DISABLE_GAMESCOPE_WSI=1");
     /* (v1.18) el modelo de Neural Forge en la segunda tarjeta: la que trajo su linea o la de secundariaNf */
     if (std::strcmp(v.clave, "neural_forge") == 0 && si("nf_offload")) {
       Secundaria s;
@@ -620,7 +629,7 @@ bool leerLinea(const std::string &lin, Leida &l) {
   }
   std::vector<std::string> otrosVars;
   std::string exe, gpu, host;
-  bool contar = false;
+  bool contar = false, sinWsi = false;
   for (; r < c && esAsignacion(t[r].texto); r++) {
     const std::string &x = t[r].texto;
     const size_t ig = x.find('=');
@@ -642,6 +651,10 @@ bool leerLinea(const std::string &lin, Leida &l) {
     }
     if (!nuestra && nombre == "ODYSSEYVK_CONTAR_MAKO" && valor == "1" && !contar) {   /* (v1.18) */
       contar = true;
+      nuestra = true;
+    }
+    if (!nuestra && nombre == "DISABLE_GAMESCOPE_WSI" && valor == "1" && !sinWsi) {   /* (v1.18) */
+      sinWsi = true;
       nuestra = true;
     }
     if (!nuestra && nombre == "MAKO_FG_HOST" && host.empty() && !valor.empty()) {   /* (v1.18) */
@@ -677,6 +690,13 @@ bool leerLinea(const std::string &lin, Leida &l) {
   /* ODYSSEYVK_CONTAR_MAKO=1 sale de ODYSSEYVK=1 con ENABLE_MAKO=1 (y sin Neural Forge): sin los dos, se queda con las demas.
      Con los dos y Neural Forge se quita: lo puso OdysseyVK antes de la regla de Neural Forge */
   if (contar && (a["mako"] != "1" || a["odysseyvk"] != "1")) otrosVars.push_back("ODYSSEYVK_CONTAR_MAKO=1");
+  /* (v1.18) DISABLE_GAMESCOPE_WSI=1 sale de gamescope con ENABLE_MAKO=1 (linea() la pone): sin los dos, se queda con las
+     demas. Y la linea que lleva los dos sin ella es la que tumba gamescope: `faltaWsi`, para que se reescriba */
+  const bool makoEnGamescope = a["mako"] == "1" && a["gamescope"] == "1";
+  if (sinWsi && !makoEnGamescope) otrosVars.push_back("DISABLE_GAMESCOPE_WSI=1");
+  l.faltaWsi = makoEnGamescope && !sinWsi;
+  for (const std::string &o : otrosVars)
+    if (o.find("GAMESCOPE_WSI=") != std::string::npos) l.faltaWsi = false;   /* puesta a mano: manda eso */
   a["otros"] = unir(otrosVars);
   /* (v1.18) la envoltura de Neural Forge: sale de NEURAL_FORGE_ENABLE=1 (linea() la pone), no es un comando propio */
   if (r + 1 < c && nombreBase(t[r].texto) == "odysseyvk" && t[r + 1].texto == "juego") r += 2;
@@ -1198,7 +1218,10 @@ std::map<std::string, std::string> porEscribir(const Estado &e, const std::vecto
        (aunque la de Steam este en otro orden o lleve `env` de mas) */
     Ajustes comoEsta = efectivo(e, "");
     for (const auto &[k, v] : l.ajustes) comoEsta[k] = v;
-    if (linea(comoEsta, l.nfExe, l.nfGpu) == quiero) continue;
+    /* (v1.18) salvo la que lleva MAKO dentro de gamescope sin DISABLE_GAMESCOPE_WSI=1: dice lo mismo que la que se
+       quiere, pero es la que tumba gamescope, y hay que escribirla con la variable */
+    if (!l.faltaWsi && linea(comoEsta, l.nfExe, l.nfGpu) == quiero) continue;
+    if (strTrim(cur) == quiero) continue;
     sal[id] = quiero;
   }
   return sal;
@@ -1399,7 +1422,7 @@ std::vector<Detectado> detectarParametros(const Estado &e) {
   /* las que ya llevan su interruptor o las pone otro solo */
   auto conocida = [](const std::string &var) {
     for (const char *k : {"ODYSSEYVK", "MANGOHUD", "ENABLE_VKDAEDALUS", "NEURAL_FORGE_", "ENABLE_VKBASALT", "ENABLE_MAKO", "MAKO_FG_HOST",
-                          "ENABLE_VK_LAYER_VALVE_", "ENABLE_GAMESCOPE_WSI", "SteamAppId", "STEAM_"})
+                          "ENABLE_VK_LAYER_VALVE_", "ENABLE_GAMESCOPE_WSI", "DISABLE_GAMESCOPE_WSI", "SteamAppId", "STEAM_"})
       if (var.rfind(k, 0) == 0) return true;
     return false;
   };

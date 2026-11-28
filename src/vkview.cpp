@@ -10,6 +10,9 @@
 #include "capture.h"
 #include "wm.h"
 #endif
+#ifdef HAVE_WAYLAND_WM
+#include "overlay.h"
+#endif
 #include "glutil.h"
 #ifdef HAVE_OPENCV
 #include "trackfeed.h"
@@ -160,6 +163,13 @@ struct VkUi {
   bool robando = false;
   std::string devolverA;
   double robadoMirar = -1.0;
+#ifdef HAVE_WAYLAND_WM
+  /* (v1.18) el velo de la pastilla: con el, el visor se queda con el raton sin hacerse la ventana activa (el juego
+     no pierde el foco, no se pausa ni se minimiza). `conVelo`: este robo va con el velo y no con la activacion */
+  std::unique_ptr<Overlay> velo;
+  bool veloProbado = false;
+#endif
+  bool conVelo = false;
   bool presentacionHecha = false;
   bool suavizado = true;     /* el boton de dividido lo pone suavizado (los ajustes del programa lo quitan) */
   bool suavizadoAuto = false; /* ...o lo decide solo el medidor de separacion (v0.88) */
@@ -930,12 +940,57 @@ static std::string tarjetaDelJuego(VkUi &ui) {
 #endif
 }
 
+/* (v1.18) Mientras la pastilla le tiene quitado el cursor al juego, el visor lo deja dicho en
+   ~/.local/state/odysseyvk/cursor-visor (su numero de proceso; lo que cuenta es la hora del fichero, que se refresca cada
+   medio segundo). Rodolfo: «cyberpunk tuvo crasheos y perdidas de foco». MEDIDO el 28-nov (09:11:03 a 09:11:45): Cyberpunk,
+   a pantalla completa exclusiva, se minimiza en cuanto el visor se hace la ventana activa; el servicio, que no sabia que
+   era a proposito, cerraba el 3D a los 6 s de verlo minimizado (con el panel de ajustes abierto encima: 09:11:23 y
+   09:11:44). Con la marca fresca el servicio espera: el visor sigue con el ultimo cuadro y al devolver el cursor saca al
+   juego de minimizado */
+static std::string g_pantallaVisor;   /* (v1.18) la salida del visor: el velo de la pastilla va en la misma */
+static void marcaCursor(bool puesta) {
+  const std::string ruta = rutaEstadoOdyssey("cursor-visor");
+  if (!puesta) {
+    ::unlink(ruta.c_str());
+    return;
+  }
+  if (FILE *f = std::fopen(ruta.c_str(), "w")) {
+    std::fprintf(f, "%d\n", (int)::getpid());
+    std::fclose(f);
+  }
+}
+
 static void robarCursor(VkUi &ui, const char *fuente) {
   if (ui.robando || !sobreJuego(ui)) return;
   ui.robando = true;
+  marcaCursor(true);
   ui.inputChanged = true;   /* la region de entrada pasa a la ventana entera */
+  ui.conVelo = false;
   std::string como = "sin el gestor de ventanas de KWin: solo se queda con el raton, sin hacerse la ventana activa";
 #ifdef HAVE_WAYLAND_WM
+  /* (v1.18) Con un velo y sin activarse (Rodolfo: «no puedo usar las settings mientras el juego anda, el juego se pausa
+     y quita foco, hace muchas versiones se podia»). Hasta aqui el visor pedia ser la ventana activa para que el juego
+     soltara el cursor, y el juego, sin foco, se pausaba (y Cyberpunk, a pantalla completa exclusiva, se minimizaba:
+     MEDIDO el 28-nov). Una capa transparente encima de todo se queda con el raton igual (KWin solo encierra el cursor
+     mientras la ventana bajo el puntero es la activa, y bajo el puntero pasa a estar el velo) y no toma el foco: el
+     juego sigue siendo la activa, con su teclado. ODYSSEYVK_CURSOR_ACTIVA=1 deja la forma de antes, para comparar */
+  if (!entornoOdyssey("ODYSSEYVK_CURSOR_ACTIVA")) {
+    if (!ui.velo && !ui.veloProbado) {
+      ui.veloProbado = true;
+      ui.velo = std::make_unique<Overlay>();
+      if (!g_pantallaVisor.empty()) ui.velo->setPantalla(g_pantallaVisor);
+      std::string e;
+      if (!ui.velo->open(&e)) {
+        std::printf("[raton] sin la capa del velo (%s): se queda la forma de antes\n", e.c_str());
+        ui.velo.reset();
+      }
+    }
+    if (ui.velo && ui.velo->ponSoloVelo()) {
+      ui.conVelo = true;
+      ui.robadoMirar = glfwGetTime() + 0.6;
+      como = "con el velo: el raton es de la pastilla y el juego sigue siendo la ventana activa";
+    }
+  }
   if (monitorVentanas(ui)) {
     std::string propia, activa;
     for (const WindowInfo &w : ui.wm.windows()) {
@@ -943,12 +998,14 @@ static void robarCursor(VkUi &ui, const char *fuente) {
       if (w.active()) activa = w.uuid;
     }
     ui.devolverA = (!activa.empty() && activa != propia) ? activa : (ui.opts ? ui.opts->captureUuid : std::string());
-    std::string e;
-    const bool pedido = !propia.empty() && ui.wm.setState(propia, WindowInfo::Active, true, &e);
-    ui.wm.flush();
-    ui.robadoMirar = glfwGetTime() + 0.6;
-    como = pedido ? "el visor pide ser la ventana activa"
-                  : "no se pudo pedir ser la ventana activa: " + (propia.empty() ? std::string("sin la ventana del visor") : e);
+    if (!ui.conVelo) {
+      std::string e;
+      const bool pedido = !propia.empty() && ui.wm.setState(propia, WindowInfo::Active, true, &e);
+      ui.wm.flush();
+      ui.robadoMirar = glfwGetTime() + 0.6;
+      como = pedido ? "el visor pide ser la ventana activa"
+                    : "no se pudo pedir ser la ventana activa: " + (propia.empty() ? std::string("sin la ventana del visor") : e);
+    }
   }
 #endif
   std::printf("[raton] %s: la pastilla le quita el cursor al juego (%s)\n", fuente, como.c_str());
@@ -957,12 +1014,18 @@ static void robarCursor(VkUi &ui, const char *fuente) {
 static void devolverCursor(VkUi &ui, const char *fuente) {
   if (!ui.robando) return;
   ui.robando = false;
+  marcaCursor(false);
   ui.inputChanged = true;
   ui.robadoMirar = -1.0;
   std::string e = "sin el gestor de ventanas de KWin";
   bool ok = false;
 #ifdef HAVE_WAYLAND_WM
+  if (ui.velo) ui.velo->quitarVelo();   /* (v1.18) el raton vuelve a lo de debajo: el juego, que no dejo de ser la activa */
+  ui.conVelo = false;
   if (ui.wmAbierto && !ui.devolverA.empty()) {
+    /* (v1.18) el que se minimizo al quedarse sin foco vuelve a la vista antes de activarlo */
+    for (const WindowInfo &w : ui.wm.windows())
+      if (w.uuid == ui.devolverA && w.minimized()) ui.wm.setState(ui.devolverA, WindowInfo::Minimized, false, &e);
     ok = ui.wm.setState(ui.devolverA, WindowInfo::Active, true, &e);
     ui.wm.flush();
   }
@@ -2202,6 +2265,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   int H = opts.h > 0 ? opts.h : (vm ? vm->height : 2160);
   int hz = refreshOf(mon, opts.hz);
   std::printf("[pantalla] %s %dx%d@%d Hz\n", glfwGetMonitorName(mon), W, H, hz);
+  g_pantallaVisor = glfwGetMonitorName(mon);
 
   /* el app_id, dicho por nosotros (v1.11): sin esto KWin lo saca de /proc/<pid>/exe, y con
      `setcap` en el binario el proceso no se deja leer (no volcable). MEDIDO 26-nov: el servicio no
@@ -3443,8 +3507,17 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         tVista = glfwGetTime();
         float vx = 0, vy = 0, vw = 0, vh = 0, vc = 0;
         static const bool forzado = entornoOdyssey("ODYSSEYVK_EFECTOS_JUEGO") != nullptr;
-        if ((ui.esJuego == 1 || forzado) && efectos::vistaPedida(&vx, &vy, &vw, &vh, &vc)) wv.ponerVista(vx, vy, vw, vh, vc);
+        const bool hayVista = (ui.esJuego == 1 || forzado) && efectos::vistaPedida(&vx, &vy, &vw, &vh, &vc);
+        if (hayVista) wv.ponerVista(vx, vy, vw, vh, vc);
         else wv.ponerVista(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        /* (v1.18) dicho al ponerse y al quitarse: se ve en el registro si la vista del panel le llego al visor */
+        static bool vistaDicha = false;
+        if (hayVista != vistaDicha) {
+          vistaDicha = hayVista;
+          if (hayVista) std::printf("[efectos] vista previa puesta: el juego en %.3f,%.3f %.3fx%.3f de la pantalla, la raya en %.3f\n", vx, vy, vw, vh, vc);
+          else std::printf("[efectos] vista previa quitada\n");
+          std::fflush(stdout);
+        }
       }
     }
 #ifdef HAVE_ORT
@@ -4177,6 +4250,67 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
       continue;
     }
     double now = glfwGetTime();
+    {
+      static double latidoCursor = -1.0;   /* (v1.18) la marca del cursor quitado al juego, fresca: ver marcaCursor */
+      if (ui.robando && now - latidoCursor >= 0.5) {
+        latidoCursor = now;
+        marcaCursor(true);
+      }
+    }
+#ifdef HAVE_WAYLAND_WM
+    /* (v1.18) el raton sobre el velo de la pastilla: lo mismo que si llegara a la ventana del visor (el velo cubre su
+       misma salida, en los mismos puntos logicos). Un clic fuera de la pastilla lo quita (clicFuera): se deja de leer */
+    if (ui.velo && ui.conVelo) {
+      ui.velo->waitAndDispatch(0);
+      /* para las pruebas: ODYSSEYVK_VELO_CLIC="x,y;x,y" pica en esos puntos logicos, uno por segundo desde que sale la
+         pastilla, por la misma cola que el raton de verdad */
+      if (const char *guion = entornoOdyssey("ODYSSEYVK_VELO_CLIC")) {
+        static double robadoEn = -1.0;
+        static int hechos = 0;
+        static bool antes = false;
+        if (!antes) robadoEn = now, hechos = 0;
+        antes = true;
+        std::vector<std::pair<double, double>> puntos;
+        for (const char *p = guion; *p;) {
+          double x = 0, y = 0;
+          int n = 0;
+          if (*p == 'e') {   /* «e»: el engranaje de la pastilla, este donde este */
+            puntos.push_back({-1.0, -1.0});
+            ++p;
+          } else {
+            if (std::sscanf(p, "%lf,%lf%n", &x, &y, &n) < 2) break;
+            puntos.push_back({x, y});
+            p += n;
+          }
+          if (*p == ';') ++p;
+        }
+        if (hechos < (int)puntos.size() && now - robadoEn >= 1.0 * (hechos + 1)) {
+          auto [x, y] = puntos[(size_t)hechos++];
+          if (x < 0.0) {
+            float px = 0, py = 0, pw = 0, ph = 0, kx = 1.0f, ky = 1.0f;
+            pointerScale(win, &ui, kx, ky);
+            if (ui.hud.pillBounds(&px, &py, &pw, &ph))
+              for (float fx = px; fx < px + pw && x < 0.0; fx += 4.0f)
+                if (ui.hud.hit(fx, py + ph * 0.5f) == Hud::HitEngranaje) x = (fx + 6.0f) / kx, y = (py + ph * 0.5f) / ky;
+          }
+          std::printf("[raton] prueba: clic en %.0f,%.0f por el velo\n", x, y);
+          std::fflush(stdout);
+          ui.velo->ratonPruebaVelo({0, 0, x, y});
+          ui.velo->ratonPruebaVelo({1, 0, x, y});
+          ui.velo->ratonPruebaVelo({-1, 0, x, y});
+        }
+        if (!ui.robando) antes = false;
+      }
+      Overlay::Raton r;
+      while (ui.robando && ui.velo->takeRaton(r)) {
+        if (r.que == 2) onEnterVK(win, 1);
+        if (r.que == -2) onEnterVK(win, 0);
+        else onCursorVK(win, r.x, r.y);
+        if ((r.que == 1 || r.que == -1) && r.boton <= 1)
+          onButtonVK(win, r.boton == 0 ? GLFW_MOUSE_BUTTON_LEFT : GLFW_MOUSE_BUTTON_RIGHT, r.que == 1 ? GLFW_PRESS : GLFW_RELEASE, 0);
+      }
+    }
+#endif
     if (opts.segundos > 0 && now - t0 >= (double)opts.segundos) {
       std::printf("[sesion] %d segundos cumplidos, saliendo con la secuencia normal\n", opts.segundos);
       break;
@@ -4229,7 +4363,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         apartado = false;
         glfwRestoreWindow(win);
         if (!opts.windowed && !opts.borderless && mon) glfwSetWindowMonitor(win, mon, 0, 0, W, H, hz);
-        glfwFocusWindow(win);
+        /* (v1.18) Sobre un juego el visor vuelve sin pedir el foco (salvo que la pastilla le tenga quitado el cursor).
+           MEDIDO el 28-nov con Cyberpunk (09:11:06 a 09:11:13): al devolverle el cursor el juego sale de minimizado
+           pasando un segundo por ventana, el servicio marca al visor oculto, y al volver el visor pedia el foco aqui: el
+           juego lo perdia otra vez (08,117), se minimizaba, se le sacaba, volvia a pasar por ventana... tres vueltas de
+           2,7 s, cada una con MAKO rehaciendo su intercambio */
+        if (ui.esJuego != 1 || ui.robando) glfwFocusWindow(win);
         glfwPollEvents();
         int nW = 0, nH = 0;
         glfwGetFramebufferSize(win, &nW, &nH);
@@ -4496,7 +4635,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             ui.quit = true;
           }
         } else if ((lastFrameCount == 0 && now - t0 > 5.0 && reintentos < 12) ||
-                   (ultimoNuevo > 0.0 && now - ultimoNuevo > 2.0)) {
+                   (ultimoNuevo > 0.0 && now - ultimoNuevo > 2.0 && !ui.robando)) {
+          /* (v1.18) con el cursor quitado al juego no: el que se minimiza al perder el foco deja de pintar, y pedir el
+             flujo cada 3 s no lo trae (MEDIDO el 28-nov: «ventana capturada: steam_app_1091500 · minimizada», intento
+             tras intento). Se queda el ultimo cuadro hasta que el cursor vuelve al juego */
           /* dos casos: el nodo se creo pero no llega nada (el portal tarda o el cambio de modo
              del panel invalida la sesion), o el flujo se paro a mitad de la sesion. En ambos
              hay que pedir el flujo otra vez, y decir por dónde vino el corte. */
@@ -5558,6 +5700,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           if (w.pid == (uint32_t)::getpid() && w.active()) visorActivo = true;
           if (w.uuid == ui.devolverA && w.active()) juegoActivo = true;
         }
+        if (ui.conVelo)   /* (v1.18) medido, no supuesto: si el velo tiene el raton y si el juego conserva el foco */
+          std::printf("[raton] con el velo: %s · %s\n",
+                      ui.velo && ui.velo->ratonEnVelo() ? "el raton esta en el velo (el juego solto el cursor)"
+                                                        : "el raton no ha entrado en el velo (sigue encerrado en el juego, o esta en otra pantalla)",
+                      juegoActivo ? "el juego sigue siendo la ventana activa" : visorActivo ? "el visor es la ventana activa" : "el juego no es la ventana activa");
+        else
         std::printf("[raton] %s\n", visorActivo ? "el visor es la ventana activa: el juego solto el cursor"
                                     : juegoActivo ? "KWin no hizo caso: el juego sigue siendo la ventana activa"
                                                   : "el juego ya no es la ventana activa");

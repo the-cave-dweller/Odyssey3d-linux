@@ -89,6 +89,7 @@ struct Leida {
   Ajustes ajustes;
   std::string nfExe;
   std::string nfGpu;   /* (v1.18) el NEURAL_FORGE_OFFLOAD_GPU de la linea si no es el de secundariaNf (vacio: el nuestro) */
+  bool faltaWsi = false;   /* (v1.18) lleva gamescope y ENABLE_MAKO=1 sin DISABLE_GAMESCOPE_WSI=1: asi gamescope se cae */
 };
 bool leerLinea(const std::string &linea, Leida &l);
 

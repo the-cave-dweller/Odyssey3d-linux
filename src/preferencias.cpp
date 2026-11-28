@@ -32,6 +32,7 @@ extern char **environ;
 #include "ajuste.h"
 #include "atajos.h"
 #include "informe.h"   /* (v1.18) el informe de un error para GitHub */
+#include "versiones.h"   /* (v1.18) volver a una version anterior */
 #include "integraciones.h"
 #include "paramspropios.h"   /* (v1.18) los parametros que añade el usuario en Integraciones */
 #include "mako.h"   /* (v1.18) MAKO FG: su boton de instalar, junto a ENABLE_MAKO */
@@ -906,7 +907,7 @@ Actualizacion estadoActualizacion() {
 
 namespace {
 /* una orden nuestra en una unidad transitoria de systemd, fuera del servicio: `systemd-run --user` */
-bool lanzarAparte(const char *orden, std::string *err) {
+bool lanzarAparte(const char *orden, std::string *err, const char *arg = nullptr) {   /* (v1.18) `arg`: «volver 1» */
   char propio[512] = {0};
   const ssize_t n = ::readlink("/proc/self/exe", propio, sizeof propio - 1);
   const std::string exe = n > 0 ? std::string(propio, (size_t)n) : std::string("odysseyvk");
@@ -920,7 +921,7 @@ bool lanzarAparte(const char *orden, std::string *err) {
     const int nulo = ::open("/dev/null", O_RDWR);
     if (nulo >= 0) { ::dup2(nulo, 0); ::dup2(nulo, 1); ::dup2(nulo, 2); }
     ::execlp("systemd-run", "systemd-run", "--user", "--collect", "--quiet", ("--unit=" + unidad).c_str(),
-             exe.c_str(), orden, (char *)nullptr);
+             exe.c_str(), orden, arg, (char *)nullptr);
     ::_exit(127);
   }
   int estado = 0;
@@ -1330,6 +1331,9 @@ bool g_integDetectado = false;   /* ya se pico «Detectar»: sale la lista de lo
 bool g_informe = false;
 informe::Datos g_informeDatos;
 std::string g_informeDiag;
+/* (v1.18) volver a una version anterior desde esa pagina: dos clics seguidos, como el desinstalador */
+int g_volverCual = 0;
+long g_volverHasta = 0;
 
 bool cambiarIntegracion(const std::string &clave, const std::string &valor, const std::vector<Juego> &juegos,
                         std::string *aviso) {
@@ -1462,6 +1466,9 @@ void filasIntegraciones(Hud::State &st, const std::vector<Juego> &juegos, std::v
     if (esAjena(v.clave)) continue;
     const bool puesto = val(v.clave) == "1";
     const size_t k = interruptor(v.clave, std::string(v.nombre) + (puesto ? "=1" : ""), idioma::tr(v.ayuda));
+    /* (v1.18) MAKO dentro de gamescope: la variable que lo acompaña, dicha (ver integ::linea) */
+    if (puesto && std::strcmp(v.clave, "mako") == 0 && val("gamescope") == "1" && val("otros").find("GAMESCOPE_WSI=") == std::string::npos)
+      st.items[k].nota = idioma::tr("Con gamescope va con DISABLE_GAMESCOPE_WSI=1: sin ella gamescope se cae al abrir MAKO");
     /* (v1.18) apagado aqui porque el juego se cayo con el (odysseyvk juego): sale apagado, con la hora */
     if (!jid.empty() && puesto && std::strcmp(v.clave, "neural_forge") == 0 &&
         fileExists(rutaEstadoOdyssey(("nf-apagado-" + jid).c_str()))) {
@@ -2982,6 +2989,28 @@ static void filasInforme(Hud::State &st, std::vector<std::string> &ids) {
   c.nota = idioma::tr("Para pegarlo donde quieras");
   c.valorTexto = idioma::tr("Copiar"), c.valor = true;
   pon(c, "informe:copiar");
+  /* (v1.18) si la version nueva es la que falla: volver a una de las dos guardadas al instalar (versiones.h) */
+  {
+    const std::vector<versiones::Guardada> gs = versiones::lista();
+    Hud::ItemPanel sv;
+    sv.tipo = Hud::ItemPanel::Seccion, sv.rotulo = idioma::tr("VOLVER A UNA VERSIÓN ANTERIOR");
+    pon(sv, "");
+    if (gs.empty()) {
+      Hud::ItemPanel n;
+      n.tipo = Hud::ItemPanel::Nota, n.rotulo = idioma::tr("Aún no hay ninguna guardada: se guardan las dos últimas al instalar encima.");
+      pon(n, "");
+    }
+    for (size_t k = 0; k < gs.size(); k++) {
+      Hud::ItemPanel vb;
+      vb.tipo = Hud::ItemPanel::Boton, vb.rotulo = idioma::trf("OdysseyVK {} · guardada el {}", {gs[k].version, gs[k].fecha});
+      vb.nota = idioma::tr(gs[k].funcionaba ? "Funcionaba: hubo un 3D de un minuto con ella. Pide tu clave."
+                                            : "No consta que funcionara: no llegó a usarse un minuto en 3D");
+      const bool armado = g_volverCual == (int)k + 1 && g_volverHasta > ::time(nullptr);
+      vb.valorTexto = idioma::tr(armado ? "¿Seguro? Pica otra vez" : "Volver");
+      vb.valor = gs[k].funcionaba, vb.peligro = true;
+      pon(vb, "informe:version:" + std::to_string(k + 1));
+    }
+  }
   Hud::ItemPanel s2;
   s2.tipo = Hud::ItemPanel::Seccion, s2.rotulo = idioma::tr("LO QUE SE ADJUNTA");
   pon(s2, "");
@@ -3019,6 +3048,24 @@ static bool aplicarInforme(const std::string &que, std::string *aviso) {
   if (que == "leer") {
     g_informeDiag = informe::diagnostico();
     return true;
+  }
+  if (que.rfind("version:", 0) == 0) {   /* (v1.18) volver a esa guardada: el segundo clic lanza `odysseyvk volver N` */
+    const int cual = std::atoi(que.c_str() + 8);
+    const std::vector<versiones::Guardada> gs = versiones::lista();
+    if (cual < 1 || (size_t)cual > gs.size() || !gs[(size_t)cual - 1].funcionaba) return false;
+    const long ahora = (long)::time(nullptr);
+    if (g_volverCual != cual || g_volverHasta <= ahora) {
+      g_volverCual = cual, g_volverHasta = ahora + 12;
+      if (aviso) *aviso = idioma::trf("pica otra vez para volver a la {}", {gs[(size_t)cual - 1].version});
+      return true;
+    }
+    g_volverCual = 0, g_volverHasta = 0;
+    std::string err;
+    const std::string n = std::to_string(cual);
+    const bool ok = std::getenv("ODYSSEYVK_PRUEBA_SIN_NAVEGADOR") ? true : lanzarAparte("volver", &err, n.c_str());
+    if (aviso) *aviso = ok ? idioma::trf("volviendo a la {}: se pide tu clave y el servicio se reinicia", {gs[(size_t)cual - 1].version})
+                           : idioma::trf("no se pudo: {}", {err});
+    return ok;
   }
   /* las pruebas (ODYSSEYVK_PRUEBA_SIN_NAVEGADOR): no abren el navegador ni tocan el portapapeles, y escriben «que paso»
      con un golpe, que el teclado no llega */

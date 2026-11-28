@@ -50,6 +50,111 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## La pastilla y el panel sobre un juego ya no le quitan el foco: el juego sigue corriendo (v1.18)
+
+- Rodolfo: «no puedo usar las settings mientras el juego anda, el juego se pausa y quita foco, hace muchas versiones se
+  podia».
+- **Por qué pasaba**: desde el 26-nov la pastilla, puesta a mano, hacía al visor la ventana activa para que el juego
+  soltara el cursor; y desde la v1.09 el panel de ajustes tomaba el teclado entero. Con cualquiera de las dos el juego
+  deja de ser la ventana activa: se pausa, y a pantalla completa exclusiva se minimiza (la entrada de abajo).
+- **MEDIDO** en el KWin de Rodolfo con `odysseyvk ctl velo-prueba` (una ventana a pantalla completa que encierra el
+  cursor como un juego): al poner encima una capa transparente (el velo), el ratón pasa a la capa sin moverlo («el
+  raton entro 1, salio 1 · velo: puesto, con el raton») y la ventana **no pierde el foco** (perdido 0); al quitarla, el
+  ratón vuelve. No hace falta activar nada: KWin solo encierra el cursor mientras la ventana bajo el puntero es la activa.
+- **Arreglo**:
+  - **la pastilla**: en vez de hacerse la ventana activa, el visor pone su propio velo (`Overlay::ponSoloVelo`) y lee de
+    él el ratón (`takeRaton`), que entra por los mismos manejadores que el de su ventana. El juego sigue siendo la activa,
+    con su teclado. `ODYSSEYVK_CURSOR_ACTIVA=1` deja la forma de antes, y sin capa (otro compositor) también se usa esa;
+  - **el panel de ajustes** sobre un juego: sin teclado (solo lo toma mientras se espera un atajo o se escribe en un
+    campo) y sin su entrada en la barra de tareas, que es una ventana normal y KWin la activaba al aparecer. Se cierra con
+    el aspa o con un clic fuera: Esc es del juego. Vale también para el juego de la sesión 3D aunque la activa sea otra.
+- **Probado** el 28-nov con Cyberpunk a pantalla completa exclusiva, el servicio, el visor y el panel de esta compilación:
+  la pastilla 10 s, el panel 10 s y la pastilla otra vez, en una sola sesión de 65 s y sin un solo cambio en la ventana
+  del juego (siempre «activa, pantalla completa»: ni se minimiza ni pasa por ventana). La primera pasada, con la entrada
+  de la barra aún puesta, perdía el foco en el mismo segundo de abrir el panel (09:49:58): de ahí salió. Los clics por
+  el velo, con `ODYSSEYVK_VELO_CLIC`: uno en la pastilla cambió de modo («desde la pastilla: modo rendimiento») y uno
+  fuera la quitó («clic en el juego: el cursor vuelve al juego»).
+- **La vista previa de los efectos y el panel en columna, con el juego puesto** (Rodolfo: «recuerda revisar que el
+  visor de shaders y el lateral funcionen con el juego puesto tambien»). Probado igual, con Cyberpunk: clic en el
+  engranaje de la pastilla por el velo (`ODYSSEYVK_VELO_CLIC=e`), y el panel, con su guion, a Efectos, «Vista previa»
+  puesta 9 s y quitada. El visor la recibe y lo dice («[efectos] vista previa puesta: el juego en 0,000,0,000
+  1,000x1,000 de la pantalla» y «quitada», renglón nuevo del registro), el panel pasa a la columna de la izquierda y
+  vuelve (los dos volcados), y la ventana del juego no cambia de estado en toda la sesión. Con los efectos apagados en
+  la casa de prueba: lo que pinta cada efecto se midió aparte (la entrada de los efectos de profundidad).
+- **Lo que no está probado**: con el ratón de verdad (los clics de la prueba entran por la misma cola, pero puestos a
+  mano), dentro de la partida con el cursor encerrado por el juego (se midió con la ventana de prueba, no con Proton), ni
+  otros juegos. Lo de la entrada de abajo (la marca del cursor, el minimizado) se queda para la forma de antes.
+
+## Cyberpunk y el foco: la pastilla ya no cierra el 3D ni deja al juego rebotando (v1.18)
+
+- Rodolfo: «cyberpunk tuvo crasheos y perdidas de foco, porfa prioriza eso».
+- **MEDIDO** en el registro del 28-nov (09:11:03 a 09:11:45), con Cyberpunk a pantalla completa exclusiva:
+  - el atajo de la pastilla hace al visor la ventana activa (así suelta el juego el cursor) y el juego **se minimiza** al
+    perder el foco; el servicio, que no sabía que era a propósito, cerraba el 3D a los 6 s de verlo minimizado, con el
+    panel de ajustes abierto encima (09:11:23 y 09:11:44);
+  - al devolverle el cursor el juego sale de minimizado pasando un segundo por ventana (2554x1408); el servicio marca al
+    visor oculto ese segundo y el visor, al volver, **pedía el foco** (`glfwFocusWindow`): el juego lo perdía otra vez, se
+    minimizaba, se le sacaba, volvía a pasar por ventana… tres vueltas de 2,7 s (09:11:06 a 09:11:13), cada una con MAKO
+    rehaciendo su intercambio. De caída del juego no hay rastro: ni informe de REDengine de hoy ni volcado.
+- **Arreglo**:
+  - el visor deja dicho que tiene el cursor quitado a propósito (`~/.local/state/odysseyvk/cursor-visor`, refrescado
+    cada medio segundo) y mientras tanto el servicio no cuenta el minimizado ni le devuelve el foco al juego; el visor se
+    queda con el último cuadro y no pide el flujo otra vez cada 3 s;
+  - al devolver el cursor, el visor saca al juego de minimizado antes de activarlo, y al volver de oculto sobre un juego
+    ya no pide el foco;
+  - la primera vez con cada juego, una tarjeta de 4 s lo cuenta: en ventana sin bordes no se minimiza.
+- **Probado** el 28-nov en la pantalla de Rodolfo, con Cyberpunk lanzado con Proton y el servicio y el visor de esta
+  compilación (casa aparte), el atajo mandado por D-Bus: cursor quitado 14 s (09:37:20 a 09:37:34) con el juego
+  minimizado y el 3D vivo; al devolverlo, un solo paso por ventana de un segundo y 12 s estable; otra vez con 3 s, igual.
+  Una sola sesión de 71 s, hasta que la prueba cerró el juego. La pasada anterior (con clics de Rodolfo en el juego en
+  vez del atajo), igual: tres robos, una sesión.
+- **Lo que no está probado**: con el panel de ajustes abierto encima (la marca es la misma), dentro de la partida (se
+  probó en el menú del juego), ni otros juegos. El segundo que el juego pasa por ventana al volver sigue ahí: es de Wine,
+  y en ventana sin bordes no pasa.
+
+## Stray dentro de gamescope: MAKO va sin la capa WSI de gamescope (v1.18)
+
+- Rodolfo: «se rompio stray», «prioriza que se mantenga corriendo gamescope a menos que no haya otra», «si gamescope wsi
+  es necesario hazlo default, para que no se crashee».
+- **MEDIDO** (registro del 27 y del 28-nov, y dos lanzamientos de Stray hechos aposta el 28): con gamescope 3.17.0 y MAKO
+  5.0.0 en la misma línea, a los 14 s de lanzar el juego MAKO abre su generador («mako-fg operation=context-open») y
+  gamescope dice «timeline: SyncobjFdToHandle failed», «vkImportSemaphoreFdKHR failed» y se cae en su hilo xwm
+  (`gamescope + 0x1462d5`, la misma dirección las cuatro veces). No es el 3D: pasa igual antes de que entre. La misma
+  orden con `DISABLE_GAMESCOPE_WSI=1` (MAKO lo anuncia: «gamescope_wsi=isolated»): 50 s dentro de gamescope a 160 fps,
+  MAKO abierto dos veces y el 3D encima hasta que se cerró a mano. Un cubo de Vulkan (vkcube) con MAKO dentro de
+  gamescope no lo reproduce: hace falta un juego con DXVK, que es el que presenta con valla.
+- **Arreglo**: `integ::linea` pone `DISABLE_GAMESCOPE_WSI=1` siempre que el juego lleve gamescope y `ENABLE_MAKO=1`
+  (de fábrica, todos los que van en gamescope); el juego presenta por el Xwayland de gamescope. `leerLinea` la reconoce
+  como suya, y la línea que lleva los dos sin ella queda marcada (`faltaWsi`) para que se reescriba aunque diga lo mismo.
+  Si las demás variables ya nombran esa capa (`ENABLE_GAMESCOPE_WSI=…`), manda lo escrito a mano. En Integraciones, el
+  interruptor de MAKO lo dice en su nota.
+- **Para que valga**: las líneas de Steam se escriben con Steam cerrado; hay que cerrarlo una vez tras instalar.
+- **Lo que no está probado**: la línea escrita por el panel en el Steam de verdad (se probó la orden equivalente lanzada
+  con Proton), ni más juegos que Stray, ni el HDR dentro de gamescope sin su capa.
+
+## Volver a una versión anterior: se guardan las dos últimas al instalar (v1.18)
+
+- Rodolfo: «implementa un sistema de fallback que permita regresar hasta dos versiones si el programa funcionaba previo
+  al error».
+- **Guardar** (`tools/versiones.sh`, que se instala en `PREFIJO/lib/odysseyvk`): `install.sh`, antes de instalar y con la
+  misma clave, copia lo que hay (los tres binarios y la capa de Vulkan) a `PREFIJO/lib/odysseyvk/anteriores/FECHA-VERSION`.
+  Se quedan las dos últimas; reinstalar lo mismo, o instalar encima de una a la que se volvió, no gasta otro hueco. La
+  regla udev, la calibración, los ajustes y las redes no se tocan.
+- **«Funcionaba»**: el servicio apunta en `~/.local/state/odysseyvk/funcionaba` la suma del binario instalado cuando un 3D
+  dura un minuto. La suma y no el número de versión: de la 1.18 salen muchos binarios, y que uno funcionara no dice nada
+  del siguiente. Cada guardada lleva su «funcionaba = si|no».
+- **Volver**: `odysseyvk volver` las lista y `odysseyvk volver 1|2` devuelve una con pkexec, reinicia el servicio y deja
+  apuntada la versión de la que se sale para que la actualización automática no la reinstale sola. La que no consta que
+  funcionara solo vuelve con `--forzar`. En el panel, en la página de «Informar de un error», la sección *Volver a una
+  versión anterior*: un botón por guardada (dos clics, como el desinstalador); la que no funcionaba sale en gris.
+- **Probado** sin root, con una instalación de mentira (`DESTDIR`): `tools/prueba-versiones.sh` (11 comprobaciones del
+  guion) y el recorrido entero con las órdenes de verdad: A instalada y apuntada, B encima (guarda A, «funcionaba»), C
+  encima sin usar B (guarda B, «no»), `volver 1` se niega, `volver 2` deja el binario de A (misma suma). El panel,
+  pintado en la CPU: el botón de la que no funcionaba no responde y el de la otra pide el segundo clic.
+- **Lo que no está probado**: nada con root ni sobre lo instalado de verdad (ni `install.sh` entero, ni pkexec, ni el
+  reinicio del servicio). La primera instalación con esto guarda lo que hay ahora como «no consta que funcionara», porque
+  la marca la pone el servicio nuevo.
+
 ## Informar de un error: un botón abajo a la izquierda que deja el informe escrito en GitHub (v1.18)
 
 - Rodolfo: «añade un boton de bug al fondo a la izquierda de la pantalla, que al presionarlo abra y mande los errores a

@@ -355,6 +355,8 @@ configure_file(capa/VkLayer_odysseyvk_capa.json.in ${CMAKE_BINARY_DIR}/capa/inst
 configure_file(capa/VkLayer_odysseyvk_contador.json.in ${CMAKE_BINARY_DIR}/capa/instalada/VkLayer_odysseyvk_contador.json @ONLY)
 configure_file(capa/VkLayer_odysseyvk_mako_contado.json ${CMAKE_BINARY_DIR}/capa/instalada/VkLayer_odysseyvk_mako_contado.json COPYONLY)
 install(TARGETS VkLayer_odysseyvk_capa LIBRARY DESTINATION lib/odysseyvk)
+# (v1.18) las versiones anteriores (tools/versiones.sh): `odysseyvk volver` lo llama desde aqui con pkexec
+install(PROGRAMS tools/versiones.sh DESTINATION lib/odysseyvk)
 
 install(TARGETS odysseyvk RUNTIME DESTINATION bin)
 

@@ -19,6 +19,7 @@
 #include "efectos_vk.h"
 #include "bandeja.h"
 #include "frenojuego.h"
+#include "versiones.h"   /* (v1.18) volver a una version anterior */
 #include "idioma.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
@@ -2386,6 +2387,66 @@ static int cmdActualizar(int argc, char **argv) {
               10);
   std::printf("[actualizar] hecho (%d)\n", rc);
   return rc == 0 ? 0 : 1;
+}
+
+/* ---- `odysseyvk volver` (v1.18) ----------------------------------------------------------------
+   Las versiones que install.sh guardo antes de instalar encima (tools/versiones.sh, dos como mucho). Sin numero las
+   lista; con 1 (la mas nueva) o 2, la devuelve a su sitio con pkexec, apunta la version de la que se sale para que la
+   actualizacion automatica no la vuelva a poner sola, y reinicia el servicio. La que no llego a funcionar (ningun 3D de
+   un minuto con ella) solo vuelve con --forzar. */
+static int cmdVolver(int argc, char **argv) {
+  int cual = 0;
+  bool forzar = false;
+  for (int i = 0; i < argc; i++) {
+    const std::string a = argv[i];
+    if (a == "--forzar") forzar = true;
+    else if (a == "--apuntar") {   /* taller: lo que hace el servicio tras un 3D de un minuto */
+      versiones::apuntarFuncionaba(rutaEstadoOdyssey("funcionaba"));
+      return 0;
+    } else cual = std::atoi(a.c_str());
+  }
+  const std::vector<versiones::Guardada> v = versiones::lista();
+  if (v.empty()) {
+    std::printf("no hay ninguna version anterior guardada (se guardan al instalar encima, desde la 1.18)\n");
+    return cual > 0 ? 1 : 0;
+  }
+  if (cual <= 0) {
+    std::printf("instalada: OdysseyVK %s\n", ODYSSEYVK_VERSION);
+    for (size_t k = 0; k < v.size(); k++)
+      std::printf("  %zu  OdysseyVK %s · guardada el %s · %s\n", k + 1, v[k].version.c_str(), v[k].fecha.c_str(),
+                  v[k].funcionaba ? "funcionaba" : "no llego a usarse un minuto en 3D");
+    std::printf("para volver a una:  odysseyvk volver 1\n");
+    return 0;
+  }
+  if ((size_t)cual > v.size()) {
+    std::fprintf(stderr, "solo hay %zu guardadas\n", v.size());
+    return 2;
+  }
+  const versiones::Guardada &g = v[(size_t)cual - 1];
+  if (!g.funcionaba && !forzar) {
+    std::fprintf(stderr, "OdysseyVK %s (%s) no llego a usarse un minuto en 3D: no consta que funcionara. Con --forzar vuelve igual.\n",
+                 g.version.c_str(), g.fecha.c_str());
+    return 3;
+  }
+  const char *su = std::getenv("ODYSSEYVK_SUDO");
+  const std::string orden = std::string(su ? su : "pkexec") + " sh " + versiones::comillas(versiones::guion()) + " volver " +
+                            versiones::comillas(versiones::prefijo()) + " " + versiones::comillas(g.carpeta);
+  const int rc = std::system(orden.c_str());
+  if (rc != 0) {
+    std::fprintf(stderr, "no se pudo volver (%d)\n", rc);
+    return 1;
+  }
+  /* que la automatica no reinstale sola la version de la que se acaba de salir */
+  if (FILE *f = std::fopen(rutaEstadoOdyssey("actualizacion-avisada").c_str(), "we")) {
+    std::fprintf(f, "%s\n", ODYSSEYVK_VERSION);
+    std::fclose(f);
+  }
+  if (!std::getenv("ODYSSEYVK_PRUEBA_SIN_SERVICIO")) {
+    std::system("systemctl --user restart odysseyvk-serve.service 2>/dev/null");
+    avisoEscritorio(idioma::tr("OdysseyVK volvió a una versión anterior"), idioma::trf("Ahora corre la {} ({}).", {g.version, g.fecha}));
+  }
+  std::printf("de vuelta OdysseyVK %s (%s)\n", g.version.c_str(), g.fecha.c_str());
+  return 0;
 }
 
 /* ---- `odysseyvk desinstalar` (v0.95) ----------------------------------------------------------
@@ -5178,6 +5239,82 @@ static int cmdFlujo(int argc, char **argv) {
 #endif
 }
 
+/* (v1.18) `odysseyvk ctl velo-prueba [SEGUNDOS]`: lo que hace KWin con un cursor encerrado cuando se le pone el velo
+   encima, sin juego. Una ventana a pantalla completa que encierra el cursor como un juego (GLFW_CURSOR_DISABLED: las
+   restricciones de puntero de Wayland, lo mismo que pide XWayland por un juego de Proton); a los 2 s se pone el velo
+   solo (Overlay::ponSoloVelo, el de la pastilla) y a los SEGUNDOS se quita. Dice si la ventana sigue con el foco y si
+   el raton paso al velo. Para la pregunta de «no puedo usar las settings mientras el juego anda» */
+static int cmdVeloPrueba(int argc, char **argv) {
+  const double dura = argc > 0 ? std::max(1.0, std::atof(argv[0])) : 4.0;
+  if (!glfwInit()) {
+    std::fprintf(stderr, "sin GLFW\n");
+    return 1;
+  }
+  GLFWmonitor *mon = glfwGetPrimaryMonitor();
+  if (const char *pista = entornoOdyssey("ODYSSEYVK_PANTALLA")) {
+    int n = 0;
+    GLFWmonitor **todos = glfwGetMonitors(&n);
+    for (int i = 0; i < n; i++)
+      if (std::strstr(glfwGetMonitorName(todos[i]), pista)) mon = todos[i];
+  }
+  const GLFWvidmode *vm = mon ? glfwGetVideoMode(mon) : nullptr;
+  if (!vm) {
+    std::fprintf(stderr, "sin monitor\n");
+    glfwTerminate();
+    return 1;
+  }
+  glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
+  GLFWwindow *w = glfwCreateWindow(vm->width, vm->height, "OdysseyVK: prueba del velo", mon, nullptr);
+  if (!w) {
+    std::fprintf(stderr, "sin ventana\n");
+    glfwTerminate();
+    return 1;
+  }
+  glfwMakeContextCurrent(w);
+  static int entradas = 0, salidas = 0, focos = 0, desenfoques = 0, movimientos = 0;
+  glfwSetCursorEnterCallback(w, [](GLFWwindow *, int dentro) { dentro ? ++entradas : ++salidas; });
+  glfwSetWindowFocusCallback(w, [](GLFWwindow *, int f) { f ? ++focos : ++desenfoques; });
+  glfwSetCursorPosCallback(w, [](GLFWwindow *, double, double) { ++movimientos; });
+  glfwSetInputMode(w, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  Overlay velo;
+  velo.setPantalla(glfwGetMonitorName(mon));
+  std::string e;
+  const bool hayCapa = velo.open(&e);
+  std::printf("[velo-prueba] ventana en %s %dx%d · capa %s\n", glfwGetMonitorName(mon), vm->width, vm->height, hayCapa ? "si" : e.c_str());
+  const double t0 = glfwGetTime();
+  int fase = 0;
+  auto cuenta = [&](const char *que) {
+    std::printf("[velo-prueba] %-22s foco %d (ganado %d, perdido %d) · el raton entro %d, salio %d · movimientos %d · velo: %s\n", que,
+                glfwGetWindowAttrib(w, GLFW_FOCUSED), focos, desenfoques, entradas, salidas, movimientos,
+                velo.veloPuesto() ? (velo.ratonEnVelo() ? "puesto, con el raton" : "puesto, sin el raton") : "no");
+    std::fflush(stdout);
+  };
+  while (!glfwWindowShouldClose(w)) {
+    glfwSwapBuffers(w);
+    glfwPollEvents();
+    if (hayCapa) velo.waitAndDispatch(0);
+    const double t = glfwGetTime() - t0;
+    if (fase == 0 && t >= 2.0) {
+      cuenta("antes del velo:");
+      if (hayCapa) velo.ponSoloVelo();
+      fase = 1;
+    } else if (fase == 1 && t >= 2.6) {
+      cuenta("con el velo (0,6 s):");
+      fase = 2;
+    } else if (fase == 2 && t >= 2.0 + dura) {
+      cuenta("antes de quitarlo:");
+      velo.quitarVelo();
+      fase = 3;
+    } else if (fase == 3 && t >= 3.0 + dura) {
+      cuenta("un segundo despues:");
+      break;
+    }
+  }
+  glfwDestroyWindow(w);
+  glfwTerminate();
+  return 0;
+}
+
 static int cmdOverlay(int argc, char **argv) {
   int segundos = 12;
   if (std::string v = flag(argc, argv, "--segundos"); !v.empty()) segundos = std::max(1, std::atoi(v.c_str()));
@@ -5247,6 +5384,13 @@ static int cmdOverlay(int argc, char **argv) {
 static void escribirMarcaVentana(const char *estado, double ahora) {
   std::ofstream os(rutaEstadoOdyssey("ventana"), std::ios::trunc);
   if (os) os << estado << ' ' << ahora << "\n";
+}
+/* (v1.18) El visor tiene quitado el cursor al juego a proposito (la pastilla o el panel en uso): lo deja dicho en
+   cursor-visor y refresca su hora cada medio segundo (vkview.cpp, marcaCursor). Si el visor se va de golpe, caduca */
+static bool visorTieneElCursor() {
+  struct stat st {};
+  if (::stat(rutaEstadoOdyssey("cursor-visor").c_str(), &st) != 0) return false;
+  return std::time(nullptr) - st.st_mtime <= 3;
 }
 static void borrarMarcaVentana() {
   std::error_code ec;
@@ -5706,6 +5850,13 @@ static int cmdServe(int argc, char **argv) {
         focoJuegoDicho = false;
         /* (v1.18) el freno del juego que pierde la pantalla completa cada vez que entra el 3D (frenojuego.h): con dos
            cierres cortos seguidos a esa ventana no se le lanza solo por un rato, y se dice por que */
+        /* (v1.18) esta version funciona: hubo un 3D de un minuto. install.sh lo mira al guardarla (tools/versiones.sh) y
+           `odysseyvk volver` solo ofrece sin mas las que lo tengan */
+        {
+          static bool apuntado = false;
+          if (!apuntado && hijoDesde > 0.0 && now - hijoDesde >= 60.0)
+            apuntado = true, versiones::apuntarFuncionaba(rutaEstadoOdyssey("funcionaba"));
+        }
         if (hijoDesde > 0.0 && !eraForzada) {
           const double espera = freno.cierre(hijoUuid, now - hijoDesde, porElUsuario, esJuego(hijoApp), now);
           if (espera > 0.0) {
@@ -6004,7 +6155,8 @@ static int cmdServe(int argc, char **argv) {
          minimizado). El servicio despierta con cada cambio de ventana, asi que en los primeros segundos de la sesion se
          lo devuelve el, en cuanto ve al visor activo. Solo al arrancar: despues la pastilla puede quitarle el cursor al
          juego a proposito (el visor se activa el solo) y de eso no sabe el servicio */
-      if (hayVisor && esJuego(hijoApp) && hijoDesde > 0.0 && now - hijoDesde < 4.0 && visor.active() && now - focoJuegoT >= 0.1) {
+      if (hayVisor && esJuego(hijoApp) && hijoDesde > 0.0 && now - hijoDesde < 4.0 && visor.active() && now - focoJuegoT >= 0.1 &&
+          !visorTieneElCursor()) {
         WindowInfo jg{};
         if (wm.find(hijoUuid, jg) && jg.mapped && !jg.active()) {
           focoJuegoT = now;
@@ -6265,6 +6417,26 @@ static int cmdServe(int argc, char **argv) {
         if (!wm.find(hijoUuid, video) || !video.mapped) motivo = "la ventana del video ya no esta";
         else if (video.minimized()) {
           if (videoMinimizadaDesde == 0.0) videoMinimizadaDesde = now;
+          /* (v1.18) El juego que se minimiza porque la pastilla le quito el cursor (el visor se hace la ventana activa y
+             uno a pantalla completa exclusiva se minimiza al perder el foco) no se ha ido: la cuenta no corre mientras el
+             visor tenga el cursor. MEDIDO el 28-nov con Cyberpunk: atajo a las 09:11:15,68, panel de ajustes abierto a las
+             18,45 y el 3D cerrado por esto a las 23,38, con el panel en uso; y otra vez a las 09:11:44. Al devolver el
+             cursor el visor lo saca de minimizado; si sigue asi, los 6 s cuentan desde entonces */
+          if (esJuego(video.appId) && visorTieneElCursor()) {
+            videoMinimizadaDesde = now;
+            static std::set<std::string> avisados;
+            if (avisados.insert(video.appId).second) {
+              std::printf("[ventana] %s se minimizo al quitarle el cursor la pastilla: el 3D sigue con el ultimo cuadro hasta que"
+                          " vuelva (en ventana sin bordes no se minimiza)\n", video.appId.c_str());
+              std::fflush(stdout);
+              if (hayTarjeta && ov)
+                mostrarAviso([](std::string &t, std::vector<std::string> &l) {
+                  t = idioma::tr("El juego se minimiza al perder el foco");
+                  l = {idioma::tr("Mientras usas la pastilla o el panel se queda la última imagen; al volver, sigue."),
+                       idioma::tr("En ventana sin bordes (borderless) no se minimiza.")};
+                }, now, 4.0);
+            }
+          }
           if (!esJuego(video.appId) || now - videoMinimizadaDesde >= 6.0) motivo = "la ventana del video esta minimizada";
         } else {
           videoMinimizadaDesde = 0.0;
@@ -7168,6 +7340,7 @@ int main(int argc, char **argv) {
     if (sub == "apilamiento") return cmdApilamiento(argc - 3, argv + 3);
     if (sub == "salidas") return cmdSalidas(argc - 3, argv + 3);
     if (sub == "overlay") return cmdOverlay(argc - 3, argv + 3);
+    if (sub == "velo-prueba") return cmdVeloPrueba(argc - 3, argv + 3);
 #endif
     if (sub == "capture") return cmdCapture(argc - 3, argv + 3);
     if (sub == "capture-gl") return cmdCaptureGl(argc - 3, argv + 3);
@@ -7283,6 +7456,7 @@ int main(int argc, char **argv) {
     return cmdMapa(argc - 2, argv + 2);
   if (cmd == "actualizar") return cmdActualizar(argc - 2, argv + 2);
   if (cmd == "desinstalar") return cmdDesinstalar(argc - 2, argv + 2);
+  if (cmd == "volver") return cmdVolver(argc - 2, argv + 2);   /* (v1.18) a una version anterior guardada */
   if (cmd == "attrs") {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;

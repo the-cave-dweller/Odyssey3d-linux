@@ -256,6 +256,9 @@ gamescope -w 2048 -h 1536 -W 3840 -H 2160 -S stretch -f --force-grab-cursor -- e
 - **Browser video freezes under the viewer** → Firefox/Zen: `about:config` →
   `gfx.vsync.compositor.unobserve-count = 0`; Chrome: `--disable-gpu-vsync`.
 - **Monitor stays rotated / scaled after a crash** → `odysseyvk ctl panel restore`.
+- **A new version works worse than the one before** → `odysseyvk volver` lists the last two installed versions
+  (kept automatically on each install) and `odysseyvk volver 1` brings one back; the panel's "Report a problem" page
+  has the same buttons.
 - **No depth, video stays flat** → the network is missing: `odysseyvk ctl net download`.
 - Logs: `journalctl --user -u odysseyvk-serve -f`; the update log is
   `~/.local/state/odysseyvk/actualizar.log`.

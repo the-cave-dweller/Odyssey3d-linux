@@ -251,6 +251,11 @@ int cmdAjustes(int argc, char **argv) {
     if (juegoActual.empty() && haySesion && ven != hub.end() && ven->second != "-")
       for (const WindowInfo &w : wmPanel.windows())
         if (w.uuid == ven->second) juegoActual = appDe(w.appId);
+    /* (v1.18) y con una sesion 3D sobre un juego, el velo y la vuelta valen tambien para el aunque la ventana activa
+       sea otra (el visor, si le quito el cursor de la forma de antes) */
+    if (juegoUuid.empty() && haySesion && ven != hub.end() && ven->second != "-")
+      for (const WindowInfo &w : wmPanel.windows())
+        if (w.uuid == ven->second && !appDe(w.appId).empty()) juegoUuid = w.uuid, juegoApp = w.appId;
     if (!juegoActual.empty()) std::printf("[ajustes] dentro del juego %s: Integraciones en gris y en Juegos solo el suyo\n", juegoActual.c_str());
     prefs::juegoDelPanel(juegoActual);   /* (v1.18) la pestana de efectos ofrece los suyos */
     st.vistaEnVivo = haySesion && !juegoActual.empty();   /* (v1.18) el visor, debajo, pinta la vista de los efectos */
@@ -292,7 +297,12 @@ int cmdAjustes(int argc, char **argv) {
   }
   /* el teclado entero para el panel mientras esta abierto (v1.09): el juego o el video de debajo no
      reciben teclas, Esc lo cierra y los atajos se capturan aqui */
-  ov.modoTeclado(st.fijado ? 2 : 1);
+  /* (v1.18) Sobre un juego, no: el teclado se queda en el juego (Rodolfo: «no puedo usar las settings mientras el juego
+     anda, el juego se pausa y quita foco, hace muchas versiones se podia»; fue asi hasta la v1.09). Con el teclado
+     exclusivo de la capa el juego deja de ser la ventana activa: se pausa, y a pantalla completa exclusiva se minimiza
+     (MEDIDO el 28-nov con Cyberpunk). El raton lo tiene el velo; el teclado solo se toma mientras se espera un atajo o
+     se escribe en un campo. Se cierra con el aspa o con un clic fuera (Esc es del juego) */
+  ov.modoTeclado(!juegoUuid.empty() ? 0 : st.fijado ? 2 : 1);
   if (!juegoUuid.empty() && !st.fijado) {
     /* medido, no supuesto: el registro dice si el juego dejo de ser la ventana activa */
     for (int i = 0; i < 6; i++) {
@@ -302,12 +312,15 @@ int cmdAjustes(int argc, char **argv) {
     WindowInfo j{};
     const bool sigue = wmPanel.find(juegoUuid, j) && j.active();
     std::printf("[ajustes] sobre el juego %s: %s\n", juegoApp.c_str(),
-                sigue ? "sigue siendo la ventana activa (su cursor puede seguir encerrado)"
-                      : "deja de ser la ventana activa: su cursor queda libre y el raton es del panel");
+                sigue ? "sigue siendo la ventana activa (no se pausa): el raton es del velo y el teclado, del juego"
+                      : "no es la ventana activa");
     std::fflush(stdout);
   }
   /* la entrada en la barra de tareas mientras el panel esta abierto (v1.04), si no se apago */
-  if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
+  /* (v1.18) Sobre un juego, no: esa entrada es una ventana normal y KWin, al aparecer, la hace la activa. MEDIDO el
+     28-nov con Cyberpunk (09:49:58): con el teclado ya en el juego, el juego dejaba de ser la activa en el mismo segundo
+     de abrirse el panel, se minimizaba y el 3D se cerraba a los 6 s */
+  if (prefs::leer().enBarraTareas && juegoUuid.empty()) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
               haySesion ? "al doble: hay una sesion 3D" : grande ? "al doble: el marco, como sobre un juego" : "tamano de escritorio", (int)juegos.size());
   std::fflush(stdout);
@@ -723,6 +736,9 @@ int cmdAjustes(int argc, char **argv) {
       }
     }
     /* fijado, el teclado va a pedido; esperando un atajo sin el «a pedido» del compositor, exclusivo */
+    if (!juegoUuid.empty())   /* (v1.18) sobre un juego el teclado es suyo, salvo esperando un atajo o escribiendo */
+      ov.modoTeclado((!prefs::capturando().empty() || prefs::editandoTexto()) ? 1 : 0);
+    else
     ov.modoTeclado(!(st.fijado || st.depuracion || st.vistaEfectos) ? 1 : (((!prefs::capturando().empty() || prefs::editandoTexto()) && !ov.tecladoAPedido()) ? 1 : 2));
     /* el teclado: con un atajo esperando, la combinacion va a el; si no, Esc cierra el panel (y las
        demas teclas se quedan aqui: el juego de debajo no las recibe) */
@@ -774,7 +790,7 @@ int cmdAjustes(int argc, char **argv) {
       idiomaDelAtlas = idioma::actual();
       std::string e;
       if (!ov.hud().buildAtlas(&e)) std::fprintf(stderr, "[ajustes] atlas: %s\n", e.c_str());
-      if (prefs::leer().enBarraTareas) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
+      if (prefs::leer().enBarraTareas && juegoUuid.empty()) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
       std::printf("[ajustes] idioma: %s\n", idioma::codigo(idiomaDelAtlas));
       std::fflush(stdout);
       rellenar();

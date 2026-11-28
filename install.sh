@@ -55,7 +55,19 @@ echo
 # escritorio en vez de en la terminal. Una sola peticion para el binario, la regla udev y los datos.
 su=${ODYSSEYVK_SUDO:-sudo}
 echo "se va a pedir la clave ($su) para instalar el binario, la regla udev y los datos de calibración"
-$su sh -c "cmake --install '$here/build' && udevadm control --reload-rules"
+prefix=$(sed -n 's/^CMAKE_INSTALL_PREFIX:INTERNAL=//p' "$here/build/CMakeCache.txt")
+prefix=${prefix:-/usr/local}
+# (v1.18) antes de instalar, lo que hay ahora se guarda para poder volver (tools/versiones.sh: se quedan las dos
+# últimas en $prefix/lib/odysseyvk/anteriores; `odysseyvk volver` las devuelve). Con la misma clave que la instalación.
+# «funcionaba»: el servicio apunta en ~/.local/state/odysseyvk/funcionaba el binario con el que hubo un 3D de un minuto
+# (su suma, no su número de versión: de una misma versión salen muchos binarios)
+ver_ahora=""
+[ -x "$prefix/bin/odysseyvk" ] && ver_ahora=$("$prefix/bin/odysseyvk" --version 2>/dev/null | awk 'NR==1{print $2}') || true
+funcionaba=no
+[ -n "$ver_ahora" ] && grep -qxF "$(cksum < "$prefix/bin/odysseyvk")" "${XDG_STATE_HOME:-$HOME/.local/state}/odysseyvk/funcionaba" 2>/dev/null && funcionaba=si
+guardar=":"
+[ -n "$ver_ahora" ] && guardar="sh '$here/tools/versiones.sh' guardar '$prefix' '$ver_ahora' $funcionaba || echo 'aviso: no se pudo guardar la versión anterior'"
+$su sh -c "$guardar; cmake --install '$here/build' && udevadm control --reload-rules"
 
 # --- servicio en segundo plano (por usuario, sin sudo) ----------------------
 prefix=$(sed -n 's/^CMAKE_INSTALL_PREFIX:INTERNAL=//p' "$here/build/CMakeCache.txt")
