@@ -45,6 +45,11 @@ public:
   bool framesFlowing() const;   /* llegó al menos un fotograma */
   uint64_t frameCount() const;  /* cuántos fotogramas han llegado */
   bool dmabufOnly() const;      /* el flujo viene en dmabuf (aún no sabemos usarlo) */
+  /* (v1.18) Pedir los cuadros en memoria normal y no en DMA-BUF (antes de `start`): al compositor se le ofrece el formato
+     sin modificador, que es como PipeWire dice «sin DMA-BUF». Para la tarjeta que no sabe importar lo que entrega el
+     compositor: MEDIDO el 28-nov, la NVIDIA no anuncia ningun modificador en Vulkan («B8G8R8A8_UNORM: sin modificadores
+     DRM») y el cuadro importado sin el solo sale bien a 3840x2160; a 2048x1536 o 750x792, revuelto por bloques */
+  void soloMemoria(bool si);
 
   /* Estado de nuestro lado del flujo de PipeWire (error, paused, streaming...). */
   std::string stateText() const;

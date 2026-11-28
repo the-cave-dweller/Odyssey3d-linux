@@ -80,9 +80,26 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **La pastilla** (`Hud::dibujaPastilla2D`, `State::pastilla2D`): el aspa (la cierra: el juego se queda como estaba), el
   interruptor de los Efectos, la generación de cuadros de MAKO (− · «FG x3» o «FG», que se enciende o se apaga al picarla
   · +) y el engranaje. Hacen lo mismo que sus atajos (`efectos`, `fg`, `fg-`, `fg+`).
-- **Lo que falta**: el servicio todavía no la lanza solo en una pantalla sin 3D (hoy solo a mano, con la orden de
-  arriba); no se ha probado con un juego ni picando sus botones (se probó capturando una ventana de prueba y pintándola
-  en la CPU), ni con la generación de cuadros del propio visor.
+- **El servicio ya la lanza solo**: la candidata a pantalla completa se mira primero por su pantalla. En una sin 3D (o
+  sin ningún monitor 3D) no se ofrece el 3D; si es un juego, sale la sesión de ShaderHUB en esa pantalla (el visor con
+  `--conver --2d --no-panel --no-lens --no-scaler`, sin rastreo), con sus atajos. `shaderhub = no` en `serve.conf` la
+  quita. Un vídeo a pantalla completa en una pantalla sin 3D ya no abre el 3D en el Odyssey.
+- **«Se ve hortruible en la seguna pantalla, considera que solo necesita profundidad, ya no un grid 3d»** (Rodolfo, al
+  verla). No era la trama. **MEDIDO** volcando lo que presenta el visor: una ventana de 3840x2160 salía limpia y una de
+  2048x1536 (DP-7) o de 750x792, revuelta por bloques. La NVIDIA no anuncia ningún modificador DRM en Vulkan
+  («B8G8R8A8_UNORM: sin modificadores DRM») y aun así deja crear la imagen sobre el DMA-BUF del compositor: lo que se lee
+  solo coincide a 3840x2160. La misma ventana importada por OpenGL (`ctl capture-gl`) sale bien. Ahora, en la sesión sin
+  3D, si la tarjeta dice que no sabe importar el cuadro (y no es de 3840x2160, lo medido bien), los cuadros se piden al
+  compositor **en memoria normal** (`WindowCapture::soloMemoria`: el formato ofrecido sin modificador) y los sube el
+  visor. Y la sesión va con la red de profundidad (para los efectos) y sin tejer nada. En el 3D no se toca.
+- **Probado** el 28-nov en DP-7 con un juego de prueba (gamescope con vkcube a pantalla completa) y el servicio y el
+  visor de esta compilación: la sesión sale sola a los 4 s, 73-75 cuadros por segundo de 75, el volcado de lo presentado
+  es el cuadro entero y limpio, el atajo oculta y saca la pastilla, y picando por el velo, Efectos los enciende y los
+  apaga y el aspa cierra la sesión sin que se relance. En DP-4 el mismo juego abre el 3D como siempre.
+- **Lo que no está probado**: con un juego de verdad ni con efectos encendidos sobre él; la generación de cuadros desde
+  la pastilla (el juego de prueba no lleva MAKO); lo que cuesta subir los cuadros por memoria a más resolución (a
+  2048x1536 no se nota en los cuadros por segundo; a 4K y muchos hercios pesará); otras tarjetas (en AMD o Intel el
+  DMA-BUF debería importarse bien y no pasar por memoria).
 
 ## Las pantallas: la lista arriba del panel y el modo sin 3D (v1.18, primera parte)
 

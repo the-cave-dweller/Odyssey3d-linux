@@ -739,7 +739,21 @@ const VkImg *VkWeave::fuenteReal() const {
 
 bool VkWeave::sourceFromDma(const GpuFrame &f, std::string *err) {
   VkImg img{};
-  if (!dev_->importImage(f, img, err, false) && !dev_->importImageImplicit(f, img, err, err)) return false;
+  /* (v1.18) Primero con su modificador (el orden de la memoria, dicho); solo si la tarjeta no lo acepta, sin el. Sin el
+     modificador la imagen se lee con el orden que la tarjeta elegiria para ese tamano, que solo coincide a veces: MEDIDO
+     el 28-nov, una ventana de 3840x2160 se veia bien y una de 2048x1536 (la segunda pantalla de Rodolfo: «se ve
+     hortruible en la seguna pantalla») o de 750x792 salia revuelta por bloques. Lo que diga el primer intento queda en el
+     registro, una vez */
+  std::string e1;
+  if (!dev_->importImage(f, img, &e1, false)) {
+    static bool dicho = false;
+    if (!dicho) {
+      dicho = true;
+      std::printf("[captura] el cuadro no se importo con su modificador (%s): se intenta sin el\n", e1.c_str());
+      std::fflush(stdout);
+    }
+    if (!dev_->importImageImplicit(f, img, err, err)) return false;
+  }
   dev_->destroyImg(next_);
   next_ = img;
   return true;

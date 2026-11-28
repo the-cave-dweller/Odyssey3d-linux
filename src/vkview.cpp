@@ -3356,7 +3356,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     const char *e = entornoOdyssey("ODYSSEYVK_ATAJOS");
     const bool quiere = !(e && (e[0] == '0' || e[0] == 'n'));
     const bool aLaFuerza = e && e[0] == '1';   /* en el taller sin panel, solo si se pide: para probarlos */
-    if (quiere && (!opts.noPanel || aLaFuerza)) {
+    /* (v1.18) y en la sesion de ShaderHUB, que va sin panel a proposito: su pastilla sale y se va con el mismo atajo */
+    if (quiere && (!opts.noPanel || aLaFuerza || ui.hud.state().pastilla2D)) {
       std::string eA;
       if (atajos.abrir(&eA))
         std::printf("[atajos] globales del escritorio puestos (valen con el teclado en el video o en el juego): %s\n",
@@ -4299,8 +4300,10 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         for (const char *p = guion; *p;) {
           double x = 0, y = 0;
           int n = 0;
-          if (*p == 'e') {   /* «e»: el engranaje de la pastilla, este donde este */
-            puntos.push_back({-1.0, -1.0});
+          if (*p == 'e' || *p == 'f' || *p == 'g' || *p == 'c') {   /* un boton de la pastilla, este donde este: «e» el
+                                                                         engranaje · «f» los efectos, «g» la generacion y «c»
+                                                                         el aspa de la de ShaderHUB */
+            puntos.push_back({-1.0, (double)*p});
             ++p;
           } else {
             if (std::sscanf(p, "%lf,%lf%n", &x, &y, &n) < 2) break;
@@ -4316,7 +4319,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             pointerScale(win, &ui, kx, ky);
             if (ui.hud.pillBounds(&px, &py, &pw, &ph))
               for (float fx = px; fx < px + pw && x < 0.0; fx += 4.0f)
-                if (ui.hud.hit(fx, py + ph * 0.5f) == Hud::HitEngranaje) x = (fx + 6.0f) / kx, y = (py + ph * 0.5f) / ky;
+                if (ui.hud.hit(fx, py + ph * 0.5f) == (y == 'f' ? Hud::HitP2dEfectos : y == 'g' ? Hud::HitP2dFg : y == 'c' ? Hud::HitP2dCerrar : Hud::HitEngranaje))
+                  x = (fx + 6.0f) / kx, y = (py + ph * 0.5f) / ky;
           }
           std::printf("[raton] prueba: clic en %.0f,%.0f por el velo\n", x, y);
           std::fflush(stdout);
@@ -4589,6 +4593,62 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                          "necesita pixel a pixel (deja la ventana a pantalla completa en esta salida)\n",
                          cf.w, cf.h, fbW, fbH);
           }
+          /* (v1.18) En la sesion de ShaderHUB (sin 3D) los cuadros se piden en memoria cuando la tarjeta no sabe importar
+             lo que entrega el compositor (Rodolfo: «se ve hortruible en la seguna pantalla»). MEDIDO el 28-nov: la NVIDIA
+             no anuncia ningun modificador en Vulkan y aun asi deja crear la imagen; lo que se lee solo coincide a
+             3840x2160 (la pantalla del Odyssey, donde el 3D lleva meses bien) y a 2048x1536 sale revuelto por bloques.
+             A ese tamano medido se deja como esta; a cualquier otro, memoria normal: la sube el visor, con su coste
+             (un cuadro de 2048x1536 son 12 MB) pero entera. En el 3D no se toca nada */
+          static bool memoriaPedida = false;
+          if (ui.hud.state().pastilla2D && gf.dmabuf && !memoriaPedida && !(gf.w == 3840 && gf.h == 2160)) {
+            VkFormat fmtImp = VK_FORMAT_UNDEFINED;
+            std::string porQue;
+            if (!dev.canImport(gf, &fmtImp, &porQue)) {
+              memoriaPedida = true;
+              std::printf("[captura] sin 3D: la tarjeta no sabe importar estos cuadros (%s): se piden en memoria normal\n", porQue.c_str());
+              std::fflush(stdout);
+              cap.stop();
+              cap.soloMemoria(true);
+              lastFrameCount = 0;
+              ultimoNuevo = 0.0;
+              std::string e2;
+              if (!cap.start(opts.captureUuid, &e2)) std::fprintf(stderr, "[captura] en memoria: %s\n", e2.c_str());
+              continue;
+            }
+          }
+          if (!gf.dmabuf) {
+            /* el cuadro en memoria: BGRx con su paso, a RGBA seguido, y a la tarjeta */
+            static std::vector<uint8_t> crudo, rgba;
+            int mw = 0, mh = 0, paso = 0;
+            if (cap.copyFrame(crudo, mw, mh, paso) && mw > 0 && mh > 0 && paso >= mw * 4 && crudo.size() >= (size_t)paso * (size_t)mh) {
+              rgba.resize((size_t)mw * (size_t)mh * 4u);
+              const bool yaRgb = cf.fourcc == 0x34324258u || cf.fourcc == 0x34324241u;   /* XB24 / AB24: ya viene R primero */
+              for (int y = 0; y < mh; y++) {
+                const uint32_t *o = (const uint32_t *)(crudo.data() + (size_t)y * (size_t)paso);
+                uint32_t *d = (uint32_t *)(rgba.data() + (size_t)y * (size_t)mw * 4u);
+                if (yaRgb) std::memcpy(d, o, (size_t)mw * 4u);
+                else
+                  for (int x = 0; x < mw; x++) {
+                    const uint32_t v = o[x];
+                    d[x] = (v & 0xFF00FF00u) | ((v & 0xFFu) << 16) | ((v >> 16) & 0xFFu) | 0xFF000000u;
+                  }
+              }
+              if (wv.sourceFromRgba(rgba.data(), mw, mh, true, &err)) {
+                fallosImport = 0;
+                newSource = true;
+                fgVideoReal(VK_FORMAT_R8G8B8A8_UNORM);
+                static bool dicho = false;
+                if (!dicho) {
+                  dicho = true;
+                  std::printf("[captura] cuadros en memoria: %dx%d (paso %d), subidos por el visor\n", mw, mh, paso);
+                  std::fflush(stdout);
+                }
+              } else if (!importWarned) {
+                importWarned = true;
+                std::fprintf(stderr, "[captura] el cuadro en memoria no se pudo subir: %s\n", err.c_str());
+              }
+            }
+          } else
           if (!wv.sourceFromDma(gf, &err)) {
             if (!importWarned) {
               importWarned = true;

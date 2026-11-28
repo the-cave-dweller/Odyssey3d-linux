@@ -56,6 +56,7 @@ struct WindowCapture::Impl {
   int lastMaxsize = 0;
   uint64_t frameCount = 0;
   bool lastDmabuf = false;
+  bool soloMemoria = false;   /* (v1.18) ver capture.h */
   std::string fmtName;
   std::string nodeName, nodeSerial, nodeClass, pwState, streamClass = "Stream/Input/Video";
   bool created = false;
@@ -234,7 +235,24 @@ struct WindowCapture::Impl {
                                         nullptr};
     pw_stream_add_listener(pwStream, &pwHook, &ev, this);
     const uint32_t tid = target.empty() ? nodeId : PW_ID_ANY;
-    const int r = pw_stream_connect(pwStream, PW_DIRECTION_INPUT, tid, PW_STREAM_FLAG_MAP_BUFFERS, nullptr, 0);
+    /* (v1.18) en memoria: el formato, dicho sin modificador (asi el compositor no manda DMA-BUF) */
+    uint8_t almacen[1024];
+    struct spa_pod_builder pb = SPA_POD_BUILDER_INIT(almacen, sizeof almacen);
+    const struct spa_pod *params[1] = {nullptr};
+    if (soloMemoria) {
+      struct spa_rectangle tam = SPA_RECTANGLE(1920, 1080), tamMin = SPA_RECTANGLE(1, 1), tamMax = SPA_RECTANGLE(16384, 16384);
+      struct spa_fraction fr = SPA_FRACTION(60, 1), frMin = SPA_FRACTION(0, 1), frMax = SPA_FRACTION(1000, 1);
+      params[0] = (const struct spa_pod *)spa_pod_builder_add_object(
+          &pb, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+          SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video),
+          SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+          SPA_FORMAT_VIDEO_format, SPA_POD_CHOICE_ENUM_Id(5, SPA_VIDEO_FORMAT_BGRx, SPA_VIDEO_FORMAT_BGRx, SPA_VIDEO_FORMAT_BGRA,
+                                                          SPA_VIDEO_FORMAT_RGBx, SPA_VIDEO_FORMAT_RGBA),
+          SPA_FORMAT_VIDEO_size, SPA_POD_CHOICE_RANGE_Rectangle(&tam, &tamMin, &tamMax),
+          SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(&fr, &frMin, &frMax));
+    }
+    const int r = pw_stream_connect(pwStream, PW_DIRECTION_INPUT, tid, PW_STREAM_FLAG_MAP_BUFFERS, soloMemoria ? params : nullptr,
+                                    soloMemoria ? 1 : 0);
     pwStarted = (r >= 0);
     if (pwStarted) ourNodeId = pw_stream_get_node_id(pwStream);
     if (r < 0) setNote(std::string("el nodo de captura rechazó la conexión: ") + std::strerror(-r));
@@ -515,6 +533,8 @@ bool WindowCapture::copyFrame(std::vector<uint8_t> &out, int &w, int &h, int &st
   stride = d->stride;
   return true;
 }
+
+void WindowCapture::soloMemoria(bool si) { d->soloMemoria = si; }
 
 bool WindowCapture::lastFrame(CapturedFrame &out) const {
   std::lock_guard<std::mutex> g(d->mtx);
