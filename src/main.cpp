@@ -21,7 +21,7 @@
 #include "frenojuego.h"
 #include "versiones.h"   /* (v1.18) volver a una version anterior */
 #include "pantallas.h"   /* (v1.18) las pantallas conectadas */
-#include "marca.h"       /* (v1.18) SpatialHUB y ShaderHUB */
+#include "marca.h"       /* (v1.18) SpatialHub y ShaderHub */
 #include "idioma.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
@@ -2185,7 +2185,7 @@ static std::string conCasa(const std::string &ruta) {
 static void avisoEscritorio(const std::string &titulo, const std::string &cuerpo) {
   const pid_t p = ::fork();
   if (p == 0) {
-    /* (v1.18) con el nombre de ahora: SpatialHUB, o ShaderHUB en un equipo sin monitor 3D (marca.h) */
+    /* (v1.18) con el nombre de ahora: SpatialHub, o ShaderHub en un equipo sin monitor 3D (marca.h) */
     const bool sin = marca::equipoSin3D();
     ::execlp("notify-send", "notify-send", "-a", marca::nombre(sin), "-i", "odysseyvk", marca::pon(titulo, sin).c_str(),
              marca::pon(cuerpo, sin).c_str(), (char *)nullptr);
@@ -4204,7 +4204,7 @@ struct ServeCfg {
   std::vector<std::string> ignore;
   int esperaSeg = 40;
   std::string pantalla;           /* dónde poner la tarjeta (DP-4); vacio = reconocer solo */
-  bool shaderHub = true;          /* (v1.18) `shaderhub = no`: sin la pastilla de ShaderHUB en las pantallas sin 3D */
+  bool shaderHub = true;          /* (v1.18) `shaderhub = no`: sin la pastilla de ShaderHub en las pantallas sin 3D */
   std::string modelo;             /* .onnx de profundidad; vacio = la red de siempre */
   std::string nuestra;            /* la otra red (.onnx), la nativa, la del boton 2 del visor */
   std::string modeloVideo;        /* (v1.16) `modelo_video =`: la red solo para videos (vacio = la de siempre tambien) */
@@ -4585,7 +4585,7 @@ static bool ignoredApp(const WindowInfo &w, const std::vector<std::string> &list
 }
 
 static std::string g_modoVisor;   /* el modo del ultimo visor lanzado (sbs, conv...), para reabrirlo tras actualizar (v0.95) */
-/* (v1.18) La sesion que se lanza es la de ShaderHUB: el juego esta en una pantalla sin 3D (Rodolfo: «ya sin el modo 3d
+/* (v1.18) La sesion que se lanza es la de ShaderHub: el juego esta en una pantalla sin 3D (Rodolfo: «ya sin el modo 3d
    tambien escrube un pill hub para operar todo lo de los shaders y el framegen»). El visor va sin trama, sin tocar el
    panel, la lente ni el scaler, y sin rastreo: captura el juego, le pasa los efectos y lo presenta con su pastilla */
 static bool g_sesionSin3D = false;
@@ -5631,7 +5631,7 @@ static int cmdServe(int argc, char **argv) {
   };
   std::map<std::string, double> fullVisto;   /* desde cuando lleva cada ventana a pantalla completa */
   double videoMinimizadaDesde = 0.0;
-  std::string sesionSalida;   /* (v1.18) la pantalla de la sesion de ShaderHUB (vacia: la del 3D) */
+  std::string sesionSalida;   /* (v1.18) la pantalla de la sesion de ShaderHub (vacia: la del 3D) */
   {
     std::string txt;
     if (readSmallFile(rutaEstadoOdyssey("reabrir"), txt)) {
@@ -5899,7 +5899,7 @@ static int cmdServe(int argc, char **argv) {
             }, now, 8.0);
           }
         }
-        std::printf("[serve] sesion %s terminada (%s)\n", g_sesionSin3D ? "de ShaderHUB" : "3D",
+        std::printf("[serve] sesion %s terminada (%s)\n", g_sesionSin3D ? "de ShaderHub" : "3D",
                     hijoUuid.empty() ? "el overlay del escritorio" : hijoUuid.c_str());
         g_sesionSin3D = false;
         sesionSalida.clear();
@@ -6162,7 +6162,7 @@ static int cmdServe(int argc, char **argv) {
        minimizacion que dejamos en paz es la nuestra, la de Tab, que el visor avisa escribiendo
        ~/.local/state/odysseyvk/entregada con su numero de proceso. */
     if (hijo > 0) {
-      const std::string panelSalida = !sesionSalida.empty() ? sesionSalida :   /* (v1.18) la de la sesion de ShaderHUB */
+      const std::string panelSalida = !sesionSalida.empty() ? sesionSalida :   /* (v1.18) la de la sesion de ShaderHub */
           !cfg.pantalla.empty() ? cfg.pantalla : (hayTarjeta && ov ? ov->outputName() : std::string());
       WindowInfo visor{};
       bool hayVisor = false;
@@ -7139,7 +7139,7 @@ static int cmdServe(int argc, char **argv) {
     if (hijo < 0 && avisoId.empty()) {
       WindowInfo w{};
       /* (v1.18) Lo primero, en que pantalla esta la candidata. En una sin 3D (o sin ningun monitor 3D conectado) no se
-         ofrece el 3D: un juego recibe la sesion de ShaderHUB (el visor sin trama con su pastilla: efectos y generacion de
+         ofrece el 3D: un juego recibe la sesion de ShaderHub (el visor sin trama con su pastilla: efectos y generacion de
          cuadros) y lo demas se deja como esta. Si no se sabe de ninguna pantalla (no se pudo leer el nucleo), todo sigue
          como siempre. `shaderhub = no` en serve.conf la quita */
       std::string salidaSin3D;
@@ -7170,11 +7170,11 @@ static int cmdServe(int argc, char **argv) {
           hijoUuid = w.uuid;
           hijoApp = strLower(w.appId);
           visorEscondidas = 0;
-          std::printf("[serve] ShaderHUB: la pastilla sin 3D para %s en %s (una pantalla sin 3D)\n", w.appId.c_str(), salidaSin3D.c_str());
+          std::printf("[serve] ShaderHub: la pastilla sin 3D para %s en %s (una pantalla sin 3D)\n", w.appId.c_str(), salidaSin3D.c_str());
         } else {
           std::printf("[serve] %s esta a pantalla completa en %s, que no tiene 3D: no se ofrece el 3D%s\n", w.appId.c_str(),
                       salidaSin3D.empty() ? "una pantalla" : salidaSin3D.c_str(),
-                      esJuego(w.appId) && !cfg.shaderHub ? " (y la pastilla de ShaderHUB esta apagada: shaderhub = no)" : "");
+                      esJuego(w.appId) && !cfg.shaderHub ? " (y la pastilla de ShaderHub esta apagada: shaderhub = no)" : "");
         }
         std::fflush(stdout);
         if (hijo > 0 && unaVez) break;

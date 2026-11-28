@@ -50,24 +50,26 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
-## SpatialHUB y ShaderHUB: dos nombres, y la cara sin 3D en rojo (v1.18)
+## SpatialHub y ShaderHub: dos nombres, y la cara sin 3D en rojo (v1.18)
 
+- **«Hub», con minúsculas** (Rodolfo, al preguntarle si quedaba algo mejor que «HUB» y ver las alternativas: «Hub me
+  gusta»): SpatialHub y ShaderHub. Sigue reconociéndolo quien viene del Hub de Samsung, sin las mayúsculas.
 - Rodolfo: «que la version no 3d se llame ShaderHUB y la 3D que sea SpatialHUB, la interfaz no 3d debe ser roja, haz todo
   el rebrand, que el github pase a llamarse como consideres correcto».
-- **El nombre** (`src/marca.h`): con la pantalla de 3D elegida es **SpatialHUB**; con una normal (o sin monitor 3D),
-  **ShaderHUB**. Los textos siguen escritos con «OdysseyVK» en los seis idiomas y el nombre de ahora se pone al pintarlos
+- **El nombre** (`src/marca.h`): con la pantalla de 3D elegida es **SpatialHub**; con una normal (o sin monitor 3D),
+  **ShaderHub**. Los textos siguen escritos con «OdysseyVK» en los seis idiomas y el nombre de ahora se pone al pintarlos
   (`Hud::text` y `textWidth`): la barra del panel, la versión del pie y de la tesela, los avisos y los rótulos, sin tocar
   la tabla. También en los avisos del escritorio, la bandeja, la entrada de la barra de tareas, los lanzadores
-  (`SpatialHUB · ShaderHUB`) y la cabecera de los README.
-- **El rojo**: una tercera paleta (`Hud::paleta`) para ShaderHUB, en el panel y en su pastilla.
+  (`SpatialHub · ShaderHub`) y la cabecera de los README.
+- **El rojo**: una tercera paleta (`Hud::paleta`) para ShaderHub, en el panel y en su pastilla.
 - **Lo que no cambia**: la orden, el servicio, las carpetas y las variables siguen siendo `odysseyvk`: cambiarlas dejaría
   sin ajustes ni calibración a quien ya lo tiene instalado. Tampoco el nombre del componente de los atajos en KDE.
 - **El repositorio de GitHub no se ha renombrado**: es un cambio a la vista de todos y con la actualización automática
   apuntando a su dirección; queda por confirmar el nombre con Rodolfo.
-- **Probado**: el panel pintado con las dos caras (ShaderHUB en rojo con «ShaderHUB 1.18»; SpatialHUB como estaba) y la
+- **Probado**: el panel pintado con las dos caras (ShaderHub en rojo con «ShaderHub 1.18»; SpatialHub como estaba) y la
   pastilla. No probado: los avisos del escritorio y la bandeja con el nombre nuevo.
 
-## La pastilla de ShaderHUB: efectos y generación de cuadros en una pantalla sin 3D (v1.18, a medias)
+## La pastilla de ShaderHub: efectos y generación de cuadros en una pantalla sin 3D (v1.18, a medias)
 
 - Rodolfo: «ya sin el modo 3d tambien escrube un pill hub para operar todo lo de los shaders y el framegen».
 - **El visor sin 3D** ya existía a trozos (`capture3d --uuid V --output P --2d --no-panel --no-lens --no-scaler`: captura
@@ -81,7 +83,7 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   interruptor de los Efectos, la generación de cuadros de MAKO (− · «FG x3» o «FG», que se enciende o se apaga al picarla
   · +) y el engranaje. Hacen lo mismo que sus atajos (`efectos`, `fg`, `fg-`, `fg+`).
 - **El servicio ya la lanza solo**: la candidata a pantalla completa se mira primero por su pantalla. En una sin 3D (o
-  sin ningún monitor 3D) no se ofrece el 3D; si es un juego, sale la sesión de ShaderHUB en esa pantalla (el visor con
+  sin ningún monitor 3D) no se ofrece el 3D; si es un juego, sale la sesión de ShaderHub en esa pantalla (el visor con
   `--conver --2d --no-panel --no-lens --no-scaler`, sin rastreo), con sus atajos. `shaderhub = no` en `serve.conf` la
   quita. Un vídeo a pantalla completa en una pantalla sin 3D ya no abre el 3D en el Odyssey.
 - **«Se ve hortruible en la seguna pantalla, considera que solo necesita profundidad, ya no un grid 3d»** (Rodolfo, al

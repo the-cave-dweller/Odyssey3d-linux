@@ -899,7 +899,7 @@ const Hud::Glyph *Hud::glifo(unsigned cp) const {
 }
 
 float Hud::textWidth(const std::string &s, float size) const {
-  /* (v1.18) el nombre de ahora (SpatialHUB o ShaderHUB) donde el texto dice «OdysseyVK»: ver marca.h */
+  /* (v1.18) el nombre de ahora (SpatialHub o ShaderHub) donde el texto dice «OdysseyVK»: ver marca.h */
   if (s.find("OdysseyVK") != std::string::npos) return textWidth(marca::pon(s, st_.sin3D || st_.pastilla2D), size);
   float sc = size / (float)kFontPx;
   float wsum = 0.0f;
@@ -1363,7 +1363,7 @@ void Hud::begin(int w, int h, float altoLogico) {
      la capsula van del mismo) y el ambar de vkDaedalus en el modo rendimiento */
   float accent[3] = {st_.rendimiento ? 0xDE / 255.0f : 0.40f, st_.rendimiento ? 0xAA / 255.0f : 0.72f,
                      st_.rendimiento ? 0x7C / 255.0f : 1.0f};
-  if (st_.pastilla2D) accent[0] = marca::rojo()[0], accent[1] = marca::rojo()[1], accent[2] = marca::rojo()[2];   /* (v1.18) ShaderHUB, en rojo */
+  if (st_.pastilla2D) accent[0] = marca::rojo()[0], accent[1] = marca::rojo()[1], accent[2] = marca::rojo()[2];   /* (v1.18) ShaderHub, en rojo */
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -2143,7 +2143,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   const bool marco = st_.marco;
   auto hex = [](uint32_t c, int k) { return (float)((c >> (16 - 8 * k)) & 0xFFu) / 255.0f; };
   float accent[3] = {st_.acentoPanel[0], st_.acentoPanel[1], st_.acentoPanel[2]};
-  if (st_.sin3D) accent[0] = marca::rojo()[0], accent[1] = marca::rojo()[1], accent[2] = marca::rojo()[2];   /* (v1.18) ShaderHUB, en rojo */
+  if (st_.sin3D) accent[0] = marca::rojo()[0], accent[1] = marca::rojo()[1], accent[2] = marca::rojo()[2];   /* (v1.18) ShaderHub, en rojo */
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
   if (marco)

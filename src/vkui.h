@@ -592,7 +592,7 @@ private:
     uint32_t control, controlHov, filo, filoCasilla, filoCasillaHov, pozo;
   };
   Paleta paleta() const {
-    /* (v1.18) ShaderHUB (una pantalla sin 3D, o su pastilla): en rojo (Rodolfo: «la interfaz no 3d debe ser roja») */
+    /* (v1.18) ShaderHub (una pantalla sin 3D, o su pastilla): en rojo (Rodolfo: «la interfaz no 3d debe ser roja») */
     if (st_.sin3D || st_.pastilla2D)
       return {0xF2666Eu, 0xC8323Cu, 0xD8424Cu, 0x3C1D20u, 0x0F0809u, 0x170F10u, 0x120B0Cu, 0x261617u, 0x1D1112u,
               0x2B191Bu, 0x372023u, 0x4C2D31u, 0x533338u, 0x74474Du, 0x100A0Bu};

@@ -3356,7 +3356,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     const char *e = entornoOdyssey("ODYSSEYVK_ATAJOS");
     const bool quiere = !(e && (e[0] == '0' || e[0] == 'n'));
     const bool aLaFuerza = e && e[0] == '1';   /* en el taller sin panel, solo si se pide: para probarlos */
-    /* (v1.18) y en la sesion de ShaderHUB, que va sin panel a proposito: su pastilla sale y se va con el mismo atajo */
+    /* (v1.18) y en la sesion de ShaderHub, que va sin panel a proposito: su pastilla sale y se va con el mismo atajo */
     if (quiere && (!opts.noPanel || aLaFuerza || ui.hud.state().pastilla2D)) {
       std::string eA;
       if (atajos.abrir(&eA))
@@ -4302,7 +4302,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
           int n = 0;
           if (*p == 'e' || *p == 'f' || *p == 'g' || *p == 'c') {   /* un boton de la pastilla, este donde este: «e» el
                                                                          engranaje · «f» los efectos, «g» la generacion y «c»
-                                                                         el aspa de la de ShaderHUB */
+                                                                         el aspa de la de ShaderHub */
             puntos.push_back({-1.0, (double)*p});
             ++p;
           } else {
@@ -4593,7 +4593,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
                          "necesita pixel a pixel (deja la ventana a pantalla completa en esta salida)\n",
                          cf.w, cf.h, fbW, fbH);
           }
-          /* (v1.18) En la sesion de ShaderHUB (sin 3D) los cuadros se piden en memoria cuando la tarjeta no sabe importar
+          /* (v1.18) En la sesion de ShaderHub (sin 3D) los cuadros se piden en memoria cuando la tarjeta no sabe importar
              lo que entrega el compositor (Rodolfo: «se ve hortruible en la seguna pantalla»). MEDIDO el 28-nov: la NVIDIA
              no anuncia ningun modificador en Vulkan y aun asi deja crear la imagen; lo que se lee solo coincide a
              3840x2160 (la pantalla del Odyssey, donde el 3D lleva meses bien) y a 2048x1536 sale revuelto por bloques.

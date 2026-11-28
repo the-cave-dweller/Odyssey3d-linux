@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=SpatialHUB · ShaderHUB
-Name[es_MX]=SpatialHUB · ShaderHUB
+Name=SpatialHub · ShaderHub
+Name[es_MX]=SpatialHub · ShaderHub
 GenericName=3D without glasses
 GenericName[es_MX]=Visor 3D sin gafas
-Comment=SpatialHUB (3D on the Samsung Odyssey 3D) and ShaderHUB (shaders, games and frame generation on any display)
-Comment[es_MX]=SpatialHUB (el 3D del Samsung Odyssey 3D) y ShaderHUB (sombreadores, juegos y generación de cuadros en cualquier pantalla)
+Comment=SpatialHub (3D on the Samsung Odyssey 3D) and ShaderHub (shaders, games and frame generation on any display)
+Comment[es_MX]=SpatialHub (el 3D del Samsung Odyssey 3D) y ShaderHub (sombreadores, juegos y generación de cuadros en cualquier pantalla)
 Exec=odysseyvk-panel
 TryExec=odysseyvk
 StartupWMClass=odysseyvk

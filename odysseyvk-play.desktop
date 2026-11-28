@@ -2,8 +2,8 @@
 Type=Application
 Version=1.0
 NoDisplay=true
-Name=SpatialHUB · ShaderHUB
-Name[es_MX]=SpatialHUB · ShaderHUB
+Name=SpatialHub · ShaderHub
+Name[es_MX]=SpatialHub · ShaderHub
 GenericName=3D SBS player
 GenericName[es_MX]=Reproductor 3D side-by-side
 Comment=Play a side-by-side video on the Samsung Odyssey 3D
