@@ -4,6 +4,7 @@
    protocolo (especifico de KDE, inestable: puede cambiar con cada versión de Plasma). */
 #pragma once
 
+#include <functional>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -56,6 +57,10 @@ public:
 
   /* Último fotograma en memoria, como bytes BGRA (o lo que dé el compositor). */
   bool copyFrame(std::vector<uint8_t> &out, int &w, int &h, int &stride);
+  /* (v1.18) Lo mismo sin copiarlo: `f` recibe el último fotograma en memoria (sus bytes, ancho, alto, paso y fourcc) y lo
+     usa ahí mismo, con la captura parada mientras tanto. Para subirlo a la tarjeta de una vez: copiar 33 MB (un cuadro
+     de 3840x2160) dos veces por cuadro era la mitad de lo que tardaba ShaderHub a ese tamaño */
+  bool conCuadro(const std::function<void(const uint8_t *px, int w, int h, int stride, uint32_t fourcc)> &f);
   /* Metadatos del último fotograma (para importarlo en OpenGL si viene en dmabuf). */
   bool lastFrame(CapturedFrame &out) const;
 

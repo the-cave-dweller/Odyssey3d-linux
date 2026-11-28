@@ -2506,7 +2506,7 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   if (st.sin3D) {
     Hud::ItemPanel n;
     n.tipo = Hud::ItemPanel::Nota;
-    n.rotulo = idioma::tr("Esta pantalla no tiene 3D: aquí se eligen y se ajustan; hoy los pinta el visor, en el monitor 3D.");
+    n.rotulo = idioma::tr("Esta pantalla no tiene 3D: los pone ShaderHub sobre el juego, sin trama, al ponerlo a pantalla completa aquí.");
     pon(n, "");
   }
   if (st.marco) {

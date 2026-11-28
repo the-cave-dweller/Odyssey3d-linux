@@ -545,6 +545,12 @@ void VkWeave::waitIdle() {
 void VkWeave::destroy() {
   if (!dev_) return;
   waitIdle();
+  if (dev_->device()) {   /* (v1.18) el buffer de paso de los cuadros en memoria */
+    if (memPasoMapa_) vkUnmapMemory(dev_->device(), memPasoMem_);
+    if (memPaso_) vkDestroyBuffer(dev_->device(), memPaso_, nullptr);
+    if (memPasoMem_) vkFreeMemory(dev_->device(), memPasoMem_, nullptr);
+    memPaso_ = VK_NULL_HANDLE, memPasoMem_ = VK_NULL_HANDLE, memPasoMapa_ = nullptr, memPasoCabe_ = 0;
+  }
   efectos_.destruir();   /* (v1.18) */
   dev_->destroyImg(blanco_);
   destroyFrames();
@@ -730,6 +736,60 @@ bool VkWeave::uploadRgba8(const uint8_t *px, int w, int h, VkImg &out, std::stri
   vkFreeMemory(dev_->device(), stageMem, nullptr);
   if (!ok && err) *err = e2;
   return ok;
+}
+
+bool VkWeave::sourceFromMemoria(const uint8_t *px, int w, int h, int stride, bool rgb, std::string *err) {
+  if (!px || w <= 0 || h <= 0 || stride < w * 4) {
+    if (err) *err = "cuadro en memoria sin datos";
+    return false;
+  }
+  std::string e2;
+  const VkDeviceSize n = (VkDeviceSize)w * (VkDeviceSize)h * 4u;
+  if (n > memPasoCabe_) {   /* el buffer de paso: uno, del tamano del cuadro, mapeado para siempre */
+    if (memPasoMapa_) vkUnmapMemory(dev_->device(), memPasoMem_);
+    if (memPaso_) vkDestroyBuffer(dev_->device(), memPaso_, nullptr);
+    if (memPasoMem_) vkFreeMemory(dev_->device(), memPasoMem_, nullptr);
+    memPaso_ = VK_NULL_HANDLE, memPasoMem_ = VK_NULL_HANDLE, memPasoMapa_ = nullptr, memPasoCabe_ = 0;
+    if (!dev_->createBuffer(n, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                            memPaso_, memPasoMem_, &e2) ||
+        vkMapMemory(dev_->device(), memPasoMem_, 0, n, 0, &memPasoMapa_) != VK_SUCCESS) {
+      if (err) *err = "buffer de paso: " + e2;
+      return false;
+    }
+    memPasoCabe_ = n;
+  }
+  if (stride == w * 4) {
+    std::memcpy(memPasoMapa_, px, (size_t)n);
+  } else {
+    for (int y = 0; y < h; y++)
+      std::memcpy((uint8_t *)memPasoMapa_ + (size_t)y * (size_t)w * 4u, px + (size_t)y * (size_t)stride, (size_t)w * 4u);
+  }
+  VkImg img{};
+  if (!dev_->createImage(w, h, rgb ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_B8G8R8A8_UNORM,
+                         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, img, &e2)) {
+    if (err) *err = "imagen del cuadro: " + e2;
+    return false;
+  }
+  VkCommandBuffer cb = dev_->beginOneTime(&e2);
+  if (!cb) {
+    if (err) *err = "buffer de mando: " + e2;
+    dev_->destroyImg(img);
+    return false;
+  }
+  barrier(cb, img.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+  VkBufferImageCopy reg{};
+  reg.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  reg.imageExtent = {(uint32_t)w, (uint32_t)h, 1};
+  vkCmdCopyBufferToImage(cb, memPaso_, img.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &reg);
+  barrier(cb, img.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+  if (!dev_->endOneTime(cb, &e2)) {
+    if (err) *err = e2;
+    dev_->destroyImg(img);
+    return false;
+  }
+  dev_->destroyImg(next_);
+  next_ = img;
+  return true;
 }
 
 const VkImg *VkWeave::fuenteReal() const {

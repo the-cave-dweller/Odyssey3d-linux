@@ -536,6 +536,15 @@ bool WindowCapture::copyFrame(std::vector<uint8_t> &out, int &w, int &h, int &st
 
 void WindowCapture::soloMemoria(bool si) { d->soloMemoria = si; }
 
+bool WindowCapture::conCuadro(const std::function<void(const uint8_t *, int, int, int, uint32_t)> &f) {
+  std::lock_guard<std::mutex> g(d->mtx);
+  if (d->frame.empty() || d->w <= 0 || d->h <= 0 || d->stride < d->w * 4 ||
+      d->frame.size() < (size_t)d->stride * (size_t)d->h)
+    return false;
+  f(d->frame.data(), d->w, d->h, d->stride, d->fmtFourcc);
+  return true;
+}
+
 bool WindowCapture::lastFrame(CapturedFrame &out) const {
   std::lock_guard<std::mutex> g(d->mtx);
   if (d->frame.empty() && !(d->lastDmabuf && d->lastFd >= 0)) return false;

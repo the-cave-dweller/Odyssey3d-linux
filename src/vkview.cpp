@@ -4600,10 +4600,12 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
              A ese tamano medido se deja como esta; a cualquier otro, memoria normal: la sube el visor, con su coste
              (un cuadro de 2048x1536 son 12 MB) pero entera. En el 3D no se toca nada */
           static bool memoriaPedida = false;
-          if (ui.hud.state().pastilla2D && gf.dmabuf && !memoriaPedida && !(gf.w == 3840 && gf.h == 2160)) {
+          /* ODYSSEYVK_CAPTURA_MEMORIA=1 (pruebas): por memoria siempre, tambien a 3840x2160, para medir ese camino */
+          static const bool memoriaForzada = entornoOdyssey("ODYSSEYVK_CAPTURA_MEMORIA") != nullptr;
+          if (ui.hud.state().pastilla2D && gf.dmabuf && !memoriaPedida && (memoriaForzada || !(gf.w == 3840 && gf.h == 2160))) {
             VkFormat fmtImp = VK_FORMAT_UNDEFINED;
             std::string porQue;
-            if (!dev.canImport(gf, &fmtImp, &porQue)) {
+            if (!dev.canImport(gf, &fmtImp, &porQue) || memoriaForzada) {
               memoriaPedida = true;
               std::printf("[captura] sin 3D: la tarjeta no sabe importar estos cuadros (%s): se piden en memoria normal\n", porQue.c_str());
               std::fflush(stdout);
@@ -4617,36 +4619,29 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
             }
           }
           if (!gf.dmabuf) {
-            /* el cuadro en memoria: BGRx con su paso, a RGBA seguido, y a la tarjeta */
-            static std::vector<uint8_t> crudo, rgba;
+            /* el cuadro en memoria, a la tarjeta tal como llega (BGRx o RGBx, con su paso): una sola copia, al buffer
+               de paso. Antes eran cuatro (la del visor, el paso a RGBA punto a punto, el buffer nuevo de cada cuadro y
+               su copia): MEDIDO el 28-nov con Cyberpunk a 3840x2160, 39 cuadros por segundo */
+            bool subido = false;
             int mw = 0, mh = 0, paso = 0;
-            if (cap.copyFrame(crudo, mw, mh, paso) && mw > 0 && mh > 0 && paso >= mw * 4 && crudo.size() >= (size_t)paso * (size_t)mh) {
-              rgba.resize((size_t)mw * (size_t)mh * 4u);
-              const bool yaRgb = cf.fourcc == 0x34324258u || cf.fourcc == 0x34324241u;   /* XB24 / AB24: ya viene R primero */
-              for (int y = 0; y < mh; y++) {
-                const uint32_t *o = (const uint32_t *)(crudo.data() + (size_t)y * (size_t)paso);
-                uint32_t *d = (uint32_t *)(rgba.data() + (size_t)y * (size_t)mw * 4u);
-                if (yaRgb) std::memcpy(d, o, (size_t)mw * 4u);
-                else
-                  for (int x = 0; x < mw; x++) {
-                    const uint32_t v = o[x];
-                    d[x] = (v & 0xFF00FF00u) | ((v & 0xFFu) << 16) | ((v >> 16) & 0xFFu) | 0xFF000000u;
-                  }
+            const bool habia = cap.conCuadro([&](const uint8_t *px, int w0, int h0, int st0, uint32_t cc) {
+              mw = w0, mh = h0, paso = st0;
+              const bool yaRgb = cc == 0x34324258u || cc == 0x34324241u;   /* XB24 / AB24: R primero */
+              subido = wv.sourceFromMemoria(px, w0, h0, st0, yaRgb, &err);
+              if (subido) fgVideoReal(yaRgb ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_B8G8R8A8_UNORM);
+            });
+            if (subido) {
+              fallosImport = 0;
+              newSource = true;
+              static bool dicho = false;
+              if (!dicho) {
+                dicho = true;
+                std::printf("[captura] cuadros en memoria: %dx%d (paso %d), subidos por el visor\n", mw, mh, paso);
+                std::fflush(stdout);
               }
-              if (wv.sourceFromRgba(rgba.data(), mw, mh, true, &err)) {
-                fallosImport = 0;
-                newSource = true;
-                fgVideoReal(VK_FORMAT_R8G8B8A8_UNORM);
-                static bool dicho = false;
-                if (!dicho) {
-                  dicho = true;
-                  std::printf("[captura] cuadros en memoria: %dx%d (paso %d), subidos por el visor\n", mw, mh, paso);
-                  std::fflush(stdout);
-                }
-              } else if (!importWarned) {
-                importWarned = true;
-                std::fprintf(stderr, "[captura] el cuadro en memoria no se pudo subir: %s\n", err.c_str());
-              }
+            } else if (habia && !importWarned) {
+              importWarned = true;
+              std::fprintf(stderr, "[captura] el cuadro en memoria no se pudo subir: %s\n", err.c_str());
             }
           } else
           if (!wv.sourceFromDma(gf, &err)) {

@@ -50,6 +50,26 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## ShaderHub: los cuadros por memoria, de 39 a 120-131 por segundo a 4K (v1.18)
+
+- Rodolfo: «mejora shaderhub». Lo que más pesaba, medido en las pruebas: cuando la tarjeta no sabe importar los cuadros
+  del compositor, ShaderHub los pide por memoria, y a 3840x2160 iba a 39 cuadros por segundo.
+- **Por qué**: cada cuadro (33 MB) se copiaba cuatro veces en el visor (la copia fuera de la captura, el paso de BGRx a
+  RGBA punto a punto, un buffer de paso nuevo con su copia) y se pedían y soltaban una imagen y un buffer por cuadro.
+- **Ahora** (`WindowCapture::conCuadro`, `VkWeave::sourceFromMemoria`): el visor lee el cuadro donde está, con la captura
+  parada ese instante, y lo copia **una vez** a un buffer de paso que se queda puesto y mapeado; la imagen se crea en el
+  formato en que llega (BGRx o RGBx), sin convertir nada en la CPU.
+- **MEDIDO** con Cyberpunk a 3840x2160, ShaderHub y Clarity puesto, forzando ese camino
+  (`ODYSSEYVK_CAPTURA_MEMORIA=1`): 120-131 cuadros por segundo, los mismos que da el juego en ese momento. Por DMA-BUF el
+  mismo juego iba a 162: el camino de memoria sigue costando (la lectura que hace el compositor y la copia que queda). La
+  medida de 39 fue en la segunda pantalla, con el visor presentando en otra tarjeta: no es la misma condición exacta. A
+  2048x1536 sigue en 74 de 75 y el volcado de lo presentado sale con sus colores.
+- **De paso**: el aviso de la pestaña Efectos en una pantalla sin 3D decía que los efectos solo corrían en el monitor
+  3D; ya no es así y ahora dice que los pone ShaderHub sobre el juego.
+- **Lo que queda**: importar el DMA-BUF bien en NVIDIA (por OpenGL, o pidiendo al compositor un orden que Vulkan
+  entienda) para no pasar por memoria; no correr la red de profundidad si ningún efecto puesto la usa; que la pastilla
+  no se oculte sola con el panel abierto.
+
 ## Portar el 3D de otros monitores, y «Monitor 3D sin soporte» (v1.18)
 
 - Rodolfo: «add a 3d port button near the bug one on 3d known monitors that offers to gather device info and upload it as
