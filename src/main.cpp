@@ -18,6 +18,7 @@
 #include "efectos.h"   /* (v1.18) `odysseyvk efectos`: los efectos de ReShade */
 #include "efectos_vk.h"
 #include "bandeja.h"
+#include "frenojuego.h"
 #include "idioma.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
@@ -5516,6 +5517,10 @@ static int cmdServe(int argc, char **argv) {
   bool otrosAvisado = false;      /* el aviso de por que las bajamos va una sola vez */
   double enfriadoHasta = 0.0;     /* cerramos una sesion hace poco: hasta aqui no se ofrece otra */
   int muertesSeguidas = 0;        /* sesiones que murieron apenas empezaron */
+  FrenoJuego freno;               /* (v1.18) el juego que pierde la pantalla completa al entrar el 3D: frenojuego.h */
+  /* (v1.18) el foco del juego mientras arranca el visor: ver «el visor nace activo» mas abajo */
+  double focoJuegoT = 0.0;
+  bool focoJuegoDicho = false;
   /* La ventana del video de una sesion que se cerro PORQUE EL VIDEO SE FUE. Ahi es justo quitarle
      la pantalla completa al navegador (no cuando uno elige 2D plano, entrega la pantalla con Tab o
      saca el visor con ESC: en esos casos el video sigue sonando y la pantalla completa es suya). */
@@ -5698,6 +5703,24 @@ static int cmdServe(int argc, char **argv) {
         forzado = false;
         const bool porElUsuario = salioDePantallaCompleta;
         salioDePantallaCompleta = false;
+        focoJuegoDicho = false;
+        /* (v1.18) el freno del juego que pierde la pantalla completa cada vez que entra el 3D (frenojuego.h): con dos
+           cierres cortos seguidos a esa ventana no se le lanza solo por un rato, y se dice por que */
+        if (hijoDesde > 0.0 && !eraForzada) {
+          const double espera = freno.cierre(hijoUuid, now - hijoDesde, porElUsuario, esJuego(hijoApp), now);
+          if (espera > 0.0) {
+            std::printf("[serve] el juego perdio la pantalla completa al entrar el 3D %d veces seguidas (la ultima"
+                        " sesion duro %.1f s): a esa ventana no se le lanza el 3D solo en %.0f s\n",
+                        freno.cortasSeguidas, now - hijoDesde, espera);
+            std::fflush(stdout);
+            mostrarAviso([](std::string &t, std::vector<std::string> &l) {
+              t = idioma::tr("El juego sale de pantalla completa");
+              l = {idioma::tr("Al entrar el 3D el juego pierde la pantalla completa y el 3D se cierra."),
+                   idioma::tr("Ponlo en ventana sin bordes (borderless): así el 3D se queda."),
+                   idioma::tr("El 3D no vuelve solo a este juego por un rato.")};
+            }, now, 8.0);
+          }
+        }
         std::printf("[serve] sesion 3D terminada (%s)\n",
                     hijoUuid.empty() ? "el overlay del escritorio" : hijoUuid.c_str());
         std::fflush(stdout);
@@ -5774,6 +5797,7 @@ static int cmdServe(int argc, char **argv) {
              la pantalla completa al navegador, asi que el bucle no puede darse, y bastan 3 s. */
           muertesSeguidas = 0;
           enfriadoHasta = now + 3.0;
+          /* (v1.18) salvo con un juego que la pierde cada vez que entra el 3D: ahi si era un bucle (el freno, arriba) */
         } else {
           if (hijoDesde > 0.0 && now - hijoDesde < 20.0) ++muertesSeguidas;
           else muertesSeguidas = 0;
@@ -5973,6 +5997,28 @@ static int cmdServe(int argc, char **argv) {
           if (fueraBarra == cfg.barraTareas) wm.setState(w.uuid, WindowInfo::SkipTaskbar, !cfg.barraTareas, &e8);
         }
         hayVisor = true;
+      }
+      /* (v1.18) El visor nace activo: al poner su primer cuadro KWin le da el foco, y el juego, a pantalla completa y
+         debajo, se queda sin el. El visor se lo devuelve, pero mira cada tanto desde su bucle, y Cyberpunk se minimizo en
+         ese hueco (MEDIDO el 27-nov: pierde «activa» a las 18:26:54,65, el visor se lo devuelve a las 55,15 y ya estaba
+         minimizado). El servicio despierta con cada cambio de ventana, asi que en los primeros segundos de la sesion se
+         lo devuelve el, en cuanto ve al visor activo. Solo al arrancar: despues la pastilla puede quitarle el cursor al
+         juego a proposito (el visor se activa el solo) y de eso no sabe el servicio */
+      if (hayVisor && esJuego(hijoApp) && hijoDesde > 0.0 && now - hijoDesde < 4.0 && visor.active() && now - focoJuegoT >= 0.1) {
+        WindowInfo jg{};
+        if (wm.find(hijoUuid, jg) && jg.mapped && !jg.active()) {
+          focoJuegoT = now;
+          std::string e9;
+          if (jg.minimized()) wm.setState(hijoUuid, WindowInfo::Minimized, false, &e9);
+          const bool pudo = wm.setState(hijoUuid, WindowInfo::Active, true, &e9);
+          wm.flush();
+          if (!focoJuegoDicho) {
+            focoJuegoDicho = true;
+            std::printf("[ventana] el visor nacio activo: el foco vuelve al juego a los %.2f s de la sesion%s%s%s\n", now - hijoDesde,
+                        jg.minimized() ? " (y se le saca de minimizado)" : "", pudo ? "" : ": no se pudo, ", pudo ? "" : e9.c_str());
+            std::fflush(stdout);
+          }
+        }
       }
       if (hayVisor) {
         std::string marca;
@@ -6318,14 +6364,20 @@ static int cmdServe(int argc, char **argv) {
             std::fflush(stdout);
           } else if ((!enCambioDeModo || !cambioPanel) && sinEstado) {
             motivo = "la ventana del video salio de pantalla completa";
-            videoSeFue = true;   /* el video se fue el solo: la ventana no tiene por que seguir a pantalla completa */
+            /* el video se fue el solo: la ventana no tiene por que seguir a pantalla completa. (v1.18) Con un juego se
+               apunta al cerrar (abajo): si en su margen vuelve a pantalla completa, no se fue */
+            if (!esJuego(hijoApp)) videoSeFue = true;
             /* Menos espera que antes: la trama ya se quita al instante con la marca de oculto, y
                mientras la sesion sigue abierta el panel esta en modo 3D sobre un escritorio 2D.
                v0.63: 1,2 -> 0,4 s. Medido el 25-nov 07:24: Firefox salio de pantalla completa a las
                07,09 y el panel no volvio a 2D hasta las 08,77, y 1,2 s de eso era esta espera. Las
                salidas falsas que la pedian son las del arranque (nuestro cambio de modo), y esta rama
-               solo corre con la sesion ya asentada; 0,4 s son dos vueltas del bucle (200 ms). */
-            paciencia = 0.4;
+               solo corre con la sesion ya asentada; 0,4 s son dos vueltas del bucle (200 ms).
+               (v1.18) Con un juego, 3 s: uno de Wine que vuelve de minimizado pasa por ventana antes de recuperar la
+               pantalla completa. MEDIDO el 27-nov con Cyberpunk: 2554x1408 de las 18:26:55,71 a las 56,80 y de las
+               18:27:03,21 a las 04,31 (1,1 s las dos veces), y a los 0,4 s el 3D ya estaba cerrado. Mientras tanto el
+               visor no traza (la marca de oculto) y, si vuelve, sigue */
+            paciencia = esJuego(hijoApp) ? 3.0 : 0.4;
           } else if (asentada && chica && !avisoChicoHecho) {
             avisoChicoHecho = true;   /* ya no insistimos: avisamos una vez y dejamos mirar */
             std::printf("[ventana] el video sigue a %ux%u en una salida de %dx%d: la trama no va a ser"
@@ -6345,6 +6397,7 @@ static int cmdServe(int argc, char **argv) {
             cerrandoSesion = true;
             /* (v1.12) si la cierra la salida de pantalla completa, al recogerla no hay espera */
             salioDePantallaCompleta = std::strcmp(motivo, "la ventana del video salio de pantalla completa") == 0;
+            if (salioDePantallaCompleta) videoSeFue = true;
             std::printf("[ventana] %s (%s): cerramos la sesion 3D y devolvemos el panel a 2D\n",
                         motivo, hijoUuid.c_str());
             std::fflush(stdout);
@@ -6854,6 +6907,12 @@ static int cmdServe(int argc, char **argv) {
       avisoUuid.clear();
     }
 
+    /* (v1.18) el freno de una ventana que ya no existe se olvida (la que solo salio de pantalla completa lo conserva) */
+    if (!freno.hasta.empty() || !freno.cortasUuid.empty()) {
+      std::set<std::string> estan;
+      for (const WindowInfo &w : wm.windows()) estan.insert(w.uuid);
+      freno.podar(estan);
+    }
     /* desde cuando lleva cada ventana a pantalla completa (para no lanzar el 3D a un juego que aun se esta abriendo) */
     {
       std::set<std::string> aun;
@@ -6879,7 +6938,8 @@ static int cmdServe(int argc, char **argv) {
     if (hijo < 0 && avisoId.empty()) {
       WindowInfo w{};
       if (wm.fullscreenCandidate(w, {}) && !ignoredApp(w, cfg.ignore) && !preguntadas.count(w.uuid) &&
-          now >= enfriadoHasta && (!esJuego(w.appId) || (fullVisto.count(w.uuid) && now - fullVisto[w.uuid] >= 4.0))) {
+          now >= enfriadoHasta && (!esJuego(w.appId) || (fullVisto.count(w.uuid) && now - fullVisto[w.uuid] >= 4.0)) &&
+          !freno.frenada(w.uuid, now)) {   /* (v1.18) el freno del juego que pierde la pantalla completa */
         preguntadas.insert(w.uuid);
         const std::string app = strLower(w.appId);
         if (tarjetaActualizacion || tarjetaAviso) {   /* la pregunta del video manda sobre los avisos */

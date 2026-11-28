@@ -331,7 +331,10 @@ entra solo en 3D al ponerse a pantalla
 completa. Los juegos tienen que ir en **ventana sin bordes** (borderless, también con gamescope):
 a pantalla completa exclusiva el escritorio pone el juego encima del 3D. Si un juego en 3D tapa el
 visor o se cierra en los 20 segundos de entrar en 3D, OdysseyVK lo avisa con una tarjeta (la de que el juego
-tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón). Al pasar el
+tapa el 3D se cierra sola con una cuenta atrás de 4 segundos en su botón). Un juego a pantalla completa
+exclusiva también puede perderla cuando entra el 3D: OdysseyVK le da 3 segundos para volver, y a las dos
+entradas fallidas seguidas deja de intentarlo en esa ventana un minuto (luego cinco) y lo dice con una
+tarjeta. Al pasar el
 ratón por una carátula sale un engranaje arriba a la derecha: abre las
 [integraciones](#integraciones-las-opciones-de-lanzamiento-de-steam) de ese juego.
 

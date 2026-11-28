@@ -5569,10 +5569,13 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
          odysseyvk»); el juego, a pantalla completa y debajo, pierde el foco al segundo, a los 6-9 s se minimiza solo (lo que
          hace un juego de Wine a pantalla completa sin foco) y el servicio cierra el 3D; un clic en el juego lo devolvia, y
          el 3D siguiente volvia a lo mismo. Salvo con la pastilla quitandole el cursor (robando), si el visor es la ventana
-         activa el foco vuelve al juego, y si se habia minimizado, se le saca. Cada medio segundo */
+         activa el foco vuelve al juego, y si se habia minimizado, se le saca. Cada medio segundo al principio; ahora cada
+         decima: MEDIDO el 27-nov con Cyberpunk, que en ese medio segundo sin foco ya se habia minimizado (18:26:54,65 a
+         55,15) y al volver pasaba por ventana, con lo que el servicio cerraba el 3D y lo relanzaba en bucle. Mirar es
+         despachar lo que KWin haya dicho, sin esperar. Mientras el visor arranca se lo devuelve el servicio */
       {
         static double miradoFoco = -1.0;
-        if (!ui.robando && ui.esJuego == 1 && ui.opts && !ui.opts->captureUuid.empty() && now - miradoFoco >= 0.5 && monitorVentanas(ui)) {
+        if (!ui.robando && ui.esJuego == 1 && ui.opts && !ui.opts->captureUuid.empty() && now - miradoFoco >= 0.1 && monitorVentanas(ui)) {
           miradoFoco = now;
           bool visorActivo = false, hay = false, juegoActivo = false, juegoMinimizado = false;
           for (const WindowInfo &w : ui.wm.windows()) {

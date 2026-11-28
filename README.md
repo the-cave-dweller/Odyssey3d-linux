@@ -320,8 +320,11 @@ switches show it). Games must run in
 **borderless window** mode (also under gamescope): in exclusive fullscreen the desktop puts the
 game above the 3D. If a game in 3D covers the viewer or closes within 20 seconds of entering 3D,
 OdysseyVK says so with a card (the one about a game covering the 3D closes itself after a
-4-second countdown on its button). Hovering a cover shows a gear in its top-right corner: it
-opens that game's [integrations](#integrations-steam-launch-options).
+4-second countdown on its button). A game in exclusive fullscreen can also drop out of fullscreen
+when the 3D comes in: OdysseyVK gives it 3 seconds to come back, and after two failed entries in a
+row it stops retrying on that window for a minute (then five) and says why with a card. Hovering a
+cover shows a gear in its top-right corner: it opens that game's
+[integrations](#integrations-steam-launch-options).
 
 ![Games tab](docs/img/games.png)
 

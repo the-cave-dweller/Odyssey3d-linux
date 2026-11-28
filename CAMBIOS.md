@@ -128,6 +128,46 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
   `tools/prueba_params.cpp`; compila con 0 avisos; `traducciones.py revisar`, 0 sin traducir (32 textos nuevos).
 - **Lo que no está probado**: nada en el monitor ni sobre un juego de verdad; la detección, sin Steam (en la casa de
   prueba no hay); las fuentes públicas con algo en la papelera (sin red).
+## Cyberpunk: el 3D ya no entra y sale en bucle cuando el juego pierde la pantalla completa (v1.18)
+
+- Rodolfo: «ayudame a diagnosticar porque se me crashean los juegos despues de las ultimas versiones» y, visto lo
+  medido, «Sí, arréglalo» (el bucle del foco y del 3D).
+- **Lo medido** (`journalctl --user`, `coredumpctl` y los informes de los juegos del 27-nov; son tres fallos, no uno):
+  - **gamescope 3.17.0 se cae con MAKO en Stray** (17:02:52 y 17:03:38, SIGSEGV las dos): en el segundo en que MAKO abre
+    su contexto (`mako-fg operation=context-open width=2048 height=1536`) gamescope dice `timeline: SyncobjFdToHandle
+    failed with: ret = -1: Invalid argument` y `vkImportSemaphoreFdKHR failed (VkResult: -3)`. NINJA GAIDEN 2 corrió a
+    las 17:14 con gamescope y MAKO a 3840x2160 sin caerse; Stray iba reescalado y a 10 bits. Otra distinta a las
+    17:59:47 con Cyberpunk: `protocol error 3 on xdg_surface@53` y SIGABRT. **Sin tocar**: hace falta una prueba.
+  - **Las líneas de Steam, atrasadas**: 10 de las 11 llevan `gamescope … ENABLE_MAKO=1` con gamescope apagado en
+    `integraciones.conf`; `integraciones-pendiente` es de las 18:22 del 27 y Steam seguía abierto desde las 18:17.
+  - **Stray con Neural Forge y MAKO** (11:14-12:02): lo de la entrada de más abajo; los informes de Unreal dicen
+    `DXGI_ERROR_INVALID_CALL` en `D3D11Query.cpp:360` a los 13-24 s. Sin arranques posteriores que lo confirmen.
+  - **Cyberpunk sin gamescope, seis arranques de 18:17 a 18:33**. En el quinto y el sexto: el juego pierde «activa» a
+    las 18:26:54,65 (el visor nace activo al poner su primer cuadro), el visor se lo devuelve a las 55,15 y ya estaba
+    minimizado; al sacarlo vuelve en ventana (2554x1408) de las 55,71 a las 56,80, y a las 56,38 el servicio ya había
+    cerrado el 3D por «salió de pantalla completa» (0,4 s de paciencia). Esa salida no cuenta como muerte, así que a
+    los 4 s de verlo otra vez a pantalla completa lo lanzaba de nuevo: 7 vueltas en 54 s y 5 más después. En el segundo
+    y el tercero el juego deja de presentar al entrar el 3D (Neural Forge: `has not presented for 10 s` a las 18:21:13
+    y a las 18:23:18) y no vuelve; en el segundo, con la ventana activa y a pantalla completa todo el rato. Entre los
+    dos, 51 cortes del flujo, uno cada 3 s. Ni informe de REDengine ni Xid: no se sabe si murió solo o lo cerró
+    Rodolfo.
+  - No es el núcleo: lo de gamescope y lo de Stray fue con `cachyos` y lo de Cyberpunk con `cachyos-eac`.
+- **El cambio** (los tres en el camino del bucle):
+  - **El foco, antes**: el servicio, que despierta con cada cambio de ventana, le devuelve el foco al juego en cuanto
+    ve al visor activo durante los primeros 4 s de la sesión (`[ventana] el visor nacio activo: el foco vuelve al juego
+    a los N s`), y lo saca de minimizado si hace falta; el visor mira cada décima en lugar de cada medio segundo.
+  - **El margen**: con un juego, la salida de pantalla completa espera 3 s antes de cerrar el 3D (un vídeo, 0,4 s como
+    antes). Mientras tanto el visor no traza, y si el juego vuelve, sigue.
+  - **El freno** (`src/frenojuego.h`): dos cierres por salida de pantalla completa seguidos en la misma ventana de un
+    juego, con sesiones de menos de 15 s, y a esa ventana el 3D no se le lanza solo en un minuto; cada cierre corto
+    más, cinco. Lo dice el registro y una tarjeta que se cierra a los 8 s («El juego sale de pantalla completa»). Una
+    sesión que aguanta 15 s lo borra; otra ventana, o el juego abierto de nuevo, empiezan de cero.
+- **Probado**: `tools/prueba_freno.cpp` (el freno con el reloj del registro: de 7 entradas del 3D en 54 s a 2, y en
+  una hora de bucle 14 en lugar de 462; a un vídeo no se le toca); compila con 0 avisos; `traducciones.py revisar`, 0
+  sin traducir (4 textos nuevos).
+- **Lo que no está probado**: nada de esto sobre un juego de verdad. El foco, el margen y el freno piden KWin con el
+  monitor y un juego a pantalla completa exclusiva: falta la instalación de Rodolfo y abrir Cyberpunk. Tampoco se sabe
+  por qué en el segundo y el tercer arranque el juego dejó de presentar al entrar el 3D sin minimizarse.
 
 ## ShaderBeam en el visor: el haz de un CRT a cada refresco del panel, para ver nítido lo que se mueve (v1.18)
 
