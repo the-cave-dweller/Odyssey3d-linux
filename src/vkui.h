@@ -191,7 +191,19 @@ public:
       bool puesta = false;   /* el valor, en el acento */
       int icono = 0;         /* ver Hud::iconoTesela */
       bool menu = false;     /* (v1.17) con una flechita que abre su menu (el cuadrito de los FPS) */
+      bool apagada = false;  /* (v1.18) tenue y sin picarse: lo del 3D en una pantalla que no lo tiene */
     };
+    /* (v1.18) las pantallas conectadas, en la barra de arriba del marco (pantallas.h; Rodolfo: «que en el tope vkodyssey
+       detecte y muestre enlistados los display»): su rotulo («DP-4 · Odyssey G90XF») y su clase (0 = normal, 1 = con 3D,
+       2 = un monitor 3D que aun no). `pantalla` = la elegida (-1: no se sabe de ninguna) y `sin3D` = la elegida no hace
+       3D: la pestana del 3D y sus teselas van en gris */
+    struct PantallaVista {
+      std::string rotulo;
+      int clase = 0;
+    };
+    std::vector<PantallaVista> pantallas;
+    int pantalla = -1;
+    bool sin3D = false;
     std::vector<Tesela> teselas;
     float aparicion = 1.0f;
     std::vector<ItemPanel> items;
@@ -374,6 +386,7 @@ public:
     HitPanelIdiomaOpcion, /* un idioma de la lista: `sub` = cual (idioma::Lengua) */
     HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
     HitPanelError,        /* (v1.18) el boton de abajo a la izquierda del marco: informar de un error (informe.h) */
+    HitPanelPantalla,     /* (v1.18) una pantalla de la barra de arriba: `sub` = cual (State::pantallas) */
     HitPanelRedimensionar, /* la esquina de abajo a la derecha: cambiar el tamano del panel (rama experimental) */
     HitPanelModoRed,      /* el interruptor AI | Rendimiento: `sub` 0 = AI (con la red), 1 = Rendimiento (sin red) */
     HitModoRed,           /* (v1.12) el mismo interruptor, en la pastilla del video: pasa al otro extremo en marcha */
@@ -639,6 +652,7 @@ private:
   };
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
   Rect panelError_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) «Informar de un error», abajo a la izquierda del marco */
+  std::vector<Rect> panelPantallas_;              /* (v1.18) las pantallas de la barra de arriba */
   Rect panelCopiar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.14) el boton Copiar del pie (pestana Juegos) */
   Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
   Rect panelEsquina_; /* la esquina para cambiar el tamano */

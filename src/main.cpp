@@ -20,6 +20,7 @@
 #include "bandeja.h"
 #include "frenojuego.h"
 #include "versiones.h"   /* (v1.18) volver a una version anterior */
+#include "pantallas.h"   /* (v1.18) las pantallas conectadas */
 #include "idioma.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
@@ -7456,7 +7457,15 @@ int main(int argc, char **argv) {
     return cmdMapa(argc - 2, argv + 2);
   if (cmd == "actualizar") return cmdActualizar(argc - 2, argv + 2);
   if (cmd == "desinstalar") return cmdDesinstalar(argc - 2, argv + 2);
-  if (cmd == "volver") return cmdVolver(argc - 2, argv + 2);   /* (v1.18) a una version anterior guardada */
+  if (cmd == "volver") return cmdVolver(argc - 2, argv + 2);
+  if (cmd == "pantallas") {   /* (v1.18) las pantallas conectadas y cual hace 3D (pantallas.h) */
+    const std::vector<pantallas::Pantalla> v = pantallas::lista();
+    if (v.empty()) std::printf("no se sabe de ninguna pantalla conectada\n");
+    for (const pantallas::Pantalla &p : v)
+      std::printf("%-10s %-4s %-16s %4dx%-4d  %s\n", p.conector.c_str(), p.fabricante.c_str(), p.nombre.c_str(), p.ancho, p.alto,
+                  p.clase == pantallas::Con3D ? "3D" : p.clase == pantallas::Candidata ? "monitor 3D sin gafas: todavia no" : "sin 3D");
+    return 0;
+  }   /* (v1.18) a una version anterior guardada */
   if (cmd == "attrs") {
     ViewerOpts o{};
     if (!parseViewerFlags(argc - 2, argv + 2, o)) return 2;

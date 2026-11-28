@@ -2131,6 +2131,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const Rect col{m, m, cw, (float)vh - 2.0f * m};
       panelCaja_ = col;
       panelCerrar_ = panelVolver_ = panelActualizar_ = panelError_ = fuera;
+      panelPantallas_.clear();
       panelPestanas_.assign(st_.pestanas.size(), fuera);
       panelTeselas_.assign(st_.teselas.size(), fuera);
       panelTeselaFlecha_.assign(st_.teselas.size(), fuera);
@@ -2169,7 +2170,30 @@ void Hud::dibujaPanel(int vw, int vh) {
       icono({baldosa.x + s, baldosa.y + s, 20.0f * s, 20.0f * s}, icoLogo_, 14.0f / 255.0f, 68.0f / 255.0f, 158.0f / 255.0f, 1.0f);
       fuente_ = hayBarlow_ ? 2 : 0;
       text("OdysseyVK", baldosa.x + baldosa.w + 12.0f * s, F.y + (56.0f - 21.0f) * 0.5f * s, 21.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
+      const float finTitulo = baldosa.x + baldosa.w + 12.0f * s + textWidth("OdysseyVK", 21.0f * s);
       fuente_ = hayBarlow_ ? 1 : 0;
+      /* (v1.18) las pantallas conectadas, a la derecha del nombre: su clase («3D» en el acento, «2D») y su rotulo; la
+         elegida, llena. Picar otra cambia lo que ofrece el panel (sin 3D: la pestana del 3D y sus teselas, en gris) */
+      panelPantallas_.assign(st_.pantallas.size(), fuera);
+      float px = finTitulo + 28.0f * s;
+      const float tope = F.x + F.w - 64.0f * s, alto = 30.0f * s, tam = 12.5f * s, tamC = 10.5f * s;
+      for (size_t k = 0; k < st_.pantallas.size(); k++) {
+        const Hud::State::PantallaVista &pv = st_.pantallas[k];
+        const std::string clase = pv.clase == 1 ? "3D" : "2D";
+        const float wc = textWidth(clase, tamC) + 12.0f * s, ancho = 8.0f * s + wc + 8.0f * s + textWidth(pv.rotulo, tam) + 12.0f * s;
+        if (px + ancho > tope) break;
+        const Rect r{px, F.y + (56.0f * s - alto) * 0.5f, ancho, alto};
+        panelPantallas_[k] = r;
+        const bool elegida = (int)k == st_.pantalla, hp = r.inside(mx_, my_);
+        relleno(r, 6.0f * s, elegida ? pal_.control : pal_.elevado, elegida ? 1.0f : hp ? 0.85f : 0.45f);
+        const Rect c{r.x + 8.0f * s, r.y + (alto - 18.0f * s) * 0.5f, wc, 18.0f * s};
+        if (pv.clase == 1) mask9(c, 1, 4.0f * s, accent[0], accent[1], accent[2], elegida ? 1.0f : 0.70f);
+        else relleno(c, 4.0f * s, pal_.filo, 1.0f);
+        text(clase, c.x + c.w * 0.5f, c.y + (c.h - tamC) * 0.5f - s * 0.5f, tamC, pv.clase == 1 ? 0.07f : dim[0], pv.clase == 1 ? 0.07f : dim[1],
+             pv.clase == 1 ? 0.07f : dim[2], 1.0f, true);
+        text(pv.rotulo, c.x + c.w + 8.0f * s, r.y + (alto - tam) * 0.5f - s, tam, ink[0], ink[1], ink[2], elegida ? 1.0f : 0.72f);
+        px += ancho + 8.0f * s;
+      }
     }
     panelCerrar_ = {F.x + F.w - 16.0f * s - 32.0f * s, F.y + 12.0f * s, 32.0f * s, 32.0f * s};
     /* (v1.17) sin la flecha de volver a la pastilla (Rodolfo: «quita la flecha»): cerrar ya devuelve el video, y la
@@ -2224,7 +2248,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const int i = vistas[(size_t)k];
       const Rect t{centroX + (float)k * (anchoT + 2.0f) * s, arriba, anchoT * s, 200.0f * s};
       panelPestanas_[(size_t)i] = t;
-      const bool gris = (size_t)i < st_.pestanaGris.size() && st_.pestanaGris[(size_t)i];
+      const bool gris = ((size_t)i < st_.pestanaGris.size() && st_.pestanaGris[(size_t)i]) || (st_.sin3D && i == 0);
       const bool puesta = i == st_.pestana, hov = t.inside(mx_, my_) && !gris;
       const float tenueT = gris ? 0.38f : 1.0f;
       /* solo las esquinas de fuera de la fila van redondas, como en vkDaedalus: aqui todas con poco radio */
@@ -2254,7 +2278,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const float tx = k < 3 ? izqC : izqC + (anchoC - 200.0f) * s;
       const Rect t{tx, arriba + (float)(k % 3) * 68.0f * s, 200.0f * s, 64.0f * s};
       panelTeselas_[k] = t;
-      const bool hov = t.inside(mx_, my_) && !te.id.empty();
+      const bool hov = t.inside(mx_, my_) && !te.id.empty() && !te.apagada;
       /* (v1.16) la de la Version hace lo de la flecha que habia junto al aspa: su flecha en ambar con una version nueva,
          y entonces con el filo del boton «Actualizar a» de antes */
       const bool esVersion = te.id == "buscar_actualizacion", nueva = esVersion && !st_.actualizacion.empty();
@@ -2285,10 +2309,15 @@ void Hud::dibujaPanel(int vw, int vh) {
       textoCabe(te.valor, t.x + 48.0f * s, t.y + 31.0f * s, 15.0f * s, t.w - 56.0f * s - wFlecha, te.puesta ? accent[0] : ink[0],
                 te.puesta ? accent[1] : ink[1], te.puesta ? accent[2] : ink[2], 1.0f);
       if (te.id == "menu_idioma") panelIdioma_ = t;   /* la lista de idiomas cuelga de ella */
+      if (te.apagada) relleno(t, 6.0f * s, pal_.ventana, 0.62f);   /* (v1.18) tenue: lo del 3D en una pantalla sin 3D */
     }
 
     /* la tarjeta de la pestana puesta: su nombre arriba, las filas y el pie */
-    const Rect tarjeta{izqC, F.y + arribaC * s, anchoC * s, std::max(160.0f, std::min(700.0f * s, F.h - arribaC * s - 16.0f * s))};
+    /* (v1.18) en una pantalla baja o estrecha (Rodolfo: «considera que pantallas de otros modelos o diseños pueden variar
+       en tamaño») la tarjeta llegaba hasta abajo y tapaba «Informar de un error», que cae a su izquierda: si no cabe al
+       lado, la tarjeta le deja su renglon. MEDIDO pintando a 1366x768 y 1280x720 */
+    const float sitioError = (panelError_.w > 0.0f && izqC < panelError_.x + panelError_.w + 12.0f * s) ? panelError_.h + 12.0f * s : 0.0f;
+    const Rect tarjeta{izqC, F.y + arribaC * s, anchoC * s, std::max(160.0f, std::min(700.0f * s, F.h - arribaC * s - 16.0f * s - sitioError))};
     relleno(tarjeta, 8.0f * s, pal_.tarjeta, 0.97f);
     fuente_ = hayBarlow_ ? 2 : 0;
     text(nombrePest(st_.pestana), tarjeta.x + 18.0f * s, tarjeta.y + 15.0f * s, 20.0f * s, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -2346,7 +2375,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const float w = textWidth(st_.pestanas[i], tamPest) + 32.0f;
       const Rect t{tx, py + 62.0f, w, 32.0f};
       panelPestanas_.push_back(t);
-      const bool grisP = i < st_.pestanaGris.size() && st_.pestanaGris[i];   /* (v1.16) en gris: tenue y sin resaltar */
+      const bool grisP = (i < st_.pestanaGris.size() && st_.pestanaGris[i]) || (st_.sin3D && i == 0);   /* (v1.16) en gris: tenue y sin resaltar */
       const bool puesta = (int)i == st_.pestana, hov = t.inside(mx_, my_) && !grisP;
       if (puesta) mask9(t, 0, 16.0f, accent[0], accent[1], accent[2], 0.95f);
       else if (hov) mask9(t, 0, 16.0f, 1.0f, 1.0f, 1.0f, 0.10f);
@@ -3270,6 +3299,12 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     return HitPanelItem;
   }
   if (st_.marco && panelError_.inside(mx, my)) return HitPanelError;   /* (v1.18) en el marco, fuera de la tarjeta */
+  if (st_.marco)   /* (v1.18) las pantallas de la barra de arriba */
+    for (size_t k = 0; k < panelPantallas_.size(); k++)
+      if (panelPantallas_[k].inside(mx, my)) {
+        if (sub) *sub = (int)k;
+        return HitPanelPantalla;
+      }
   if (!panelCaja_.inside(mx, my)) return HitNone;
   if (panelCerrar_.inside(mx, my)) return HitPanelCerrar;
   if (st_.marco && panelVolver_.inside(mx, my)) return HitPanelVolver;   /* (v1.16) */
@@ -3284,14 +3319,14 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
   if (panelCopiar_.inside(mx, my)) return HitPanelCopiar;
   for (size_t i = 0; i < panelPestanas_.size(); i++)
     if (panelPestanas_[i].inside(mx, my)) {
-      if (i < st_.pestanaGris.size() && st_.pestanaGris[i]) return HitPanel;   /* (v1.16) en gris: no se abre */
+      if ((i < st_.pestanaGris.size() && st_.pestanaGris[i]) || (st_.sin3D && i == 0)) return HitPanel;   /* (v1.16) en gris: no se abre */
       if (sub) *sub = (int)i;
       return HitPanelPestana;
     }
   /* (v1.16) las teselas chicas, y a pantalla completa no se arrastra nada */
   if (st_.marco)
     for (size_t k = 0; k < panelTeselas_.size() && k < st_.teselas.size(); k++)
-      if (panelTeselas_[k].inside(mx, my) && !st_.teselas[k].id.empty()) {
+      if (panelTeselas_[k].inside(mx, my) && !st_.teselas[k].id.empty() && !st_.teselas[k].apagada) {
         /* (v1.17) su flechita abre o cierra su menu: 1000 + la tesela */
         if (sub) *sub = k < panelTeselaFlecha_.size() && panelTeselaFlecha_[k].inside(mx, my) ? 1000 + (int)k : (int)k;
         return HitPanelTesela;

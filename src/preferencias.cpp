@@ -33,6 +33,7 @@ extern char **environ;
 #include "atajos.h"
 #include "informe.h"   /* (v1.18) el informe de un error para GitHub */
 #include "versiones.h"   /* (v1.18) volver a una version anterior */
+#include "pantallas.h"   /* (v1.18) las pantallas conectadas y cual hace 3D */
 #include "integraciones.h"
 #include "paramspropios.h"   /* (v1.18) los parametros que añade el usuario en Integraciones */
 #include "mako.h"   /* (v1.18) MAKO FG: su boton de instalar, junto a ENABLE_MAKO */
@@ -2500,6 +2501,13 @@ static void filasEfectos(Hud::State &st, std::vector<std::string> &ids, const st
   /* la casilla de la vista previa: en medio, encima de las dos mitades, como la de la vista de depuracion (Rodolfo: «pon la
      casilla de preview para palomearla igual que pusiste la de depuracion en la otra seccion»); palomeada, arriba de la
      columna. Solo con el panel sobre el 3D de un juego: el visor es el que pinta el juego */
+  /* (v1.18) en una pantalla sin 3D se eligen y se ajustan igual, y se dice donde corren hoy */
+  if (st.sin3D) {
+    Hud::ItemPanel n;
+    n.tipo = Hud::ItemPanel::Nota;
+    n.rotulo = idioma::tr("Esta pantalla no tiene 3D: aquí se eligen y se ajustan; hoy los pinta el visor, en el monitor 3D.");
+    pon(n, "");
+  }
   if (st.marco) {
     Hud::ItemPanel d;
     d.tipo = Hud::ItemPanel::Interruptor;
@@ -2950,6 +2958,54 @@ static bool aplicarEfectos(const std::string &que, int sub, float frac, std::str
 }
 
 void juegoDelPanel(const std::string &appid) { g_juegoDelPanel = appid; }
+
+/* (v1.18) Las pantallas, al panel (ver pantallas.h). La elegida es la de 3D si la hay (va la primera) hasta que se pica
+   otra; con una que no hace 3D, `sin3D`: la pestana del 3D y sus teselas van en gris y el panel se queda de gestor de
+   juegos, efectos e integraciones. Sin saber de ninguna (no se pudo leer el nucleo) no se apaga nada.
+   ODYSSEYVK_HUD_PANTALLA=N la elige para los volcados */
+static int g_pantallaElegida = -1;
+static std::vector<pantallas::Pantalla> g_pantallasVistas;
+/* La elegida es la pantalla del hub (Rodolfo: «añade tambien algo para decirle al proframa que pantalla ejecuta el
+   hub»): se guarda en serve.conf (`pantalla_hub = DP-7`, por su conector) y el panel se abre en ella desde la proxima
+   vez (panel_ajustes.cpp); con una sesion 3D abierta, el panel sigue saliendo sobre el 3D */
+void elegirPantalla(int cual) {
+  g_pantallaElegida = cual;
+  if (cual >= 0 && (size_t)cual < g_pantallasVistas.size()) {
+    std::string e;
+    ajuste::fijarEnServeConf("pantalla_hub", g_pantallasVistas[(size_t)cual].conector, &e);
+  }
+}
+std::string notaDePantalla(int clase) {
+  return idioma::tr(clase == 1   ? "Pantalla 3D: todo OdysseyVK"
+                    : clase == 2 ? "Monitor 3D sin gafas que OdysseyVK aún no sabe poner en 3D: va como una pantalla normal"
+                                 : "Pantalla sin 3D: juegos, efectos e integraciones; lo del 3D, apagado") +
+         std::string(" · ") + idioma::tr("el hub se abre en ella desde la próxima vez");
+}
+static void pantallasAlPanel(Hud::State &st) {
+  static std::vector<pantallas::Pantalla> v;
+  static std::chrono::steady_clock::time_point leidas{};
+  const auto ahora = std::chrono::steady_clock::now();
+  if (leidas == std::chrono::steady_clock::time_point{} || ahora - leidas > std::chrono::seconds(3)) {
+    v = pantallas::lista();
+    leidas = ahora;
+  }
+  g_pantallasVistas = v;
+  if (g_pantallaElegida < 0)
+    if (const char *e = std::getenv("ODYSSEYVK_HUD_PANTALLA")) g_pantallaElegida = std::atoi(e);
+  if (g_pantallaElegida < 0) {   /* la del hub, si se eligio una y sigue conectada */
+    const auto conf = ajuste::leerServeConf();
+    if (const auto it = conf.find("pantalla_hub"); it != conf.end())
+      for (size_t k = 0; k < v.size(); k++)
+        if (v[k].conector == it->second) g_pantallaElegida = (int)k;
+  }
+  if (g_pantallaElegida < 0 || (size_t)g_pantallaElegida >= v.size()) g_pantallaElegida = 0;
+  st.pantallas.clear();
+  for (const pantallas::Pantalla &p : v) st.pantallas.push_back({p.rotulo(), (int)p.clase});
+  st.pantalla = v.empty() ? -1 : g_pantallaElegida;
+  st.sin3D = !v.empty() && v[(size_t)g_pantallaElegida].clase != pantallas::Con3D;
+  /* sin 3D la pestana del 3D no se abre: la de por defecto pasa a ser Juegos (o Ajustes, si Juegos esta en gris) */
+  if (st.sin3D && st.pestana == 0) st.pestana = (st.pestanaGris.size() > 1 && st.pestanaGris[1]) ? 3 : 1;
+}
 void fuentesSolas(bool si) { g_fuentesSolas = si; }
 void efectosDe(const std::string &que) { g_efectosDe = que; }
 
@@ -3162,6 +3218,10 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
                                   : idioma::trf("Actualizar a {}", {st.actualizacion}),
          false, 5},
         {"menu_idioma", idioma::tr("Idioma"), idioma::nombre(idioma::actual()), false, 6}};
+    /* (v1.18) en una pantalla sin 3D, las del 3D van apagadas */
+    if (st.sin3D)
+      for (Hud::State::Tesela &t : st.teselas)
+        if (t.id == "profundidad_dlss" || t.id == "hud_plano" || t.id == "rastreo") t.apagada = true;
     /* (v1.17) la del cuadrito de los FPS lleva su menu de lo que se vigila; si hay algo, lo dice */
     for (Hud::State::Tesela &t : st.teselas)
       if (t.id == "fps_juego") {
@@ -3474,6 +3534,7 @@ static void llenarSinArrastre(Hud::State &st, const Valores &v, const std::vecto
    arrastrando un deslizador: se conserva el que se tiene apretado, por su id (si salen o se van filas por encima,
    cambia de sitio) y con la bola donde esta. Antes volvia a lo guardado a media arrastrada */
 void llenar(Hud::State &st, const Valores &v, const std::vector<Juego> &juegos, std::vector<std::string> &ids) {
+  pantallasAlPanel(st);   /* (v1.18) antes que nada: puede cambiar la pestana */
   std::string idArrastre;
   float fracArrastre = 0.0f;
   if (st.arrastrando >= 0 && (size_t)st.arrastrando < ids.size() && (size_t)st.arrastrando < st.items.size())

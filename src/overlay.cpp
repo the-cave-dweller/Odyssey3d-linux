@@ -1269,7 +1269,7 @@ struct Overlay::Impl {
        al bucle del panel; el pin es de la rama experimental), y cualquier otro clic con la lista de
        idiomas abierta, que la cierra */
     if (h == Hud::HitPanelCerrar || h == Hud::HitPanelPestana || h == Hud::HitPanelItem || h == Hud::HitPanelIdioma ||
-        h == Hud::HitPanelIdiomaOpcion || h == Hud::HitPanelActualizar || h == Hud::HitPanelFijar || h == Hud::HitPanelError ||
+        h == Hud::HitPanelIdiomaOpcion || h == Hud::HitPanelActualizar || h == Hud::HitPanelFijar || h == Hud::HitPanelError || h == Hud::HitPanelPantalla ||
         h == Hud::HitPanelModoRed || h == Hud::HitPanelTesela ||   /* (v1.16) las teselas chicas del panel nuevo */
         h == Hud::HitPanelCopiar ||   /* (v1.16) el Copiar del pie de Juegos: desde la 1.14 no llegaba */
         h == Hud::HitPanelVolver ||   /* (v1.16) la flecha de volver a la pastilla */

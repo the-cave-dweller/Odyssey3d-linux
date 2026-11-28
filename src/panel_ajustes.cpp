@@ -129,6 +129,13 @@ int cmdAjustes(int argc, char **argv) {
   if (pista.empty()) {
     const auto conf = ajuste::leerServeConf();
     if (const auto it = conf.find("pantalla"); it != conf.end()) pista = it->second;
+    /* (v1.18) la pantalla del hub (la ficha elegida arriba del panel): el panel se abre en ella, salvo con una sesion 3D
+       abierta, que entonces va sobre el 3D. Si ya no esta conectada, la capa cae en la de siempre */
+    if (const auto it = conf.find("pantalla_hub"); it != conf.end() && !it->second.empty()) {
+      std::string estado;
+      readSmallFile(rutaEstadoOdyssey("hub"), estado);
+      if (estado.find("sesion = ninguna") != std::string::npos || estado.find("sesion =") == std::string::npos) pista = it->second;
+    }
   }
   if (!pista.empty()) ov.setPantalla(pista);
   std::string err;
@@ -573,6 +580,15 @@ int cmdAjustes(int argc, char **argv) {
           std::printf("[ajustes] %s\n", g.sub == 1 ? "modo rendimiento (sin red)" : "AI (con la red)");
           std::fflush(stdout);
         }
+        repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelPantalla && g.sub >= 0 && (size_t)g.sub < st.pantallas.size()) {
+        /* (v1.18) otra pantalla de la barra de arriba: lo que ofrece el panel pasa a ser lo de esa */
+        prefs::elegirPantalla(g.sub);
+        st.corrida = 0.0f;
+        rellenar();
+        st.pie = prefs::notaDePantalla(st.pantallas[(size_t)g.sub].clase);
+        std::printf("[ajustes] pantalla %s: %s\n", st.pantallas[(size_t)g.sub].rotulo.c_str(), st.sin3D ? "sin 3D" : "con 3D");
+        std::fflush(stdout);
         repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelError) {
         /* (v1.18) «Informar de un error»: la pagina del informe, en Ajustes */

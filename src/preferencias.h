@@ -192,6 +192,9 @@ int tomarPestana();
 void integracionesDe(const std::string &appid);
 /* (v1.18) el juego sobre el que se abrio el panel: la pestana de efectos ofrece los suyos */
 void juegoDelPanel(const std::string &appid);
+/* (v1.18) las pantallas de la barra de arriba (pantallas.h): elegir una, y lo que dice de ella el pie */
+void elegirPantalla(int cual);
+std::string notaDePantalla(int clase);
 /* (v1.18) abrir la pagina de efectos: "*" = los de todos los juegos, o un appid (la prueba del HUD) */
 void efectosDe(const std::string &que);
 /* (v1.15) lo que, si cambia, hay que rehacer la pestana Integraciones (integ::firma y el «Copiado» del boton) */

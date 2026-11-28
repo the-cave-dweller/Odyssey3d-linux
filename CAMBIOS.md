@@ -50,6 +50,47 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Las pantallas: la lista arriba del panel y el modo sin 3D (v1.18, primera parte)
+
+- Rodolfo: «nuevo major change, sistema de displays, que en el tope vkodyssey detecte y muestre enlistados los display,
+  que si no son 3d (la mayoria) deshabilite en ellos cualquier cosa relacionada al 3d y que funcione como gestor
+  independiente de shader y juegos, que en casos donde no halla un monitor 3d sea la pestaña por defecto, tambien analiza
+  si monitores 3d como el acer spatialabs o el de sony pueden tener su modo 3d».
+- **Detectar** (`src/pantallas.h`, `odysseyvk pantallas`): las conectadas salen del núcleo (`/sys/class/drm`, `status` y
+  `edid`), sin el compositor. De cada EDID, el fabricante, el nombre y la resolución nativa; y su clase: **con 3D** (el
+  Odyssey G90XF), **candidata** (un monitor 3D sin gafas que aún no: Acer SpatialLabs, Sony ELF-SR) o **normal**.
+  MEDIDO aquí: `DP-4 SAM Odyssey G90XF 3840x2160 3D` y `DP-7 SUN X7149A 1600x1200 sin 3D`.
+- **Arriba del panel**, junto al nombre: una ficha por pantalla, con «3D» (en el acento) o «2D» y su rótulo; la elegida,
+  llena. De entrada, la de 3D si la hay. Picar otra cambia lo que ofrece el panel.
+- **Sin 3D** (la elegida no lo tiene, o no hay ningún monitor 3D): la pestaña del 3D y las teselas de la profundidad de
+  DLSS, el HUD del juego y seguir la cabeza van en gris y no se pican; la pestaña por defecto pasa a ser Juegos; Efectos
+  dice dónde corren hoy (en el visor, en el monitor 3D). Juegos, Efectos, Integraciones, Ajustes y FG siguen enteras. Si
+  no se sabe de ninguna pantalla (no se pudo leer el núcleo), no se apaga nada.
+- **La pantalla del hub** (Rodolfo: «añade tambien algo para decirle al proframa que pantalla ejecuta el hub, considera
+  que pantallas de otros modelos o diseños pueden variar en tamaño»): la ficha elegida se guarda en `serve.conf`
+  (`pantalla_hub = DP-7`, por su conector) y el panel se abre en ella desde la próxima vez; con una sesión 3D abierta
+  sigue saliendo sobre el 3D, y si esa pantalla ya no está conectada, en la de siempre. **Tamaños**: el marco ya se
+  encogía por debajo de 1280x720; pintado a 1280x720, 1366x768, 1600x1200 y 2560x1080 cabe entero, salvo que en las dos
+  más bajas la tarjeta tapaba «Informar de un error»: ahora le deja su renglón cuando no cabe a su lado.
+- **Análisis de otros monitores 3D** (sin ninguno aquí para medir):
+  - **Acer SpatialLabs**: candidato real. MEDIDO en este equipo: la placa de la lente del Odyssey se anuncia por USB como
+    `354b:0116 «Dimenco BV SR Lens Switch Board»`. El Odyssey 3D lleva la plataforma SR de Dimenco, que es la de los
+    SpatialLabs (lente lenticular que se enciende y se apaga, y seguidor de ojos de 1280x480 a 60, lo mismo que da la
+    cámara de aquí). Lo que haría falta medir en uno: los identificadores USB de su placa y de su cámara, si la orden de
+    la lente es la misma, cómo se pone su escalador en 3D (aquí es una orden SCSI propia de Samsung) y la calibración de
+    su lente (paso, inclinación y los mapas de corrección de cada unidad).
+  - **Sony Spatial Reality Display (ELF-SR1/SR2)**: no con lo que hay. Tecnología propia, con su sensor de visión y su
+    SDK solo para Windows; no hay nada de Dimenco que reutilizar. Tejer la imagen se podría si se midiera la lente de una
+    unidad, pero sin su sensor el seguimiento tendría que salir de otra cámara.
+  - Las dos se reconocen por su nombre y se tratan como pantalla normal, diciéndolo.
+- **Probado**: `tools/prueba_pantallas.cpp` (11 comprobaciones: el EDID, las clases y un `/sys/class/drm` de mentira) y el
+  panel pintado en la CPU en tres casos (este equipo; sin monitor 3D, con `ODYSSEYVK_PANTALLAS_PRUEBA`; con la 2D elegida,
+  `ODYSSEYVK_HUD_PANTALLA=1`).
+- **Lo que no está hecho todavía**: el servicio no mira las pantallas (sin monitor 3D sigue ofreciendo lo de siempre); en
+  una pantalla sin 3D los efectos se ajustan pero aún no corren; y la pastilla propia de ese modo (Rodolfo: «ya sin el
+  modo 3d tambien escrube un pill hub para operar todo lo de los shaders y el framegen»). Picar una ficha con el ratón de
+  verdad no está probado (el golpe pasa por el mismo camino que las teselas).
+
 ## La pastilla y el panel sobre un juego ya no le quitan el foco: el juego sigue corriendo (v1.18)
 
 - Rodolfo: «no puedo usar las settings mientras el juego anda, el juego se pausa y quita foco, hace muchas versiones se
