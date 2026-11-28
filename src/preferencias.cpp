@@ -34,6 +34,7 @@ extern char **environ;
 #include "informe.h"   /* (v1.18) el informe de un error para GitHub */
 #include "versiones.h"   /* (v1.18) volver a una version anterior */
 #include "pantallas.h"   /* (v1.18) las pantallas conectadas y cual hace 3D */
+#include "puerto3d.h"    /* (v1.18) el pedido de portar el 3D de un monitor */
 #include "integraciones.h"
 #include "paramspropios.h"   /* (v1.18) los parametros que añade el usuario en Integraciones */
 #include "mako.h"   /* (v1.18) MAKO FG: su boton de instalar, junto a ENABLE_MAKO */
@@ -2981,11 +2982,14 @@ std::string notaDePantalla(int clase) {
                                  : "Pantalla sin 3D: juegos, efectos e integraciones; lo del 3D, apagado") +
          std::string(" · ") + idioma::tr("el hub se abre en ella desde la próxima vez");
 }
+static bool g_pantallasViejas = false;   /* releerlas ya (se cambio `sin_3d`) */
+static time_t g_puertoHasta = 0;         /* «Portar el 3D» armado hasta entonces */
 static void pantallasAlPanel(Hud::State &st) {
   static std::vector<pantallas::Pantalla> v;
   static std::chrono::steady_clock::time_point leidas{};
   const auto ahora = std::chrono::steady_clock::now();
-  if (leidas == std::chrono::steady_clock::time_point{} || ahora - leidas > std::chrono::seconds(3)) {
+  if (g_pantallasViejas || leidas == std::chrono::steady_clock::time_point{} || ahora - leidas > std::chrono::seconds(3)) {
+    g_pantallasViejas = false;
     v = pantallas::lista();
     leidas = ahora;
   }
@@ -3002,6 +3006,9 @@ static void pantallasAlPanel(Hud::State &st) {
   st.pantallas.clear();
   for (const pantallas::Pantalla &p : v) st.pantallas.push_back({p.rotulo(), (int)p.clase});
   st.pantalla = v.empty() ? -1 : g_pantallaElegida;
+  /* (v1.18) con un monitor 3D sin soporte conectado, el boton de pedir que se porte */
+  st.puerto3d = std::any_of(v.begin(), v.end(), [](const pantallas::Pantalla &p) { return p.clase == pantallas::Candidata; });
+  st.puerto3dArmado = st.puerto3d && g_puertoHasta > ::time(nullptr);
   st.sin3D = !v.empty() && v[(size_t)g_pantallaElegida].clase != pantallas::Con3D;
   /* sin 3D la pestana del 3D no se abre: la de por defecto pasa a ser Juegos (o Ajustes, si Juegos esta en gris) */
   if (st.sin3D && st.pestana == 0) st.pestana = (st.pestanaGris.size() > 1 && st.pestanaGris[1]) ? 3 : 1;
@@ -3367,6 +3374,14 @@ static void llenarFilas(Hud::State &st, const Valores &v, const std::vector<Jueg
     bt.ayuda = idioma::tr("En el gestor de tareas del panel de abajo: el visor 3D y estos ajustes mientras están abiertos");
     bt.valor = v.enBarraTareas;
     pon(bt, "barra_tareas");
+    /* (v1.18) Rodolfo: «also add an unsupported 3d monitor button that fallbacks everything to be Shaderhub 2d in those
+       monitors», «that button in settings». `sin_3d = si` en serve.conf: la pantalla de 3D se trata como una normal
+       (pantallas.h) y el servicio le da la sesion de ShaderHub en vez del 3D */
+    Hud::ItemPanel s3;
+    s3.tipo = Hud::ItemPanel::Interruptor, s3.rotulo = idioma::tr("Monitor 3D sin soporte: usar ShaderHub");
+    s3.ayuda = idioma::tr("Si el 3D de tu monitor no funciona o aún no está soportado: todo pasa a ShaderHub (2D), sin lente ni trama");
+    s3.valor = pantallas::forzado2D();
+    pon(s3, "sin_3d");
     Hud::ItemPanel sw;
     sw.tipo = Hud::ItemPanel::Interruptor, sw.rotulo = idioma::tr("Mostrar OdysseyVK en la bandeja del sistema");
     sw.ayuda = idioma::tr("El icono junto al reloj y las notificaciones: clic abre estos ajustes, clic central los juegos");
@@ -3789,6 +3804,73 @@ bool aplicar(const std::string &id, int sub, float frac, bool soltado, const std
     if (!fija("actualizaciones", v.avisarActualizaciones ? "no" : "si")) return false;
     if (aviso) *aviso = idioma::tr(v.avisarActualizaciones ? "no se avisará de versiones nuevas; el botón junto al aspa las sigue marcando"
                                                            : "se avisará con una tarjeta en la orilla de la pantalla");
+    return true;
+  }
+  if (id == "sin_3d") {   /* (v1.18) el monitor 3D, tratado como una pantalla normal */
+    const bool ahora = pantallas::forzado2D();
+    if (!fija("sin_3d", ahora ? "no" : "si")) return false;
+    g_pantallasViejas = true;
+    if (aviso) *aviso = idioma::tr(ahora ? "el 3D de tu monitor vuelve: SpatialHub" : "tu monitor pasa a ShaderHub (2D): sin lente ni trama");
+    return true;
+  }
+  if (id == "puerto3d") {   /* (v1.18) pedir que se porte el 3D de un monitor: ver puerto3d.h */
+    if (g_pantallasVistas.empty()) g_pantallasVistas = pantallas::lista();   /* aun no se habia llenado el panel */
+    const pantallas::Pantalla *p = nullptr;
+    if (g_pantallaElegida >= 0 && (size_t)g_pantallaElegida < g_pantallasVistas.size() &&
+        g_pantallasVistas[(size_t)g_pantallaElegida].clase == pantallas::Candidata)
+      p = &g_pantallasVistas[(size_t)g_pantallaElegida];
+    for (const pantallas::Pantalla &q : g_pantallasVistas)
+      if (!p && q.clase == pantallas::Candidata) p = &q;
+    if (!p) {
+      if (aviso) *aviso = idioma::tr("no hay ningún monitor 3D sin soporte conectado");
+      return false;
+    }
+    if (g_puertoHasta <= ::time(nullptr)) {   /* el primer clic: lo que va a pasar */
+      g_puertoHasta = ::time(nullptr) + 12;
+      if (aviso) *aviso = idioma::trf("pica otra vez: se abre GitHub con lo de {} escrito (sin su número de serie) para que lo envíes", {p->rotulo()});
+      return true;
+    }
+    g_puertoHasta = 0;
+    std::vector<std::string> modos;
+    {
+      std::error_code ec;
+      for (const auto &c : std::filesystem::directory_iterator("/sys/class/drm", ec)) {
+        const std::string n = c.path().filename().string();
+        const size_t g = n.find('-');
+        if (n.rfind("card", 0) != 0 || g == std::string::npos || n.substr(g + 1) != p->conector) continue;
+        std::ifstream f(c.path() / "modes");
+        std::string l;
+        while (std::getline(f, l))
+          if (!l.empty() && std::find(modos.begin(), modos.end(), l) == modos.end()) modos.push_back(l);
+      }
+    }
+    /* del equipo, lo basico (el sistema y las tarjetas): el registro del servicio aqui no pinta nada */
+    std::string equipo = informe::diagnostico();
+    if (const size_t r = equipo.find("Registro del servicio"); r != std::string::npos) equipo.erase(r);
+    const std::string texto = puerto3d::cuerpo(*p, modos, puerto3d::usbDelMonitor(p->fabricante), equipo);
+    if (FILE *f = std::fopen(rutaEstadoOdyssey("portar-3d.md").c_str(), "we")) {
+      std::fwrite(texto.data(), 1, texto.size(), f);
+      std::fclose(f);
+    }
+    const std::string u = puerto3d::url(kRepoGitHub, *p, texto);
+    if (std::getenv("ODYSSEYVK_PRUEBA_SIN_NAVEGADOR")) {   /* las pruebas no abren nada */
+      std::printf("[puerto3d] %zu letras de direccion: %.100s...\n", u.size(), u.c_str());
+    } else {
+      std::string e2;
+      copiarAlPortapapeles(texto, &e2);
+      const pid_t pid = ::fork();
+      if (pid == 0) {
+        ::setsid();
+        if (::fork() != 0) ::_exit(0);
+        const int nulo = ::open("/dev/null", O_RDWR);
+        if (nulo >= 0) ::dup2(nulo, 0), ::dup2(nulo, 1), ::dup2(nulo, 2);
+        ::execlp("xdg-open", "xdg-open", u.c_str(), (char *)nullptr);
+        ::_exit(127);
+      }
+      int stt = 0;
+      if (pid > 0) ::waitpid(pid, &stt, 0);
+    }
+    if (aviso) *aviso = idioma::tr("pedido abierto en GitHub: léelo, añade lo que sepas y envíalo (quedó copiado)");
     return true;
   }
   if (id == "barra_tareas" || id == "bandeja") {

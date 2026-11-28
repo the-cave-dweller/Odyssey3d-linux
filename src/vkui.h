@@ -208,6 +208,9 @@ public:
     std::vector<PantallaVista> pantallas;
     int pantalla = -1;
     bool sin3D = false;
+    /* (v1.18) «Portar el 3D de este monitor», junto a «Informar de un error»: sale con un monitor 3D que aun no tiene
+       soporte conectado (puerto3d.h); armado, pide el segundo clic */
+    bool puerto3d = false, puerto3dArmado = false;
     std::vector<Tesela> teselas;
     float aparicion = 1.0f;
     std::vector<ItemPanel> items;
@@ -396,6 +399,7 @@ public:
     HitPanelFijar,        /* el pin junto al nombre: fijar el panel encima (rama experimental) */
     HitPanelError,        /* (v1.18) el boton de abajo a la izquierda del marco: informar de un error (informe.h) */
     HitPanelPantalla,     /* (v1.18) una pantalla de la barra de arriba: `sub` = cual (State::pantallas) */
+    HitPanelPuerto3D,     /* (v1.18) «Portar el 3D de este monitor», junto al de informar de un error */
     HitPanelRedimensionar, /* la esquina de abajo a la derecha: cambiar el tamano del panel (rama experimental) */
     HitPanelModoRed,      /* el interruptor AI | Rendimiento: `sub` 0 = AI (con la red), 1 = Rendimiento (sin red) */
     HitModoRed,           /* (v1.12) el mismo interruptor, en la pastilla del video: pasa al otro extremo en marcha */
@@ -668,6 +672,7 @@ private:
   Rect panelCaja_, panelActualizar_, panelCerrar_, panelCuerpo_, panelIdioma_, panelFijar_;
   Rect panelError_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) «Informar de un error», abajo a la izquierda del marco */
   std::vector<Rect> panelPantallas_;              /* (v1.18) las pantallas de la barra de arriba */
+  Rect panelPuerto_{-10.0f, -10.0f, 0.0f, 0.0f};  /* (v1.18) «Portar el 3D de este monitor» */
   Rect panelCopiar_{-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.14) el boton Copiar del pie (pestana Juegos) */
   Rect panelLogo_;   /* el logo y el nombre: la primera pestana (rama experimental) */
   Rect panelEsquina_; /* la esquina para cambiar el tamano */

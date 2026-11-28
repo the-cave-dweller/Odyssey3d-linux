@@ -2209,7 +2209,7 @@ void Hud::dibujaPanel(int vw, int vh) {
       const float m = 16.0f * s, cw = std::min(500.0f * s, (float)vw * 0.42f);
       const Rect col{m, m, cw, (float)vh - 2.0f * m};
       panelCaja_ = col;
-      panelCerrar_ = panelVolver_ = panelActualizar_ = panelError_ = fuera;
+      panelCerrar_ = panelVolver_ = panelActualizar_ = panelError_ = panelPuerto_ = fuera;
       panelPantallas_.clear();
       panelPestanas_.assign(st_.pestanas.size(), fuera);
       panelTeselas_.assign(st_.teselas.size(), fuera);
@@ -2299,6 +2299,19 @@ void Hud::dibujaPanel(int vw, int vh) {
       icono(an, icoAnillo_, 0.95f, 0.62f, 0.30f, 0.95f);
       text("!", an.x + an.w * 0.5f, an.y + 2.0f * s, 11.0f * s, 0.95f, 0.62f, 0.30f, 0.95f, true);
       text(rot, an.x + an.w + 8.0f * s, panelError_.y + (alto - tam) * 0.5f - s, tam, ink[0], ink[1], ink[2], he ? 1.0f : 0.80f);
+      /* (v1.18) a su derecha, con un monitor 3D sin soporte conectado: pedir que se porte su 3D (puerto3d.h) */
+      panelPuerto_ = fuera;
+      if (st_.puerto3d) {
+        const std::string rp = idioma::tr(st_.puerto3dArmado ? "¿Seguro? Pica otra vez" : "Portar el 3D de este monitor");
+        const float ap = 14.0f * s + 16.0f * s + 8.0f * s + textWidth(rp, tam) + 14.0f * s;
+        panelPuerto_ = {panelError_.x + panelError_.w + 8.0f * s, panelError_.y, ap, alto};
+        const bool hp = panelPuerto_.inside(mx_, my_);
+        relleno(panelPuerto_, 6.0f * s, st_.puerto3dArmado ? pal_.fuerte : pal_.control, hp || st_.puerto3dArmado ? 1.0f : 0.55f);
+        icono({panelPuerto_.x + 14.0f * s, panelPuerto_.y + (alto - 16.0f * s) * 0.5f, 16.0f * s, 16.0f * s}, icoCubo_, accent[0], accent[1],
+              accent[2], 0.95f);
+        text(rp, panelPuerto_.x + 14.0f * s + 16.0f * s + 8.0f * s, panelPuerto_.y + (alto - tam) * 0.5f - s, tam, ink[0], ink[1], ink[2],
+             hp ? 1.0f : 0.80f);
+      }
     }
     rotuloActualizar = !st_.actualizacion.empty()
                            ? idioma::trf("Hay una actualización pendiente: OdysseyVK {}. Pica para instalarla.", {st_.actualizacion})
@@ -2395,7 +2408,8 @@ void Hud::dibujaPanel(int vw, int vh) {
     /* (v1.18) en una pantalla baja o estrecha (Rodolfo: «considera que pantallas de otros modelos o diseños pueden variar
        en tamaño») la tarjeta llegaba hasta abajo y tapaba «Informar de un error», que cae a su izquierda: si no cabe al
        lado, la tarjeta le deja su renglon. MEDIDO pintando a 1366x768 y 1280x720 */
-    const float sitioError = (panelError_.w > 0.0f && izqC < panelError_.x + panelError_.w + 12.0f * s) ? panelError_.h + 12.0f * s : 0.0f;
+    const float finBotones = panelPuerto_.w > 0.0f ? panelPuerto_.x + panelPuerto_.w : panelError_.x + panelError_.w;
+    const float sitioError = (panelError_.w > 0.0f && izqC < finBotones + 12.0f * s) ? panelError_.h + 12.0f * s : 0.0f;
     const Rect tarjeta{izqC, F.y + arribaC * s, anchoC * s, std::max(160.0f, std::min(700.0f * s, F.h - arribaC * s - 16.0f * s - sitioError))};
     relleno(tarjeta, 8.0f * s, pal_.tarjeta, 0.97f);
     fuente_ = hayBarlow_ ? 2 : 0;
@@ -3378,6 +3392,7 @@ Hud::Hit Hud::hitDetalle(float mxa, float mya, int *item, int *sub, float *frac)
     return HitPanelItem;
   }
   if (st_.marco && panelError_.inside(mx, my)) return HitPanelError;   /* (v1.18) en el marco, fuera de la tarjeta */
+  if (st_.marco && panelPuerto_.inside(mx, my)) return HitPanelPuerto3D;
   if (st_.marco)   /* (v1.18) las pantallas de la barra de arriba */
     for (size_t k = 0; k < panelPantallas_.size(); k++)
       if (panelPantallas_[k].inside(mx, my)) {

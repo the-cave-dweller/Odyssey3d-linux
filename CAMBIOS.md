@@ -50,6 +50,59 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## Portar el 3D de otros monitores, y «Monitor 3D sin soporte» (v1.18)
+
+- Rodolfo: «add a 3d port button near the bug one on 3d known monitors that offers to gather device info and upload it as
+  a feature request to see wether support can be added, consider to also log the way this monitors handle 3d so we can
+  bring new support as they are usually not 3d lens free 3d»; «also add an unsupported 3d monitor button that fallbacks
+  everything to be Shaderhub 2d in those monitors», «that button in settings».
+- **Cómo hace 3D cada monitor** (`pantallas::estereoDeEdid`): casi ninguno es de lente. Se lee del EDID entero lo que
+  declaran los de gafas: el estéreo del detalle de tiempos (campo secuencial, entrelazado, lado a lado), el bloque de
+  HDMI de la extensión CTA-861 (`3D_present` y sus formatos: empaquetado de cuadros, arriba y abajo, lado a lado a
+  medias) y la «Stereo Display Interface» de DisplayID con su método. El que declara algo y no es el Odyssey pasa a ser
+  **candidata**, como los que se reconocen por su nombre. MEDIDO: el Odyssey no declara nada de eso (su 3D va por USB).
+- **«Portar el 3D de este monitor»**, junto a «Informar de un error», solo con una candidata conectada (`puerto3d.h`). El
+  primer clic dice lo que va a pasar; el segundo junta lo del monitor y abre GitHub con el pedido escrito (etiqueta
+  `enhancement`): quién es, cómo declara su 3D, los aparatos USB que pueden ser suyos (cámaras, la placa de lente de
+  Dimenco, los de su marca), sus modos, lo básico del equipo y su EDID **sin el número de serie** (los bytes 12 a 15 y el
+  descriptor de serie, con la suma rehecha). No se sube nada solo: lo envía el usuario después de leerlo. Queda una copia
+  en `~/.local/state/odysseyvk/portar-3d.md` y en el portapapeles.
+- **«Monitor 3D sin soporte: usar ShaderHub»**, en Ajustes (`sin_3d = si` en `serve.conf`): el monitor de 3D se trata
+  como una pantalla normal en el panel, en el servicio (le da la sesión de ShaderHub en vez del 3D) y en la marca; y
+  entonces también ofrece portarlo.
+- **Probado**: `tools/prueba_pantallas.cpp` (ahora 17 comprobaciones: los tres sitios del EDID con EDID hechos a mano y
+  el forzado a 2D) y, pintado en la CPU con `ODYSSEYVK_SIN_3D=1`, el panel en rojo con la ficha del Odyssey en «2D», el
+  interruptor puesto y el botón armado; el pedido generado con el EDID de verdad del Odyssey (2647 letras de dirección,
+  sin serie, con su cámara y su placa de Dimenco).
+- **Lo que no está probado**: abrir GitHub de verdad con el pedido, ningún monitor 3D de gafas real (los EDID de la
+  prueba son hechos a mano siguiendo la norma), ni el servicio con `sin_3d` puesto y un juego.
+
+## Probado con juegos de verdad, sin Rodolfo delante (v1.18)
+
+- Rodolfo: «pruebalos porfa, no ando en casa». Con el servicio y el visor de esta compilación (casa aparte), los juegos
+  lanzados con Proton y un **ratón virtual** (`uinput`, de posición absoluta: cae en el punto pedido, comprobado con la
+  posición del cursor que da KWin) para picar de verdad.
+- **Stray en gamescope con MAKO** y la línea nueva (`DISABLE_GAMESCOPE_WSI=1`): 70 s vivo, MAKO abre su generador dos
+  veces sin el fallo de antes, el 3D encima a 157-165 cuadros por segundo; con los efectos puestos (Clarity) sobre el 3D,
+  150-164. La pastilla sale con el velo y gamescope sigue siendo la ventana activa.
+- **Cyberpunk, la pastilla y el panel con el ratón de verdad**: en el menú el juego ya tiene el cursor encerrado (el
+  ratón virtual no lo mueve); al salir la pastilla el cursor queda libre («el raton esta en el velo»), un clic en el
+  engranaje abre el panel, la pestaña Efectos y su interruptor responden (encendidos, apagados), el aspa lo cierra, y la
+  ventana del juego no cambia de estado en toda la sesión (164-165 cuadros por segundo). No se entró a la partida.
+- **ShaderHub con Cyberpunk** (su pantalla tomada por una sin 3D, `ODYSSEYVK_PANTALLAS_PRUEBA`): la sesión sale sola,
+  162 cuadros por segundo sin tocar la lente; un clic de verdad en Efectos pone Clarity sobre el juego y otro en FG
+  enciende la generación en el perfil de MAKO. Lo que presenta el visor, capturado: el juego limpio con la pastilla roja.
+- **Lo que salió mal o no se pudo**:
+  - Cyberpunk no se queda en la segunda pantalla: mandado a DP-7, a los 13 s vuelve él solo a la suya (la sesión de
+    ShaderHub se cerró bien al irse). En esos 13 s sus cuadros (3840x2160, por memoria) iban a **39 por segundo**: subir
+    4K por memoria es demasiado lento y hay que mejorarlo (subir BGRA sin pasarlo a RGBA, o importarlo por OpenGL).
+  - Stray en gamescope tampoco se dejó llevar a DP-7 antes de ponerse a pantalla completa: ahí solo queda probado el
+    juego de prueba (gamescope con vkcube, 73-75 de 75).
+  - Si FG cambia de verdad dentro del juego no se vio: el visor de la prueba escribe el perfil de MAKO en su casa aparte.
+  - Con el panel abierto, la pastilla se oculta sola a los 5 s (el panel sigue): no molesta, pero no es lo esperado.
+  - El diálogo «Compilation error» de Cyberpunk es de sus mods de REDscript (Rodolfo: «es normal, cerrando el dialogo
+    abre»).
+
 ## SpatialHub y ShaderHub: dos nombres, y la cara sin 3D en rojo (v1.18)
 
 - **«Hub», con minúsculas** (Rodolfo, al preguntarle si quedaba algo mejor que «HUB» y ver las alternativas: «Hub me

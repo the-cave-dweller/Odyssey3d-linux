@@ -582,6 +582,17 @@ int cmdAjustes(int argc, char **argv) {
           std::fflush(stdout);
         }
         repintar = true;
+      } else if (g.tipo == (int)Hud::HitPanelPuerto3D) {
+        /* (v1.18) «Portar el 3D de este monitor»: el primer clic lo arma y dice lo que hara; el segundo junta lo del
+           monitor y abre GitHub con el pedido escrito (preferencias.cpp, puerto3d.h) */
+        std::string aviso;
+        bool cerrarP = false;
+        prefs::aplicar("puerto3d", 0, 0.0f, true, juegos, &aviso, &cerrarP);
+        rellenar();
+        st.pie = aviso;
+        std::printf("[ajustes] portar el 3D: %s\n", aviso.c_str());
+        std::fflush(stdout);
+        repintar = true;
       } else if (g.tipo == (int)Hud::HitPanelPantalla && g.sub >= 0 && (size_t)g.sub < st.pantallas.size()) {
         /* (v1.18) otra pantalla de la barra de arriba: lo que ofrece el panel pasa a ser lo de esa */
         prefs::elegirPantalla(g.sub);
