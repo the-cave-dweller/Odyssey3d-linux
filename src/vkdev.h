@@ -65,6 +65,9 @@ public:
   std::string describeExternal(VkFormat f) const;
   /* ¿Se puede importar este fotograma tal cual? Deja en *fmt el formato a usar. */
   bool canImport(const GpuFrame &f, VkFormat *fmt, std::string *err = nullptr) const;
+  /* (v1.18) los modificadores DRM con los que esta tarjeta importa una imagen de ese formato para muestrearla, los suyos
+     antes que el lineal: lo que se le ofrece al compositor en la captura */
+  std::vector<uint64_t> modificadoresDe(VkFormat fmt) const;
 
   /* DMA-BUF -> VkImage con tiling VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT.
      El fd se duplica: el imagen es dueña de su referencia.

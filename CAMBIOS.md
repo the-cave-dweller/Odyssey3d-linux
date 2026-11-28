@@ -50,6 +50,30 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## ShaderHub: los cuadros entran directos también en NVIDIA, a cualquier tamaño (v1.18)
+
+- Rodolfo: «y sigue con lo que comentaste» (lo que quedaba: importar bien los cuadros en NVIDIA, un juego de verdad en
+  la segunda pantalla).
+- **La causa, por fin**: se le preguntó a la tarjeta (una sonda de Vulkan) qué órdenes de memoria importa para BGRA8: la
+  NVIDIA anuncia siete (`0x0300000000606010` a `…15` y el lineal). KWin entregaba `0x0300000000e08014`, que no está en
+  esa lista: nadie se la ofrecía, así que elegía el suyo. De ahí la imagen revuelta fuera de 3840x2160 y el rodeo por
+  memoria.
+- **Arreglo** (`VkDev::modificadoresDe`, `WindowCapture::modificadores`): en la sesión de ShaderHub, en cuanto se conoce
+  la tarjeta, la captura se vuelve a pedir **ofreciéndole al compositor esos órdenes** (BGRA y BGRx, obligatorio y sin
+  fijar: lo fija él al reservar) y, detrás, lo mismo sin modificador (memoria normal) por si no hay ninguno en común.
+  KWin elige `0x0300000000606014` y el cuadro se importa con su modificador, sin copia. El rodeo por memoria se queda de
+  respaldo. En el 3D no se toca (`ODYSSEYVK_CAPTURA_MODIFICADORES=1` lo pone también ahí, para probarlo).
+- **MEDIDO**: el volcado de lo presentado sale limpio a 2048x1536 (DP-7) y a 3840x2160 (DP-4), sin pasar por memoria.
+  Cyberpunk a 3840x2160 con Clarity: **162-163 cuadros por segundo** (por memoria, 120-131). Y por fin un juego de verdad
+  en la segunda pantalla: **Stray en gamescope en DP-7** (movido cuando ya estaba a pantalla completa), la sesión de
+  ShaderHub sale sola, Clarity corre sobre 2048x1536 y va a 73-74 de 75 durante 70 s.
+- **Lo que no está probado**: otras tarjetas (en AMD o Intel la oferta sale de su propia lista; no se vio), ni el 3D con
+  la oferta puesta. Si la generación de cuadros cambia dentro del juego al picarla en la pastilla sigue sin verse: el
+  visor de la prueba escribe el perfil de MAKO en su casa aparte.
+- De paso se vio que una marca vieja de «visor oculto» en la carpeta de estado deja parado a un visor lanzado a mano
+  sin el servicio (las horas de la marca y del visor no son del mismo reloj): con el servicio no pasa, que la reescribe
+  cada vuelta. Queda apuntado, sin tocar.
+
 ## ShaderHub: la red de profundidad solo si hace falta, y el panel en su pantalla (v1.18)
 
 - Rodolfo: «sigue con lo pendiente». De lo que quedó apuntado de ShaderHub:

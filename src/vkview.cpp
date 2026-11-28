@@ -2484,6 +2484,33 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   std::printf("[vulkan] %s · %s · cola de prioridad %s%s%s\n", dev.deviceName().c_str(),
               dev.hasDmaBufImport() ? "dma-buf disponible" : "sin dma-buf", dev.prioridad().c_str(),
               dev.prioridadNota().empty() ? "" : " · ", dev.prioridadNota().c_str());
+#ifdef HAVE_CAPTURE
+  /* (v1.18) Ya se sabe la tarjeta: en la sesion de ShaderHub la captura se vuelve a pedir ofreciendole al compositor los
+     ordenes de memoria que esa tarjeta importa en Vulkan (ver WindowCapture::modificadores). La primera peticion salio
+     antes, sin tarjeta, para ganar tiempo; el compositor habia elegido el suyo, que la NVIDIA no importa bien fuera de
+     3840x2160. ODYSSEYVK_CAPTURA_MODIFICADORES=1 lo hace tambien en el 3D (para probarlo), =0 no lo hace nunca */
+  {
+    const char *e = entornoOdyssey("ODYSSEYVK_CAPTURA_MODIFICADORES");
+    const bool sin3d = kind == SourceKind::Capture && opts.no3d && opts.noLens && opts.noScaler;
+    if (kind == SourceKind::Capture && capPedida && !(e && e[0] == '0') && (sin3d || (e && e[0] == '1'))) {
+      const std::vector<uint64_t> mods = dev.modificadoresDe(VK_FORMAT_B8G8R8A8_UNORM);
+      if (!mods.empty()) {
+        bomba.para();
+        cap.stop();
+        cap.modificadores(mods);
+        capPedida = cap.start(opts.captureUuid, &capErr);
+        bomba.parar = false;   /* la bomba del arranque sigue hasta que el bucle la releva */
+        if (capPedida) bomba.arranca(cap);
+        std::string lista;
+        char b[32];
+        for (uint64_t m : mods) std::snprintf(b, sizeof b, "%s0x%llx", lista.empty() ? "" : " ", (unsigned long long)m), lista += b;
+        std::printf("[captura] al compositor se le ofrecen los ordenes de memoria que importa esta tarjeta: %s%s\n", lista.c_str(),
+                    capPedida ? "" : " (no se pudo volver a pedir la captura)");
+        std::fflush(stdout);
+      }
+    }
+  }
+#endif
 
   VkWeave wv;
   /* (v1.18) la generacion de cuadros de los videos (fgvideo.h): `fg_video` de serve.conf (0 = no, 2 a 4 = el

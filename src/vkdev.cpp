@@ -456,6 +456,26 @@ static VkResult allocImportFd(VkDevice dev, VkImg &out, VkDeviceSize size, uint3
   return r;
 }
 
+std::vector<uint64_t> VkDev::modificadoresDe(VkFormat fmt) const {
+  std::vector<uint64_t> v;
+  if (!dmaBufExt_ || phys_ == VK_NULL_HANDLE) return v;
+  VkDrmFormatModifierPropertiesListEXT ml{};
+  ml.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+  VkFormatProperties2 fp{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2};
+  fp.pNext = &ml;
+  vkGetPhysicalDeviceFormatProperties2(phys_, fmt, &fp);
+  std::vector<VkDrmFormatModifierPropertiesEXT> ms(ml.drmFormatModifierCount);
+  ml.pDrmFormatModifierProperties = ms.data();
+  vkGetPhysicalDeviceFormatProperties2(phys_, fmt, &fp);
+  for (int lineal = 0; lineal < 2; lineal++)   /* los propios primero; el lineal (0), al final */
+    for (const VkDrmFormatModifierPropertiesEXT &m : ms) {
+      if ((m.drmFormatModifier == 0) != (lineal == 1)) continue;
+      if (m.drmFormatModifierPlaneCount != 1 || !(m.drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) continue;
+      v.push_back(m.drmFormatModifier);
+    }
+  return v;
+}
+
 bool VkDev::canImport(const GpuFrame &f, VkFormat *fmt, std::string *err) const {
   if (!dmaBufExt_) {
     setErr("la GPU no tiene VK_EXT_external_memory_dma_buf / VK_EXT_image_drm_format_modifier", err);

@@ -51,6 +51,11 @@ public:
      compositor: MEDIDO el 28-nov, la NVIDIA no anuncia ningun modificador en Vulkan («B8G8R8A8_UNORM: sin modificadores
      DRM») y el cuadro importado sin el solo sale bien a 3840x2160; a 2048x1536 o 750x792, revuelto por bloques */
   void soloMemoria(bool si);
+  /* (v1.18) Los modificadores DRM (el orden de la memoria) que la tarjeta del visor sabe importar, para ofrecérselos al
+     compositor (antes de `start`). Sin esto el compositor elige el suyo y puede ser uno que Vulkan no entienda: MEDIDO
+     el 28-nov, KWin entrega 0x0300000000e08014 y la NVIDIA importa en Vulkan 0x0300000000606010 a …15 y el lineal. Se
+     ofrecen esos (BGRA y BGRx) y, detrás, lo mismo sin modificador (memoria normal) por si no hay ninguno en común */
+  void modificadores(const std::vector<uint64_t> &lista);
 
   /* Estado de nuestro lado del flujo de PipeWire (error, paused, streaming...). */
   std::string stateText() const;

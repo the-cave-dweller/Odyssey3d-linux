@@ -57,6 +57,7 @@ struct WindowCapture::Impl {
   uint64_t frameCount = 0;
   bool lastDmabuf = false;
   bool soloMemoria = false;   /* (v1.18) ver capture.h */
+  std::vector<uint64_t> modificadores;   /* (v1.18) los que sabe importar la tarjeta del visor */
   std::string fmtName;
   std::string nodeName, nodeSerial, nodeClass, pwState, streamClass = "Stream/Input/Video";
   bool created = false;
@@ -251,8 +252,37 @@ struct WindowCapture::Impl {
           SPA_FORMAT_VIDEO_size, SPA_POD_CHOICE_RANGE_Rectangle(&tam, &tamMin, &tamMax),
           SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(&fr, &frMin, &frMax));
     }
-    const int r = pw_stream_connect(pwStream, PW_DIRECTION_INPUT, tid, PW_STREAM_FLAG_MAP_BUFFERS, soloMemoria ? params : nullptr,
-                                    soloMemoria ? 1 : 0);
+    /* (v1.18) con modificadores: BGRA y BGRx con la lista de los que importa la tarjeta (obligatorio, sin fijar: lo fija
+       el compositor al reservar) y, detras, los dos sin modificador (memoria normal) */
+    uint8_t almacen2[4096];
+    struct spa_pod_builder pb2 = SPA_POD_BUILDER_INIT(almacen2, sizeof almacen2);
+    const struct spa_pod *ofertas[4] = {nullptr, nullptr, nullptr, nullptr};
+    uint32_t nOfertas = 0;
+    if (!soloMemoria && !modificadores.empty()) {
+      struct spa_rectangle tam = SPA_RECTANGLE(1920, 1080), tamMin = SPA_RECTANGLE(1, 1), tamMax = SPA_RECTANGLE(16384, 16384);
+      struct spa_fraction fr = SPA_FRACTION(60, 1), frMin = SPA_FRACTION(0, 1), frMax = SPA_FRACTION(1000, 1);
+      for (int conMod = 1; conMod >= 0; conMod--)
+        for (uint32_t fmt : {(uint32_t)SPA_VIDEO_FORMAT_BGRA, (uint32_t)SPA_VIDEO_FORMAT_BGRx}) {
+          struct spa_pod_frame f0, f1;
+          spa_pod_builder_push_object(&pb2, &f0, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+          spa_pod_builder_add(&pb2, SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video), 0);
+          spa_pod_builder_add(&pb2, SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw), 0);
+          spa_pod_builder_add(&pb2, SPA_FORMAT_VIDEO_format, SPA_POD_Id(fmt), 0);
+          if (conMod) {
+            spa_pod_builder_prop(&pb2, SPA_FORMAT_VIDEO_modifier, SPA_POD_PROP_FLAG_MANDATORY | SPA_POD_PROP_FLAG_DONT_FIXATE);
+            spa_pod_builder_push_choice(&pb2, &f1, SPA_CHOICE_Enum, 0);
+            spa_pod_builder_long(&pb2, (int64_t)modificadores[0]);   /* el preferido, y luego todos */
+            for (uint64_t m : modificadores) spa_pod_builder_long(&pb2, (int64_t)m);
+            spa_pod_builder_pop(&pb2, &f1);
+          }
+          spa_pod_builder_add(&pb2, SPA_FORMAT_VIDEO_size, SPA_POD_CHOICE_RANGE_Rectangle(&tam, &tamMin, &tamMax),
+                              SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(&fr, &frMin, &frMax), 0);
+          ofertas[nOfertas++] = (const struct spa_pod *)spa_pod_builder_pop(&pb2, &f0);
+        }
+    }
+    const int r = nOfertas ? pw_stream_connect(pwStream, PW_DIRECTION_INPUT, tid, PW_STREAM_FLAG_MAP_BUFFERS, ofertas, nOfertas)
+                           : pw_stream_connect(pwStream, PW_DIRECTION_INPUT, tid, PW_STREAM_FLAG_MAP_BUFFERS, soloMemoria ? params : nullptr,
+                                               soloMemoria ? 1 : 0);
     pwStarted = (r >= 0);
     if (pwStarted) ourNodeId = pw_stream_get_node_id(pwStream);
     if (r < 0) setNote(std::string("el nodo de captura rechazó la conexión: ") + std::strerror(-r));
@@ -535,6 +565,7 @@ bool WindowCapture::copyFrame(std::vector<uint8_t> &out, int &w, int &h, int &st
 }
 
 void WindowCapture::soloMemoria(bool si) { d->soloMemoria = si; }
+void WindowCapture::modificadores(const std::vector<uint64_t> &lista) { d->modificadores = lista; }
 
 bool WindowCapture::conCuadro(const std::function<void(const uint8_t *, int, int, int, uint32_t)> &f) {
   std::lock_guard<std::mutex> g(d->mtx);
