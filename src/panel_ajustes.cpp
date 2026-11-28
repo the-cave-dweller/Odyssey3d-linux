@@ -3,6 +3,7 @@
    panel no usa y que tardaban ~45 ms en cargarse cada vez que se abria (Rodolfo: «optimize the opening and
    closing of the layer to your best»; «Yes, do it»). */
 #include "panel_ajustes.h"
+#include "marca.h"
 
 #include "ircam.h"
 #include "lens.h"
@@ -327,7 +328,7 @@ int cmdAjustes(int argc, char **argv) {
   /* (v1.18) Sobre un juego, no: esa entrada es una ventana normal y KWin, al aparecer, la hace la activa. MEDIDO el
      28-nov con Cyberpunk (09:49:58): con el teclado ya en el juego, el juego dejaba de ser la activa en el mismo segundo
      de abrirse el panel, se minimizaba y el 3D se cerraba a los 6 s */
-  if (prefs::leer().enBarraTareas && juegoUuid.empty()) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
+  if (prefs::leer().enBarraTareas && juegoUuid.empty()) ov.ponEntradaBarra(marca::pon(idioma::tr("OdysseyVK — Ajustes"), st.sin3D));
   std::printf("[ajustes] panel puesto en %s (%s) · %d juegos de Steam\n", ov.outputName().c_str(),
               haySesion ? "al doble: hay una sesion 3D" : grande ? "al doble: el marco, como sobre un juego" : "tamano de escritorio", (int)juegos.size());
   std::fflush(stdout);
@@ -806,7 +807,7 @@ int cmdAjustes(int argc, char **argv) {
       idiomaDelAtlas = idioma::actual();
       std::string e;
       if (!ov.hud().buildAtlas(&e)) std::fprintf(stderr, "[ajustes] atlas: %s\n", e.c_str());
-      if (prefs::leer().enBarraTareas && juegoUuid.empty()) ov.ponEntradaBarra(idioma::tr("OdysseyVK — Ajustes"));
+      if (prefs::leer().enBarraTareas && juegoUuid.empty()) ov.ponEntradaBarra(marca::pon(idioma::tr("OdysseyVK — Ajustes"), st.sin3D));
       std::printf("[ajustes] idioma: %s\n", idioma::codigo(idiomaDelAtlas));
       std::fflush(stdout);
       rellenar();

@@ -2,6 +2,7 @@
 #include "bandeja.h"
 #include "bususuario.h"
 #include "idioma.h"
+#include "marca.h"
 
 #include <systemd/sd-bus.h>
 #include <unistd.h>
@@ -15,7 +16,7 @@ const char *kIface = "org.kde.StatusNotifierItem";
 int propiedad(sd_bus *, const char *, const char *, const char *prop, sd_bus_message *reply, void *, sd_bus_error *) {
   if (!std::strcmp(prop, "Category")) return sd_bus_message_append(reply, "s", "ApplicationStatus");
   if (!std::strcmp(prop, "Id")) return sd_bus_message_append(reply, "s", "odysseyvk");
-  if (!std::strcmp(prop, "Title")) return sd_bus_message_append(reply, "s", "OdysseyVK");
+  if (!std::strcmp(prop, "Title")) return sd_bus_message_append(reply, "s", marca::nombre(marca::equipoSin3D()));   /* (v1.18) */
   if (!std::strcmp(prop, "Status")) return sd_bus_message_append(reply, "s", "Active");
   if (!std::strcmp(prop, "IconName")) return sd_bus_message_append(reply, "s", "odysseyvk");
   if (!std::strcmp(prop, "ItemIsMenu")) return sd_bus_message_append(reply, "b", 0);
@@ -28,7 +29,7 @@ int propiedad(sd_bus *, const char *, const char *, const char *prop, sd_bus_mes
     sd_bus_message_append(reply, "s", "odysseyvk");
     sd_bus_message_open_container(reply, 'a', "(iiay)");
     sd_bus_message_close_container(reply);
-    sd_bus_message_append(reply, "ss", "OdysseyVK", idioma::tr("Clic: ajustes · clic central: juegos"));
+    sd_bus_message_append(reply, "ss", marca::nombre(marca::equipoSin3D()), idioma::tr("Clic: ajustes · clic central: juegos"));
     return sd_bus_message_close_container(reply);
   }
   return -EINVAL;

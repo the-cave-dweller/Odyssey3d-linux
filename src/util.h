@@ -71,6 +71,9 @@ std::string nombrePciIds(const std::string &fabricante, const std::string &model
 /* (v1.18) la direccion PCI de la tarjeta que da una salida de DRM («DP-4» → «0000:01:00.0»). En sysfs el `device` del
    conector (card2-DP-4/device) es la tarjeta de DRM, no la PCI: la PCI es la de card2/device. Vacio si no esta */
 std::string pciDeConector(const std::string &conector);
+/* (v1.18) la tarjeta principal del equipo (la de arranque, `boot_vga`: en la que dibuja el compositor), por su direccion
+   PCI; vacio si no se sabe */
+std::string pciPrincipal();
 /* (v1.18) la salida conectada cuyo EDID lleve `texto` («G90XF»: el monitor 3D), o vacio */
 std::string conectorConEdid(const std::string &texto);
 /* (v1.16) una red de video (Video Depth Anything): lleva «video» en el nombre del archivo. Mira 32 cuadros a la vez, solo

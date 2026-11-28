@@ -1220,6 +1220,7 @@ static void aplicarFg(VkUi &ui, int fila, int k) {
   ui.inputChanged = true;
 }
 
+static void atajoHub(VkUi &ui, const std::string &accion, const char *origen);
 void applyHit(VkUi &ui, Hud::Hit hit) {
   Hud::State &st = ui.hud.state();
   WeaveTuning &t = ui.tune;
@@ -1354,6 +1355,16 @@ void applyHit(VkUi &ui, Hud::Hit hit) {
       }
       break;
     }
+    /* (v1.18) la pastilla de una pantalla sin 3D: lo mismo que sus atajos */
+    case Hud::HitP2dCerrar:
+      std::printf("[pastilla] sin 3D: cerrada con su aspa, el juego se queda como estaba\n");
+      std::fflush(stdout);
+      ui.quit = true;
+      break;
+    case Hud::HitP2dEfectos: atajoHub(ui, "efectos", "pastilla"); break;
+    case Hud::HitP2dFg: atajoHub(ui, "fg", "pastilla"); break;
+    case Hud::HitP2dFgMenos: atajoHub(ui, "fg-", "pastilla"); break;
+    case Hud::HitP2dFgMas: atajoHub(ui, "fg+", "pastilla"); break;
     case Hud::HitEngranaje: {
       /* el engranaje de la pastilla: el panel de ajustes, por encima del video */
       abrirPanelDeAjustes();
@@ -2393,6 +2404,8 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
   ui.suavizado = opts.suavizado;
   ui.suavizadoAuto = opts.suavizadoAuto;
   ui.hud.state().engranaje = !opts.noHud;
+  /* (v1.18) sin 3D (`--2d` sin lente ni scaler, sobre una ventana capturada): la pastilla de los efectos y la generacion */
+  ui.hud.state().pastilla2D = kind == SourceKind::Capture && opts.no3d && opts.noLens && opts.noScaler;
   ui.hud.state().suavizado = opts.suavizado;
   ui.hud.state().ratonLibre = !opts.noPassthrough;
   /* tamano de la pastilla pedido a mano (--ui-escala); en marcha se ajusta con Ctrl+Shift+7 / 8 */
@@ -2445,7 +2458,18 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
     return 1;
   }
   /* (v1.18) en la tarjeta que da la salida del monitor 3D (ver VkDev::createDevice) */
-  const std::string pciMonitor = pciDeConector(opts.output.empty() ? rig.output : opts.output);
+  std::string pciMonitor = pciDeConector(opts.output.empty() ? rig.output : opts.output);
+  /* (v1.18) Sin 3D (la pastilla de una pantalla normal: `--2d` sin lente ni scaler) manda la tarjeta del compositor y no
+     la de la pantalla: lo que se captura son cuadros del compositor, y solo se importan en su tarjeta. MEDIDO el 28-nov
+     en el equipo de Rodolfo (DP-7 en la RTX 5080, el compositor en la RTX 4090): el visor plano en la 5080 abria y
+     pintaba la pastilla, y cada cuadro capturado fallaba con «vkAllocateMemory (DMA-BUF sin modificador): sin memoria de
+     dispositivo» («fuente 0.0/s»). En el 3D no se toca: alli cada cuadro tejido tiene que salir de la tarjeta del monitor */
+  if (kind == SourceKind::Capture && opts.no3d && opts.noLens && opts.noScaler)
+    if (const std::string principal = pciPrincipal(); !principal.empty() && principal != pciMonitor) {
+      std::printf("[vulkan] sin 3D: el visor va en la tarjeta del compositor (%s) y no en la de la pantalla (%s): ahi se importan los cuadros capturados\n",
+                  principal.c_str(), pciMonitor.empty() ? "?" : pciMonitor.c_str());
+      pciMonitor = principal;
+    }
   if (!dev.createDevice({"VK_KHR_swapchain"}, surface, &err, -1, pciMonitor)) {
     std::fprintf(stderr, "[error] dispositivo Vulkan: %s\n", err.c_str());
     vkDestroySurfaceKHR(dev.instance(), surface, nullptr);
@@ -3483,6 +3507,7 @@ int runViewerVk(const ViewerOpts &opts, SourceKind kind) {
         if ((esJuego ? 1 : ui.esJuego) != juegoEf || f != firmaEf || app != appEf) {
           juegoEf = esJuego ? 1 : ui.esJuego, firmaEf = f, appEf = app;
           const efectos::Ajustes aj = esJuego ? efectos::cargar(app) : efectos::Ajustes{};
+          ui.hud.state().efectosPuestos = esJuego && aj.puestos;   /* (v1.18) lo dice el interruptor de la pastilla sin 3D */
           /* (v1.18) la vista previa ya no los enciende: con el interruptor general apagado, a los dos lados de la raya sale
              el juego sin efectos (Rodolfo: «el boton de encendido general no hace nada»: con la vista puesta la cadena
              corria igual y el lado de «con efectos» no cambiaba) */

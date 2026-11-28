@@ -1,4 +1,9 @@
-# OdysseyVK — glasses-free 3D on the Samsung Odyssey 3D (G90XF) for Linux
+# SpatialHUB · ShaderHUB — glasses-free 3D on the Samsung Odyssey 3D (G90XF), and shaders and frame generation on any display, for Linux
+
+> **Two faces, one program.** On the Odyssey 3D it is **SpatialHUB**: everything below. On any other display it is
+> **ShaderHUB** (in red): the games list, ReShade effects, integrations and frame generation, with the 3D parts switched
+> off. The display chips at the top of the panel pick which one you are looking at. The command, the service and the
+> folders are still called `odysseyvk` (the project's name until v1.18), so nothing you already set up moves.
 
 **English** · [Español](README.es.md)
 

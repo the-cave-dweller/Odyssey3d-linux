@@ -50,6 +50,40 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El README**: «Lo nuevo de la 1.18» arriba con su tablita, y lo de la 1.17 debajo; una captura nueva,
   `monitor.png` (el menú de la tesela y el cuadrito con lo vigilado).
 
+## SpatialHUB y ShaderHUB: dos nombres, y la cara sin 3D en rojo (v1.18)
+
+- Rodolfo: «que la version no 3d se llame ShaderHUB y la 3D que sea SpatialHUB, la interfaz no 3d debe ser roja, haz todo
+  el rebrand, que el github pase a llamarse como consideres correcto».
+- **El nombre** (`src/marca.h`): con la pantalla de 3D elegida es **SpatialHUB**; con una normal (o sin monitor 3D),
+  **ShaderHUB**. Los textos siguen escritos con «OdysseyVK» en los seis idiomas y el nombre de ahora se pone al pintarlos
+  (`Hud::text` y `textWidth`): la barra del panel, la versión del pie y de la tesela, los avisos y los rótulos, sin tocar
+  la tabla. También en los avisos del escritorio, la bandeja, la entrada de la barra de tareas, los lanzadores
+  (`SpatialHUB · ShaderHUB`) y la cabecera de los README.
+- **El rojo**: una tercera paleta (`Hud::paleta`) para ShaderHUB, en el panel y en su pastilla.
+- **Lo que no cambia**: la orden, el servicio, las carpetas y las variables siguen siendo `odysseyvk`: cambiarlas dejaría
+  sin ajustes ni calibración a quien ya lo tiene instalado. Tampoco el nombre del componente de los atajos en KDE.
+- **El repositorio de GitHub no se ha renombrado**: es un cambio a la vista de todos y con la actualización automática
+  apuntando a su dirección; queda por confirmar el nombre con Rodolfo.
+- **Probado**: el panel pintado con las dos caras (ShaderHUB en rojo con «ShaderHUB 1.18»; SpatialHUB como estaba) y la
+  pastilla. No probado: los avisos del escritorio y la bandeja con el nombre nuevo.
+
+## La pastilla de ShaderHUB: efectos y generación de cuadros en una pantalla sin 3D (v1.18, a medias)
+
+- Rodolfo: «ya sin el modo 3d tambien escrube un pill hub para operar todo lo de los shaders y el framegen».
+- **El visor sin 3D** ya existía a trozos (`capture3d --uuid V --output P --2d --no-panel --no-lens --no-scaler`: captura
+  la ventana y la presenta sin trama, sin lente, scaler ni rastreo). **MEDIDO** en la segunda pantalla de Rodolfo (DP-7,
+  en la RTX 5080, con el compositor en la RTX 4090): abría y pintaba la pastilla, pero cada cuadro capturado fallaba al
+  importarse («vkAllocateMemory (DMA-BUF sin modificador): sin memoria de dispositivo», «fuente 0,0/s»): los cuadros son
+  del compositor y solo se importan en su tarjeta. Ahora, sin 3D, el visor va en la tarjeta del compositor
+  (`pciPrincipal`, la de arranque) y no en la de la pantalla: 72 cuadros por segundo de 75, sin un fallo. En el 3D no se
+  toca.
+- **La pastilla** (`Hud::dibujaPastilla2D`, `State::pastilla2D`): el aspa (la cierra: el juego se queda como estaba), el
+  interruptor de los Efectos, la generación de cuadros de MAKO (− · «FG x3» o «FG», que se enciende o se apaga al picarla
+  · +) y el engranaje. Hacen lo mismo que sus atajos (`efectos`, `fg`, `fg-`, `fg+`).
+- **Lo que falta**: el servicio todavía no la lanza solo en una pantalla sin 3D (hoy solo a mano, con la orden de
+  arriba); no se ha probado con un juego ni picando sus botones (se probó capturando una ventana de prueba y pintándola
+  en la CPU), ni con la generación de cuadros del propio visor.
+
 ## Las pantallas: la lista arriba del panel y el modo sin 3D (v1.18, primera parte)
 
 - Rodolfo: «nuevo major change, sistema de displays, que en el tope vkodyssey detecte y muestre enlistados los display,

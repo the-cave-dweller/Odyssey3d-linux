@@ -183,6 +183,10 @@ public:
     bool vistaEnVivo = false;
     /* (v1.18) el interruptor general de los efectos que se ven: apagado, la vista previa lo dice */
     bool efectosPuestos = true;
+    /* (v1.18) la pastilla de una pantalla sin 3D (Rodolfo: «ya sin el modo 3d tambien escrube un pill hub para operar
+       todo lo de los shaders y el framegen»): en vez de lo del 3D lleva el aspa (cerrarla), el interruptor de los Efectos,
+       la generacion de cuadros (menos, encender o apagar, mas) y el engranaje. El visor corre sin trama, lente ni rastreo */
+    bool pastilla2D = false;
     /* (v1.18) el efecto que se esta arrastrando por su agarre (su fila, -1 = ninguno): donde caeria lo dice destinoFila() */
     int moviendoFila = -1;
     std::vector<std::string> pestanasNota;
@@ -367,6 +371,11 @@ public:
     HitModoDividido,   /* ... video dividido ... */
     HitModoSuave,      /* ... y video dividido suavizado (v0.83) */
     HitEngranaje,      /* el engranaje de la pastilla: abre el panel de ajustes */
+    HitP2dCerrar,      /* (v1.18) la pastilla sin 3D: su aspa, */
+    HitP2dEfectos,     /* el interruptor de los efectos */
+    HitP2dFg,          /* y la generacion de cuadros: encenderla o apagarla, */
+    HitP2dFgMenos,     /* un multiplicador menos */
+    HitP2dFgMas,       /* o uno mas */
     HitPreajuste1,     /* los tres preajustes del menu del rayo (rama experimental) */
     HitPreajuste2,
     HitPreajuste3,
@@ -583,6 +592,10 @@ private:
     uint32_t control, controlHov, filo, filoCasilla, filoCasillaHov, pozo;
   };
   Paleta paleta() const {
+    /* (v1.18) ShaderHUB (una pantalla sin 3D, o su pastilla): en rojo (Rodolfo: «la interfaz no 3d debe ser roja») */
+    if (st_.sin3D || st_.pastilla2D)
+      return {0xF2666Eu, 0xC8323Cu, 0xD8424Cu, 0x3C1D20u, 0x0F0809u, 0x170F10u, 0x120B0Cu, 0x261617u, 0x1D1112u,
+              0x2B191Bu, 0x372023u, 0x4C2D31u, 0x533338u, 0x74474Du, 0x100A0Bu};
     if (st_.sinRedPanel || st_.rendimiento)
       return {0xDEAA7Cu, 0xB87A3Au, 0xC88A4Au, 0x3A2E22u, 0x0E0B08u, 0x15110Du, 0x110E0Bu, 0x231C15u, 0x1B1611u,
               0x282018u, 0x32281Eu, 0x463A2Eu, 0x4C4034u, 0x6A5A48u, 0x0F0C09u};
@@ -633,6 +646,8 @@ private:
   Rect askPanel_, askSbs_, askTop_, askFlat_, askConv_, askDont_, askClose_, askAyuda_;
   Rect askActualizar_, askLuego_, askNoAvisar_;
   Rect chkRecordar_, btnNormal_, btnDividido_, btnSuave_, btnEngranaje_;
+  Rect p2dCerrar_, p2dEfectos_, p2dFg_, p2dFgMenos_, p2dFgMas_;   /* (v1.18) la pastilla sin 3D */
+  void dibujaPastilla2D(int vw, const float accent[3], const float ink[4], const float dim[4]);
   Rect btnPre_[3];   /* los preajustes del menu del rayo */
   /* el boton del rayo de la pastilla, su menu desplegado y las pistas de sus cuatro deslizadores */
   Rect btnRayo_, menuRend_, rendTrack_[4], rendFila_[4];

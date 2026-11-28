@@ -21,6 +21,7 @@
 #include "frenojuego.h"
 #include "versiones.h"   /* (v1.18) volver a una version anterior */
 #include "pantallas.h"   /* (v1.18) las pantallas conectadas */
+#include "marca.h"       /* (v1.18) SpatialHUB y ShaderHUB */
 #include "idioma.h"
 #include "wm.h"
 #ifdef HAVE_WAYLAND_WM
@@ -2184,7 +2185,10 @@ static std::string conCasa(const std::string &ruta) {
 static void avisoEscritorio(const std::string &titulo, const std::string &cuerpo) {
   const pid_t p = ::fork();
   if (p == 0) {
-    ::execlp("notify-send", "notify-send", "-a", "OdysseyVK", "-i", "odysseyvk", titulo.c_str(), cuerpo.c_str(), (char *)nullptr);
+    /* (v1.18) con el nombre de ahora: SpatialHUB, o ShaderHUB en un equipo sin monitor 3D (marca.h) */
+    const bool sin = marca::equipoSin3D();
+    ::execlp("notify-send", "notify-send", "-a", marca::nombre(sin), "-i", "odysseyvk", marca::pon(titulo, sin).c_str(),
+             marca::pon(cuerpo, sin).c_str(), (char *)nullptr);
     ::_exit(127);
   }
   if (p > 0) {
@@ -3722,6 +3726,18 @@ static int cmdHudSelfTest(int argc, char **argv) {
   hud.state().remember = rec && rec[0] == '1';
   /* los botones de icono: ODYSSEYVK_HUD_MODO=0 los quita, 1 = video normal puesto, 2 = dividido,
      3 = dividido suavizado */
+  /* (v1.18) ODYSSEYVK_HUD_PASTILLA2D=EFECTOS[,MULT]: la pastilla de una pantalla sin 3D, con los efectos puestos (1) o no
+     (0) y la generacion de MAKO en ese multiplicador (0 = apagada; sin el, no hay MAKO ni juego) */
+  if (const char *p2 = std::getenv("ODYSSEYVK_HUD_PASTILLA2D")) {
+    hud.state().pastilla2D = true;
+    hud.state().engranaje = true;
+    hud.state().efectosPuestos = p2[0] == '1';
+    if (const char *c = std::strchr(p2, ',')) {
+      hud.state().fg.mako = true, hud.state().fg.exe = "Juego.exe";
+      hud.state().fg.puesta = std::atoi(c + 1) >= 2;
+      if (hud.state().fg.puesta) hud.state().fg.multiplicador = std::atoi(c + 1);
+    }
+  }
   const char *modo = std::getenv("ODYSSEYVK_HUD_MODO");
   hud.state().modoVisible = !(modo && modo[0] == '0');
   hud.state().modo3d = (modo && modo[0] >= '2' && modo[0] <= '3') ? modo[0] - '0' : 1;

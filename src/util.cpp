@@ -319,6 +319,21 @@ std::string pciDeConector(const std::string &conector) {
   return {};
 }
 
+std::string pciPrincipal() {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  for (const fs::directory_entry &c : fs::directory_iterator("/sys/class/drm", ec)) {
+    const std::string n = c.path().filename().string();   /* «card2» */
+    if (n.rfind("card", 0) != 0 || n.find('-') != std::string::npos) continue;
+    std::string v;
+    if (!readSmallFile(c.path().string() + "/device/boot_vga", v) || strTrim(v) != "1") continue;
+    std::error_code e2;
+    const std::string pci = fs::canonical(c.path() / "device", e2).filename().string();
+    if (!e2) return pci;
+  }
+  return {};
+}
+
 std::string conectorConEdid(const std::string &texto) {
   namespace fs = std::filesystem;
   std::error_code ec;

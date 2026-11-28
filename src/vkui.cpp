@@ -1,5 +1,6 @@
 /* vkui.cpp — atlas (fuentes + máscaras), disposición de la interfaz y manejo del ratón. */
 #include "vkui.h"
+#include "marca.h"
 
 #include <thread>
 #include "idioma.h"
@@ -898,6 +899,8 @@ const Hud::Glyph *Hud::glifo(unsigned cp) const {
 }
 
 float Hud::textWidth(const std::string &s, float size) const {
+  /* (v1.18) el nombre de ahora (SpatialHUB o ShaderHUB) donde el texto dice «OdysseyVK»: ver marca.h */
+  if (s.find("OdysseyVK") != std::string::npos) return textWidth(marca::pon(s, st_.sin3D || st_.pastilla2D), size);
   float sc = size / (float)kFontPx;
   float wsum = 0.0f;
   size_t i = 0;
@@ -911,6 +914,7 @@ float Hud::textWidth(const std::string &s, float size) const {
 
 float Hud::text(const std::string &s, float x, float y, float size, float cr, float cg, float cb, float ca,
                 bool center) {
+  if (s.find("OdysseyVK") != std::string::npos) return text(marca::pon(s, st_.sin3D || st_.pastilla2D), x, y, size, cr, cg, cb, ca, center);   /* (v1.18) */
   float sc = size / (float)kFontPx;
   float pen = center ? x - textWidth(s, size) * 0.5f : x;
   float top0 = y;
@@ -970,6 +974,76 @@ void Hud::nudgePopout(int d) { st_.popout = std::max(-50, std::min(50, st_.popou
 /* (v1.13) el cuadrito de los FPS del juego, con su orilla derecha en `xDer`. (v1.17) Tambien con la pastilla oculta,
    en la esquina de arriba a la derecha y pegado a las dos orillas (`orilla`), hasta que se apague en los ajustes
    (Rodolfo: «no quiero que se esconda, sino que se quede al frente y se mueva a la orilla de la pantalla») */
+/* (v1.18) La pastilla de una pantalla sin 3D (ver State::pastilla2D): del alto y del color de la barra del panel, arriba
+   a la derecha como la del 3D. De izquierda a derecha: el aspa (cierra la pastilla y el visor: el juego se queda como
+   estaba), el interruptor de los Efectos (en el acento, encendidos), la generacion de cuadros de MAKO (‹ menos · «FG x2»
+   o «FG» apagada, que al picarla se enciende o se apaga · mas ›; en gris sin MAKO o sin juego) y el engranaje */
+void Hud::dibujaPastilla2D(int vw, const float accent[3], const float ink[4], const float dim[4]) {
+  const Rect fuera{-10.0f, -10.0f, 0.0f, 0.0f};
+  sw3D_ = swKnob_ = pillModo_ = depTrack_ = popTrack_ = depKnob_ = popKnob_ = fuera;
+  fuente_ = hayBarlow_ ? 1 : 0;
+  const float aire = 16.0f, ph = 56.0f, alto = 32.0f, tam = 13.0f;
+  const std::string tEfx = idioma::tr("Efectos");
+  const State::Fg &g = st_.fg;
+  const bool hayFg = g.mako && !g.exe.empty();
+  const std::string tFg = hayFg && g.puesta ? "FG x" + std::to_string(g.multiplicador) : std::string("FG");
+  const float wEfx = 10.0f + 18.0f + 8.0f + textWidth(tEfx, tam) + 12.0f;
+  const float wFlecha = 26.0f, wFgC = 10.0f + 18.0f + 8.0f + std::max(textWidth("FG x4", tam), textWidth(tFg, tam)) + 10.0f;
+  const float wFg = wFlecha + wFgC + wFlecha;
+  const float pw = aire + alto + 12.0f + wEfx + 12.0f + wFg + (st_.engranaje ? 14.0f + 30.0f : 0.0f) + aire;
+  const float x0 = (float)vw - pw, y0 = 0.0f, y = y0 + (ph - alto) * 0.5f;
+  panelW_ = pw, panelH_ = ph;
+  pillPanel_ = {x0, y0, pw, ph};
+  mask9({x0, y0 - 8.0f, pw + 8.0f, ph + 8.0f}, 1, 8.0f, Hud::canal(pal_.barra, 0), Hud::canal(pal_.barra, 1), Hud::canal(pal_.barra, 2), 0.94f);
+  auto gris = [&](const Rect &r, bool hov) {
+    const float v = hov ? 0.32f : 0.24f;
+    mask9(r, 0, 4.0f, v, v + 0.02f, v + 0.05f, 0.95f);
+  };
+  /* el aspa */
+  p2dCerrar_ = {x0 + aire, y, alto, alto};
+  {
+    const bool h = p2dCerrar_.inside(mx_, my_);
+    gris(p2dCerrar_, h);
+    icono({p2dCerrar_.x + 8.0f, p2dCerrar_.y + 8.0f, 16.0f, 16.0f}, icoCerrar_, ink[0], ink[1], ink[2], h ? 1.0f : 0.80f);
+  }
+  /* los efectos */
+  p2dEfectos_ = {p2dCerrar_.x + alto + 12.0f, y, wEfx, alto};
+  {
+    const bool h = p2dEfectos_.inside(mx_, my_), on = st_.efectosPuestos;
+    const float t = h ? 1.10f : 1.0f;
+    if (on) mask9(p2dEfectos_, 0, 4.0f, std::min(1.0f, accent[0] * t), std::min(1.0f, accent[1] * t), std::min(1.0f, accent[2] * t), 0.95f);
+    else gris(p2dEfectos_, h);
+    const float c = on ? 0.08f : ink[0], c1 = on ? 0.09f : ink[1], c2 = on ? 0.11f : ink[2];
+    icono({p2dEfectos_.x + 10.0f, p2dEfectos_.y + 7.0f, 18.0f, 18.0f}, icoEfectos_, c, c1, c2, on || h ? 1.0f : 0.80f);
+    text(tEfx, p2dEfectos_.x + 36.0f, p2dEfectos_.y + (alto - tam) * 0.5f - 1.0f, tam, c, c1, c2, on || h ? 1.0f : 0.85f);
+  }
+  /* la generacion de cuadros */
+  const Rect fg{p2dEfectos_.x + wEfx + 12.0f, y, wFg, alto};
+  gris(fg, false);
+  if (hayFg) {
+    p2dFgMenos_ = {fg.x, y, wFlecha, alto};
+    p2dFg_ = {fg.x + wFlecha, y, wFgC, alto};
+    p2dFgMas_ = {fg.x + wFlecha + wFgC, y, wFlecha, alto};
+    for (const Rect *r : {&p2dFgMenos_, &p2dFg_, &p2dFgMas_})
+      if (r->inside(mx_, my_)) mask9(*r, 0, 4.0f, 1.0f, 1.0f, 1.0f, 0.12f);
+    text("-", p2dFgMenos_.x + wFlecha * 0.5f, y + (alto - 16.0f) * 0.5f - 2.0f, 16.0f, ink[0], ink[1], ink[2], g.puesta ? 0.9f : 0.4f, true);
+    text("+", p2dFgMas_.x + wFlecha * 0.5f, y + (alto - 16.0f) * 0.5f - 2.0f, 16.0f, ink[0], ink[1], ink[2], g.puesta ? 0.9f : 0.4f, true);
+  }
+  {
+    const float cx = fg.x + wFlecha;
+    const float *c = hayFg && g.puesta ? accent : (hayFg ? ink : dim);
+    icono({cx + 10.0f, y + 7.0f, 18.0f, 18.0f}, icoFg_, c[0], c[1], c[2], hayFg ? 1.0f : 0.55f);
+    text(tFg, cx + 36.0f, y + (alto - tam) * 0.5f - 1.0f, tam, c[0], c[1], c[2], hayFg ? 1.0f : 0.55f);
+  }
+  /* el engranaje */
+  if (st_.engranaje) {
+    btnEngranaje_ = {x0 + pw - aire - 30.0f, y0 + (ph - 30.0f) * 0.5f, 30.0f, 30.0f};
+    const bool hov = btnEngranaje_.inside(mx_, my_);
+    if (hov) mask9(btnEngranaje_, 0, 4.0f, 1.0f, 1.0f, 1.0f, 0.14f);
+    icono({btnEngranaje_.x + 4.0f, btnEngranaje_.y + 4.0f, 22.0f, 22.0f}, icoEngranaje_, ink[0], ink[1], ink[2], hov ? 1.0f : 0.78f);
+  }
+}
+
 void Hud::dibujaCuadroFps(float xDer, float ph, bool compacta, bool orilla, const float accent[3], const float ink[4],
                           const float dim[4]) {
   const float y0 = 0.0f;
@@ -1289,6 +1363,7 @@ void Hud::begin(int w, int h, float altoLogico) {
      la capsula van del mismo) y el ambar de vkDaedalus en el modo rendimiento */
   float accent[3] = {st_.rendimiento ? 0xDE / 255.0f : 0.40f, st_.rendimiento ? 0xAA / 255.0f : 0.72f,
                      st_.rendimiento ? 0x7C / 255.0f : 1.0f};
+  if (st_.pastilla2D) accent[0] = marca::rojo()[0], accent[1] = marca::rojo()[1], accent[2] = marca::rojo()[2];   /* (v1.18) ShaderHUB, en rojo */
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
 
@@ -1307,13 +1382,16 @@ void Hud::begin(int w, int h, float altoLogico) {
   for (int k = 0; k < 4; k++) rendTrack_[k] = rendFila_[k] = {-10.0f, -10.0f, 0.0f, 0.0f};
   btnRed_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* ya no hay boton de red */
   cuadroFps_ = menuFg_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) */
+  p2dCerrar_ = p2dEfectos_ = p2dFg_ = p2dFgMenos_ = p2dFgMas_ = {-10.0f, -10.0f, 0.0f, 0.0f};   /* (v1.18) */
   /* (v1.17) la pastilla oculta: el cuadrito de los FPS se queda, en la esquina */
   if (!st_.overlayOn && !st_.panel && cuadroFps()) {
     fuente_ = hayBarlow_ ? 1 : 0;
     dibujaCuadroFps((float)vw, st_.legado ? 76.0f : 56.0f, !st_.legado, true, accent, ink, dim);
     dibujaMenuFg(accent, ink, dim);
   }
-  if (st_.overlayOn) {
+  if (st_.overlayOn && st_.pastilla2D) {
+    dibujaPastilla2D(vw, accent, ink, dim);   /* (v1.18) en una pantalla sin 3D: efectos y generacion de cuadros */
+  } else if (st_.overlayOn) {
     const bool leg = st_.legado;
     fuente_ = hayBarlow_ ? 1 : 0;   /* (v1.16) la letra del resto de la aplicacion */
     const float aire = 16.0f, anchoDes = 140.0f;
@@ -2065,6 +2143,7 @@ void Hud::dibujaPanel(int vw, int vh) {
   const bool marco = st_.marco;
   auto hex = [](uint32_t c, int k) { return (float)((c >> (16 - 8 * k)) & 0xFFu) / 255.0f; };
   float accent[3] = {st_.acentoPanel[0], st_.acentoPanel[1], st_.acentoPanel[2]};
+  if (st_.sin3D) accent[0] = marca::rojo()[0], accent[1] = marca::rojo()[1], accent[2] = marca::rojo()[2];   /* (v1.18) ShaderHUB, en rojo */
   float ink[4] = {0.93f, 0.94f, 0.96f, 1.0f};
   float dim[4] = {0.68f, 0.70f, 0.74f, 0.90f};
   if (marco)
@@ -3570,6 +3649,13 @@ Hud::Hit Hud::hit(float mxa, float mya) const {
   if (btnNormal_.inside(mx, my)) return HitModoNormal;
   if (btnDividido_.inside(mx, my)) return HitModoDividido;
   if (chkRecordar_.inside(mx, my)) return HitRecordar;
+  if (st_.pastilla2D) {   /* (v1.18) la pastilla sin 3D */
+    if (p2dCerrar_.inside(mx, my)) return HitP2dCerrar;
+    if (p2dEfectos_.inside(mx, my)) return HitP2dEfectos;
+    if (p2dFgMenos_.inside(mx, my)) return HitP2dFgMenos;
+    if (p2dFgMas_.inside(mx, my)) return HitP2dFgMas;
+    if (p2dFg_.inside(mx, my)) return HitP2dFg;
+  }
   if (btnEngranaje_.inside(mx, my)) return HitEngranaje;
   return HitNone;
 }
