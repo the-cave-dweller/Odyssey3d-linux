@@ -578,7 +578,7 @@ todo lo demás —visor, hub, verbos `ctl`— queda igual.
 ## Actualizarse y desinstalarse (v0.95)
 
 El servicio mira cada seis horas el `VERSION` de
-<https://github.com/the-cave-dweller/Odyssey3d-linux>. Con una versión nueva sale una tarjeta en
+<https://github.com/the-cave-dweller/SpatialHub>. Con una versión nueva sale una tarjeta en
 la orilla con **Actualizar**, **Luego** y un «No avisar de actualizaciones» chico; y en el panel de
 ajustes, junto al aspa, el botón se pone amarillo (pícalo para instalar; verde = al día, gris = sin
 mirar; con el ratón encima lo dice). La pestaña **Programa** tiene lo mismo más «Actualizar

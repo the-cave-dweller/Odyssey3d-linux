@@ -159,7 +159,7 @@ la red va a la tarjeta con más memoria (`HIP_VISIBLE_DEVICES` fija una). Sin mo
 CPU. La profundidad de DLSS de los juegos es solo de NVIDIA.
 
 ```bash
-git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh
+git clone https://github.com/the-cave-dweller/SpatialHub.git && cd SpatialHub && ./install.sh
 ```
 
 `install.sh` compila (en silencio: el detalle va a `build/compilacion.log` y sale si algo falla), pide tu clave una

@@ -64,8 +64,11 @@ Los textos viejos se dejan con el nombre que tenía el proyecto entonces: son hi
 - **El rojo**: una tercera paleta (`Hud::paleta`) para ShaderHub, en el panel y en su pastilla.
 - **Lo que no cambia**: la orden, el servicio, las carpetas y las variables siguen siendo `odysseyvk`: cambiarlas dejaría
   sin ajustes ni calibración a quien ya lo tiene instalado. Tampoco el nombre del componente de los atajos en KDE.
-- **El repositorio de GitHub no se ha renombrado**: es un cambio a la vista de todos y con la actualización automática
-  apuntando a su dirección; queda por confirmar el nombre con Rodolfo.
+- **El repositorio de GitHub pasa a llamarse `SpatialHub`** (Rodolfo, entre las opciones: «SpatialHub entonces»), con
+  los dos nombres en su descripción y sus temas (odyssey-3d, samsung-odyssey, glasses-free-3d, reshade,
+  frame-generation…). El programa busca las versiones en la dirección nueva. MEDIDO tras renombrarlo: la vieja
+  (`Odyssey3d-linux`) sigue contestando por la API (una redirección), por raw y por git, así que lo ya instalado se
+  sigue actualizando.
 - **Probado**: el panel pintado con las dos caras (ShaderHub en rojo con «ShaderHub 1.18»; SpatialHub como estaba) y la
   pastilla. No probado: los avisos del escritorio y la bandeja con el nombre nuevo.
 

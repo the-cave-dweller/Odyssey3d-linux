@@ -154,7 +154,7 @@ graphics, the network goes to the card with more memory (`HIP_VISIBLE_DEVICES` p
 network runs on the CPU. The DLSS depth of games is NVIDIA-only.
 
 ```bash
-git clone https://github.com/the-cave-dweller/Odyssey3d-linux.git && cd Odyssey3d-linux && ./install.sh
+git clone https://github.com/the-cave-dweller/SpatialHub.git && cd SpatialHub && ./install.sh
 ```
 
 `install.sh` compiles (quietly: the details go to `build/compilacion.log`, shown if something fails), asks for your

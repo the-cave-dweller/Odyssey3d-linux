@@ -784,13 +784,13 @@ bool alternarMonitor(const std::string &clave, std::string *aviso) {
 }
 
 /* ---- la actualizacion (v0.95) ---------------------------------------------------------------- */
-const char *const kRepoGitHub = "https://github.com/the-cave-dweller/Odyssey3d-linux";
-const char *const kUrlVersionRemota = "https://raw.githubusercontent.com/the-cave-dweller/Odyssey3d-linux/main/VERSION";
+const char *const kRepoGitHub = "https://github.com/the-cave-dweller/SpatialHub";
+const char *const kUrlVersionRemota = "https://raw.githubusercontent.com/the-cave-dweller/SpatialHub/main/VERSION";
 /* La API de GitHub da el archivo al momento. raw.githubusercontent pasa por una cache de hasta 5 min
    (MEDIDO el 26-nov 00:31: con la 1.00 ya subida, raw seguia dando 0.98, «x-cache: HIT») y una mirada
    que caiga en esa ventana deja la version vieja apuntada hasta la siguiente (v1.01). Se pide la API
    y, si falla (sin red o pasado su limite de 60 por hora), raw. */
-const char *const kUrlVersionApi = "https://api.github.com/repos/the-cave-dweller/Odyssey3d-linux/contents/VERSION?ref=main";
+const char *const kUrlVersionApi = "https://api.github.com/repos/the-cave-dweller/SpatialHub/contents/VERSION?ref=main";
 
 bool versionMasNueva(const std::string &a, const std::string &b) {
   size_t i = 0, j = 0;
